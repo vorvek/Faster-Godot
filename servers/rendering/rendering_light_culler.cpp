@@ -477,13 +477,13 @@ bool RenderingLightCuller::_add_light_camera_planes(LightCullPlanes &r_cull_plan
 		}
 	} else if (p_light_source.type == LightSource::ST_AREA) {
 		for (int n = 0; n < 6; n++) {
-			float dist = data.frustum_planes[n].distance_to(p_light_source.pos);
+			float dist = cull_frustum_planes[n].distance_to(p_light_source.pos);
 			float half_diagonal = p_light_source.area_size.length() / 2.0;
 			if (dist < 0.0f) {
 				lookup |= 1 << n;
 
 				// Add backfacing camera frustum planes.
-				r_cull_planes.add_cull_plane(data.frustum_planes[n]);
+				r_cull_planes.add_cull_plane(cull_frustum_planes[n]);
 			} else {
 				// Is the light out of range?
 				if (dist >= p_light_source.range + half_diagonal) {
@@ -678,7 +678,7 @@ bool RenderingLightCuller::create_frustum_points(const Plane *p_frustum_planes, 
 
 #ifdef LIGHT_CULLER_DEBUG_LOGGING
 		if (is_logging()) {
-			print_line("point " + itos(i) + " -> " + String(result[i]));
+			print_line("point " + itos(i) + " -> " + String(r_result[i]));
 		}
 #endif
 	}
