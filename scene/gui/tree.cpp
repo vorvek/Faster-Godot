@@ -7033,5 +7033,6 @@ Tree::~Tree() {
 		memdelete(root);
 	}
 	RenderingServer::get_singleton()->free_rid(content_ci);
+	RenderingServer::get_singleton()->free_rid(custom_ci);
 	RenderingServer::get_singleton()->free_rid(header_ci);
 }
