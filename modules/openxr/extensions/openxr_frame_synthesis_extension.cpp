@@ -250,7 +250,7 @@ void OpenXRFrameSynthesisExtension::on_main_swapchains_created() {
 	}
 }
 
-void OpenXRFrameSynthesisExtension::on_pre_render() {
+void OpenXRFrameSynthesisExtension::on_pre_draw_viewport(RID p_render_target) {
 	if (!frame_synthesis_ext) {
 		return;
 	}
@@ -258,8 +258,7 @@ void OpenXRFrameSynthesisExtension::on_pre_render() {
 	OpenXRAPI *openxr_api = OpenXRAPI::get_singleton();
 	ERR_FAIL_NULL(openxr_api);
 
-	size_t view_count = render_state.config_views.size();
-	if (!enabled || view_count != 2 || render_state.skip_next_frame) {
+	if (!enabled || render_state.config_views.size() != 2 || render_state.frame_synthesis_info.size() != 2 || render_state.skip_next_frame) {
 		// Unset these just in case.
 		openxr_api->set_velocity_texture(RID());
 		openxr_api->set_velocity_depth_texture(RID());
@@ -317,7 +316,7 @@ void OpenXRFrameSynthesisExtension::on_pre_render() {
 
 void OpenXRFrameSynthesisExtension::on_post_draw_viewport(RID p_render_target) {
 	// Check if our extension is supported and enabled.
-	if (!frame_synthesis_ext || !enabled || render_state.config_views.size() != 2 || render_state.skip_next_frame) {
+	if (!frame_synthesis_ext || !enabled || render_state.config_views.size() != 2 || render_state.frame_synthesis_info.size() != 2 || render_state.skip_next_frame) {
 		return;
 	}
 
@@ -329,7 +328,7 @@ void OpenXRFrameSynthesisExtension::on_post_draw_viewport(RID p_render_target) {
 
 void *OpenXRFrameSynthesisExtension::set_projection_views_and_get_next_pointer(int p_view_index, void *p_next_pointer) {
 	// Check if our extension is supported and enabled.
-	if (!frame_synthesis_ext || !enabled || render_state.config_views.size() != 2) {
+	if (!frame_synthesis_ext || !enabled || render_state.config_views.size() != 2 || render_state.frame_synthesis_info.size() != 2) {
 		return nullptr;
 	}
 
@@ -342,14 +341,8 @@ void *OpenXRFrameSynthesisExtension::set_projection_views_and_get_next_pointer(i
 		return nullptr;
 	}
 
-	// Check if we can run frame synthesis.
-	size_t view_count = render_state.config_views.size();
-	if (enabled && view_count == 2) {
-		render_state.frame_synthesis_info[p_view_index].next = p_next_pointer;
-		return &render_state.frame_synthesis_info[p_view_index];
-	}
-
-	return nullptr;
+	render_state.frame_synthesis_info[p_view_index].next = p_next_pointer;
+	return &render_state.frame_synthesis_info[p_view_index];
 }
 
 bool OpenXRFrameSynthesisExtension::is_available() const {
