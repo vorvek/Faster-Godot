@@ -3566,6 +3566,7 @@ const ShaderLanguage::BuiltinEntry ShaderLanguage::frag_only_func_defs[] = {
 	{ "fwidth" },
 	{ "fwidthCoarse" },
 	{ "fwidthFine" },
+	{ "textureQueryLod" },
 	{ nullptr }
 };
 
