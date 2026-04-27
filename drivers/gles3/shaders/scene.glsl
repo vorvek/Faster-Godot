@@ -467,7 +467,7 @@ struct MultiviewData {
 	highp vec4 eye_offset[MAX_VIEWS];
 };
 
-layout(std140) uniform MultiviewDataBlock { // ubo:8
+layout(std140) uniform MultiviewDataBlock { // ubo:9
 	MultiviewData data;
 }
 multiview_data_block;
@@ -1210,7 +1210,7 @@ struct MultiviewData {
 	highp vec4 eye_offset[MAX_VIEWS];
 };
 
-layout(std140) uniform MultiviewDataBlock { // ubo:8
+layout(std140) uniform MultiviewDataBlock { // ubo:9
 	MultiviewData data;
 }
 multiview_data_block;
