@@ -1215,11 +1215,14 @@ void EditorNode::_remove_plugin_from_enabled(const String &p_name) {
 	ps->set("editor_plugins/enabled", enabled_plugins);
 }
 
-void EditorNode::_plugin_over_edit(EditorPlugin *p_plugin, Object *p_object) {
+void EditorNode::_plugin_over_edit(EditorPlugin *p_plugin, Object *p_object, bool p_set_current) {
 	if (p_object) {
 		editor_plugins_over->add_plugin(p_plugin);
 		p_plugin->edit(p_object);
 		p_plugin->make_visible(true);
+		if (p_set_current) {
+			p_plugin->set_current();
+		}
 	} else {
 		editor_plugins_over->remove_plugin(p_plugin);
 		p_plugin->edit(nullptr);
@@ -2853,7 +2856,7 @@ bool EditorNode::_is_class_editor_disabled_by_feature_profile(const StringName &
 	return false;
 }
 
-void EditorNode::edit_item(Object *p_object, Object *p_editing_owner) {
+void EditorNode::edit_item(Object *p_object, Object *p_editing_owner, bool p_set_current) {
 	ERR_FAIL_NULL(p_editing_owner);
 
 	// Editing for this type of object may be disabled by user's feature profile.
@@ -2901,6 +2904,9 @@ void EditorNode::edit_item(Object *p_object, Object *p_editing_owner) {
 			// Plugin was already active, just change the object and ensure it's visible.
 			plugin->make_visible(true);
 			plugin->edit(p_object);
+			if (p_set_current) {
+				plugin->set_current();
+			}
 			continue;
 		}
 
@@ -2908,6 +2914,9 @@ void EditorNode::edit_item(Object *p_object, Object *p_editing_owner) {
 			// Plugin is already active, but as self-owning, so it needs a separate check.
 			plugin->make_visible(true);
 			plugin->edit(p_object);
+			if (p_set_current) {
+				plugin->set_current();
+			}
 			continue;
 		}
 
@@ -2947,7 +2956,7 @@ void EditorNode::edit_item(Object *p_object, Object *p_editing_owner) {
 	}
 
 	for (EditorPlugin *plugin : to_over_edit) {
-		_plugin_over_edit(plugin, p_object);
+		_plugin_over_edit(plugin, p_object, p_set_current);
 	}
 }
 
