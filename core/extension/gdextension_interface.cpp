@@ -1395,6 +1395,7 @@ static GDExtensionBool gdextension_object_get_class_name(GDExtensionConstObjectP
 	return true;
 }
 
+#ifndef DISABLE_DEPRECATED
 static GDExtensionObjectPtr gdextension_object_cast_to(GDExtensionConstObjectPtr p_object, void *p_class_tag) {
 	if (!p_object) {
 		return nullptr;
@@ -1403,6 +1404,7 @@ static GDExtensionObjectPtr gdextension_object_cast_to(GDExtensionConstObjectPtr
 
 	return o->is_class_ptr(p_class_tag) ? (GDExtensionObjectPtr)o : (GDExtensionObjectPtr) nullptr;
 }
+#endif
 
 static GDObjectInstanceID gdextension_object_get_instance_id(GDExtensionConstObjectPtr p_object) {
 	const Object *o = (const Object *)p_object;
@@ -1659,11 +1661,13 @@ static GDExtensionObjectPtr gdextension_classdb_construct_object2(GDExtensionCon
 	return (GDExtensionObjectPtr)ClassDB::instantiate_without_postinitialization(classname);
 }
 
+#ifndef DISABLE_DEPRECATED
 static void *gdextension_classdb_get_class_tag(GDExtensionConstStringNamePtr p_classname) {
 	const StringName classname = *reinterpret_cast<const StringName *>(p_classname);
 	ClassDB::ClassInfo *class_info = ClassDB::classes.getptr(classname);
 	return class_info ? class_info->class_ptr : nullptr;
 }
+#endif
 
 static void gdextension_editor_add_plugin(GDExtensionConstStringNamePtr p_classname) {
 #ifdef TOOLS_ENABLED
@@ -1833,7 +1837,9 @@ void gdextension_setup_interface() {
 	REGISTER_INTERFACE_FUNC(object_free_instance_binding);
 	REGISTER_INTERFACE_FUNC(object_set_instance);
 	REGISTER_INTERFACE_FUNC(object_get_class_name);
+#ifndef DISABLE_DEPRECATED
 	REGISTER_INTERFACE_FUNC(object_cast_to);
+#endif // DISABLE_DEPRECATED
 	REGISTER_INTERFACE_FUNC(object_get_instance_from_id);
 	REGISTER_INTERFACE_FUNC(object_get_instance_id);
 	REGISTER_INTERFACE_FUNC(object_has_script_method);
@@ -1859,7 +1865,9 @@ void gdextension_setup_interface() {
 #endif // DISABLE_DEPRECATED
 	REGISTER_INTERFACE_FUNC(classdb_construct_object2);
 	REGISTER_INTERFACE_FUNC(classdb_get_method_bind);
+#ifndef DISABLE_DEPRECATED
 	REGISTER_INTERFACE_FUNC(classdb_get_class_tag);
+#endif // DISABLE_DEPRECATED
 	REGISTER_INTERFACE_FUNC(editor_add_plugin);
 	REGISTER_INTERFACE_FUNC(editor_remove_plugin);
 	REGISTER_INTERFACE_FUNC(editor_help_load_xml_from_utf8_chars);
