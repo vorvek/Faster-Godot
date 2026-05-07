@@ -6006,6 +6006,9 @@ Window find_window_from_process_id(Display *p_display, pid_t p_process_id) {
 		}
 	}
 
+	// Suppress any pending bad window errors.
+	XSync(p_display, False);
+
 	// Restore default error handler.
 	XSetErrorHandler(oldHandler);
 
@@ -6055,6 +6058,9 @@ Error DisplayServerX11::embed_process(WindowID p_window, OS::ProcessID p_pid, co
 
 	DEBUG_LOG_X11("Starting embedding %ld to window %lu \n", p_pid, wd.x11_window);
 
+	// Handle bad window errors silently because the embedded window may be closed at any time.
+	int (*oldHandler)(Display *, XErrorEvent *) = XSetErrorHandler(&bad_window_error_handler);
+
 	EmbeddedProcessData *ep = nullptr;
 	if (embedded_processes.has(p_pid)) {
 		ep = embedded_processes.get(p_pid);
@@ -6062,6 +6068,8 @@ Error DisplayServerX11::embed_process(WindowID p_window, OS::ProcessID p_pid, co
 		// New process, trying to find the window.
 		Window process_window = find_window_from_process_id(x11_display, p_pid);
 		if (!process_window) {
+			XSync(x11_display, False);
+			XSetErrorHandler(oldHandler);
 			return ERR_DOES_NOT_EXIST;
 		}
 		DEBUG_LOG_X11("Process %ld window found: %lu \n", p_pid, process_window);
@@ -6072,9 +6080,6 @@ Error DisplayServerX11::embed_process(WindowID p_window, OS::ProcessID p_pid, co
 		_set_window_taskbar_pager_enabled(process_window, false);
 		embedded_processes.insert(p_pid, ep);
 	}
-
-	// Handle bad window errors silently because just in case the embedded window was closed.
-	int (*oldHandler)(Display *, XErrorEvent *) = XSetErrorHandler(&bad_window_error_handler);
 
 	if (p_visible) {
 		// Resize and move the window to match the desired rectangle.
@@ -6177,6 +6182,9 @@ Error DisplayServerX11::embed_process(WindowID p_window, OS::ProcessID p_pid, co
 		}
 	}
 
+	// Suppress any pending bad window errors.
+	XSync(x11_display, False);
+
 	// Restore default error handler.
 	XSetErrorHandler(oldHandler);
 	return OK;
@@ -6208,6 +6216,9 @@ Error DisplayServerX11::request_close_embedded_process(OS::ProcessID p_pid) {
 		ev.xclient.data.l[1] = CurrentTime;
 		XSendEvent(x11_display, ep->process_window, False, NoEventMask, &ev);
 	}
+
+	// Suppress any pending bad window errors.
+	XSync(x11_display, False);
 
 	// Restore default error handler.
 	XSetErrorHandler(oldHandler);
