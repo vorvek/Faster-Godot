@@ -2757,7 +2757,7 @@ void RendererSceneCull::_visibility_cull(const VisibilityCullData &cull_data, ui
 
 template <bool p_fade_check>
 int RendererSceneCull::_visibility_range_check(InstanceVisibilityData &r_vis_data, const Vector3 &p_camera_pos, uint64_t p_viewport_mask) {
-	float dist = p_camera_pos.distance_to(r_vis_data.position);
+	const float dist_sq = p_camera_pos.distance_squared_to(r_vis_data.position);
 	const RS::VisibilityRangeFadeMode &fade_mode = r_vis_data.fade_mode;
 
 	float begin_offset = -r_vis_data.range_begin_margin;
@@ -2768,16 +2768,20 @@ int RendererSceneCull::_visibility_range_check(InstanceVisibilityData &r_vis_dat
 		end_offset = -end_offset;
 	}
 
-	if (r_vis_data.range_end > 0.0f && dist > r_vis_data.range_end + end_offset) {
+	const float end_limit = r_vis_data.range_end + end_offset;
+	const float begin_limit = r_vis_data.range_begin + begin_offset;
+
+	if (r_vis_data.range_end > 0.0f && (end_limit < 0.0f || dist_sq > end_limit * end_limit)) {
 		r_vis_data.viewport_state &= ~p_viewport_mask;
 		return -1;
-	} else if (r_vis_data.range_begin > 0.0f && dist < r_vis_data.range_begin + begin_offset) {
+	} else if (r_vis_data.range_begin > 0.0f && begin_limit > 0.0f && dist_sq < begin_limit * begin_limit) {
 		r_vis_data.viewport_state &= ~p_viewport_mask;
 		return 1;
 	} else {
 		r_vis_data.viewport_state |= p_viewport_mask;
-		if (p_fade_check) {
+		if constexpr (p_fade_check) {
 			if (fade_mode != RS::VISIBILITY_RANGE_FADE_DISABLED) {
+				float dist = Math::sqrt(dist_sq);
 				r_vis_data.children_fade_alpha = 1.0f;
 				if (r_vis_data.range_end > 0.0f && dist > r_vis_data.range_end - end_offset) {
 					if (fade_mode == RS::VISIBILITY_RANGE_FADE_DEPENDENCIES) {

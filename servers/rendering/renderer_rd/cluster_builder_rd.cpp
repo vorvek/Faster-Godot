@@ -525,35 +525,57 @@ void ClusterBuilderRD::bake_cluster() {
 			RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, shared->cluster_render.shader_pipelines[use_msaa ? ClusterBuilderSharedDataRD::ClusterRender::PIPELINE_MSAA : ClusterBuilderSharedDataRD::ClusterRender::PIPELINE_NORMAL]);
 			RD::get_singleton()->draw_list_bind_uniform_set(draw_list, cluster_render_uniform_set, 0);
 
-			for (uint32_t i = 0; i < render_element_count;) {
-				push_constant.base_index = i;
-				switch (render_elements[i].type) {
+			enum ClusterVolumeGeometry {
+				CLUSTER_VOLUME_SPHERE,
+				CLUSTER_VOLUME_CONE,
+				CLUSTER_VOLUME_BOX,
+			};
+
+			auto get_cluster_volume_geometry = [](const RenderElementData &p_element) {
+				switch (p_element.type) {
 					case ELEMENT_TYPE_OMNI_LIGHT: {
+						return CLUSTER_VOLUME_SPHERE;
+					}
+					case ELEMENT_TYPE_SPOT_LIGHT: {
+						return p_element.has_wide_spot_angle ? CLUSTER_VOLUME_SPHERE : CLUSTER_VOLUME_CONE;
+					}
+					case ELEMENT_TYPE_DECAL:
+					case ELEMENT_TYPE_REFLECTION_PROBE: {
+						return CLUSTER_VOLUME_BOX;
+					}
+				}
+				return CLUSTER_VOLUME_BOX;
+			};
+
+			auto bind_cluster_volume_geometry = [&](ClusterVolumeGeometry p_geometry) {
+				switch (p_geometry) {
+					case CLUSTER_VOLUME_SPHERE: {
 						RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->sphere_vertex_array);
 						RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->sphere_index_array);
 					} break;
-					case ELEMENT_TYPE_SPOT_LIGHT: {
-						// If the spot angle is above a certain threshold, use a sphere instead of a cone for building the clusters
-						// since the cone gets too flat/large (spot angle close to 90 degrees) or
-						// can't even cover the affected area of the light (spot angle above 90 degrees).
-						if (render_elements[i].has_wide_spot_angle) {
-							RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->sphere_vertex_array);
-							RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->sphere_index_array);
-						} else {
-							RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->cone_vertex_array);
-							RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->cone_index_array);
-						}
+					case CLUSTER_VOLUME_CONE: {
+						RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->cone_vertex_array);
+						RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->cone_index_array);
 					} break;
-					case ELEMENT_TYPE_DECAL:
-					case ELEMENT_TYPE_REFLECTION_PROBE: {
+					case CLUSTER_VOLUME_BOX: {
 						RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->box_vertex_array);
 						RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->box_index_array);
 					} break;
 				}
+			};
 
-				RD::get_singleton()->draw_list_set_push_constant(draw_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterRender::PushConstant));
+			for (uint32_t i = 0; i < render_element_count;) {
+				push_constant.base_index = i;
+
+				ClusterVolumeGeometry geometry = get_cluster_volume_geometry(render_elements[i]);
+				bind_cluster_volume_geometry(geometry);
 
 				uint32_t instances = 1;
+				while (i + instances < render_element_count && get_cluster_volume_geometry(render_elements[i + instances]) == geometry) {
+					instances++;
+				}
+
+				RD::get_singleton()->draw_list_set_push_constant(draw_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterRender::PushConstant));
 				RD::get_singleton()->draw_list_draw(draw_list, true, instances);
 				i += instances;
 			}

@@ -112,7 +112,9 @@ protected:
 	void _render_buffers_ensure_depth_texture(const RenderDataRD *p_render_data);
 	void _render_buffers_copy_depth_texture(const RenderDataRD *p_render_data, bool p_use_msaa = false);
 	void _render_buffers_post_process_and_tonemap(const RenderDataRD *p_render_data, bool p_use_msaa = false);
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	void _post_process_subpass(RID p_source_texture, RID p_framebuffer, const RenderDataRD *p_render_data);
+#endif
 	void _disable_clear_request(const RenderDataRD *p_render_data);
 
 	// needed for a single argument calls (material and uv2)

@@ -32,7 +32,9 @@
 
 #include "servers/rendering/renderer_rd/pipeline_cache_rd.h"
 #include "servers/rendering/renderer_rd/shaders/effects/tonemap.glsl.gen.h"
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 #include "servers/rendering/renderer_rd/shaders/effects/tonemap_mobile.glsl.gen.h"
+#endif
 
 #include "servers/rendering/rendering_server.h"
 
@@ -55,6 +57,7 @@ private:
 		TONEMAP_MODE_MAX
 	};
 
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	enum TonemapModeMobile {
 		TONEMAP_MOBILE_MODE_NORMAL,
 		TONEMAP_MOBILE_MODE_1D_LUT,
@@ -68,6 +71,7 @@ private:
 
 		TONEMAP_MOBILE_MODE_MAX
 	};
+#endif
 
 	enum Flags {
 		TONEMAP_FLAG_USE_BCS = (1 << 0),
@@ -79,6 +83,7 @@ private:
 		TONEMAP_FLAG_CONVERT_TO_SRGB = (1 << 6),
 	};
 
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	enum FlagsMobile {
 		TONEMAP_MOBILE_FLAG_USE_BCS = (1 << 0),
 		TONEMAP_MOBILE_FLAG_USE_GLOW = (1 << 1),
@@ -102,6 +107,7 @@ private:
 		TONEMAP_MOBILE_FLAG_GLOW_MODE_MIX = (1 << 17),
 		TONEMAP_MOBILE_ADRENO_BUG = (1 << 18), // Needs to be last so we force the pipeline cache to specify specializations for all variants.
 	};
+#endif
 
 	struct TonemapPushConstant {
 		float bcs[3]; // 12 - 12
@@ -126,6 +132,7 @@ private:
 		float tonemapper_params[4]; //  16 - 112
 	};
 
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	struct TonemapPushConstantMobile {
 		float bcs[3]; // 12 - 12
 		float luminance_multiplier; //  4 - 16
@@ -140,6 +147,7 @@ private:
 
 		float tonemapper_params[4]; //  16 - 64
 	};
+#endif
 
 	/* tonemap actually writes to a framebuffer, which is
 	 * better to do using the raster pipeline rather than
@@ -152,12 +160,14 @@ private:
 		PipelineCacheRD pipelines[TONEMAP_MODE_MAX];
 	} tonemap;
 
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	struct TonemapMobile {
 		TonemapPushConstantMobile push_constant;
 		TonemapMobileShaderRD shader;
 		RID shader_version;
 		PipelineCacheRD pipelines[TONEMAP_MOBILE_MODE_MAX];
 	} tonemap_mobile;
+#endif
 
 public:
 	ToneMapper(bool p_use_mobile_version);
@@ -208,8 +218,10 @@ public:
 	};
 
 	void tonemapper(RID p_source_color, RID p_dst_framebuffer, const TonemapSettings &p_settings);
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	void tonemapper_mobile(RID p_source_color, RID p_dst_framebuffer, const TonemapSettings &p_settings);
 	void tonemapper_subpass(RD::DrawListID p_subpass_draw_list, RID p_source_color, RD::FramebufferFormatID p_dst_format_id, const TonemapSettings &p_settings);
+#endif
 };
 
 } // namespace RendererRD

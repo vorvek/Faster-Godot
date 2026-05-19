@@ -34,6 +34,19 @@
 #include "core/math/projection.h"
 #include "rendering_server_globals.h"
 
+static _FORCE_INLINE_ real_t _aabb_min_distance_to_plane(const Vector3 &p_min, const Vector3 &p_max, const Plane &p_plane) {
+	const Vector3 &normal = p_plane.normal;
+	const Vector3 support(
+			normal.x >= 0.0f ? p_min.x : p_max.x,
+			normal.y >= 0.0f ? p_min.y : p_max.y,
+			normal.z >= 0.0f ? p_min.z : p_max.z);
+	return normal.dot(support) + p_plane.d;
+}
+
+static _FORCE_INLINE_ real_t _aabb_min_distance_to_plane(const AABB &p_aabb, const Plane &p_plane) {
+	return _aabb_min_distance_to_plane(p_aabb.position, p_aabb.position + p_aabb.size, p_plane);
+}
+
 #ifdef RENDERING_LIGHT_CULLER_DEBUG_STRINGS
 const char *RenderingLightCuller::Data::string_planes[] = {
 	"NEAR",
@@ -131,14 +144,11 @@ bool RenderingLightCuller::cull_directional_light(const RendererSceneCull::Insta
 
 	LightCullPlanes &cull_planes = data.directional_cull_planes[p_directional_light_id];
 
-	Vector3 mins = Vector3(p_bound.bounds[0], p_bound.bounds[1], p_bound.bounds[2]);
-	Vector3 maxs = Vector3(p_bound.bounds[3], p_bound.bounds[4], p_bound.bounds[5]);
-	AABB bb(mins, maxs - mins);
+	const Vector3 mins(p_bound.bounds[0], p_bound.bounds[1], p_bound.bounds[2]);
+	const Vector3 maxs(p_bound.bounds[3], p_bound.bounds[4], p_bound.bounds[5]);
 
-	real_t r_min, r_max;
 	for (int p = 0; p < cull_planes.num_cull_planes; p++) {
-		bb.project_range_in_plane(cull_planes.cull_planes[p], r_min, r_max);
-		if (r_min > 0.0f) {
+		if (_aabb_min_distance_to_plane(mins, maxs, cull_planes.cull_planes[p]) > 0.0f) {
 #ifdef LIGHT_CULLER_DEBUG_DIRECTIONAL_LIGHT
 			cull_planes.rejected_count++;
 #endif
@@ -179,20 +189,21 @@ void RenderingLightCuller::cull_regular_light(PagedArray<RendererSceneCull::Inst
 		}
 #endif
 
-		real_t r_min, r_max;
 		bool show = true;
 
 		for (int p = 0; p < data.regular_cull_planes.num_cull_planes; p++) {
-			// As we only need r_min, could this be optimized?
-			bb.project_range_in_plane(data.regular_cull_planes.cull_planes[p], r_min, r_max);
+			const Plane &plane = data.regular_cull_planes.cull_planes[p];
 
 #ifdef LIGHT_CULLER_DEBUG_LOGGING
 			if (is_logging()) {
-				print_line("\tplane " + itos(p) + " : " + String(data.regular_cull_planes.cull_planes[p]) + " r_min " + String(Variant(r_min)) + " r_max " + String(Variant(r_max)));
+				real_t r_min;
+				real_t r_max;
+				bb.project_range_in_plane(plane, r_min, r_max);
+				print_line("\tplane " + itos(p) + " : " + String(plane) + " r_min " + String(Variant(r_min)) + " r_max " + String(Variant(r_max)));
 			}
 #endif
 
-			if (r_min > 0.0f) {
+			if (_aabb_min_distance_to_plane(bb, plane) > 0.0f) {
 				show = false;
 				break;
 			}

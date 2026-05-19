@@ -273,6 +273,15 @@ static etcpak_force_inline unsigned long _bit_scan_forward( unsigned long mask )
 typedef std::array<uint16_t, 4> v4i;
 
 #ifdef __AVX2__
+static etcpak_force_inline uint8_t first_set_bit_u32(uint32_t mask)
+{
+#if defined _MSC_VER && !defined __clang__
+	return (uint8_t)_bit_scan_forward(mask);
+#else
+	return (uint8_t)__builtin_ctz(mask);
+#endif
+}
+
 static etcpak_force_inline __m256i Sum4_AVX2( const uint8_t* data) noexcept
 {
     __m128i d0 = _mm_loadu_si128(((__m128i*)data) + 0);
@@ -2585,7 +2594,7 @@ static inline int16_t hMax( __m128i buffer, uint8_t& idx )
     __m128i tmp3 = _mm_minpos_epu16( tmp2 );
     uint8_t result = 255 - (uint8_t)_mm_cvtsi128_si32( tmp3 );
     __m128i mask = _mm_cmpeq_epi8( buffer, _mm_set1_epi8( result ) );
-    idx = _tzcnt_u32( _mm_movemask_epi8( mask ) );
+    idx = first_set_bit_u32( _mm_movemask_epi8( mask ) );
 
     return result;
 }
@@ -2633,7 +2642,7 @@ static inline int16_t hMin( __m128i buffer, uint8_t& idx )
     __m128i tmp3 = _mm_minpos_epu16( tmp2 );
     uint8_t result = (uint8_t)_mm_cvtsi128_si32( tmp3 );
     __m128i mask = _mm_cmpeq_epi8( buffer, _mm_set1_epi8( result ) );
-    idx = _tzcnt_u32( _mm_movemask_epi8( mask ) );
+    idx = first_set_bit_u32( _mm_movemask_epi8( mask ) );
     return result;
 }
 #elif defined __ARM_NEON && defined __aarch64__

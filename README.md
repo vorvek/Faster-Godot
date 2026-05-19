@@ -1,76 +1,75 @@
-# Godot Engine
+# Faster-Godot
 
-<p align="center">
-  <a href="https://godotengine.org">
-    <img src="logo_outlined.svg" width="400" alt="Godot Engine logo">
-  </a>
-</p>
+Faster-Godot is a performance-first fork of Godot 4.6.2-stable for desktop
+games that can commit to a narrower runtime contract:
 
-## 2D and 3D cross-platform game engine
+- Windows and Linux only.
+- x86_64 only.
+- AVX2 and FMA required.
+- Forward+ rendering only.
+- Vulkan as the active rendering backend.
+- Jolt as the 3D physics backend.
 
-**[Godot Engine](https://godotengine.org) is a feature-packed, cross-platform
-game engine to create 2D and 3D games from a unified interface.** It provides a
-comprehensive set of [common tools](https://godotengine.org/features), so that
-users can focus on making games without having to reinvent the wheel. Games can
-be exported with one click to a number of platforms, including the major desktop
-platforms (Linux, macOS, Windows), mobile platforms (Android, iOS), as well as
-Web-based platforms and [consoles](https://godotengine.org/consoles).
+This is not a general-purpose replacement for official Godot. It deliberately
+trades broad platform compatibility for lower binary size, less renderer and
+module surface area, and tighter hot paths for desktop Forward+ games.
 
-## Free, open source and community-driven
+## Where The Speed Comes From
 
-Godot is completely free and open source under the very permissive [MIT license](https://godotengine.org/license).
-No strings attached, no royalties, nothing. The users' games are theirs, down
-to the last line of engine code. Godot's development is fully independent and
-community-driven, empowering users to help shape their engine to match their
-expectations. It is supported by the [Godot Foundation](https://godot.foundation/)
-not-for-profit.
+The current speed work is concentrated in these areas. The benchmarked gains so
+far came mostly from the renderer-profile and hot-path changes:
 
-Before being open sourced in [February 2014](https://github.com/godotengine/godot/commit/0b806ee0fc9097fa7bda7ac0109191c9c5e0a1ac),
-Godot had been developed by [Juan Linietsky](https://github.com/reduz) and
-[Ariel Manzur](https://github.com/punto-) for several years as an in-house
-engine, used to publish several work-for-hire titles.
+- Forward+ only: Mobile and compatibility renderer paths are removed from the
+  fork build, including mobile tonemapping variants and Forward Mobile shader
+  generation.
+- AVX2/FMA baseline: The engine is compiled for modern x86_64 desktop CPUs
+  instead of the official broad SSE4.2 baseline.
+- Render culling hot paths: Visibility range checks avoid square roots when no
+  fade value is needed, light culling avoids full AABB projection when only the
+  minimum plane distance matters, and clustered volume draws batch consecutive
+  same-geometry elements.
+- Occlusion raycast backend: Embree is updated to 4.4.1 and the viewport
+  occlusion path stays enabled for fixed-camera rooms, corridors, and dense
+  static scenes.
+- Windows input pump: Raw mouse input is drained in batches and normal message
+  processing is capped per frame to avoid high-polling mice flooding
+  `PeekMessage()` and tanking CanvasItem-heavy scenes.
+- Smaller runtime surface: Unused modules and backends are disabled by default,
+  including mobile/XR/networking modules outside this fork's target profile.
+- Jolt-only physics: Godot Physics 2D/3D modules are disabled in the fork
+  profile; Jolt is the default 3D physics server.
 
-![Screenshot of a 3D scene in the Godot Engine editor](https://raw.githubusercontent.com/godotengine/godot-design/master/screenshots/editor_tps_demo_1920x1080.jpg)
+## Build
 
-## Getting the engine
+Faster-Godot is enabled by default through the `faster_godot=yes` SCons option.
+Use `faster_godot=no` to build closer to official Godot behavior from this tree.
 
-### Binary downloads
+Windows release template:
 
-Official binaries for the Godot editor and the export templates can be found
-[on the Godot website](https://godotengine.org/download).
+```powershell
+scons platform=windows target=template_release arch=x86_64 use_mingw=yes tests=no optimize=speed lto=none debug_symbols=no -j16
+```
 
-### Compiling from source
+Linux release template:
 
-[See the official docs](https://docs.godotengine.org/en/latest/engine_details/development/compiling)
-for compilation instructions for every supported platform.
+```bash
+scons platform=linuxbsd target=template_release arch=x86_64 tests=no optimize=speed lto=none debug_symbols=no -j16
+```
 
-## Community and contributing
+The forked binaries receive the `.faster_godot` suffix.
 
-Godot is not only an engine but an ever-growing community of users and engine
-developers. The main community channels are listed [on the homepage](https://godotengine.org/community).
+## Changes From Official Godot
 
-The best way to get in touch with the core engine developers is to join the
-[Godot Contributors Chat](https://chat.godotengine.org).
+The short index is in [CHANGES_FROM_OFFICIAL.md](CHANGES_FROM_OFFICIAL.md).
+Each larger change links to a focused document under [docs](docs/) with the
+code scope, pros, and cons.
 
-To get started contributing to the project, see the [contributing guide](CONTRIBUTING.md).
-This document also includes guidelines for reporting bugs.
+## License
 
-## Documentation and demos
+Faster-Godot keeps Godot's original MIT license. See [LICENSE.txt](LICENSE.txt).
 
-The official documentation is hosted on [Read the Docs](https://docs.godotengine.org).
-It is maintained by the Godot community in its own [GitHub repository](https://github.com/godotengine/godot-docs).
+## Attribution
 
-The [class reference](https://docs.godotengine.org/en/latest/classes/)
-is also accessible from the Godot editor.
+Based on Godot Engine 4.6.2-stable.
 
-We also maintain official demos in their own [GitHub repository](https://github.com/godotengine/godot-demo-projects)
-as well as a list of [awesome Godot community resources](https://github.com/godotengine/awesome-godot).
-
-There are also a number of other
-[learning resources](https://docs.godotengine.org/en/latest/community/tutorials.html)
-provided by the community, such as text and video tutorials, demos, etc.
-Consult the [community channels](https://godotengine.org/community)
-for more information.
-
-[![Code Triagers Badge](https://www.codetriage.com/godotengine/godot/badges/users.svg)](https://www.codetriage.com/godotengine/godot)
-[![Translate on Weblate](https://hosted.weblate.org/widgets/godot-engine/-/godot/svg-badge.svg)](https://hosted.weblate.org/engage/godot-engine/?utm_source=widget)
+Fork maintained by Jon Tamayo - https://x.com/vorvek

@@ -74,6 +74,10 @@
 #include <shlwapi.h>
 #include <shobjidl.h>
 #include <wbemcli.h>
+#include <windns.h> // For QWORD.
+#include <winuser.h>
+
+#include <limits>
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -247,6 +251,33 @@ void DisplayServerWindows::_set_mouse_mode_impl(MouseMode p_mode) {
 			SetCapture(wd.hWnd);
 
 			_register_raw_input_devices(window_id);
+
+			const BitField<WinKeyModifierMask> &mods = _get_mods();
+
+			Ref<InputEventMouseMotion> mm;
+			mm.instantiate();
+
+			mm->set_window_id(window_id);
+			mm->set_pressure(windows[window_id].last_pressure);
+			mm->set_ctrl_pressed(mods.has_flag(WinKeyModifierMask::CTRL));
+			mm->set_shift_pressed(mods.has_flag(WinKeyModifierMask::SHIFT));
+			mm->set_alt_pressed(mods.has_flag(WinKeyModifierMask::ALT));
+			mm->set_meta_pressed(mods.has_flag(WinKeyModifierMask::META));
+			mm->set_button_mask(mouse_get_button_state());
+
+			mm->set_relative(Vector2(mm->get_position() - Vector2(old_x, old_y)));
+			mm->set_relative_screen_position(mm->get_relative());
+			old_x = mm->get_position().x;
+			old_y = mm->get_position().y;
+
+			mm->set_position(center);
+			mm->set_global_position(center);
+			mm->set_velocity(Vector2(0, 0));
+			mm->set_screen_velocity(Vector2(0, 0));
+
+			if (windows[window_id].window_focused || window_get_active_popup() == window_id) {
+				Input::get_singleton()->parse_input_event(mm);
+			}
 		}
 	} else {
 		// Mouse is free to move around (not captured or confined).
@@ -3852,6 +3883,119 @@ String DisplayServerWindows::keyboard_get_layout_name(int p_index) const {
 	return ret;
 }
 
+void DisplayServerWindows::process_raw_input() {
+	WindowID window_id = MAIN_WINDOW_ID;
+
+	if (!use_raw_input) {
+		return;
+	}
+
+	UINT n_buffer;
+	if (GetRawInputBuffer(nullptr, &n_buffer, sizeof(RAWINPUTHEADER)) != 0 || n_buffer == 0) {
+		return;
+	}
+
+	UINT dw_size = n_buffer * sizeof(RAWINPUT);
+	LPBYTE lpb = new BYTE[dw_size];
+	if (lpb == nullptr) {
+		return;
+	}
+
+	UINT n_read = GetRawInputBuffer((PRAWINPUT)lpb, &dw_size, sizeof(RAWINPUTHEADER));
+	if (n_read == (UINT)-1 || n_read == 0) {
+		delete[] lpb;
+		return;
+	}
+
+	PRAWINPUT raw = (PRAWINPUT)lpb;
+	for (UINT i = 0; i < n_read; ++i) {
+		const BitField<WinKeyModifierMask> &mods = _get_mods();
+		if (raw->header.dwType == RIM_TYPEKEYBOARD) {
+			if (raw->data.keyboard.VKey == VK_SHIFT) {
+				// If multiple Shifts are held down at the same time,
+				// Windows natively only sends a KEYUP for the last one to be released.
+				if (raw->data.keyboard.Flags & RI_KEY_BREAK) {
+					// Make sure to check the latest key state since
+					// we're in the middle of the message queue.
+					if (GetAsyncKeyState(VK_SHIFT) < 0) {
+						// A Shift is released, but another Shift is still held.
+						ERR_BREAK(key_event_pos >= KEY_EVENT_BUFFER_SIZE);
+
+						KeyEvent ke;
+						ke.shift = false;
+						ke.altgr = mods.has_flag(WinKeyModifierMask::ALT_GR);
+						ke.alt = mods.has_flag(WinKeyModifierMask::ALT);
+						ke.control = mods.has_flag(WinKeyModifierMask::CTRL);
+						ke.meta = mods.has_flag(WinKeyModifierMask::META);
+						ke.uMsg = WM_KEYUP;
+						ke.window_id = window_id;
+
+						ke.wParam = VK_SHIFT;
+						// data.keyboard.MakeCode -> 0x2A - left shift, 0x36 - right shift.
+						// Bit 30 -> key was previously down, bit 31 -> key is being released.
+						ke.lParam = raw->data.keyboard.MakeCode << 16 | 1 << 30 | 1 << 31;
+						key_event_buffer[key_event_pos++] = ke;
+					}
+				}
+			}
+		} else if (mouse_mode == MOUSE_MODE_CAPTURED && raw->header.dwType == RIM_TYPEMOUSE) {
+			Ref<InputEventMouseMotion> mm;
+			mm.instantiate();
+
+			mm->set_window_id(window_id);
+			mm->set_ctrl_pressed(mods.has_flag(WinKeyModifierMask::CTRL));
+			mm->set_shift_pressed(mods.has_flag(WinKeyModifierMask::SHIFT));
+			mm->set_alt_pressed(mods.has_flag(WinKeyModifierMask::ALT));
+			mm->set_meta_pressed(mods.has_flag(WinKeyModifierMask::META));
+
+			mm->set_pressure((raw->data.mouse.ulButtons & RI_MOUSE_LEFT_BUTTON_DOWN) ? 1.0f : 0.0f);
+			mm->set_button_mask(mouse_get_button_state());
+
+			Point2i c(windows[window_id].width / 2, windows[window_id].height / 2);
+
+			// Centering just so it works as before.
+			POINT pos = { (int)c.x, (int)c.y };
+			ClientToScreen(windows[window_id].hWnd, &pos);
+			SetCursorPos(pos.x, pos.y);
+
+			mm->set_position(c);
+			mm->set_global_position(c);
+			mm->set_velocity(Vector2(0, 0));
+			mm->set_screen_velocity(Vector2(0, 0));
+
+			if (raw->data.mouse.usFlags == MOUSE_MOVE_RELATIVE) {
+				mm->set_relative(Vector2(raw->data.mouse.lLastX, raw->data.mouse.lLastY));
+			} else if (raw->data.mouse.usFlags == MOUSE_MOVE_ABSOLUTE) {
+				int nScreenWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+				int nScreenHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+				int nScreenLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
+				int nScreenTop = GetSystemMetrics(SM_YVIRTUALSCREEN);
+
+				Vector2 abs_pos(
+						(double(raw->data.mouse.lLastX) - 65536.0 / (nScreenWidth)) * nScreenWidth / 65536.0 + nScreenLeft,
+						(double(raw->data.mouse.lLastY) - 65536.0 / (nScreenHeight)) * nScreenHeight / 65536.0 + nScreenTop);
+
+				POINT coords; // Client coords.
+				coords.x = abs_pos.x;
+				coords.y = abs_pos.y;
+
+				ScreenToClient(windows[window_id].hWnd, &coords);
+
+				mm->set_relative(Vector2(coords.x - old_x, coords.y - old_y));
+				old_x = coords.x;
+				old_y = coords.y;
+			}
+			mm->set_relative_screen_position(mm->get_relative());
+
+			if ((windows[window_id].window_focused || windows[window_id].is_popup) && mm->get_relative() != Vector2()) {
+				Input::get_singleton()->parse_input_event(mm);
+			}
+		}
+		raw = NEXTRAWINPUTBLOCK(raw);
+	}
+	delete[] lpb;
+}
+
 void DisplayServerWindows::process_events() {
 	ERR_FAIL_COND(!Thread::is_main_thread());
 
@@ -3864,10 +4008,49 @@ void DisplayServerWindows::process_events() {
 	}
 
 	_THREAD_SAFE_LOCK_
+
+	process_raw_input();
+
 	MSG msg = {};
-	while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+	auto peek_not_input = [&] {
+		if (!app_focused) {
+			return PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE);
+		}
+		BOOL ret = PeekMessageW(&msg, nullptr, 0, WM_INPUT - 1, PM_REMOVE);
+		// Avoid polling what is polled below in `peek_keys_mouse_buttons()`.
+		if (!ret) {
+			ret = PeekMessageW(&msg, nullptr, WM_INPUT + 3, WM_MOUSEMOVE, PM_REMOVE);
+		}
+		if (!ret) {
+			ret = PeekMessageW(&msg, nullptr, WM_MOUSELAST + 1, std::numeric_limits<UINT>::max(), PM_REMOVE);
+		}
+		return ret;
+	};
+
+	auto peek_keys_mouse_buttons = [&] {
+		BOOL ret = PeekMessageW(&msg, nullptr, WM_KEYFIRST, WM_KEYUP, PM_REMOVE);
+		if (!ret) {
+			// Do not process `WM_MOUSEMOVE` here.
+			ret = PeekMessageW(&msg, nullptr, WM_LBUTTONDOWN, WM_MOUSELAST, PM_REMOVE);
+		}
+		return ret;
+	};
+
+	constexpr int MAX_EVENTS_PER_FRAME = 1;
+	constexpr int MAX_EVENTS_PER_FRAME_KMB = 1;
+	int events_processed_this_frame = 0;
+	int events_processed_this_frame_kmb = 0;
+
+	while (events_processed_this_frame < MAX_EVENTS_PER_FRAME && peek_not_input()) {
 		TranslateMessage(&msg);
 		DispatchMessageW(&msg);
+		events_processed_this_frame++;
+	}
+
+	if (events_processed_this_frame_kmb < MAX_EVENTS_PER_FRAME_KMB && peek_keys_mouse_buttons()) {
+		TranslateMessage(&msg);
+		DispatchMessageW(&msg);
+		events_processed_this_frame_kmb++;
 	}
 	_THREAD_SAFE_UNLOCK_
 
@@ -5006,109 +5189,6 @@ LRESULT DisplayServerWindows::WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
 
 		} break;
 		case WM_INPUT: {
-			if (!use_raw_input) {
-				break;
-			}
-
-			UINT dwSize;
-
-			GetRawInputData((HRAWINPUT)lParam, RID_INPUT, nullptr, &dwSize, sizeof(RAWINPUTHEADER));
-			LPBYTE lpb = new BYTE[dwSize];
-			if (lpb == nullptr) {
-				return 0;
-			}
-
-			if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER)) != dwSize) {
-				OutputDebugString(TEXT("GetRawInputData does not return correct size !\n"));
-			}
-
-			RAWINPUT *raw = (RAWINPUT *)lpb;
-
-			const BitField<WinKeyModifierMask> &mods = _get_mods();
-			if (raw->header.dwType == RIM_TYPEKEYBOARD) {
-				if (raw->data.keyboard.VKey == VK_SHIFT) {
-					// If multiple Shifts are held down at the same time,
-					// Windows natively only sends a KEYUP for the last one to be released.
-					if (raw->data.keyboard.Flags & RI_KEY_BREAK) {
-						// Make sure to check the latest key state since
-						// we're in the middle of the message queue.
-						if (GetAsyncKeyState(VK_SHIFT) < 0) {
-							// A Shift is released, but another Shift is still held
-							ERR_BREAK(key_event_pos >= KEY_EVENT_BUFFER_SIZE);
-
-							KeyEvent ke;
-							ke.shift = false;
-							ke.altgr = mods.has_flag(WinKeyModifierMask::ALT_GR);
-							ke.alt = mods.has_flag(WinKeyModifierMask::ALT);
-							ke.control = mods.has_flag(WinKeyModifierMask::CTRL);
-							ke.meta = mods.has_flag(WinKeyModifierMask::META);
-							ke.uMsg = WM_KEYUP;
-							ke.window_id = window_id;
-
-							ke.wParam = VK_SHIFT;
-							// data.keyboard.MakeCode -> 0x2A - left shift, 0x36 - right shift.
-							// Bit 30 -> key was previously down, bit 31 -> key is being released.
-							ke.lParam = raw->data.keyboard.MakeCode << 16 | 1 << 30 | 1 << 31;
-							key_event_buffer[key_event_pos++] = ke;
-						}
-					}
-				}
-			} else if (mouse_mode == MOUSE_MODE_CAPTURED && raw->header.dwType == RIM_TYPEMOUSE) {
-				Ref<InputEventMouseMotion> mm;
-				mm.instantiate();
-
-				mm->set_window_id(window_id);
-				mm->set_ctrl_pressed(mods.has_flag(WinKeyModifierMask::CTRL));
-				mm->set_shift_pressed(mods.has_flag(WinKeyModifierMask::SHIFT));
-				mm->set_alt_pressed(mods.has_flag(WinKeyModifierMask::ALT));
-				mm->set_meta_pressed(mods.has_flag(WinKeyModifierMask::META));
-
-				mm->set_pressure((raw->data.mouse.ulButtons & RI_MOUSE_LEFT_BUTTON_DOWN) ? 1.0f : 0.0f);
-
-				mm->set_button_mask(mouse_get_button_state());
-
-				Point2i c(windows[window_id].width / 2, windows[window_id].height / 2);
-
-				// Centering just so it works as before.
-				POINT pos = { (int)c.x, (int)c.y };
-				ClientToScreen(windows[window_id].hWnd, &pos);
-				SetCursorPos(pos.x, pos.y);
-
-				mm->set_position(c);
-				mm->set_global_position(c);
-				mm->set_velocity(Vector2(0, 0));
-				mm->set_screen_velocity(Vector2(0, 0));
-
-				if (raw->data.mouse.usFlags == MOUSE_MOVE_RELATIVE) {
-					mm->set_relative(Vector2(raw->data.mouse.lLastX, raw->data.mouse.lLastY));
-
-				} else if (raw->data.mouse.usFlags == MOUSE_MOVE_ABSOLUTE) {
-					int nScreenWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-					int nScreenHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-					int nScreenLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
-					int nScreenTop = GetSystemMetrics(SM_YVIRTUALSCREEN);
-
-					Vector2 abs_pos(
-							(double(raw->data.mouse.lLastX) - 65536.0 / (nScreenWidth)) * nScreenWidth / 65536.0 + nScreenLeft,
-							(double(raw->data.mouse.lLastY) - 65536.0 / (nScreenHeight)) * nScreenHeight / 65536.0 + nScreenTop);
-
-					POINT coords; // Client coords.
-					coords.x = abs_pos.x;
-					coords.y = abs_pos.y;
-
-					ScreenToClient(hWnd, &coords);
-
-					mm->set_relative(Vector2(coords.x - old_x, coords.y - old_y));
-					old_x = coords.x;
-					old_y = coords.y;
-				}
-				mm->set_relative_screen_position(mm->get_relative());
-
-				if ((windows[window_id].window_focused || windows[window_id].is_popup) && mm->get_relative() != Vector2()) {
-					Input::get_singleton()->parse_input_event(mm);
-				}
-			}
-			delete[] lpb;
 		} break;
 		case WT_CSRCHANGE:
 		case WT_PROXIMITY: {

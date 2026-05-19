@@ -2409,12 +2409,17 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 
 	// Start with RenderingDevice-based backends.
 #ifdef RD_ENABLED
+#ifdef FASTER_GODOT_FORWARD_PLUS_ONLY
+	renderer_hints = "forward_plus";
+	default_renderer_mobile = "forward_plus";
+#else
 	renderer_hints = "forward_plus,mobile";
 	default_renderer_mobile = "mobile";
 #endif
+#endif
 
 	// And Compatibility next, or first if Vulkan is disabled.
-#ifdef GLES3_ENABLED
+#if defined(GLES3_ENABLED) && !defined(FASTER_GODOT_FORWARD_PLUS_ONLY)
 	if (!renderer_hints.is_empty()) {
 		renderer_hints += ",";
 	}
@@ -2432,8 +2437,10 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 
 	if (!rendering_method.is_empty()) {
 		if (rendering_method != "forward_plus" &&
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 				rendering_method != "mobile" &&
 				rendering_method != "gl_compatibility" &&
+#endif
 				rendering_method != "dummy") {
 			OS::get_singleton()->print("Unknown rendering method '%s', aborting.\nValid options are ",
 					rendering_method.utf8().get_data());
@@ -2518,7 +2525,11 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		// Now validate whether the selected driver matches with the renderer.
 		bool valid_combination = false;
 		Vector<String> available_drivers;
-		if (rendering_method == "forward_plus" || rendering_method == "mobile") {
+		if (rendering_method == "forward_plus"
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
+				|| rendering_method == "mobile"
+#endif
+		) {
 #ifdef VULKAN_ENABLED
 			available_drivers.push_back("vulkan");
 #endif
@@ -2529,7 +2540,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			available_drivers.push_back("metal");
 #endif
 		}
-#ifdef GLES3_ENABLED
+#if defined(GLES3_ENABLED) && !defined(FASTER_GODOT_FORWARD_PLUS_ONLY)
 		if (rendering_method == "gl_compatibility") {
 			available_drivers.push_back("opengl3");
 			available_drivers.push_back("opengl3_angle");

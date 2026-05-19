@@ -29,17 +29,30 @@
 /**************************************************************************/
 
 #include <windows.h>
+#include <stdint.h>
 #ifdef _MSC_VER
 #include <intrin.h> // For builtin __cpuid.
+#define GODOT_CPUID(r_cpuinfo, p_info, p_subinfo) __cpuidex(r_cpuinfo, p_info, p_subinfo)
+#define GODOT_XGETBV(p_index) _xgetbv(p_index)
 #else
-void __cpuid(int *r_cpuinfo, int p_info) {
+static void GODOT_CPUID(int *r_cpuinfo, int p_info, int p_subinfo) {
 	// Note: Some compilers have a buggy `__cpuid` intrinsic, using inline assembly (based on LLVM-20 implementation) instead.
 	__asm__ __volatile__(
 			"xchgq %%rbx, %q1;"
 			"cpuid;"
 			"xchgq %%rbx, %q1;"
 			: "=a"(r_cpuinfo[0]), "=r"(r_cpuinfo[1]), "=c"(r_cpuinfo[2]), "=d"(r_cpuinfo[3])
-			: "0"(p_info));
+			: "0"(p_info), "2"(p_subinfo));
+}
+
+static uint64_t GODOT_XGETBV(uint32_t p_index) {
+	uint32_t eax;
+	uint32_t edx;
+	__asm__ __volatile__(
+			"xgetbv;"
+			: "=a"(eax), "=d"(edx)
+			: "c"(p_index));
+	return ((uint64_t)edx << 32) | eax;
 }
 #endif
 
@@ -58,23 +71,41 @@ extern int WINAPI ShimMainCRTStartup() __attribute__((used));
 #endif
 
 extern int WINAPI ShimMainCRTStartup() {
-	BOOL win_sse42_supported = FALSE;
-	BOOL cpuid_sse42_supported = FALSE;
-
 	int cpuinfo[4];
-	__cpuid(cpuinfo, 0x01);
+	GODOT_CPUID(cpuinfo, 0x01, 0x00);
 
-	win_sse42_supported = IsProcessorFeaturePresent(PF_SSE4_2_INSTRUCTIONS_AVAILABLE);
-	cpuid_sse42_supported = cpuinfo[2] & (1 << 20);
+	BOOL win_sse42_supported = IsProcessorFeaturePresent(PF_SSE4_2_INSTRUCTIONS_AVAILABLE);
+	BOOL cpuid_sse42_supported = cpuinfo[2] & (1 << 20);
 
+#ifdef FASTER_GODOT
+	int cpuinfo7[4];
+	GODOT_CPUID(cpuinfo7, 0x07, 0x00);
+
+	BOOL cpuid_avx_supported = cpuinfo[2] & (1 << 28);
+	BOOL cpuid_fma_supported = cpuinfo[2] & (1 << 12);
+	BOOL cpuid_osxsave_supported = cpuinfo[2] & (1 << 27);
+	BOOL cpuid_avx2_supported = cpuinfo7[1] & (1 << 5);
+	BOOL os_avx_state_supported = FALSE;
+	if (cpuid_osxsave_supported) {
+		uint64_t xcr0 = GODOT_XGETBV(0);
+		os_avx_state_supported = (xcr0 & 0x6) == 0x6;
+	}
+
+	if ((win_sse42_supported || cpuid_sse42_supported) && cpuid_avx_supported && cpuid_fma_supported && cpuid_avx2_supported && os_avx_state_supported) {
+#else
 	if (win_sse42_supported || cpuid_sse42_supported) {
+#endif
 #ifdef WINDOWS_SUBSYSTEM_CONSOLE
 		return mainCRTStartup();
 #else
 		return WinMainCRTStartup();
 #endif
 	} else {
+#ifdef FASTER_GODOT
+		MessageBoxW(NULL, L"A CPU and operating system with SSE4.2, AVX, AVX2, FMA, and AVX OS state support is required.", L"Godot Engine", MB_OK | MB_ICONEXCLAMATION | MB_TASKMODAL);
+#else
 		MessageBoxW(NULL, L"A CPU with SSE4.2 instruction set support is required.", L"Godot Engine", MB_OK | MB_ICONEXCLAMATION | MB_TASKMODAL);
+#endif
 		return -1;
 	}
 }

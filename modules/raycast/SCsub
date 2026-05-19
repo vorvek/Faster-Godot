@@ -12,6 +12,9 @@ thirdparty_obj = []
 
 if env["builtin_embree"]:
     thirdparty_dir = "#thirdparty/embree/"
+    faster_embree_avx2_profile = (
+        env["faster_godot"] and env["arch"] == "x86_64" and env["platform"] in ["windows", "linuxbsd"] and not env.msvc
+    )
 
     embree_src = [
         "common/sys/sysinfo.cpp",
@@ -46,7 +49,6 @@ if env["builtin_embree"]:
         "kernels/bvh/bvh.cpp",
         "kernels/bvh/bvh_statistics.cpp",
         "kernels/bvh/bvh4_factory.cpp",
-        "kernels/bvh/bvh8_factory.cpp",
         "kernels/bvh/bvh_collider.cpp",
         "kernels/bvh/bvh_rotate.cpp",
         "kernels/bvh/bvh_refit.cpp",
@@ -63,7 +65,8 @@ if env["builtin_embree"]:
     thirdparty_sources = [thirdparty_dir + file for file in embree_src]
 
     env_raycast.Prepend(CPPPATH=[thirdparty_dir, thirdparty_dir + "include"])
-    env_raycast.Append(CPPDEFINES=["EMBREE_TARGET_SSE2", "EMBREE_LOWEST_ISA", "TASKING_INTERNAL"])
+    env_raycast.Append(CPPDEFINES=["EMBREE_LOWEST_ISA", "TASKING_INTERNAL"])
+    env_raycast.Append(CPPDEFINES=["EMBREE_TARGET_SSE2"])
     env_raycast.AppendUnique(CPPDEFINES=["NDEBUG"])  # No assert() even in debug builds.
 
     if env["platform"] == "windows":
@@ -78,7 +81,16 @@ if env["builtin_embree"]:
     env_thirdparty = env_raycast.Clone()
     env_thirdparty.force_optimization_on_debug()
     env_thirdparty.disable_warnings()
-    env_thirdparty.add_source_files(thirdparty_obj, thirdparty_sources)
+
+    if faster_embree_avx2_profile:
+        # Embree's base objects are the lowest-ISA dispatch layer. Do not let
+        # Faster-Godot's global AVX2 flags leak into them, or Embree's template
+        # instantiation guards select the wrong object set.
+        for flag in ["-mavx2", "-mfma", "-ffp-contract=fast"]:
+            if flag in env_thirdparty["CCFLAGS"]:
+                env_thirdparty["CCFLAGS"].remove(flag)
+            if flag in env_thirdparty["CXXFLAGS"]:
+                env_thirdparty["CXXFLAGS"].remove(flag)
 
     # Set x86 CPU instruction sets to use when building Embree's own intrinsics.
     # Keep this in sync with Godot's main SConstruct file.
@@ -111,6 +123,8 @@ if env["builtin_embree"]:
                 "-fvisibility-inlines-hidden",
             ]
         )
+
+    env_thirdparty.add_source_files(thirdparty_obj, thirdparty_sources)
 
     env.modules_sources += thirdparty_obj
 

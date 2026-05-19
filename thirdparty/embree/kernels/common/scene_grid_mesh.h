@@ -11,11 +11,12 @@ namespace embree
   /*! Grid Mesh */
   struct GridMesh : public Geometry
   {
+    static constexpr unsigned short maxGridRes = 32768;
     /*! type of this geometry */
     static const Geometry::GTypeMask geom_type = Geometry::MTY_GRID_MESH;
 
     /*! grid */
-    struct Grid 
+    struct Grid
     {
       unsigned int startVtxID;
       unsigned int lineVtxOffset;
@@ -42,7 +43,7 @@ namespace embree
   public:
 
     /*! grid mesh construction */
-    GridMesh (Device* device); 
+    GridMesh (Device* device);
 
     /* geometry interface */
   public:
@@ -69,11 +70,11 @@ namespace embree
       unsigned int primID = args->primID;
       float U = args->u;
       float V = args->v;
-      
+
       /* clamp input u,v to [0;1] range */
       U = max(min(U,1.0f),0.0f);
       V = max(min(V,1.0f),0.0f);
-      
+
       RTCBufferType bufferType = args->bufferType;
       unsigned int bufferSlot = args->bufferSlot;
       float* P = args->P;
@@ -83,11 +84,11 @@ namespace embree
       float* ddPdvdv = args->ddPdvdv;
       float* ddPdudv = args->ddPdudv;
       unsigned int valueCount = args->valueCount;
-      
+
       /* calculate base pointer and stride */
       assert((bufferType == RTC_BUFFER_TYPE_VERTEX && bufferSlot < numTimeSteps) ||
              (bufferType == RTC_BUFFER_TYPE_VERTEX_ATTRIBUTE && bufferSlot <= vertexAttribs.size()));
-      const char* src = nullptr; 
+      const char* src = nullptr;
       size_t stride = 0;
       if (bufferType == RTC_BUFFER_TYPE_VERTEX_ATTRIBUTE) {
         src    = vertexAttribs[bufferSlot].getPtr();
@@ -96,7 +97,7 @@ namespace embree
         src    = vertices[bufferSlot].getPtr();
         stride = vertices[bufferSlot].getStride();
       }
-      
+
       const Grid& grid = grids[primID];
       const int grid_width  = grid.resX-1;
       const int grid_height = grid.resY-1;
@@ -106,13 +107,13 @@ namespace embree
       const int iv = min((int)floor(V*grid_height),grid_height);
       const float u = U*grid_width-float(iu);
       const float v = V*grid_height-float(iv);
-      
+
       for (unsigned int i=0; i<valueCount; i+=N)
       {
         const size_t ofs = i*sizeof(float);
         const unsigned int idx0 = grid.startVtxID + (iv+0)*grid.lineVtxOffset + iu;
         const unsigned int idx1 = grid.startVtxID + (iv+1)*grid.lineVtxOffset + iu;
-        
+
         const vbool<N> valid = vint<N>((int)i)+vint<N>(step) < vint<N>(int(valueCount));
         const vfloat<N> p0 = mem<vfloat<N>>::loadu(valid,(float*)&src[(idx0+0)*stride+ofs]);
         const vfloat<N> p1 = mem<vfloat<N>>::loadu(valid,(float*)&src[(idx0+1)*stride+ofs]);
@@ -125,15 +126,15 @@ namespace embree
         const vfloat<N> U  = select(left,u,vfloat<N>(1.0f)-u);
         const vfloat<N> V  = select(left,v,vfloat<N>(1.0f)-v);
         const vfloat<N> W  = 1.0f-U-V;
-        
+
         if (P) {
           mem<vfloat<N>>::storeu(valid,P+i,madd(W,Q0,madd(U,Q1,V*Q2)));
         }
-        if (dPdu) { 
+        if (dPdu) {
           assert(dPdu); mem<vfloat<N>>::storeu(valid,dPdu+i,select(left,Q1-Q0,Q0-Q1)*rcp_grid_width);
           assert(dPdv); mem<vfloat<N>>::storeu(valid,dPdv+i,select(left,Q2-Q0,Q0-Q2)*rcp_grid_height);
         }
-        if (ddPdudu) { 
+        if (ddPdudu) {
           assert(ddPdudu); mem<vfloat<N>>::storeu(valid,ddPdudu+i,vfloat<N>(zero));
           assert(ddPdvdv); mem<vfloat<N>>::storeu(valid,ddPdvdv+i,vfloat<N>(zero));
           assert(ddPdudv); mem<vfloat<N>>::storeu(valid,ddPdudv+i,vfloat<N>(zero));
@@ -142,7 +143,7 @@ namespace embree
     }
 
     void addElementsToCount (GeometryCounts & counts) const;
-    
+
     __forceinline unsigned int getNumTotalQuads() const
     {
       size_t quads = 0;
@@ -154,12 +155,16 @@ namespace embree
     __forceinline unsigned int getNumQuads(const size_t gridID) const
     {
       const Grid& g = grid(gridID);
+      assert(g.resX <= maxGridRes);
+      assert(g.resY <= maxGridRes);
       return (unsigned int) max((int)1,((int)g.resX-1) * ((int)g.resY-1));
     }
-    
+
     __forceinline unsigned int getNumSubGrids(const size_t gridID) const
     {
       const Grid& g = grid(gridID);
+      assert(g.resX <= maxGridRes);
+      assert(g.resY <= maxGridRes);
       return max((unsigned int)1,((unsigned int)g.resX >> 1) * ((unsigned int)g.resY >> 1));
     }
 
@@ -174,7 +179,7 @@ namespace embree
     __forceinline size_t numVertices() const {
       return vertices[0].size();
     }
-    
+
     /*! returns i'th grid*/
     __forceinline const Grid& grid(size_t i) const {
       return grids[i];
@@ -218,7 +223,7 @@ namespace embree
       assert(y < (size_t)g.resY);
       return g.startVtxID + x + y * g.lineVtxOffset;
     }
-    
+
     /*! returns i'th vertex of the first timestep */
     __forceinline const Vec3fa grid_vertex(const Grid& g, size_t x, size_t y) const {
       const size_t index = grid_vertex_index(g,x,y);
@@ -236,7 +241,7 @@ namespace embree
       const size_t index = grid_vertex_index(g,x,y);
       return vertex(index,time);
     }
-    
+
     /*! gathers quad vertices */
     __forceinline void gather_quad_vertices(Vec3fa& v0, Vec3fa& v1, Vec3fa& v2, Vec3fa& v3, const Grid& g, size_t x, size_t y) const
     {
@@ -245,7 +250,7 @@ namespace embree
       v2 = grid_vertex(g,x+1,y+1);
       v3 = grid_vertex(g,x+0,y+1);
     }
-    
+
     /*! gathers quad vertices for specified time */
     __forceinline void gather_quad_vertices(Vec3fa& v0, Vec3fa& v1, Vec3fa& v2, Vec3fa& v3, const Grid& g, size_t x, size_t y, float time) const
     {
@@ -280,7 +285,7 @@ namespace embree
       bbox = b;
       return true;
     }
-    
+
     /*! calculates the build bounds of the i'th primitive, if it's valid */
     __forceinline bool buildBounds(const Grid& g, size_t sx, size_t sy, BBox3fa& bbox) const
     {
@@ -367,7 +372,7 @@ namespace embree
     Device::vector<RawBufferView> vertexAttribs = device; //!< vertex attributes
 
 #if defined(EMBREE_SYCL_SUPPORT)
-    
+
   public:
     struct PrimID_XY { uint32_t primID; uint16_t x,y; };
     Device::vector<PrimID_XY> quadID_to_primID_xy = device;  //!< maps a quad to the primitive ID and grid coordinates
@@ -382,7 +387,7 @@ namespace embree
         : GridMesh(device) {}
 
       LBBox3fa vlinearBounds(size_t buildID, const BBox1f& time_range, const SubGridBuildData * const sgrids) const override {
-        const SubGridBuildData &subgrid = sgrids[buildID];                      
+        const SubGridBuildData &subgrid = sgrids[buildID];
         const unsigned int primID = subgrid.primID;
         const size_t x = subgrid.x();
         const size_t y = subgrid.y();
@@ -405,15 +410,15 @@ namespace embree
         return pinfo;
       }
 #endif
-      
-      PrimInfo createPrimRefArray(mvector<PrimRef>& prims, mvector<SubGridBuildData>& sgrids, const range<size_t>& r, size_t k, unsigned int geomID) const override 
+
+      PrimInfo createPrimRefArray(mvector<PrimRef>& prims, mvector<SubGridBuildData>& sgrids, const range<size_t>& r, size_t k, unsigned int geomID) const override
       {
         PrimInfo pinfo(empty);
         for (size_t j=r.begin(); j<r.end(); j++)
         {
           if (!valid(j)) continue;
           const GridMesh::Grid &g = grid(j);
-          
+
           for (unsigned int y=0; y<g.resY-1u; y+=2)
           {
             for (unsigned int x=0; x<g.resX-1u; x+=2)
@@ -423,7 +428,7 @@ namespace embree
               const PrimRef prim(bounds,(unsigned)geomID,(unsigned)k);
               pinfo.add_center2(prim);
               sgrids[k] = SubGridBuildData(x | g.get3x3FlagsX(x), y | g.get3x3FlagsY(y), unsigned(j));
-              prims[k++] = prim;                
+              prims[k++] = prim;
             }
           }
         }
@@ -454,7 +459,7 @@ namespace embree
         {
           if (!valid(j, timeSegmentRange(t0t1))) continue;
           const GridMesh::Grid &g = grid(j);
-          
+
           for (unsigned int y=0; y<g.resY-1u; y+=2)
           {
             for (unsigned int x=0; x<g.resX-1u; x+=2)

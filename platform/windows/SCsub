@@ -20,12 +20,16 @@ common_win = [
     "windows_terminal_logger.cpp",
     "windows_utils.cpp",
     "native_menu_windows.cpp",
-    "gl_manager_windows_native.cpp",
-    "gl_manager_windows_angle.cpp",
-    "wgl_detect_version.cpp",
     "rendering_context_driver_vulkan_windows.cpp",
     "drop_target_windows.cpp",
 ]
+
+if env["opengl3"]:
+    common_win += [
+        "gl_manager_windows_native.cpp",
+        "gl_manager_windows_angle.cpp",
+        "wgl_detect_version.cpp",
+    ]
 
 if env["library_type"] == "executable":
     common_win += ["godot_windows.cpp"]
@@ -49,10 +53,15 @@ if env["arch"] == "x86_64" and env["library_type"] == "executable":
     if env.msvc:
         if "/d2archSSE42" in env_cpp_check["CCFLAGS"]:
             env_cpp_check["CCFLAGS"].remove("/d2archSSE42")
+        if "/arch:AVX2" in env_cpp_check["CCFLAGS"]:
+            env_cpp_check["CCFLAGS"].remove("/arch:AVX2")
         env.Append(LINKFLAGS=["/ENTRY:ShimMainCRTStartup"])
     else:
         if "-msse4.2" in env_cpp_check["CCFLAGS"]:
             env_cpp_check["CCFLAGS"].remove("-msse4.2")
+        for flag in ["-mavx2", "-mfma"]:
+            if flag in env_cpp_check["CCFLAGS"]:
+                env_cpp_check["CCFLAGS"].remove(flag)
         env.Append(LINKFLAGS=["-Wl,--entry=ShimMainCRTStartup"])
 
 

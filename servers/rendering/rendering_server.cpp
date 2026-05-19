@@ -3702,13 +3702,19 @@ void RenderingServer::init() {
 	GLOBAL_DEF_RST("rendering/lights_and_shadows/use_physical_light_units", false);
 
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/lights_and_shadows/directional_shadow/size", PROPERTY_HINT_RANGE, "256,16384"), 4096);
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	GLOBAL_DEF("rendering/lights_and_shadows/directional_shadow/size.mobile", 2048);
+#endif
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/lights_and_shadows/directional_shadow/soft_shadow_filter_quality", PROPERTY_HINT_ENUM, "Hard (Fastest),Soft Very Low (Faster),Soft Low (Fast),Soft Medium (Average),Soft High (Slow),Soft Ultra (Slowest)"), 2);
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	GLOBAL_DEF("rendering/lights_and_shadows/directional_shadow/soft_shadow_filter_quality.mobile", 0);
+#endif
 	GLOBAL_DEF("rendering/lights_and_shadows/directional_shadow/16_bits", true);
 
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/lights_and_shadows/positional_shadow/soft_shadow_filter_quality", PROPERTY_HINT_ENUM, "Hard (Fastest),Soft Very Low (Faster),Soft Low (Fast),Soft Medium (Average),Soft High (Slow),Soft Ultra (Slowest)"), 2);
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	GLOBAL_DEF("rendering/lights_and_shadows/positional_shadow/soft_shadow_filter_quality.mobile", 0);
+#endif
 	GLOBAL_DEF("rendering/lights_and_shadows/positional_shadow/atlas_16_bits", true);
 
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/2d/shadow_atlas/size", PROPERTY_HINT_RANGE, "128,16384"), 2048);
@@ -3716,7 +3722,9 @@ void RenderingServer::init() {
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/2d/batching/uniform_set_cache_size", PROPERTY_HINT_RANGE, "256,1048576,1"), 4096);
 
 	// Number of commands that can be drawn per frame.
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/gl_compatibility/item_buffer_size", PROPERTY_HINT_RANGE, "128,1048576,1"), 16384);
+#endif
 
 	GLOBAL_DEF("rendering/shader_compiler/shader_cache/enabled", true);
 	GLOBAL_DEF("rendering/shader_compiler/shader_cache/compress", true);
@@ -3726,12 +3734,18 @@ void RenderingServer::init() {
 
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/reflections/sky_reflections/roughness_layers", PROPERTY_HINT_RANGE, "1,32,1"), 8);
 	GLOBAL_DEF_RST("rendering/reflections/sky_reflections/texture_array_reflections", true);
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	GLOBAL_DEF("rendering/reflections/sky_reflections/texture_array_reflections.mobile", false);
+#endif
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/reflections/sky_reflections/ggx_samples", PROPERTY_HINT_RANGE, "0,256,1"), 32);
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/reflections/sky_reflections/ggx_samples.mobile", PROPERTY_HINT_RANGE, "0,128,1"), 16);
+#endif
 	GLOBAL_DEF("rendering/reflections/sky_reflections/fast_filter_high_quality", false);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/reflections/reflection_atlas/reflection_size", PROPERTY_HINT_RANGE, "4,4096,1"), 256);
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/reflections/reflection_atlas/reflection_size.mobile", PROPERTY_HINT_RANGE, "4,2048,1"), 128);
+#endif
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/reflections/reflection_atlas/reflection_count", PROPERTY_HINT_RANGE, "1,256,1"), 64);
 	GLOBAL_DEF_RST("rendering/reflections/specular_occlusion/enabled", true);
 
@@ -3741,7 +3755,9 @@ void RenderingServer::init() {
 
 	GLOBAL_DEF_RST("rendering/shading/overrides/force_vertex_shading", false);
 	GLOBAL_DEF("rendering/shading/overrides/force_lambert_over_burley", false);
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	GLOBAL_DEF("rendering/shading/overrides/force_lambert_over_burley.mobile", true);
+#endif
 
 	GLOBAL_DEF_RST("rendering/driver/depth_prepass/enable", true);
 	GLOBAL_DEF_RST("rendering/driver/depth_prepass/disable_for_vendors", "PowerVR,Mali,Adreno,Apple");
@@ -3794,8 +3810,10 @@ void RenderingServer::init() {
 		}
 
 		GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/scaling_3d/mode", PROPERTY_HINT_ENUM, mode_hints), 0);
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 		GLOBAL_DEF_NOVAL(PropertyInfo(Variant::INT, "rendering/scaling_3d/mode.ios", PROPERTY_HINT_ENUM, mode_hints_metal), 0);
 		GLOBAL_DEF_NOVAL(PropertyInfo(Variant::INT, "rendering/scaling_3d/mode.macos", PROPERTY_HINT_ENUM, mode_hints_metal), 0);
+#endif
 	}
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/scaling_3d/scale", PROPERTY_HINT_RANGE, "0.25,2.0,0.01"), 1.0);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/scaling_3d/fsr_sharpness", PROPERTY_HINT_RANGE, "0,2,0.1"), 0.2f);
@@ -3807,7 +3825,9 @@ void RenderingServer::init() {
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/occlusion_culling/occlusion_rays_per_thread", PROPERTY_HINT_RANGE, "1,2048,1,or_greater"), 512);
 
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/environment/glow/upscale_mode", PROPERTY_HINT_ENUM, "Linear (Fast),Bicubic (Slow)"), 1);
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	GLOBAL_DEF("rendering/environment/glow/upscale_mode.mobile", 0);
+#endif
 
 	GLOBAL_DEF("rendering/environment/screen_space_reflection/half_size", true);
 
@@ -3832,12 +3852,18 @@ void RenderingServer::init() {
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/limits/spatial_indexer/update_iterations_per_frame", PROPERTY_HINT_RANGE, "0,1024,1"), 10);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/limits/spatial_indexer/threaded_cull_minimum_instances", PROPERTY_HINT_RANGE, "32,65536,1"), 1000);
 
+#ifdef FASTER_GODOT_FORWARD_PLUS_ONLY
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/limits/cluster_builder/max_clustered_elements", PROPERTY_HINT_RANGE, "32,8192,1"), 256);
+#else
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/limits/cluster_builder/max_clustered_elements", PROPERTY_HINT_RANGE, "32,8192,1"), 512);
+#endif
 
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	// OpenGL limits
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/limits/opengl/max_renderable_elements", PROPERTY_HINT_RANGE, "1024,65536,1"), 65536);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/limits/opengl/max_renderable_lights", PROPERTY_HINT_RANGE, "2,256,1"), 32);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/limits/opengl/max_lights_per_object", PROPERTY_HINT_RANGE, "2,1024,1"), 8);
+#endif
 
 #ifndef XR_DISABLED
 	GLOBAL_DEF_RST_BASIC("xr/shaders/enabled", false);

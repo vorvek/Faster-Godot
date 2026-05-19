@@ -299,6 +299,9 @@ void register_server_types() {
 	GLOBAL_DEF(PropertyInfo(Variant::STRING, PhysicsServer2DManager::setting_property_name, PROPERTY_HINT_ENUM, "DEFAULT"), "DEFAULT");
 
 	PhysicsServer2DManager::get_singleton()->register_server("Dummy", callable_mp_static(_create_dummy_physics_server_2d));
+#ifdef FASTER_GODOT
+	PhysicsServer2DManager::get_singleton()->set_default_server("Dummy");
+#endif
 #endif // PHYSICS_2D_DISABLED
 
 #ifndef NAVIGATION_3D_DISABLED

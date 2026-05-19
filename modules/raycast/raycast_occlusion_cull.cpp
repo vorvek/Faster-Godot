@@ -649,7 +649,9 @@ void RaycastOcclusionCull::_init_embree() {
 	_MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
 #endif
 
-	String settings = vformat("threads=%d", MAX(1, OS::get_singleton()->get_processor_count() - 2));
+	OS *os = OS::get_singleton();
+	const int thread_count = MAX(1, os->get_processor_count() - 2);
+	String settings = vformat("threads=%d", thread_count);
 	ebr_device = rtcNewDevice(settings.utf8().ptr());
 }
 

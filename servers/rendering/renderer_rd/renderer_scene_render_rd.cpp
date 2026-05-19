@@ -797,11 +797,16 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 			}
 		}
 
+#ifdef FASTER_GODOT_FORWARD_PLUS_ONLY
+		ERR_FAIL_COND_MSG(!can_use_storage, "Faster-Godot requires storage-capable Forward+ render buffers.");
+		tone_mapper->tonemapper(color_texture, dest_fb, tonemap);
+#else
 		if (can_use_storage) {
 			tone_mapper->tonemapper(color_texture, dest_fb, tonemap);
 		} else {
 			tone_mapper->tonemapper_mobile(color_texture, dest_fb, tonemap);
 		}
+#endif
 
 		RD::get_singleton()->draw_command_end_label();
 	}
@@ -883,6 +888,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 	texture_storage->render_target_disable_clear_request(render_target);
 }
 
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 void RendererSceneRenderRD::_post_process_subpass(RID p_source_texture, RID p_framebuffer, const RenderDataRD *p_render_data) {
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 	RD::get_singleton()->draw_command_begin_label("Post Process Subpass");
@@ -967,6 +973,7 @@ void RendererSceneRenderRD::_post_process_subpass(RID p_source_texture, RID p_fr
 
 	RD::get_singleton()->draw_command_end_label();
 }
+#endif
 
 void RendererSceneRenderRD::_disable_clear_request(const RenderDataRD *p_render_data) {
 	ERR_FAIL_COND(p_render_data->render_buffers.is_null());

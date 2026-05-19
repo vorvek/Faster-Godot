@@ -36,6 +36,10 @@
 using namespace RendererRD;
 
 ToneMapper::ToneMapper(bool p_use_mobile_version) {
+#ifdef FASTER_GODOT_FORWARD_PLUS_ONLY
+	(void)p_use_mobile_version;
+	using_mobile_version = false;
+#else
 	using_mobile_version = p_use_mobile_version;
 	if (using_mobile_version) {
 		// Initialize tonemapper
@@ -71,6 +75,7 @@ ToneMapper::ToneMapper(bool p_use_mobile_version) {
 		}
 
 	} else {
+#endif
 		// Initialize tonemapper
 		Vector<String> tonemap_modes;
 		tonemap_modes.push_back("\n");
@@ -102,15 +107,21 @@ ToneMapper::ToneMapper(bool p_use_mobile_version) {
 				tonemap.pipelines[i].clear();
 			}
 		}
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	}
+#endif
 }
 
 ToneMapper::~ToneMapper() {
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	if (using_mobile_version) {
 		tonemap_mobile.shader.version_free(tonemap_mobile.shader_version);
 	} else {
+#endif
 		tonemap.shader.version_free(tonemap.shader_version);
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	}
+#endif
 }
 
 void ToneMapper::tonemapper(RID p_source_color, RID p_dst_framebuffer, const TonemapSettings &p_settings) {
@@ -217,6 +228,7 @@ void ToneMapper::tonemapper(RID p_source_color, RID p_dst_framebuffer, const Ton
 	RD::get_singleton()->draw_list_end();
 }
 
+#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 void ToneMapper::tonemapper_mobile(RID p_source_color, RID p_dst_framebuffer, const TonemapSettings &p_settings) {
 	ERR_FAIL_COND_MSG(!using_mobile_version, "Can't use the mobile version of the tonemapper with the clustered renderer.");
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
@@ -394,3 +406,4 @@ void ToneMapper::tonemapper_subpass(RD::DrawListID p_subpass_draw_list, RID p_so
 	RD::get_singleton()->draw_list_set_push_constant(p_subpass_draw_list, &tonemap_mobile.push_constant, sizeof(TonemapPushConstantMobile));
 	RD::get_singleton()->draw_list_draw(p_subpass_draw_list, false, 1u, 3u);
 }
+#endif

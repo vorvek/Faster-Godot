@@ -55,6 +55,9 @@ void initialize_jolt_physics_module(ModuleInitializationLevel p_level) {
 
 	jolt_initialize();
 	PhysicsServer3DManager::get_singleton()->register_server("Jolt Physics", callable_mp_static(&create_jolt_physics_server));
+#ifdef FASTER_GODOT
+	PhysicsServer3DManager::get_singleton()->set_default_server("Jolt Physics", 10);
+#endif
 	JoltProjectSettings::register_settings();
 }
 

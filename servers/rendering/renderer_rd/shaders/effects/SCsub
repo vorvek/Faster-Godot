@@ -9,6 +9,8 @@ if "RD_GLSL" in env["BUILDERS"]:
 
     # find all shader code(all glsl files excluding our include files)
     glsl_files = [str(f) for f in Glob("*.glsl") if str(f) not in gl_include_files]
+    if env["faster_godot"]:
+        glsl_files = [f for f in glsl_files if f != "tonemap_mobile.glsl"]
 
     # make sure we recompile shaders if include files change
     env.Depends([f + ".gen.h" for f in glsl_files], gl_include_files + ["#glsl_builders.py"])

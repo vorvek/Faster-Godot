@@ -36,6 +36,7 @@
 #include <unistd.h>
 #include <climits>
 #include <clocale>
+#include <cstdint>
 #include <cstdlib>
 
 #if defined(SANITIZERS_ENABLED)
@@ -43,14 +44,24 @@
 #endif
 
 #if defined(__x86_64) || defined(__x86_64__)
-void __cpuid(int *r_cpuinfo, int p_info) {
+static void godot_cpuid(int *r_cpuinfo, int p_info, int p_subinfo) {
 	// Note: Some compilers have a buggy `__cpuid` intrinsic, using inline assembly (based on LLVM-20 implementation) instead.
 	__asm__ __volatile__(
 			"xchgq %%rbx, %q1;"
 			"cpuid;"
 			"xchgq %%rbx, %q1;"
 			: "=a"(r_cpuinfo[0]), "=r"(r_cpuinfo[1]), "=c"(r_cpuinfo[2]), "=d"(r_cpuinfo[3])
-			: "0"(p_info));
+			: "0"(p_info), "2"(p_subinfo));
+}
+
+static uint64_t godot_xgetbv(uint32_t p_index) {
+	uint32_t eax;
+	uint32_t edx;
+	__asm__ __volatile__(
+			"xgetbv;"
+			: "=a"(eax), "=d"(edx)
+			: "c"(p_index));
+	return ((uint64_t)edx << 32) | eax;
 }
 #endif
 
@@ -69,8 +80,39 @@ extern "C" const char *pck_section_dummy_call() {
 int main(int argc, char *argv[]) {
 #if defined(__x86_64) || defined(__x86_64__)
 	int cpuinfo[4];
-	__cpuid(cpuinfo, 0x01);
+	godot_cpuid(cpuinfo, 0x01, 0x00);
 
+#ifdef FASTER_GODOT
+	int cpuinfo7[4];
+	godot_cpuid(cpuinfo7, 0x07, 0x00);
+
+	const bool cpuid_sse42_supported = cpuinfo[2] & (1 << 20);
+	const bool cpuid_avx_supported = cpuinfo[2] & (1 << 28);
+	const bool cpuid_fma_supported = cpuinfo[2] & (1 << 12);
+	const bool cpuid_osxsave_supported = cpuinfo[2] & (1 << 27);
+	const bool cpuid_avx2_supported = cpuinfo7[1] & (1 << 5);
+	bool os_avx_state_supported = false;
+	if (cpuid_osxsave_supported) {
+		const uint64_t xcr0 = godot_xgetbv(0);
+		os_avx_state_supported = (xcr0 & 0x6) == 0x6;
+	}
+
+	if (!(cpuid_sse42_supported && cpuid_avx_supported && cpuid_fma_supported && cpuid_avx2_supported && os_avx_state_supported)) {
+		printf("A CPU and operating system with SSE4.2, AVX, AVX2, FMA, and AVX OS state support is required.\n");
+
+		int ret = system("zenity --warning --title \"Godot Engine\" --text \"A CPU and operating system with SSE4.2, AVX, AVX2, FMA, and AVX OS state support is required.\" 2> /dev/null");
+		if (ret != 0) {
+			ret = system("kdialog --title \"Godot Engine\" --sorry \"A CPU and operating system with SSE4.2, AVX, AVX2, FMA, and AVX OS state support is required.\" 2> /dev/null");
+		}
+		if (ret != 0) {
+			ret = system("Xdialog --title \"Godot Engine\" --msgbox \"A CPU and operating system with SSE4.2, AVX, AVX2, FMA, and AVX OS state support is required.\" 0 0 2> /dev/null");
+		}
+		if (ret != 0) {
+			ret = system("xmessage -center -title \"Godot Engine\" \"A CPU and operating system with SSE4.2, AVX, AVX2, FMA, and AVX OS state support is required.\" 2> /dev/null");
+		}
+		abort();
+	}
+#else
 	if (!(cpuinfo[2] & (1 << 20))) {
 		printf("A CPU with SSE4.2 instruction set support is required.\n");
 
@@ -86,6 +128,7 @@ int main(int argc, char *argv[]) {
 		}
 		abort();
 	}
+#endif
 #endif
 
 #if defined(SANITIZERS_ENABLED)
