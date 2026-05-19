@@ -2245,6 +2245,7 @@ void Node3DEditorViewport::_sinput(const Ref<InputEvent> &p_event) {
 							}
 
 							se->gizmo->commit_subgizmos(ids, restore, false);
+							finish_transform();
 						} else {
 							if (_edit.original_mouse_pos != _edit.mouse_pos) {
 								commit_transform();
