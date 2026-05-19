@@ -39,9 +39,6 @@
 #include "drivers/vulkan/rendering_context_driver_vulkan.h"
 #undef CursorShape
 #endif
-#if defined(D3D12_ENABLED)
-#include "drivers/d3d12/rendering_context_driver_d3d12.h"
-#endif
 #if defined(METAL_ENABLED)
 #include "drivers/metal/rendering_context_driver_metal.h"
 #endif
@@ -2026,11 +2023,6 @@ bool DisplayServer::is_rendering_device_supported() {
 #if defined(VULKAN_ENABLED)
 	rcd = memnew(RenderingContextDriverVulkan);
 #endif
-#ifdef D3D12_ENABLED
-	if (rcd == nullptr) {
-		rcd = memnew(RenderingContextDriverD3D12);
-	}
-#endif
 #ifdef METAL_ENABLED
 	if (rcd == nullptr) {
 		GODOT_CLANG_WARNING_PUSH_AND_IGNORE("-Wunguarded-availability")
@@ -2107,11 +2099,6 @@ bool DisplayServer::can_create_rendering_device() {
 
 #if defined(VULKAN_ENABLED)
 	rcd = memnew(RenderingContextDriverVulkan);
-#endif
-#ifdef D3D12_ENABLED
-	if (rcd == nullptr) {
-		rcd = memnew(RenderingContextDriverD3D12);
-	}
 #endif
 #ifdef METAL_ENABLED
 	if (rcd == nullptr) {

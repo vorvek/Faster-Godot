@@ -267,36 +267,6 @@ Error EditorExportPlatformWindows::export_project(const Ref<EditorExportPreset> 
 		da->copy(template_path.get_base_dir().path_join("accesskit." + arch + ".dll"), path.get_base_dir().path_join("accesskit." + arch + ".dll"), get_chmod_flags());
 	}
 
-	int export_d3d12 = p_preset->get("application/export_d3d12");
-	bool agility_sdk_multiarch = p_preset->get("application/d3d12_agility_sdk_multiarch");
-	bool include_d3d12_extra_libs = false;
-	if (export_d3d12 == 0) {
-		include_d3d12_extra_libs = (String(get_project_setting(p_preset, "rendering/rendering_device/driver.windows")) == "d3d12") && (String(get_project_setting(p_preset, "rendering/renderer/rendering_method")) != "gl_compatibility");
-	} else if (export_d3d12 == 1) {
-		include_d3d12_extra_libs = true;
-	}
-	if (include_d3d12_extra_libs) {
-		if (da->file_exists(template_path.get_base_dir().path_join("D3D12Core." + arch + ".dll"))) {
-			if (agility_sdk_multiarch) {
-				da->make_dir_recursive(path.get_base_dir().path_join(arch));
-				da->copy(template_path.get_base_dir().path_join("D3D12Core." + arch + ".dll"), path.get_base_dir().path_join(arch).path_join("D3D12Core.dll"), get_chmod_flags());
-			} else {
-				da->copy(template_path.get_base_dir().path_join("D3D12Core." + arch + ".dll"), path.get_base_dir().path_join("D3D12Core.dll"), get_chmod_flags());
-			}
-		}
-		if (da->file_exists(template_path.get_base_dir().path_join("d3d12SDKLayers." + arch + ".dll"))) {
-			if (agility_sdk_multiarch) {
-				da->make_dir_recursive(path.get_base_dir().path_join(arch));
-				da->copy(template_path.get_base_dir().path_join("d3d12SDKLayers." + arch + ".dll"), path.get_base_dir().path_join(arch).path_join("d3d12SDKLayers.dll"), get_chmod_flags());
-			} else {
-				da->copy(template_path.get_base_dir().path_join("d3d12SDKLayers." + arch + ".dll"), path.get_base_dir().path_join("d3d12SDKLayers.dll"), get_chmod_flags());
-			}
-		}
-		if (da->file_exists(template_path.get_base_dir().path_join("WinPixEventRuntime." + arch + ".dll"))) {
-			da->copy(template_path.get_base_dir().path_join("WinPixEventRuntime." + arch + ".dll"), path.get_base_dir().path_join("WinPixEventRuntime.dll"), get_chmod_flags());
-		}
-	}
-
 	// Export project.
 	String pck_path = path;
 	if (embedded) {
@@ -429,7 +399,7 @@ bool EditorExportPlatformWindows::get_export_option_visibility(const EditorExpor
 
 	// Hide resources.
 	bool mod_res = p_preset->get("application/modify_resources");
-	if (!mod_res && p_option != "application/modify_resources" && p_option != "application/export_angle" && p_option != "application/export_d3d12" && p_option != "application/d3d12_agility_sdk_multiarch" && p_option.begins_with("application/")) {
+	if (!mod_res && p_option != "application/modify_resources" && p_option != "application/export_angle" && p_option.begins_with("application/")) {
 		return false;
 	}
 
@@ -442,9 +412,7 @@ bool EditorExportPlatformWindows::get_export_option_visibility(const EditorExpor
 	if (p_option == "dotnet/embed_build_outputs" ||
 			p_option == "custom_template/debug" ||
 			p_option == "custom_template/release" ||
-			p_option == "application/d3d12_agility_sdk_multiarch" ||
 			p_option == "application/export_angle" ||
-			p_option == "application/export_d3d12" ||
 			p_option == "application/icon_interpolation") {
 		return advanced_options_enabled;
 	}
@@ -478,8 +446,6 @@ void EditorExportPlatformWindows::get_export_options(List<ExportOption> *r_optio
 	r_options->push_back(ExportOption(PropertyInfo(Variant::STRING, "application/copyright"), ""));
 	r_options->push_back(ExportOption(PropertyInfo(Variant::STRING, "application/trademarks"), ""));
 	r_options->push_back(ExportOption(PropertyInfo(Variant::INT, "application/export_angle", PROPERTY_HINT_ENUM, "Auto,Yes,No"), 0, true));
-	r_options->push_back(ExportOption(PropertyInfo(Variant::INT, "application/export_d3d12", PROPERTY_HINT_ENUM, "Auto,Yes,No"), 0, true));
-	r_options->push_back(ExportOption(PropertyInfo(Variant::BOOL, "application/d3d12_agility_sdk_multiarch"), true, true));
 
 	String run_script = "Expand-Archive -LiteralPath '{temp_dir}\\{archive_name}' -DestinationPath '{temp_dir}'\n"
 						"$action = New-ScheduledTaskAction -Execute '{temp_dir}\\{exe_name}' -Argument '{cmd_args}'\n"

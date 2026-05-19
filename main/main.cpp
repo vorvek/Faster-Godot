@@ -2302,12 +2302,12 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 
 	// Always include all supported drivers as hint, as this is used by the editor host platform
 	// for project settings. For example, a Linux user should be able to configure that they want
-	// to export for D3D12 on Windows and Metal on macOS even if their host platform can't use those.
+	// to export for Metal on macOS even if their host platform can't use it.
 
 	{
 		// RenderingDevice driver overrides per platform.
 		GLOBAL_DEF_RST("rendering/rendering_device/driver", "vulkan");
-		GLOBAL_DEF_RST(PropertyInfo(Variant::STRING, "rendering/rendering_device/driver.windows", PROPERTY_HINT_ENUM, "vulkan,d3d12"), "vulkan");
+		GLOBAL_DEF_RST(PropertyInfo(Variant::STRING, "rendering/rendering_device/driver.windows", PROPERTY_HINT_ENUM, "vulkan"), "vulkan");
 		GLOBAL_DEF_RST(PropertyInfo(Variant::STRING, "rendering/rendering_device/driver.linuxbsd", PROPERTY_HINT_ENUM, "vulkan"), "vulkan");
 		GLOBAL_DEF_RST(PropertyInfo(Variant::STRING, "rendering/rendering_device/driver.android", PROPERTY_HINT_ENUM, "vulkan"), "vulkan");
 		GLOBAL_DEF_RST(PropertyInfo(Variant::STRING, "rendering/rendering_device/driver.ios", PROPERTY_HINT_ENUM, "metal,vulkan"), "metal");
@@ -2315,7 +2315,6 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		GLOBAL_DEF_RST(PropertyInfo(Variant::STRING, "rendering/rendering_device/driver.macos", PROPERTY_HINT_ENUM, "metal,vulkan"), "metal");
 
 		GLOBAL_DEF_RST("rendering/rendering_device/fallback_to_vulkan", true);
-		GLOBAL_DEF_RST("rendering/rendering_device/fallback_to_d3d12", true);
 		GLOBAL_DEF_RST("rendering/rendering_device/fallback_to_opengl3", true);
 	}
 
@@ -2465,6 +2464,12 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	}
 
 	if (!rendering_driver.is_empty()) {
+		rendering_driver = rendering_driver.to_lower();
+		if (rendering_driver == "d3d12") {
+			WARN_PRINT("The Direct3D 12 rendering driver has been removed from this fork; using Vulkan instead.");
+			rendering_driver = "vulkan";
+		}
+
 		// As the rendering drivers available may depend on the display driver and renderer
 		// selected, we can't do an exhaustive check here, but we can look through all
 		// the options in all the display drivers for a match.
@@ -2533,9 +2538,6 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 #ifdef VULKAN_ENABLED
 			available_drivers.push_back("vulkan");
 #endif
-#ifdef D3D12_ENABLED
-			available_drivers.push_back("d3d12");
-#endif
 #ifdef METAL_ENABLED
 			available_drivers.push_back("metal");
 #endif
@@ -2597,6 +2599,10 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 
 	// always convert to lower case for consistency in the code
 	rendering_driver = rendering_driver.to_lower();
+	if (rendering_driver == "d3d12") {
+		WARN_PRINT("The Direct3D 12 rendering driver has been removed from this fork; using Vulkan instead.");
+		rendering_driver = "vulkan";
+	}
 
 	OS::get_singleton()->set_current_rendering_driver_name(rendering_driver);
 	OS::get_singleton()->set_current_rendering_method(rendering_method);

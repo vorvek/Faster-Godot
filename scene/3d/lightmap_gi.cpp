@@ -1805,7 +1805,7 @@ PackedStringArray LightmapGI::get_configuration_warnings() const {
 
 #ifdef MODULE_LIGHTMAPPER_RD_ENABLED
 	if (!DisplayServer::get_singleton()->can_create_rendering_device()) {
-		warnings.push_back(vformat(RTR("Lightmaps can only be baked from a GPU that supports the RenderingDevice backends.\nYour GPU (%s) does not support RenderingDevice, as it does not support Vulkan, Direct3D 12, or Metal.\nLightmap baking will not be available on this device, although rendering existing baked lightmaps will work."), RenderingServer::get_singleton()->get_video_adapter_name()));
+		warnings.push_back(vformat(RTR("Lightmaps can only be baked from a GPU that supports the RenderingDevice backends.\nYour GPU (%s) does not support RenderingDevice, as it does not support Vulkan or Metal.\nLightmap baking will not be available on this device, although rendering existing baked lightmaps will work."), RenderingServer::get_singleton()->get_video_adapter_name()));
 		return warnings;
 	}
 

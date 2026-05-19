@@ -1660,7 +1660,7 @@ void RenderingDeviceGraph::add_buffer_clear(RDD::BufferID p_dst, ResourceTracker
 		command->self_stages = RDD::PIPELINE_STAGE_COPY_BIT;
 		usage = RESOURCE_USAGE_COPY_TO;
 	} else {
-		// If the driver is uncapable of using the copy engine for clearing the buffer (e.g. D3D12), we must transition it to storage buffer read/write usage.
+		// If the driver is incapable of using the copy engine for clearing the buffer, we must transition it to storage buffer read/write usage.
 		command->self_stages = RDD::PIPELINE_STAGE_CLEAR_STORAGE_BIT;
 		usage = RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE;
 	}
@@ -2119,7 +2119,7 @@ void RenderingDeviceGraph::add_texture_clear_color(RDD::TextureID p_dst, Resourc
 		command->self_stages = RDD::PIPELINE_STAGE_COPY_BIT;
 		usage = RESOURCE_USAGE_COPY_TO;
 	} else {
-		// If the driver is uncapable of using the copy engine for clearing the image (e.g. D3D12), we must either transition the
+		// If the driver is incapable of using the copy engine for clearing the image, we must either transition the
 		// resource to a render target or a storage image as that's the only two ways it can perform the operation.
 		if (p_dst_tracker->texture_usage & RDD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) {
 			command->self_stages = RDD::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -2149,7 +2149,7 @@ void RenderingDeviceGraph::add_texture_clear_depth_stencil(RDD::TextureID p_dst,
 		command->self_stages = RDD::PIPELINE_STAGE_COPY_BIT;
 		usage = RESOURCE_USAGE_COPY_TO;
 	} else {
-		// If the driver is uncapable of using the copy engine for clearing the image (e.g. D3D12), we must transition the
+		// If the driver is incapable of using the copy engine for clearing the image, we must transition the
 		// resource to a depth stencil as that's the only way it can perform the operation.
 		command->self_stages = RDD::PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | RDD::PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
 		usage = RESOURCE_USAGE_ATTACHMENT_DEPTH_STENCIL_READ_WRITE;

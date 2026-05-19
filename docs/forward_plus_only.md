@@ -9,7 +9,7 @@ Vulkan Forward+ game.
 
 - `SConstruct`
   - Enables Vulkan.
-  - Disables OpenGL/GLES compatibility, D3D12, Metal, XR, and deprecated APIs in
+  - Disables OpenGL/GLES compatibility, Metal, XR, and deprecated APIs in
     the Faster-Godot profile.
   - Defines `FASTER_GODOT_FORWARD_PLUS_ONLY`.
 - `main/main.cpp`

@@ -257,7 +257,6 @@ public:
 	// See DynamicBuffer::encode. We need this argument because SPIR-V does not distinguish between a
 	// uniform buffer and a dynamic uniform buffer. At shader level they're the same thing, but the PSO
 	// is created slightly differently and they're bound differently.
-	// On D3D12 the Root Layout is also different.
 	void initialize(const Vector<String> &p_variant_defines, const String &p_general_defines = "", const Vector<RD::PipelineImmutableSampler> &p_immutable_samplers = Vector<RD::PipelineImmutableSampler>(), const Vector<uint64_t> &p_dynamic_buffers = Vector<uint64_t>());
 	void initialize(const Vector<VariantDefine> &p_variant_defines, const String &p_general_defines = "", const Vector<RD::PipelineImmutableSampler> &p_immutable_samplers = Vector<RD::PipelineImmutableSampler>(), const Vector<uint64_t> &p_dynamic_buffers = Vector<uint64_t>());
 

@@ -178,10 +178,6 @@
 #include "editor/shader/shader_baker/shader_baker_export_plugin_platform_vulkan.h"
 #endif
 
-#ifdef D3D12_ENABLED
-#include "editor/shader/shader_baker/shader_baker_export_plugin_platform_d3d12.h"
-#endif
-
 #ifdef METAL_ENABLED
 #include "editor/shader/shader_baker/shader_baker_export_plugin_platform_metal.h"
 #endif
@@ -5905,8 +5901,6 @@ String EditorNode::_get_system_info() const {
 	}
 	if (driver_name == "vulkan") {
 		driver_name = "Vulkan";
-	} else if (driver_name == "d3d12") {
-		driver_name = "Direct3D 12";
 	} else if (driver_name == "opengl3_angle") {
 		driver_name = "OpenGL ES 3/ANGLE";
 	} else if (driver_name == "opengl3_es") {
@@ -8164,7 +8158,6 @@ void EditorNode::notify_settings_overrides_changed() {
 HashMap<String, Variant> EditorNode::get_initial_settings() {
 	HashMap<String, Variant> settings;
 	settings["physics/3d/physics_engine"] = "Jolt Physics";
-	settings["rendering/rendering_device/driver.windows"] = "d3d12";
 	return settings;
 }
 
@@ -9251,12 +9244,6 @@ EditorNode::EditorNode() {
 	Ref<ShaderBakerExportPluginPlatformVulkan> shader_baker_export_plugin_platform_vulkan;
 	shader_baker_export_plugin_platform_vulkan.instantiate();
 	shader_baker_export_plugin->add_platform(shader_baker_export_plugin_platform_vulkan);
-#endif
-
-#ifdef D3D12_ENABLED
-	Ref<ShaderBakerExportPluginPlatformD3D12> shader_baker_export_plugin_platform_d3d12;
-	shader_baker_export_plugin_platform_d3d12.instantiate();
-	shader_baker_export_plugin->add_platform(shader_baker_export_plugin_platform_d3d12);
 #endif
 
 #ifdef METAL_ENABLED

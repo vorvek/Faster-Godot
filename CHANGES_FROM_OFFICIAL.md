@@ -6,6 +6,7 @@ desktop Forward+ profile. The detailed notes are split by change area:
 | Area | Detail |
 | --- | --- |
 | Forward+ only renderer profile | [docs/forward_plus_only.md](docs/forward_plus_only.md) |
+| Vulkan-only Windows RenderingDevice profile | [docs/vulkan_only_windows_rendering.md](docs/vulkan_only_windows_rendering.md) |
 | x86_64 AVX2/FMA baseline | [docs/x86_64_avx2_fma.md](docs/x86_64_avx2_fma.md) |
 | Windows and Linux target profile | [docs/windows_linux_target_profile.md](docs/windows_linux_target_profile.md) |
 | Jolt-only physics profile | [docs/jolt_only_physics.md](docs/jolt_only_physics.md) |

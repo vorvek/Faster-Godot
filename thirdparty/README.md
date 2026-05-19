@@ -150,40 +150,6 @@ Patches:
 - `0001-revert-bc6h-reorg.patch` ([GH-73715](https://github.com/godotengine/godot/pull/73715))
 
 
-## d3d12ma
-
-- Upstream: https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator
-- Version: 2.1.0-development (4d16e802e0b9451c9d3c27cd308928c13b73acd6, 2023)
-- License: MIT
-
-Files extracted from upstream source:
-
-- `src/D3D12MemAlloc.cpp`, `src/D3D12MemAlloc.natvis`
-- `include/D3D12MemAlloc.h`
-- `LICENSE.txt`, `NOTICES.txt`
-
-Patches:
-
-- `0001-mingw-support.patch` ([GH-83452](https://github.com/godotengine/godot/pull/83452))
-
-
-## directx_headers
-
-- Upstream: https://github.com/microsoft/DirectX-Headers
-- Version: 1.618.2 (dde59d560da2760fec612d6634124edc2a26b82f, 2025)
-- License: MIT
-
-Files extracted from upstream source:
-
-- `include/directx/*.h`
-- `include/dxguids/*.h`
-- `LICENSE`
-
-Patches:
-
-- `0001-win7-8-dynamic-load.patch` ([GH-88496](https://github.com/godotengine/godot/pull/88496))
-
-
 ## doctest
 
 - Upstream: https://github.com/onqtam/doctest

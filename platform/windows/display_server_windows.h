@@ -230,7 +230,6 @@ class DisplayServerWindows : public DisplayServer {
 		DRIVER_ID_COMPAT_OPENGL3 = 1 << 0,
 		DRIVER_ID_COMPAT_ANGLE_D3D11 = 1 << 1,
 		DRIVER_ID_RD_VULKAN = 1 << 2,
-		DRIVER_ID_RD_D3D12 = 1 << 3,
 	};
 	static BitField<DriverID> tested_drivers;
 
@@ -382,8 +381,6 @@ class DisplayServerWindows : public DisplayServer {
 		bool initialized = false;
 
 		HWND parent_hwnd = 0;
-
-		bool no_redirection_bitmap = false;
 	};
 
 #ifdef SDL_ENABLED
@@ -393,7 +390,7 @@ class DisplayServerWindows : public DisplayServer {
 	List<WindowID> popup_list;
 	uint64_t time_since_popup = 0;
 
-	Error _create_window(WindowID p_window_id, WindowMode p_mode, uint32_t p_flags, const Rect2i &p_rect, bool p_exclusive, WindowID p_transient_parent, HWND p_parent_hwnd, bool p_no_redirection_bitmap);
+	Error _create_window(WindowID p_window_id, WindowMode p_mode, uint32_t p_flags, const Rect2i &p_rect, bool p_exclusive, WindowID p_transient_parent, HWND p_parent_hwnd);
 	void _destroy_window(WindowID p_window_id); // Destroys only what was needed to be created for the main window. Does not destroy transient parent dependencies or GL/rendering context windows.
 
 #ifdef RD_ENABLED
@@ -465,7 +462,7 @@ class DisplayServerWindows : public DisplayServer {
 	HashMap<int64_t, Vector2> pointer_last_pos;
 
 	void _send_window_event(const WindowData &wd, WindowEvent p_event);
-	void _get_window_style(bool p_main_window, bool p_initialized, bool p_fullscreen, bool p_multiwindow_fs, bool p_borderless, bool p_resizable, bool p_no_min_btn, bool p_no_max_btn, bool p_minimized, bool p_maximized, bool p_maximized_fs, bool p_no_activate_focus, bool p_embed_child, bool p_no_redirection_bitmap, DWORD &r_style, DWORD &r_style_ex);
+	void _get_window_style(bool p_main_window, bool p_initialized, bool p_fullscreen, bool p_multiwindow_fs, bool p_borderless, bool p_resizable, bool p_no_min_btn, bool p_no_max_btn, bool p_minimized, bool p_maximized, bool p_maximized_fs, bool p_no_activate_focus, bool p_embed_child, DWORD &r_style, DWORD &r_style_ex);
 
 	MouseMode mouse_mode;
 	MouseMode mouse_mode_base = MOUSE_MODE_VISIBLE;

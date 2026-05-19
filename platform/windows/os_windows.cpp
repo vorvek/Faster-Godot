@@ -84,9 +84,6 @@ extern "C" {
 #if defined(VULKAN_ENABLED)
 #include "rendering_context_driver_vulkan_windows.h"
 #endif
-#if defined(D3D12_ENABLED)
-#include "drivers/d3d12/rendering_context_driver_d3d12.h"
-#endif
 #if defined(GLES3_ENABLED)
 #include "drivers/gles3/rasterizer_gles3.h"
 #endif
@@ -2674,11 +2671,6 @@ bool OS_Windows::_test_create_rendering_device(const String &p_display_driver) c
 
 #if defined(VULKAN_ENABLED)
 	rcd = memnew(RenderingContextDriverVulkan);
-#endif
-#ifdef D3D12_ENABLED
-	if (rcd == nullptr) {
-		rcd = memnew(RenderingContextDriverD3D12);
-	}
 #endif
 	if (rcd != nullptr) {
 		err = rcd->initialize();

@@ -3257,25 +3257,13 @@
 		<member name="rendering/renderer/rendering_method.web" type="String" setter="" getter="" default="&quot;gl_compatibility&quot;">
 			Override for [member rendering/renderer/rendering_method] on web.
 		</member>
-		<member name="rendering/rendering_device/d3d12/agility_sdk_version" type="int" setter="" getter="" default="618">
-			Version code of the [url=https://devblogs.microsoft.com/directx/directx12agility/]Direct3D 12 Agility SDK[/url] to use ([code]D3D12SDKVersion[/code]). This must match the [i]minor[/i] version that is installed next to the editor binary and in the export templates directory for the current editor version. For example, if you have [code]1.618.5[/code] installed, you need to input [code]618[/code] here.
-		</member>
-		<member name="rendering/rendering_device/d3d12/max_resource_descriptors" type="int" setter="" getter="" default="65536">
-			The number of entries in the resource descriptor heap the Direct3D 12 rendering driver uses for most rendering operations.
-			Depending on the complexity of scenes, this value may be lowered or may need to be raised.
-		</member>
-		<member name="rendering/rendering_device/d3d12/max_sampler_descriptors" type="int" setter="" getter="" default="1024">
-			The number of entries in the sampler descriptor heap the Direct3D 12 rendering driver uses for most rendering operations.
-			Depending on the complexity of scenes, this value may be lowered or may need to be raised.
-		</member>
 		<member name="rendering/rendering_device/driver" type="String" setter="" getter="" default="&quot;vulkan&quot;">
 			Sets the driver to be used by the renderer when using a RenderingDevice-based renderer like the Forward+ or Mobile renderers. Editing this property has no effect in the default configuration, as first-party platforms each have platform-specific overrides. Use those overrides to configure the driver for each platform.
 			This can be overridden using the [code]--rendering-driver &lt;driver&gt;[/code] command line argument.
 			Supported values are:
 			- [code]metal[/code], Metal (supported on Apple Silicon Macs and iOS).
 			- [code]vulkan[/code], Vulkan (supported on all desktop and mobile platforms).
-			- [code]d3d12[/code], Direct3D 12 (supported on Windows).
-			[b]Note:[/b] The availability of these options depends on whether the engine was compiled with support for them (determined by SCons options [code]vulkan[/code], [code]metal[/code], and [code]d3d12[/code]).
+			[b]Note:[/b] The availability of these options depends on whether the engine was compiled with support for them (determined by SCons options [code]vulkan[/code] and [code]metal[/code]).
 			[b]Note:[/b] If a given platform has no registered drivers, it can fall back to the Compatibility renderer (OpenGL 3) if [member rendering/rendering_device/fallback_to_opengl3] is enabled. This fallback happens automatically for the Web platform regardless of that property.
 			[b]Note:[/b] The actual rendering driver may be automatically changed by the engine as a result of a fallback, or a user-specified command line argument. To get the actual rendering driver that is used at runtime, use [method RenderingServer.get_current_rendering_driver_name] instead of reading this project setting's value.
 		</member>
@@ -3310,22 +3298,17 @@
 		</member>
 		<member name="rendering/rendering_device/driver.windows" type="String" setter="" getter="" default="&quot;vulkan&quot;">
 			Windows override for [member rendering/rendering_device/driver].
-			Two options are supported:
-			- [code]vulkan[/code] (default), Vulkan from native drivers. If [member rendering/rendering_device/fallback_to_vulkan] is enabled, this is used as a fallback if Direct3D 12 is not supported.
-			- [code]d3d12[/code], Direct3D 12 from native drivers. If [member rendering/rendering_device/fallback_to_d3d12] is enabled, this is used as a fallback if Vulkan is not supported.
-			[b]Note:[/b] Starting with Godot 4.6, new projects are configured by default to use [code]d3d12[/code] on Windows. Projects created before Godot 4.6 keep [code]vulkan[/code] for compatibility reasons, but it is recommended to switch them manually to [code]d3d12[/code].
-		</member>
-		<member name="rendering/rendering_device/fallback_to_d3d12" type="bool" setter="" getter="" default="true">
-			If [code]true[/code], the Forward+ renderer will fall back to Direct3D 12 if Vulkan is not supported. The fallback is always attempted regardless of this setting if Vulkan driver support was disabled at compile time.
-			[b]Note:[/b] This setting is implemented only on Windows.
+			Only one option is supported:
+			- [code]vulkan[/code] (default), Vulkan from native drivers.
+			[b]Note:[/b] Projects that still request [code]d3d12[/code] are automatically routed to [code]vulkan[/code] in this fork.
 		</member>
 		<member name="rendering/rendering_device/fallback_to_opengl3" type="bool" setter="" getter="" default="true">
-			If [code]true[/code], the Forward+ renderer will fall back to OpenGL 3 if Direct3D 12, Metal, and Vulkan are not supported.
+			If [code]true[/code], the Forward+ renderer will fall back to OpenGL 3 if Vulkan and Metal are not supported.
 			[b]Note:[/b] This setting is implemented on Windows, Android, macOS, iOS, and Linux/X11.
 		</member>
 		<member name="rendering/rendering_device/fallback_to_vulkan" type="bool" setter="" getter="" default="true">
-			If [code]true[/code], the Forward+ renderer will fall back to Vulkan if Direct3D 12 (on Windows) or Metal (on macOS x86_64) are not supported. The fallback is always attempted regardless of this setting if Direct3D 12 (Windows) or Metal (macOS) driver support was disabled at compile time.
-			[b]Note:[/b] This setting is implemented on Windows and macOS.
+			If [code]true[/code], the Forward+ renderer will fall back to Vulkan if Metal is not supported on macOS x86_64. The fallback is always attempted regardless of this setting if Metal driver support was disabled at compile time.
+			[b]Note:[/b] This setting is implemented on macOS.
 		</member>
 		<member name="rendering/rendering_device/pipeline_cache/enable" type="bool" setter="" getter="" default="true">
 			Enable the pipeline cache that is saved to disk if the graphics API supports it.
@@ -3454,7 +3437,7 @@
 		</member>
 		<member name="rendering/textures/vram_compression/compress_with_gpu" type="bool" setter="" getter="" default="true">
 			If [code]true[/code], the texture importer will utilize the GPU for compressing textures, improving the import time of large images.
-			[b]Note:[/b] This only functions on a device which supports either Vulkan, Direct3D 12, or Metal as a rendering driver.
+			[b]Note:[/b] This only functions on a device which supports either Vulkan or Metal as a rendering driver.
 			[b]Note:[/b] Currently this only affects certain compressed formats (BC1, BC3, BC4, BC5, and BC6), all of which are exclusive to desktop platforms and consoles.
 		</member>
 		<member name="rendering/textures/vram_compression/import_etc2_astc" type="bool" setter="" getter="" default="false">

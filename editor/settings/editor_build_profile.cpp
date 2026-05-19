@@ -58,7 +58,6 @@ const char *EditorBuildProfile::build_option_identifiers[BUILD_OPTION_MAX] = {
 	"forward_plus_renderer",
 	"forward_mobile_renderer",
 	"vulkan",
-	"d3d12",
 	"metal",
 	"opengl3",
 	"disable_physics_2d",
@@ -87,7 +86,6 @@ const bool EditorBuildProfile::build_option_disabled_by_default[BUILD_OPTION_MAX
 	false, // FORWARD_RENDERER
 	false, // MOBILE_RENDERER
 	false, // VULKAN
-	false, // D3D12
 	false, // METAL
 	false, // OPENGL
 	false, // PHYSICS_2D
@@ -116,7 +114,6 @@ const bool EditorBuildProfile::build_option_disable_values[BUILD_OPTION_MAX] = {
 	false, // FORWARD_RENDERER
 	false, // MOBILE_RENDERER
 	false, // VULKAN
-	false, // D3D12
 	false, // METAL
 	false, // OPENGL
 	true, // PHYSICS_2D
@@ -145,7 +142,6 @@ const bool EditorBuildProfile::build_option_explicit_use[BUILD_OPTION_MAX] = {
 	false, // FORWARD_RENDERER
 	false, // MOBILE_RENDERER
 	false, // VULKAN
-	false, // D3D12
 	false, // METAL
 	false, // OPENGL
 	false, // PHYSICS_2D
@@ -173,7 +169,6 @@ const EditorBuildProfile::BuildOptionCategory EditorBuildProfile::build_option_c
 	BUILD_OPTION_CATEGORY_GRAPHICS, // FORWARD_RENDERER
 	BUILD_OPTION_CATEGORY_GRAPHICS, // MOBILE_RENDERER
 	BUILD_OPTION_CATEGORY_GRAPHICS, // VULKAN
-	BUILD_OPTION_CATEGORY_GRAPHICS, // D3D12
 	BUILD_OPTION_CATEGORY_GRAPHICS, // METAL
 	BUILD_OPTION_CATEGORY_GRAPHICS, // OPENGL
 	BUILD_OPTION_CATEGORY_PHYSICS, // PHYSICS_2D
@@ -205,10 +200,6 @@ const HashMap<EditorBuildProfile::BuildOption, LocalVector<EditorBuildProfile::B
 			BUILD_OPTION_RENDERING_DEVICE,
 	} },
 	{ BUILD_OPTION_VULKAN, {
-			BUILD_OPTION_FORWARD_RENDERER,
-			BUILD_OPTION_MOBILE_RENDERER,
-	} },
-	{ BUILD_OPTION_D3D12, {
 			BUILD_OPTION_FORWARD_RENDERER,
 			BUILD_OPTION_MOBILE_RENDERER,
 	} },
@@ -393,7 +384,6 @@ String EditorBuildProfile::get_build_option_name(BuildOption p_build_option) {
 		TTRC("Forward+ Renderer"),
 		TTRC("Mobile Renderer"),
 		TTRC("Vulkan"),
-		TTRC("D3D12"),
 		TTRC("Metal"),
 		TTRC("OpenGL"),
 		TTRC("Physics Server (2D)"),
@@ -426,7 +416,6 @@ String EditorBuildProfile::get_build_option_description(BuildOption p_build_opti
 		TTRC("Forward+ renderer for advanced 3D graphics."),
 		TTRC("Mobile renderer for less advanced 3D graphics."),
 		TTRC("Vulkan backend of RenderingDevice."),
-		TTRC("Direct3D 12 backend of RenderingDevice."),
 		TTRC("Metal backend of RenderingDevice (Apple arm64 only)."),
 		TTRC("OpenGL backend (if disabled, the RenderingDevice backend is required)."),
 		TTRC("Physics Server and capabilities for 2D."),
@@ -598,7 +587,6 @@ void EditorBuildProfile::_bind_methods() {
 	BIND_ENUM_CONSTANT(BUILD_OPTION_FORWARD_RENDERER);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_MOBILE_RENDERER);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_VULKAN);
-	BIND_ENUM_CONSTANT(BUILD_OPTION_D3D12);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_METAL);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_OPENGL);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_PHYSICS_2D);
@@ -656,17 +644,6 @@ EditorBuildProfile::EditorBuildProfile() {
 		{ "rendering/rendering_device/fallback_to_vulkan", { true } },
 	};
 	build_option_settings.insert(BUILD_OPTION_VULKAN, settings_vulkan);
-
-	HashMap<String, LocalVector<Variant>> settings_d3d12 = {
-		{ "rendering/rendering_device/driver", { "d3d12" } },
-		{ "rendering/rendering_device/driver.windows", { "d3d12" } },
-		{ "rendering/rendering_device/driver.linuxbsd", { "d3d12" } },
-		{ "rendering/rendering_device/driver.android", { "d3d12" } },
-		{ "rendering/rendering_device/driver.ios", { "d3d12" } },
-		{ "rendering/rendering_device/driver.macos", { "d3d12" } },
-		{ "rendering/rendering_device/fallback_to_d3d12", { true } },
-	};
-	build_option_settings.insert(BUILD_OPTION_D3D12, settings_d3d12);
 
 	HashMap<String, LocalVector<Variant>> settings_metal = {
 		{ "rendering/rendering_device/driver", { "metal" } },

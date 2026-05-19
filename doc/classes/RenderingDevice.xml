@@ -7,7 +7,7 @@
 		[RenderingDevice] is an abstraction for working with modern low-level graphics APIs such as Vulkan. Compared to [RenderingServer] (which works with Godot's own rendering subsystems), [RenderingDevice] is much lower-level and allows working more directly with the underlying graphics APIs. [RenderingDevice] is used in Godot to provide support for several modern low-level graphics APIs while reducing the amount of code duplication required. [RenderingDevice] can also be used in your own projects to perform things that are not exposed by [RenderingServer] or high-level nodes, such as using compute shaders.
 		On startup, Godot creates a global [RenderingDevice] which can be retrieved using [method RenderingServer.get_rendering_device]. This global [RenderingDevice] performs drawing to the screen.
 		[b]Local RenderingDevices:[/b] Using [method RenderingServer.create_local_rendering_device], you can create "secondary" rendering devices to perform drawing and GPU compute operations on separate threads.
-		[b]Note:[/b] [RenderingDevice] assumes intermediate knowledge of modern graphics APIs such as Vulkan, Direct3D 12, Metal or WebGPU. These graphics APIs are lower-level than OpenGL or Direct3D 11, requiring you to perform what was previously done by the graphics driver itself. If you have difficulty understanding the concepts used in this class, follow the [url=https://vulkan-tutorial.com/]Vulkan Tutorial[/url] or [url=https://vkguide.dev/]Vulkan Guide[/url]. It's recommended to have existing modern OpenGL or Direct3D 11 knowledge before attempting to learn a low-level graphics API.
+		[b]Note:[/b] [RenderingDevice] assumes intermediate knowledge of modern graphics APIs such as Vulkan, Metal or WebGPU. These graphics APIs are lower-level than OpenGL or Direct3D 11, requiring you to perform what was previously done by the graphics driver itself. If you have difficulty understanding the concepts used in this class, follow the [url=https://vulkan-tutorial.com/]Vulkan Tutorial[/url] or [url=https://vkguide.dev/]Vulkan Guide[/url]. It's recommended to have existing modern OpenGL or Direct3D 11 knowledge before attempting to learn a low-level graphics API.
 		[b]Note:[/b] [RenderingDevice] is not available when running in headless mode or when using the Compatibility rendering method.
 	</description>
 	<tutorials>
@@ -1169,13 +1169,11 @@
 		<constant name="DRIVER_RESOURCE_LOGICAL_DEVICE" value="0" enum="DriverResource">
 			Specific device object based on a physical device ([code]rid[/code] parameter is ignored).
 			- Vulkan: Vulkan device driver resource ([code]VkDevice[/code]).
-			- D3D12: D3D12 device driver resource ([code]ID3D12Device[/code]).
 			- Metal: Metal device driver resource ([code]MTLDevice[/code]).
 		</constant>
 		<constant name="DRIVER_RESOURCE_PHYSICAL_DEVICE" value="1" enum="DriverResource">
 			Physical device the specific logical device is based on ([code]rid[/code] parameter is ignored).
 			- Vulkan: [code]VkPhysicalDevice[/code].
-			- D3D12: [code]IDXGIAdapter[/code].
 		</constant>
 		<constant name="DRIVER_RESOURCE_TOPMOST_OBJECT" value="2" enum="DriverResource">
 			Top-most graphics API entry object ([code]rid[/code] parameter is ignored).
@@ -1184,7 +1182,6 @@
 		<constant name="DRIVER_RESOURCE_COMMAND_QUEUE" value="3" enum="DriverResource">
 			The main graphics-compute command queue ([code]rid[/code] parameter is ignored).
 			- Vulkan: [code]VkQueue[/code].
-			- D3D12: [code]ID3D12CommandQueue[/code].
 			- Metal: [code]MTLCommandQueue[/code].
 		</constant>
 		<constant name="DRIVER_RESOURCE_QUEUE_FAMILY" value="4" enum="DriverResource">
@@ -1193,17 +1190,14 @@
 		</constant>
 		<constant name="DRIVER_RESOURCE_TEXTURE" value="5" enum="DriverResource">
 			- Vulkan: [code]VkImage[/code].
-			- D3D12: [code]ID3D12Resource[/code].
 		</constant>
 		<constant name="DRIVER_RESOURCE_TEXTURE_VIEW" value="6" enum="DriverResource">
 			The view of an owned or shared texture.
 			- Vulkan: [code]VkImageView[/code].
-			- D3D12: [code]ID3D12Resource[/code].
 		</constant>
 		<constant name="DRIVER_RESOURCE_TEXTURE_DATA_FORMAT" value="7" enum="DriverResource">
 			The native id of the data format of the texture.
 			- Vulkan: [code]VkFormat[/code].
-			- D3D12: [code]DXGI_FORMAT[/code].
 		</constant>
 		<constant name="DRIVER_RESOURCE_SAMPLER" value="8" enum="DriverResource">
 			- Vulkan: [code]VkSampler[/code].
@@ -1214,7 +1208,6 @@
 		<constant name="DRIVER_RESOURCE_BUFFER" value="10" enum="DriverResource">
 			Buffer of any kind of (storage, vertex, etc.).
 			- Vulkan: [code]VkBuffer[/code].
-			- D3D12: [code]ID3D12Resource[/code].
 		</constant>
 		<constant name="DRIVER_RESOURCE_COMPUTE_PIPELINE" value="11" enum="DriverResource">
 			- Vulkan: [code]VkPipeline[/code].
