@@ -23,7 +23,6 @@ Rendered Vulkan Forward+ benchmark, Windows release template, three-run average:
 | --- | ---: | ---: | ---: |
 | FPS average | 564.37 FPS | 573.88 FPS | +1.7% |
 | Frame time average | 1.77 ms | 1.74 ms | -1.7% |
-| Draw calls | 73 | 73 | 0.0% |
 | VRAM monitor | 184.50 MiB | 183.23 MiB | -0.7% |
 
 The benchmark scene used fixed-camera 3D gameplay with Vulkan Forward+ on both
