@@ -12,16 +12,16 @@ source.
 The controls are Project Settings under `rendering/anti_aliasing/quality`:
 
 - `taa_sharpness`
-  - Default: `0.20`.
+  - Default: `0.10`.
   - Adds clamp-aware sharpening during the TAA resolve.
   - Higher values counter TAA blur but can increase shimmer or edge halos.
 - `taa_history_weight`
-  - Default: `0.90`.
+  - Default: `0.93`.
   - Controls the base contribution from previous-frame history.
   - Official behavior was equivalent to `0.9375`, which is steadier but more
     prone to ghosting.
 - `taa_disocclusion_threshold`
-  - Default: `2.0` texels.
+  - Default: `2.25` texels.
   - Controls how much motion-vector change is tolerated before history is
     rejected.
   - Official behavior used a hard-coded `2.5` texel threshold.
@@ -29,7 +29,7 @@ The controls are Project Settings under `rendering/anti_aliasing/quality`:
   - Default: `16`.
   - Controls how many Halton jitter positions plain TAA cycles through.
 - `taa_jitter_scale`
-  - Default: `1.0`.
+  - Default: `0.85`.
   - Scales plain TAA camera jitter. `0.0` disables camera jitter while keeping
     the TAA resolve active.
 
