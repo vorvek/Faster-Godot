@@ -217,11 +217,6 @@ private:
 		RID texture;
 	} dfg_lut;
 
-	struct LTC {
-		RID lut1_texture;
-		RID lut2_texture;
-	} ltc;
-
 	enum PassMode {
 		PASS_MODE_COLOR,
 		PASS_MODE_SHADOW,
