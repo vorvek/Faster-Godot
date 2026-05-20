@@ -42,6 +42,7 @@
 
 #define RB_TEX_RAYTRACING SNAME("raytracing")
 #define RB_TEX_RT_DEPTH SNAME("rt_depth")
+#define RB_TEX_RT_VELOCITY SNAME("rt_velocity")
 #define RB_TEX_RT_HISTORY_VALIDITY SNAME("rt_history_validity")
 #define RB_TEX_RT_HISTORY_VALIDITY_PREV SNAME("rt_history_validity_prev")
 #define RB_TEX_RT_HISTORY_ID SNAME("rt_history_id")

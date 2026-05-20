@@ -1523,3 +1523,7 @@ void CopyEffects::merge_specular(RID p_dest_framebuffer, RID p_specular, RID p_b
 
 	RD::get_singleton()->draw_command_end_label();
 }
+
+void CopyEffects::additive_blend(RID p_dest_framebuffer, RID p_source, uint32_t p_view_count) {
+	merge_specular(p_dest_framebuffer, p_source, RID(), RID(), p_view_count);
+}

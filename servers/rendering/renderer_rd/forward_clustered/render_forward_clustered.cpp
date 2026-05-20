@@ -110,6 +110,15 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 				RD::TEXTURE_SAMPLES_1);
 	}
 
+	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_VELOCITY)) {
+		render_buffers->create_texture(
+				RB_SCOPE_FORWARD_CLUSTERED,
+				RB_TEX_RT_VELOCITY,
+				RD::DATA_FORMAT_R16G16_SFLOAT,
+				usage_bits,
+				RD::TEXTURE_SAMPLES_1);
+	}
+
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_VALIDITY)) {
 		RID history_validity = render_buffers->create_texture(
 				RB_SCOPE_FORWARD_CLUSTERED,
@@ -810,7 +819,7 @@ void RenderForwardClustered::_render_list_with_draw_list(RenderListParameters *p
 	RD::get_singleton()->draw_list_end();
 }
 
-uint32_t RenderForwardClustered::_setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, bool p_opaque_render_buffers, bool p_apply_alpha_multiplier, bool p_pancake_shadows) {
+uint32_t RenderForwardClustered::_setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, bool p_opaque_render_buffers, bool p_apply_alpha_multiplier, bool p_pancake_shadows, bool p_disable_screen_space_effects) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
 	Ref<RenderSceneBuffersRD> rd = p_render_data->render_buffers;
@@ -878,7 +887,7 @@ uint32_t RenderForwardClustered::_setup_environment(const RenderDataRD *p_render
 		scene_state.ubo.ssao_ao_affect = environment_get_ssao_ao_channel_affect(p_render_data->environment);
 		scene_state.ubo.ssao_light_affect = environment_get_ssao_direct_light_affect(p_render_data->environment);
 		uint32_t ss_flags = 0;
-		if (p_opaque_render_buffers) {
+		if (p_opaque_render_buffers && !p_disable_screen_space_effects) {
 			ss_flags |= environment_get_ssao_enabled(p_render_data->environment) ? (1 << 0) : 0;
 			ss_flags |= environment_get_ssil_enabled(p_render_data->environment) ? (1 << 1) : 0;
 			ss_flags |= environment_get_ssr_enabled(p_render_data->environment) ? (1 << 2) : 0;
@@ -1925,6 +1934,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	const float *rt_env_params = scene_features.rt && p_render_data->environment.is_valid()
 			? RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment)
 			: nullptr;
+	bool rt_replaces_opaque = scene_features.rt && (!rt_env_params || (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] != 0u);
 	const bool rt_internal_denoiser = rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] == RSE::PT_DENOISER_INTERNAL;
 	const bool rt_dlss_rr_denoiser = rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] == RSE::PT_DENOISER_DLSS_RAY_RECONSTRUCTION;
 	const bool rt_temporal_denoiser = rt_internal_denoiser || rt_dlss_rr_denoiser;
@@ -1993,7 +2003,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	bool using_debug_mvs = get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_MOTION_VECTORS;
 	bool using_rt_temporal_denoise = !is_reflection_probe && scene_features.rt && rt_temporal_denoiser && rt_temporal_accumulation;
-	bool using_taa = rb->get_use_taa() || using_rt_temporal_denoise;
+	bool using_viewport_taa = rb->get_use_taa();
+	bool using_taa = using_viewport_taa || using_rt_temporal_denoise;
 
 	enum {
 		SCALE_NONE,
@@ -2024,7 +2035,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		motion_vectors_required = true;
 	} else if (ce_needs_motion_vectors) {
 		motion_vectors_required = true;
-	} else if (!is_reflection_probe && using_taa) {
+	} else if (!is_reflection_probe && (using_viewport_taa || (using_rt_temporal_denoise && rt_replaces_opaque))) {
 		motion_vectors_required = true;
 	} else if (!is_reflection_probe && using_upscaling) {
 		motion_vectors_required = true;
@@ -2048,10 +2059,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	Vector<Color> depth_pass_clear;
 	bool using_separate_specular = false;
 	bool reverse_cull = p_render_data->scene_data->cam_transform.basis.determinant() < 0;
-	// Rasterized motion vectors are only needed when an upscaler/TAA consumes
-	// them AND nothing else is producing them. When RT is enabled, the path
-	// tracer writes velocity itself (rt_velocity_image in the RT uniform set).
-	bool using_motion_pass = rb_data.is_valid() && (using_upscaling || using_taa) && !scene_features.rt;
+	// Rasterized motion vectors are only needed when the raster output consumes
+	// them. Path Traced mode writes the main velocity buffer from RT instead.
+	bool using_motion_pass = rb_data.is_valid() && (using_upscaling || using_viewport_taa) && !rt_replaces_opaque;
 
 	if (is_reflection_probe) {
 		uint32_t resolution = light_storage->reflection_probe_instance_get_resolution(p_render_data->reflection_probe);
@@ -2228,10 +2238,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	if (rt_requested && (!rt_pipeline.is_valid() || !rt_uniform_set.is_valid())) {
 		ERR_PRINT_ONCE_ED("Failed to initialize raytracing pipeline or uniform set. Falling back to raster opaque rendering for this frame.");
 		scene_features.rt = false;
+		rt_replaces_opaque = false;
 		scene_features.raw &= ~uint32_t(SCENE_FEATURE_DEPTH_RECONSTRUCT);
 		using_rt_temporal_denoise = false;
-		using_taa = rb->get_use_taa();
-		using_motion_pass = rb_data.is_valid() && (using_upscaling || using_taa);
+		using_taa = using_viewport_taa;
+		using_motion_pass = rb_data.is_valid() && (using_upscaling || using_viewport_taa);
 		if (using_motion_pass) {
 			p_render_data->scene_data->calculate_motion_vectors = true;
 			color_pass_flags |= COLOR_PASS_FLAG_MOTION_VECTORS;
@@ -2255,15 +2266,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		_update_render_base_uniform_set();
 	}
 
-	// With RT on we skip OPAQUE (TLAS is built from rt_instances) and
-	// using_motion_pass is off (RT writes velocity itself), so the last arg
-	// collapses the side-effect population to ALPHA only.
-	_fill_render_list(RENDER_LIST_OPAQUE, p_render_data, PASS_MODE_COLOR, using_sdfgi, using_sdfgi || using_voxelgi, using_motion_pass, false, scene_features.rt);
+	// Path Traced mode skips OPAQUE (TLAS is built from rt_instances). Hybrid
+	// RTGI still renders the normal raster opaque path and composites RTGI later.
+	_fill_render_list(RENDER_LIST_OPAQUE, p_render_data, PASS_MODE_COLOR, using_sdfgi, using_sdfgi || using_voxelgi, using_motion_pass, false, rt_replaces_opaque);
 
 	int *render_info = p_render_data->render_info ? p_render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_VISIBLE] : (int *)nullptr;
 
-	if (scene_features.rt) {
-		// RT path: skip opaque sort/instance data -- TLAS transforms come from
+	if (rt_replaces_opaque) {
+		// Path Traced path: skip opaque sort/instance data -- TLAS transforms come from
 		render_list[RENDER_LIST_ALPHA].sort_by_reverse_depth_and_priority();
 		_fill_instance_data(RENDER_LIST_ALPHA, render_info);
 	} else {
@@ -2540,8 +2550,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// Declare rp_uniform_set here so it's available for transparent pass later
 	RID rp_uniform_set;
 
-	// Skip opaque pass when raytracing handles color.
-	if (!scene_features.rt) {
+	// Skip opaque pass only when Path Traced mode handles opaque color.
+	if (!rt_replaces_opaque) {
 		RID normal_roughness_views[RendererSceneRender::MAX_RENDER_VIEWS];
 		if (rb_data.is_valid() && rb_data->has_normal_roughness()) {
 			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
@@ -2560,7 +2570,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// Shadow pass can change the base uniform set samplers.
 		_update_render_base_uniform_set();
 
-		uint32_t opaque_pass_uniform_buffer_index = _setup_environment(p_render_data, is_reflection_probe, screen_size, screen_size, p_default_bg_color, true, using_motion_pass);
+		uint32_t opaque_pass_uniform_buffer_index = _setup_environment(p_render_data, is_reflection_probe, screen_size, screen_size, p_default_bg_color, true, using_motion_pass, false, scene_features.rt);
 
 		rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_OPAQUE, p_render_data, radiance_texture, samplers, opaque_pass_uniform_buffer_index, true);
 
@@ -2619,7 +2629,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 	}
 
-	// Execute raytracing if enabled (replaces opaque/motion vector pass)
+	// Execute raytracing if enabled. Hybrid RTGI produces an indirect-light
+	// texture; Path Traced mode replaces the opaque/motion vector pass.
 	if (scene_features.rt && rb_data.is_valid() && raytracing && raytracing->get_shader()) {
 		RD::get_singleton()->draw_command_begin_label("Raytracing");
 		RENDER_TIMESTAMP("TLAS Build");
@@ -2673,8 +2684,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		RD::get_singleton()->draw_command_end_label();
 
-		// Copy RT depth (R32F storage image) to D32F depth buffer after tracing.
-		if (rb_data.is_valid() && rb_data->rt_has_depth_texture()) {
+		// Path Traced mode owns the main depth buffer. Hybrid keeps raster depth
+		// and uses RT depth only for RTGI history rejection.
+		if (rt_replaces_opaque && rb_data.is_valid() && rb_data->rt_has_depth_texture()) {
 			RENDER_TIMESTAMP("Copy RT Depth (R32F -> D32F)");
 			RD::get_singleton()->draw_command_begin_label("Copy RT Depth");
 			RID rt_depth_fb = FramebufferCacheRD::get_singleton()->get_cache_multiview(rb->get_view_count(), rb->get_depth_texture());
@@ -2682,18 +2694,23 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->draw_command_end_label();
 		}
 
-		// Motion vectors are fully generated by the RT raygen/closest-hit/miss shaders
-		// (written to rt_velocity_image). No raster motion pass needed.
-
-		raytracing->copy_output_texture(p_render_data);
+		if (rt_replaces_opaque) {
+			// Motion vectors are fully generated by the RT raygen/closest-hit/miss
+			// shaders (written to the main velocity image). No raster motion pass needed.
+			raytracing->copy_output_texture(p_render_data);
+		}
 
 		if (using_rt_temporal_denoise) {
 			RD::get_singleton()->draw_command_begin_label("RT Denoise");
 			RENDER_TIMESTAMP("RT Denoise");
 			const float rt_history_weight = rt_env_params ? rt_env_params[RSE::PT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT] : 0.94f;
-			taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, true, rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight);
+			if (rt_replaces_opaque) {
+				taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, true, rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight);
+			} else {
+				taa->process_texture(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, SNAME("rtgi_taa"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, rb_data->rt_get_velocity_texture(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, true, rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight);
+			}
 			RD::get_singleton()->draw_command_end_label();
-		} else if (using_taa) {
+		} else if (rt_replaces_opaque && using_viewport_taa) {
 			RD::get_singleton()->draw_command_begin_label("RT TAA");
 			RENDER_TIMESTAMP("RT TAA");
 			taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, false, rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id());
@@ -2702,17 +2719,24 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->texture_clear(rb_data->rt_get_prev_history_validity(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 			RD::get_singleton()->texture_clear(rb_data->rt_get_prev_history_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 		}
+
+		if (!rt_replaces_opaque) {
+			RD::get_singleton()->draw_command_begin_label("Composite Hybrid RTGI");
+			RENDER_TIMESTAMP("Composite Hybrid RTGI");
+			copy_effects->additive_blend(color_only_framebuffer, rb_data->rt_get_texture(), p_render_data->scene_data->view_count);
+			RD::get_singleton()->draw_command_end_label();
+		}
 	}
 
 	{
-		// Skip color MSAA resolve when raytracing - RT output is already in internal_texture.
-		if (!scene_features.rt && ce_post_opaque_resolved_color) {
+		// Skip color MSAA resolve only when Path Traced mode has already written internal_texture.
+		if (!rt_replaces_opaque && ce_post_opaque_resolved_color) {
 			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
 				RD::get_singleton()->texture_resolve_multisample(rb->get_color_msaa(v), rb->get_internal_texture(v));
 			}
 		}
 
-		if (!scene_features.rt && ce_post_opaque_resolved_depth) {
+		if (!rt_replaces_opaque && ce_post_opaque_resolved_depth) {
 			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
 				resolve_effects->resolve_depth(rb->get_depth_msaa(v), rb->get_depth_texture(v), rb->get_internal_size(), texture_multisamples[msaa]);
 			}
@@ -2745,7 +2769,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		_debug_sdfgi_probes(rb, color_only_framebuffer, p_render_data->scene_data->view_count, cms);
 	}
 
-	if ((draw_sky || draw_sky_fog_only) && !scene_features.rt) {
+	if ((draw_sky || draw_sky_fog_only) && !rt_replaces_opaque) {
 		RENDER_TIMESTAMP("Render Sky");
 
 		RD::get_singleton()->draw_command_begin_label("Draw Sky");
@@ -2760,8 +2784,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	if (use_msaa) {
 		RENDER_TIMESTAMP("Resolve MSAA");
 
-		// RT writes internal_texture; skip MSAA resolve.
-		if (!scene_features.rt && (scene_state.used_screen_texture || using_separate_specular || ce_pre_transparent_resolved_color)) {
+		// Path Traced mode writes internal_texture directly; Hybrid still uses
+		// the normal raster MSAA target.
+		if (!rt_replaces_opaque && (scene_state.used_screen_texture || using_separate_specular || ce_pre_transparent_resolved_color)) {
 			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
 				RD::get_singleton()->texture_resolve_multisample(rb->get_color_msaa(v), rb->get_internal_texture(v));
 			}
@@ -2772,7 +2797,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			}
 		}
 
-		if (!scene_features.rt && (scene_state.used_depth_texture || scene_state.used_normal_texture || using_separate_specular || ce_needs_normal_roughness || ce_pre_transparent_resolved_depth)) {
+		if (!rt_replaces_opaque && (scene_state.used_depth_texture || scene_state.used_normal_texture || using_separate_specular || ce_needs_normal_roughness || ce_pre_transparent_resolved_depth)) {
 			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
 				resolve_effects->resolve_depth(rb->get_depth_msaa(v), rb->get_depth_texture(v), rb->get_internal_size(), texture_multisamples[msaa]);
 			}
@@ -2844,14 +2869,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// so if we've requested this, we need another copy.
 			// Fairly unlikely scenario though.
 
-			// RT writes internal_texture; skip MSAA resolve.
-			if (!scene_features.rt && ce_pre_transparent_resolved_color) {
+			// Path Traced mode writes internal_texture directly; Hybrid still
+			// uses the normal raster MSAA target.
+			if (!rt_replaces_opaque && ce_pre_transparent_resolved_color) {
 				for (uint32_t v = 0; v < rb->get_view_count(); v++) {
 					RD::get_singleton()->texture_resolve_multisample(rb->get_color_msaa(v), rb->get_internal_texture(v));
 				}
 			}
 
-			if (!scene_features.rt && ce_pre_transparent_resolved_depth) {
+			if (!rt_replaces_opaque && ce_pre_transparent_resolved_depth) {
 				for (uint32_t v = 0; v < rb->get_view_count(); v++) {
 					resolve_effects->resolve_depth(rb->get_depth_msaa(v), rb->get_depth_texture(v), rb->get_internal_size(), texture_multisamples[msaa]);
 				}
@@ -2862,7 +2888,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		_process_compositor_effects(RSE::COMPOSITOR_EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT, p_render_data);
 	}
 
-	// Skip transparent pass when raytracing handles color.
+	// Transparent objects are always raster overlays.
 	if (true) {
 		RENDER_TIMESTAMP("Render 3D Transparent Pass");
 
@@ -2878,7 +2904,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			transparent_color_pass_flags &= ~uint32_t(COLOR_PASS_FLAG_MOTION_VECTORS);
 
 			RID alpha_framebuffer;
-			if (scene_features.rt && rb_data.is_valid()) {
+			if (rt_replaces_opaque && rb_data.is_valid()) {
 				int v_count = (transparent_color_pass_flags & COLOR_PASS_FLAG_MULTIVIEW) ? rb->get_view_count() : 1;
 				RID color = rb->get_internal_texture();
 				RID depth = rb->get_depth_texture();
@@ -2904,16 +2930,16 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	if (rb_data.is_valid() && use_msaa) {
 		bool resolve_velocity_buffer = (using_taa || using_upscaling || ce_needs_motion_vectors) && rb->has_velocity_buffer(true);
 		for (uint32_t v = 0; v < rb->get_view_count(); v++) {
-			// RT writes internal_texture; skip MSAA resolve.
-			// and MSAA color buffer is empty since we skipped rasterization.
-			if (!scene_features.rt) {
+			// Path Traced mode writes internal_texture directly; Hybrid still
+			// uses the normal raster MSAA target.
+			if (!rt_replaces_opaque) {
 				RD::get_singleton()->texture_resolve_multisample(rb->get_color_msaa(v), rb->get_internal_texture(v));
 			}
-			if (!scene_features.rt) {
+			if (!rt_replaces_opaque) {
 				resolve_effects->resolve_depth(rb->get_depth_msaa(v), rb->get_depth_texture(v), rb->get_internal_size(), texture_multisamples[msaa]);
 			}
 
-			if (resolve_velocity_buffer && !scene_features.rt) {
+			if (resolve_velocity_buffer && !rt_replaces_opaque) {
 				RD::get_singleton()->texture_resolve_multisample(rb->get_velocity_buffer(true, v), rb->get_velocity_buffer(false, v));
 			}
 		}
@@ -3015,15 +3041,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 			RD::get_singleton()->draw_command_end_label();
 #endif
-		} else if (using_taa && !using_rt_temporal_denoise && !scene_features.rt) {
+		} else if (using_viewport_taa && !rt_replaces_opaque) {
 			RD::get_singleton()->draw_command_begin_label("TAA");
 			RENDER_TIMESTAMP("TAA");
-			const bool use_rt_validity = scene_features.rt && rb_data.is_valid() && rb_data->rt_has_history_validity() && rb_data->rt_has_history_id();
-			RID rt_history_validity = use_rt_validity ? rb_data->rt_get_history_validity() : RID();
-			RID rt_prev_history_validity = use_rt_validity ? rb_data->rt_get_prev_history_validity() : RID();
-			RID rt_history_id = use_rt_validity ? rb_data->rt_get_history_id() : RID();
-			RID rt_prev_history_id = use_rt_validity ? rb_data->rt_get_prev_history_id() : RID();
-			taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, false, rt_history_validity, rt_prev_history_validity, rt_history_id, rt_prev_history_id);
+			taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far);
 			RD::get_singleton()->draw_command_end_label();
 		}
 	}

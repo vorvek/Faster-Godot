@@ -408,6 +408,7 @@ public:
 	void octmap_roughness_raster(RID p_source_rd_texture, RID p_dest_framebuffer, uint32_t p_sample_count, float p_roughness, uint32_t p_source_size, uint32_t p_dest_size, float p_border_size);
 
 	void merge_specular(RID p_dest_framebuffer, RID p_specular, RID p_base, RID p_reflection, uint32_t p_view_count);
+	void additive_blend(RID p_dest_framebuffer, RID p_source, uint32_t p_view_count);
 };
 
 } // namespace RendererRD

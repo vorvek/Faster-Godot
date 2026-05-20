@@ -177,6 +177,13 @@ void main() {
 		}
 	}
 
+	if (uint(get_rt_param(RT_PARAM_MODE)) == RT_MODE_HYBRID &&
+			get_total_bounces(ps.packed_bounces_flags) == 0u) {
+		ps.radiance = vec3(0.0);
+		path_pack(payload, ps);
+		return;
+	}
+
 	mat3 camera_basis = mat3(scene_data_block.data.inv_view_matrix);
 	mat3 world_to_sky = scene_data_block.data.radiance_inverse_xform * camera_basis;
 	vec3 sky_dir = world_to_sky * gl_WorldRayDirectionEXT;

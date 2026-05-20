@@ -160,3 +160,48 @@ void TAA::process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_f
 
 	RD::get_singleton()->draw_command_end_label();
 }
+
+void TAA::process_texture(Ref<RenderSceneBuffersRD> p_render_buffers, const StringName &p_source_context, const StringName &p_source_texture, const StringName &p_history_context, RD::DataFormat p_format, RID p_velocity_texture, float p_z_near, float p_z_far, bool p_raytracing_denoise, RID p_rt_history_validity, RID p_rt_prev_history_validity, RID p_rt_history_id, RID p_rt_prev_history_id, float p_raytracing_history_weight) {
+	CopyEffects *copy_effects = CopyEffects::get_singleton();
+
+	uint32_t view_count = p_render_buffers->get_view_count();
+	Size2i internal_size = p_render_buffers->get_internal_size();
+
+	bool just_allocated = false;
+	if (!p_render_buffers->has_texture(p_history_context, SNAME("history"))) {
+		uint32_t usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT;
+
+		p_render_buffers->create_texture(p_history_context, SNAME("history"), p_format, usage_bits);
+		p_render_buffers->create_texture(p_history_context, SNAME("temp"), p_format, usage_bits);
+		p_render_buffers->create_texture(p_history_context, SNAME("prev_velocity"), RD::DATA_FORMAT_R16G16_SFLOAT, usage_bits);
+
+		just_allocated = true;
+	}
+
+	RD::get_singleton()->draw_command_begin_label("TAA");
+
+	for (uint32_t v = 0; v < view_count; v++) {
+		RID frame_texture = p_render_buffers->get_texture_slice(p_source_context, p_source_texture, v, 0);
+		RID velocity_buffer = p_velocity_texture;
+		RID taa_history = p_render_buffers->get_texture_slice(p_history_context, SNAME("history"), v, 0);
+		RID taa_prev_velocity = p_render_buffers->get_texture_slice(p_history_context, SNAME("prev_velocity"), v, 0);
+
+		if (!just_allocated) {
+			RID depth_texture = p_render_buffers->get_depth_texture(v);
+			RID taa_temp = p_render_buffers->get_texture_slice(p_history_context, SNAME("temp"), v, 0);
+			resolve(frame_texture, taa_temp, depth_texture, velocity_buffer, taa_prev_velocity, taa_history, p_rt_history_validity, p_rt_prev_history_validity, p_rt_history_id, p_rt_prev_history_id, Size2(internal_size.x, internal_size.y), p_z_near, p_z_far, p_raytracing_denoise, p_raytracing_history_weight);
+			copy_effects->copy_to_rect(taa_temp, frame_texture, Rect2(0, 0, internal_size.x, internal_size.y));
+		}
+
+		copy_effects->copy_to_rect(frame_texture, taa_history, Rect2(0, 0, internal_size.x, internal_size.y));
+		copy_effects->copy_to_rect(velocity_buffer, taa_prev_velocity, Rect2(0, 0, internal_size.x, internal_size.y));
+		if (p_rt_history_validity.is_valid() && p_rt_prev_history_validity.is_valid()) {
+			RD::get_singleton()->texture_copy(p_rt_history_validity, p_rt_prev_history_validity, Vector3(), Vector3(), Vector3(internal_size.x, internal_size.y, 1), 0, 0, v, v);
+		}
+		if (p_rt_history_id.is_valid() && p_rt_prev_history_id.is_valid()) {
+			RD::get_singleton()->texture_copy(p_rt_history_id, p_rt_prev_history_id, Vector3(), Vector3(), Vector3(internal_size.x, internal_size.y, 1), 0, 0, v, v);
+		}
+	}
+
+	RD::get_singleton()->draw_command_end_label();
+}

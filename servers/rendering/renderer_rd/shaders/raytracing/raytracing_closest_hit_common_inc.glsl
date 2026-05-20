@@ -496,12 +496,17 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 
 	uint total_bounces = get_total_bounces(ps.packed_bounces_flags);
 	uint diffuse_bounces = get_diffuse_bounces(ps.packed_bounces_flags);
+	bool hybrid_primary = uint(get_rt_param(RT_PARAM_MODE)) == RT_MODE_HYBRID && total_bounces == 0u;
 
 	// Environment fog for this ray segment (before surface contribution).
-	apply_segment_fog(gl_HitTEXT, ps.radiance, ps.throughput);
+	if (!hybrid_primary) {
+		apply_segment_fog(gl_HitTEXT, ps.radiance, ps.throughput);
+	}
 
 	// Emissive contribution.
-	ps.radiance += ps.throughput * m.emissive;
+	if (!hybrid_primary) {
+		ps.radiance += ps.throughput * m.emissive;
+	}
 
 	// Bounce limit check.
 	if (total_bounces >= RT_GET_MAX_BOUNCES() || diffuse_bounces >= MAX_DIFFUSE_BOUNCES) {
@@ -599,18 +604,12 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	path_pack(payload, ps);
 
 	uint rt_light_count = uint(get_rt_param(RT_PARAM_LIGHT_COUNT));
-	if (rt_light_count > 0u) {
+	if (rt_light_count > 0u && !hybrid_primary) {
 		bool is_indirect = (diffuse_bounces > 0u);
 		uint receiver_layer_mask = geometries[h.geometry_idx].layer_mask;
 		vec3 direct_light = lights_evaluate_direct_lighting(
 				h.hit_pos, h.geometry_normal, N, V, brdf_mat, ps.rng_state, is_indirect, receiver_layer_mask, rt_light_count);
 		ps.radiance += ps.throughput * direct_light;
-	}
-
-	if (uint(get_rt_param(RT_PARAM_MODE)) == RT_MODE_HYBRID && total_bounces >= 1u) {
-		ps.packed_bounces_flags = set_path_terminated(ps.packed_bounces_flags);
-		path_pack(payload, ps);
-		return;
 	}
 
 	// =================================================================
