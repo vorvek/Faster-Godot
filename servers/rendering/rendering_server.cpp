@@ -1686,6 +1686,9 @@ Array RenderingServer::_get_array_from_surface(uint64_t p_format, Vector<uint8_t
 			case RSE::ARRAY_INDEX: {
 				/* determine whether using 16 or 32 bits indices */
 
+				const uint32_t index_size = (p_vertex_len <= (1 << 16) && p_vertex_len > 0) ? sizeof(uint16_t) : sizeof(uint32_t);
+				ERR_FAIL_COND_V(p_index_data.size() < p_index_len * index_size, ret);
+
 				const uint8_t *ir = p_index_data.ptr();
 
 				Vector<int> arr;

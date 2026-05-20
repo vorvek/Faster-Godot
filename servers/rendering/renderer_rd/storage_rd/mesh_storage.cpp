@@ -56,6 +56,28 @@ static BitField<RD::BufferCreationBits> rt_buffer_creation_bits(bool p_as_build_
 	return bits;
 }
 
+static Span<uint8_t> get_index_data_for_rd(const Vector<uint8_t> &p_index_data, uint32_t p_index_count, bool p_index_16, Vector<uint8_t> &r_padded_index_data, uint32_t &r_index_buffer_count) {
+	const uint32_t index_stride = p_index_16 ? sizeof(uint16_t) : sizeof(uint32_t);
+	const uint32_t index_data_size = p_index_count * index_stride;
+
+	r_index_buffer_count = p_index_count;
+	ERR_FAIL_COND_V_MSG(p_index_data.size() < index_data_size, p_index_data, "Index data is smaller than the index count requires.");
+
+	Span<uint8_t> index_data(p_index_data.ptr(), index_data_size);
+	if (p_index_16 && (p_index_count & 1)) {
+		r_padded_index_data.resize_initialized(index_data_size + index_stride);
+		memcpy(r_padded_index_data.ptrw(), p_index_data.ptr(), index_data_size);
+		r_index_buffer_count++;
+		index_data = r_padded_index_data;
+	}
+
+	return index_data;
+}
+
+static uint32_t get_index_stride(uint32_t p_vertex_count) {
+	return (p_vertex_count <= 65536 && p_vertex_count > 0) ? sizeof(uint16_t) : sizeof(uint32_t);
+}
+
 MeshStorage::MeshStorage() {
 	singleton = this;
 
@@ -431,15 +453,9 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 
 	if (new_surface.index_count) {
 		bool is_index_16 = new_surface.vertex_count <= 65536 && new_surface.vertex_count > 0;
-		uint32_t index_buffer_count = new_surface.index_count;
-		Span<uint8_t> index_data = new_surface.index_data;
 		Vector<uint8_t> padded_index_data;
-		if (is_index_16 && (new_surface.index_count & 1)) {
-			padded_index_data = new_surface.index_data;
-			padded_index_data.resize_initialized(padded_index_data.size() + sizeof(uint16_t));
-			index_buffer_count++;
-			index_data = padded_index_data;
-		}
+		uint32_t index_buffer_count = 0;
+		Span<uint8_t> index_data = get_index_data_for_rd(new_surface.index_data, new_surface.index_count, is_index_16, padded_index_data, index_buffer_count);
 
 		s->index_buffer = RD::get_singleton()->index_buffer_create(index_buffer_count, is_index_16 ? RD::INDEX_BUFFER_FORMAT_UINT16 : RD::INDEX_BUFFER_FORMAT_UINT32, index_data, false, rt_as_input_bits);
 		s->index_buffer_size = index_data.size();
@@ -451,15 +467,12 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 
 			for (int i = 0; i < new_surface.lods.size(); i++) {
 				uint32_t indices = new_surface.lods[i].index_data.size() / (is_index_16 ? 2 : 4);
-				uint32_t lod_index_buffer_count = indices;
-				Span<uint8_t> lod_index_data = new_surface.lods[i].index_data;
 				Vector<uint8_t> padded_lod_index_data;
-				if (is_index_16 && (indices & 1)) {
-					padded_lod_index_data = new_surface.lods[i].index_data;
-					padded_lod_index_data.resize_initialized(padded_lod_index_data.size() + sizeof(uint16_t));
-					lod_index_buffer_count++;
-					lod_index_data = padded_lod_index_data;
+				uint32_t lod_index_buffer_count = 0;
+				if (new_surface.primitive == RS::PRIMITIVE_TRIANGLES && indices > 0 && (indices % 3) != 0 && ((indices - 1) % 3) == 0) {
+					indices--;
 				}
+				Span<uint8_t> lod_index_data = get_index_data_for_rd(new_surface.lods[i].index_data, indices, is_index_16, padded_lod_index_data, lod_index_buffer_count);
 				s->lods[i].index_buffer = RD::get_singleton()->index_buffer_create(lod_index_buffer_count, is_index_16 ? RD::INDEX_BUFFER_FORMAT_UINT16 : RD::INDEX_BUFFER_FORMAT_UINT32, lod_index_data, false, rt_as_input_bits);
 				s->lods[i].index_buffer_size = lod_index_data.size();
 				s->lods[i].index_array = RD::get_singleton()->index_array_create(s->lods[i].index_buffer, 0, indices);
@@ -703,16 +716,21 @@ RS::SurfaceData MeshStorage::mesh_get_surface(RID p_mesh, int p_surface) const {
 	sd.vertex_count = s.vertex_count;
 	sd.index_count = s.index_count;
 	sd.primitive = s.primitive;
+	const uint32_t index_stride = get_index_stride(s.vertex_count);
 
-	if (sd.index_count) {
+	if (sd.index_count && s.index_buffer.is_valid()) {
 		sd.index_data = RD::get_singleton()->buffer_get_data(s.index_buffer);
+		sd.index_data.resize(sd.index_count * index_stride);
 	}
 	sd.aabb = s.aabb;
 	sd.uv_scale = s.uv_scale;
 	for (uint32_t i = 0; i < s.lod_count; i++) {
 		RS::SurfaceData::LOD lod;
 		lod.edge_length = s.lods[i].edge_length;
-		lod.index_data = RD::get_singleton()->buffer_get_data(s.lods[i].index_buffer);
+		if (s.lods[i].index_buffer.is_valid()) {
+			lod.index_data = RD::get_singleton()->buffer_get_data(s.lods[i].index_buffer);
+			lod.index_data.resize(s.lods[i].index_count * index_stride);
+		}
 		sd.lods.push_back(lod);
 	}
 
