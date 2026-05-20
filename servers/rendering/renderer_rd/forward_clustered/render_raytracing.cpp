@@ -1318,6 +1318,32 @@ RTMaterialData *RenderRaytracing::process_material(RID p_material_rid, uint16_t 
 		}
 		return RID();
 	};
+	auto apply_emission_color_param = [&](const StringName &p_param) -> bool {
+		Variant emission_var = material_storage->material_get_param(p_material_rid, p_param);
+		if (emission_var.get_type() == Variant::COLOR) {
+			Color c = ((Color)emission_var).srgb_to_linear();
+			mat.emission_color[0] = c.r;
+			mat.emission_color[1] = c.g;
+			mat.emission_color[2] = c.b;
+			return true;
+		}
+		if (emission_var.get_type() == Variant::VECTOR3) {
+			Vector3 v = emission_var;
+			mat.emission_color[0] = v.x;
+			mat.emission_color[1] = v.y;
+			mat.emission_color[2] = v.z;
+			return true;
+		}
+		return false;
+	};
+	auto apply_emission_energy_param = [&](const StringName &p_param) -> bool {
+		Variant emission_energy_var = material_storage->material_get_param(p_material_rid, p_param);
+		if (emission_energy_var.get_type() == Variant::FLOAT) {
+			mat.emission_strength = emission_energy_var;
+			return true;
+		}
+		return false;
+	};
 
 	// Textures
 	// Albedo is a color texture - needs sRGB->linear conversion
@@ -1352,6 +1378,15 @@ RTMaterialData *RenderRaytracing::process_material(RID p_material_rid, uint16_t 
 
 	// Emission is a color texture - needs sRGB->linear conversion
 	RID emission_rd = get_material_texture("texture_emission", true);
+	if (!emission_rd.is_valid()) {
+		emission_rd = get_material_texture("emission_texture", true);
+	}
+	if (!emission_rd.is_valid()) {
+		emission_rd = get_material_texture("emissive_texture", true);
+	}
+	if (!emission_rd.is_valid()) {
+		emission_rd = get_material_texture("texture_emissive", true);
+	}
 	if (emission_rd.is_valid()) {
 		mat.emission_texture_idx = bindless_block->add_texture(emission_rd);
 		mat.flags |= RT_MAT_FLAG_HAS_EMISSION_TEX;
@@ -1536,17 +1571,29 @@ RTMaterialData *RenderRaytracing::process_material(RID p_material_rid, uint16_t 
 		mat.specular = specular_var;
 	}
 
-	Variant emission_var = material_storage->material_get_param(p_material_rid, "emission");
-	if (emission_var.get_type() == Variant::COLOR) {
-		Color c = ((Color)emission_var).srgb_to_linear();
-		mat.emission_color[0] = c.r;
-		mat.emission_color[1] = c.g;
-		mat.emission_color[2] = c.b;
+	bool has_emission_color = apply_emission_color_param("emission");
+	if (!has_emission_color) {
+		has_emission_color = apply_emission_color_param("emission_color");
+	}
+	if (!has_emission_color) {
+		has_emission_color = apply_emission_color_param("emissive");
+	}
+	if (!has_emission_color) {
+		has_emission_color = apply_emission_color_param("emissive_color");
 	}
 
-	Variant emission_energy_var = material_storage->material_get_param(p_material_rid, "emission_energy");
-	if (emission_energy_var.get_type() == Variant::FLOAT) {
-		mat.emission_strength = emission_energy_var;
+	bool has_emission_energy = apply_emission_energy_param("emission_energy");
+	if (!has_emission_energy) {
+		has_emission_energy = apply_emission_energy_param("emission_strength");
+	}
+	if (!has_emission_energy) {
+		has_emission_energy = apply_emission_energy_param("emissive_energy");
+	}
+	if (!has_emission_energy) {
+		has_emission_energy = apply_emission_energy_param("emissive_strength");
+	}
+	if (has_emission_color && !has_emission_energy && mat.emission_strength == 0.0f) {
+		mat.emission_strength = 1.0f;
 	}
 
 	// UV1 scale and offset (vec3 in Godot, we only use xy).

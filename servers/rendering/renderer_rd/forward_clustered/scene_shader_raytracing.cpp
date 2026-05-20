@@ -1006,9 +1006,9 @@ SceneShaderRaytracing::PipelineBuildTask *SceneShaderRaytracing::_make_pipeline_
 					"    normal_map = sample_material_texture(rt_mat.normal_texture_idx, mat_uv, rt_mat.flags).rgb;\n"
 					"    normal_map_depth = rt_mat.normal_map_depth;\n"
 					"}\n"
+					"emission = rt_mat.emission_color * rt_mat.emission_strength;\n"
 					"if ((rt_mat.flags & 2u) != 0u) {\n"
-					"    emission = sample_material_texture(rt_mat.emission_texture_idx, mat_uv, rt_mat.flags).rgb\n"
-					"             * rt_mat.emission_color * rt_mat.emission_strength;\n"
+					"    emission *= sample_material_texture(rt_mat.emission_texture_idx, mat_uv, rt_mat.flags).rgb;\n"
 					"}\n";
 		}
 
