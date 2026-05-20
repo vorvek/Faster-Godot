@@ -3620,7 +3620,7 @@ bool RenderingDeviceDriverVulkan::_determine_swap_chain_format(RenderingContextD
 	bool hdr_output_requested = context_driver->surface_get_hdr_output_enabled(p_surface);
 
 	// Determine which formats to prefer based on the requested capabilities.
-	FixedVector<FormatCandidate, 6> preferred_formats;
+	FixedVector<FormatCandidate, 8> preferred_formats;
 	if (hdr_output_requested) {
 		// Our preferred HDR format is 16-bit float + extended linear.
 		if (context_driver->is_colorspace_externally_managed()) {
@@ -3645,6 +3645,8 @@ bool RenderingDeviceDriverVulkan::_determine_swap_chain_format(RenderingContextD
 	// These formats are always considered for SDR.
 	preferred_formats.push_back({ VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR, COLOR_SPACE_REC709_NONLINEAR_SRGB });
 	preferred_formats.push_back({ VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR, COLOR_SPACE_REC709_NONLINEAR_SRGB });
+	preferred_formats.push_back({ VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR, COLOR_SPACE_REC709_NONLINEAR_SRGB });
+	preferred_formats.push_back({ VK_FORMAT_R8G8B8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR, COLOR_SPACE_REC709_NONLINEAR_SRGB });
 
 	bool found = false;
 	for (const FormatCandidate &candidate : preferred_formats) {
@@ -3727,9 +3729,24 @@ void RenderingDeviceDriverVulkan::_swap_chain_release(SwapChain *swap_chain) {
 RenderingDeviceDriver::SwapChainID RenderingDeviceDriverVulkan::swap_chain_create(RenderingContextDriver::SurfaceID p_surface) {
 	DEV_ASSERT(p_surface != 0);
 
-	// Create an empty swap chain until it is resized.
 	SwapChain *swap_chain = memnew(SwapChain);
 	swap_chain->surface = p_surface;
+
+	// The Vulkan swapchain images are created lazily on resize, but the
+	// compositor queries the screen framebuffer format during initialization to
+	// build its blit pipelines. Resolve the intended surface format up front.
+	VkFormat format = VK_FORMAT_UNDEFINED;
+	VkColorSpaceKHR color_space = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+	RDD::ColorSpace rdd_color_space = COLOR_SPACE_REC709_NONLINEAR_SRGB;
+	if (!_determine_swap_chain_format(p_surface, format, color_space, rdd_color_space)) {
+		memdelete(swap_chain);
+		ERR_FAIL_V_MSG(SwapChainID(), "Vulkan surface did not return any valid formats.");
+	}
+
+	swap_chain->format = format;
+	swap_chain->color_space = color_space;
+	swap_chain->rdd_color_space = rdd_color_space;
+
 	return SwapChainID(swap_chain);
 }
 
@@ -4143,9 +4160,14 @@ RDD::DataFormat RenderingDeviceDriverVulkan::swap_chain_get_format(SwapChainID p
 			return DATA_FORMAT_B8G8R8A8_UNORM;
 		case VK_FORMAT_R8G8B8A8_UNORM:
 			return DATA_FORMAT_R8G8B8A8_UNORM;
+		case VK_FORMAT_B8G8R8A8_SRGB:
+			return DATA_FORMAT_B8G8R8A8_SRGB;
+		case VK_FORMAT_R8G8B8A8_SRGB:
+			return DATA_FORMAT_R8G8B8A8_SRGB;
 		case VK_FORMAT_R16G16B16A16_SFLOAT:
 			return DATA_FORMAT_R16G16B16A16_SFLOAT;
 		default:
+			ERR_PRINT(vformat("Unknown swap chain Vulkan format: %d.", int(swap_chain->format)));
 			DEV_ASSERT(false && "Unknown swap chain format.");
 			return DATA_FORMAT_MAX;
 	}
