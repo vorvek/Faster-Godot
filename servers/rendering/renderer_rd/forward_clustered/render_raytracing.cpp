@@ -2617,9 +2617,13 @@ uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, RT_L
 	};
 
 	LocalVector<LightScore> positional_lights;
+	HashSet<RID> positional_lights_seen;
 
 	// Helper: score a positional light and add to candidates.
 	auto score_positional_light = [&](RID light_instance) {
+		if (positional_lights_seen.has(light_instance)) {
+			return;
+		}
 		RID base = ls->light_instance_get_base_light(light_instance);
 		Transform3D xform = ls->light_instance_get_base_transform(light_instance);
 		Vector3 light_pos = xform.origin;
@@ -2633,9 +2637,12 @@ uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, RT_L
 		ls_entry.light_instance = light_instance;
 		ls_entry.score = score;
 		positional_lights.push_back(ls_entry);
+		positional_lights_seen.insert(light_instance);
 	};
 
 	// Directional lights from the frustum-culled list (they're global, always included).
+	// Positional lights are also collected here as a conservative fallback for
+	// dynamic carried lights that may not enter the wider RT light list.
 	const PagedArray<RID> &lights = *p_render_data->lights;
 	for (uint32_t li = 0; li < (uint32_t)lights.size(); li++) {
 		RID light_instance = lights[li];
@@ -2643,6 +2650,7 @@ uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, RT_L
 		RSE::LightType type = ls->light_get_type(base);
 
 		if (type != RSE::LIGHT_DIRECTIONAL) {
+			score_positional_light(light_instance);
 			continue;
 		}
 		if (rt_light_count >= p_max_lights) {
@@ -2668,6 +2676,7 @@ uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, RT_L
 		ld.indirect_energy = ls->light_get_param(base, RSE::LIGHT_PARAM_INDIRECT_ENERGY);
 		ld.inv_spot_attenuation = 0.0f;
 		ld.cos_spot_angle = 0.0f;
+		ld.flags = ls->light_has_shadow(base) ? RT_LIGHT_FLAG_SHADOW : 0;
 		ld.spot_direction[0] = 0.0f;
 		ld.spot_direction[1] = 0.0f;
 		ld.spot_direction[2] = 0.0f;
@@ -2720,6 +2729,7 @@ uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, RT_L
 		}
 		ld.specular_amount = ls->light_get_param(base, RSE::LIGHT_PARAM_SPECULAR) * 2.0f; // Matches rasterizer convention (light_storage.cpp), normalizes 0.5 default to 1.0.
 		ld.indirect_energy = ls->light_get_param(base, RSE::LIGHT_PARAM_INDIRECT_ENERGY);
+		ld.flags = ls->light_has_shadow(base) ? RT_LIGHT_FLAG_SHADOW : 0;
 
 		if (type == RSE::LIGHT_SPOT) {
 			ld.inv_spot_attenuation = 1.0f / MAX(0.001f, ls->light_get_param(base, RSE::LIGHT_PARAM_SPOT_ATTENUATION));

@@ -9,6 +9,7 @@
 #define RT_LIGHT_TYPE_OMNI 0 // Point light with radius (soft shadows)
 #define RT_LIGHT_TYPE_DIRECTIONAL 1 // Sun/moon with angular size
 #define RT_LIGHT_TYPE_SPOT 3 // Spot light with cone falloff
+#define RT_LIGHT_FLAG_SHADOW 1u
 
 // Reservoir sampling batch size for stochastic light selection.
 #ifndef RT_LIGHT_RESERVOIR_SIZE
@@ -31,7 +32,7 @@ struct RTLightData {
 	float indirect_energy; // Godot indirect energy multiplier.
 	float inv_spot_attenuation; // Spot cone softness.
 	float cos_spot_angle; // Cosine of spot cone half-angle.
-	float _pad0;
+	uint flags; // RT_LIGHT_FLAG_*.
 	vec3 spot_direction; // Spot direction (normalized, world space).
 	float _pad1;
 };
@@ -324,7 +325,7 @@ vec3 lights_evaluate_direct_lighting(
 			spot_atten = 1.0 - pow(spot_rim, light.inv_spot_attenuation);
 		}
 
-		if (!lights_trace_shadow_ray(hit_pos, L, shadow_dist, rng_state)) {
+		if ((light.flags & RT_LIGHT_FLAG_SHADOW) != 0u && !lights_trace_shadow_ray(hit_pos, L, shadow_dist, rng_state)) {
 			return vec3(0.0);
 		}
 
@@ -357,7 +358,7 @@ vec3 lights_evaluate_direct_lighting(
 			return vec3(0.0);
 		}
 
-		if (!lights_trace_shadow_ray(hit_pos, L, ls.max_distance, rng_state)) {
+		if ((light.flags & RT_LIGHT_FLAG_SHADOW) != 0u && !lights_trace_shadow_ray(hit_pos, L, ls.max_distance, rng_state)) {
 			return vec3(0.0);
 		}
 

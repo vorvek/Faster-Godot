@@ -121,6 +121,10 @@ enum RTLightType : uint32_t {
 	RT_LIGHT_TYPE_SPOT = 3,
 };
 
+enum RTLightFlag : uint32_t {
+	RT_LIGHT_FLAG_SHADOW = 1 << 0,
+};
+
 // Must match GLSL RTLightData (std430, 80 bytes).
 struct alignas(16) RT_LightData {
 	float position[3]; // World position (omni/spot) or direction (directional, normalized).
@@ -134,7 +138,7 @@ struct alignas(16) RT_LightData {
 	float indirect_energy;
 	float inv_spot_attenuation;
 	float cos_spot_angle;
-	float _pad0;
+	uint32_t flags;
 	float spot_direction[3];
 	float _pad1;
 };
