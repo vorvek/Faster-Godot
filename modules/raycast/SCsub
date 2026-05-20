@@ -82,9 +82,9 @@ if env["builtin_embree"]:
 
     if faster_embree_avx2_profile:
         # Embree's base objects are the lowest-ISA dispatch layer. Do not let
-        # Faster-Godot's global AVX2 flags leak into them, or Embree's template
+        # Faster-Godot's global SIMD flags leak into them, or Embree's template
         # instantiation guards select the wrong object set.
-        for flag in ["-mavx2", "-mfma", "-ffp-contract=fast", "/arch:AVX2", "/fp:fast"]:
+        for flag in ["-mavx2", "-mfma", "-mf16c", "-mpopcnt", "-ffp-contract=fast", "/arch:AVX2", "/fp:fast"]:
             if flag in env_thirdparty["CCFLAGS"]:
                 env_thirdparty["CCFLAGS"].remove(flag)
             if flag in env_thirdparty["CXXFLAGS"]:

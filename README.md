@@ -5,7 +5,7 @@ games that can commit to a narrower runtime contract:
 
 - Windows and Linux only.
 - x86_64 only.
-- AVX2 and FMA required.
+- AVX2, FMA, F16C, and POPCNT required.
 - Forward+ rendering only.
 - Vulkan as the active rendering backend.
 - Jolt as the 3D physics backend.
@@ -22,8 +22,9 @@ far came mostly from the renderer-profile and hot-path changes:
 - Forward+ only: Mobile and compatibility renderer paths are removed from the
   fork build, including mobile tonemapping variants and Forward Mobile shader
   generation.
-- AVX2/FMA baseline: The engine is compiled for modern x86_64 desktop CPUs
-  instead of the official broad SSE4.2 baseline.
+- AVX2/FMA/F16C/POPCNT baseline: The engine is compiled for modern x86_64
+  desktop CPUs instead of the official broad SSE4.2 baseline, with zstd BMI2
+  paths dispatched at runtime on CPUs that expose BMI2.
 - Render culling hot paths: Visibility range checks avoid square roots when no
   fade value is needed, light culling avoids full AABB projection when only the
   minimum plane distance matters, and clustered volume draws batch consecutive
@@ -33,7 +34,9 @@ far came mostly from the renderer-profile and hot-path changes:
   static scenes.
 - Hardware RTGI and path tracing: Forward+ Vulkan can use a hardware ray
   tracing global illumination path exposed through `Environment`, intended for
-  dark 3D scenes where moving local lights need real bounce lighting.
+  dark 3D scenes where moving local lights need real bounce lighting. RTGI
+  denoiser selections that do not have a shipped vendor backend fall through to
+  the internal temporal denoiser instead of leaving raw noisy output.
 - Windows input pump: Raw mouse input is drained in batches and normal message
   processing is capped per frame to avoid high-polling mice flooding
   `PeekMessage()` and tanking CanvasItem-heavy scenes.
@@ -51,6 +54,12 @@ Windows release template:
 
 ```powershell
 scons platform=windows target=template_release arch=x86_64 use_mingw=yes tests=no optimize=speed lto=none debug_symbols=no -j16
+```
+
+Windows stripped release editor:
+
+```powershell
+scons platform=windows target=editor arch=x86_64 use_mingw=yes production=yes tests=no optimize=speed lto=none debug_symbols=no -j16
 ```
 
 Linux release template:

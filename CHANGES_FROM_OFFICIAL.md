@@ -7,10 +7,10 @@ desktop Forward+ profile. The detailed notes are split by change area:
 | --- | --- |
 | Forward+ only renderer profile | [docs/forward_plus_only.md](docs/forward_plus_only.md) |
 | Vulkan-only Windows RenderingDevice profile | [docs/vulkan_only_windows_rendering.md](docs/vulkan_only_windows_rendering.md) |
-| x86_64 AVX2/FMA baseline | [docs/x86_64_avx2_fma.md](docs/x86_64_avx2_fma.md) |
+| x86_64 AVX2/FMA/F16C/POPCNT baseline and codec SIMD hooks | [docs/x86_64_avx2_fma.md](docs/x86_64_avx2_fma.md) |
 | Windows and Linux target profile | [docs/windows_linux_target_profile.md](docs/windows_linux_target_profile.md) |
 | Jolt-only physics profile | [docs/jolt_only_physics.md](docs/jolt_only_physics.md) |
-| Hardware RTGI and path tracing | [docs/path_tracing_gi.md](docs/path_tracing_gi.md) |
+| Hardware RTGI, path tracing, and RTGI denoiser routing | [docs/path_tracing_gi.md](docs/path_tracing_gi.md) |
 | Forward+ rendering hot-path tuning | [docs/rendering_hot_path_tuning.md](docs/rendering_hot_path_tuning.md) |
 | Occlusion culling and Embree update | [docs/occlusion_culling.md](docs/occlusion_culling.md) |
 | Windows high-polling mouse input | [docs/windows_high_polling_mouse_input.md](docs/windows_high_polling_mouse_input.md) |

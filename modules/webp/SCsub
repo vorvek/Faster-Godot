@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 from misc.utility.scons_hints import *
 
+import methods
+
 Import("env")
 Import("env_modules")
 
@@ -144,6 +146,8 @@ if env["builtin_libwebp"]:
     env_webp.Prepend(CPPPATH=[thirdparty_dir, thirdparty_dir + "src/"])
 
     env_thirdparty = env_webp.Clone()
+    if env["faster_godot"] and env["arch"] == "x86_64" and env.msvc and not methods.using_clang(env):
+        env_thirdparty.AppendUnique(CPPDEFINES=["WEBP_MSC_SSE41", "WEBP_MSC_AVX2"])
     env_thirdparty.disable_warnings()
     env_thirdparty.add_source_files(thirdparty_obj, thirdparty_sources)
     env.modules_sources += thirdparty_obj

@@ -88,6 +88,13 @@ Vendor denoisers are not hard dependencies. `Auto` prefers the internal
 temporal/spatial denoiser path first; NVIDIA, AMD, and Intel integrations are
 kept as optional plugin or compile-time integration points.
 
+The NVIDIA RTGI option maps to the DLSS Ray Reconstruction path where available
+and still emits the DLSS RR G-buffer/debug textures. This fork does not ship a
+Streamline/DLSS reconstruction pass, so the renderer also routes NVIDIA RTGI
+through the same temporal RT denoising resolve used by the internal denoiser.
+That avoids the previous behavior where selecting NVIDIA produced auxiliary
+buffers but left the final RTGI image effectively undenoised.
+
 ## Validation
 
 Validated so far:
@@ -101,6 +108,9 @@ Validated so far:
     lowest-ISA dispatch objects.
   - ETCpak now receives the MSVC AVX2/FMA feature macros required by its SIMD
     tables when building the Faster-Godot profile.
+  - The NVIDIA RTGI denoiser selection now participates in the temporal RT
+    denoising resolve while preserving DLSS RR auxiliary buffers for debug and
+    future backend integration.
 
 ## Pros
 

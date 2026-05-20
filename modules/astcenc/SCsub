@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 from misc.utility.scons_hints import *
 
+import methods
+
 Import("env")
 Import("env_modules")
 
@@ -41,6 +43,17 @@ env_astcenc.Prepend(CPPPATH=[thirdparty_dir])
 
 env_thirdparty = env_astcenc.Clone()
 env_thirdparty.disable_warnings()
+
+if env["faster_godot"] and env["arch"] == "x86_64" and env.msvc and not methods.using_clang(env):
+    env_thirdparty.AppendUnique(
+        CPPDEFINES=[
+            ("ASTCENC_SSE", 42),
+            ("ASTCENC_AVX", 2),
+            ("ASTCENC_X86_GATHERS", 1),
+            ("ASTCENC_F16C", 1),
+            ("ASTCENC_POPCNT", 1),
+        ]
+    )
 
 # Build the encoder only for editor builds
 astc_encoder = env.editor_build

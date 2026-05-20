@@ -187,7 +187,7 @@ opts.Add(BoolVariable("production", "Set defaults to build Godot for use in prod
 opts.Add(
     BoolVariable(
         "faster_godot",
-        "Build Faster-Godot: Windows/Linux x86_64, Forward+ only, AVX2/FMA desktop profile",
+        "Build Faster-Godot: Windows/Linux x86_64, Forward+ only, AVX2/FMA/F16C/POPCNT desktop profile",
         True,
     )
 )
@@ -816,7 +816,7 @@ elif env.msvc:
 # Set x86 CPU instruction sets to use by the compiler's autovectorization.
 if env["arch"] == "x86_64":
     if env["faster_godot"]:
-        # Faster-Godot targets private x86_64 desktop builds and treats AVX2/FMA as the minimum CPU contract.
+        # Faster-Godot targets private x86_64 desktop builds and treats AVX2/FMA/F16C/POPCNT as the minimum CPU contract.
         if env.msvc and not methods.using_clang(env):
             if "/fp:strict" in env["CCFLAGS"]:
                 env["CCFLAGS"].remove("/fp:strict")
@@ -824,7 +824,7 @@ if env["arch"] == "x86_64":
         else:
             if "-ffp-contract=off" in env["CCFLAGS"]:
                 env["CCFLAGS"].remove("-ffp-contract=off")
-            env.Append(CCFLAGS=["-mavx2", "-mfma", "-ffp-contract=fast"])
+            env.Append(CCFLAGS=["-mavx2", "-mfma", "-mf16c", "-mpopcnt", "-ffp-contract=fast"])
     else:
         # On 64-bit x86, enable SSE 4.2 and prior instruction sets (SSE3/SSSE3/SSE4/SSE4.1) to improve performance.
         # This is supported on most CPUs released after 2009-2011 (Intel Nehalem, AMD Bulldozer).

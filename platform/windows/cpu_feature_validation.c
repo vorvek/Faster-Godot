@@ -81,8 +81,10 @@ extern int WINAPI ShimMainCRTStartup() {
 	int cpuinfo7[4];
 	GODOT_CPUID(cpuinfo7, 0x07, 0x00);
 
+	BOOL cpuid_popcnt_supported = cpuinfo[2] & (1 << 23);
 	BOOL cpuid_avx_supported = cpuinfo[2] & (1 << 28);
 	BOOL cpuid_fma_supported = cpuinfo[2] & (1 << 12);
+	BOOL cpuid_f16c_supported = cpuinfo[2] & (1 << 29);
 	BOOL cpuid_osxsave_supported = cpuinfo[2] & (1 << 27);
 	BOOL cpuid_avx2_supported = cpuinfo7[1] & (1 << 5);
 	BOOL os_avx_state_supported = FALSE;
@@ -91,7 +93,7 @@ extern int WINAPI ShimMainCRTStartup() {
 		os_avx_state_supported = (xcr0 & 0x6) == 0x6;
 	}
 
-	if ((win_sse42_supported || cpuid_sse42_supported) && cpuid_avx_supported && cpuid_fma_supported && cpuid_avx2_supported && os_avx_state_supported) {
+	if ((win_sse42_supported || cpuid_sse42_supported) && cpuid_popcnt_supported && cpuid_avx_supported && cpuid_fma_supported && cpuid_f16c_supported && cpuid_avx2_supported && os_avx_state_supported) {
 #else
 	if (win_sse42_supported || cpuid_sse42_supported) {
 #endif
@@ -102,7 +104,7 @@ extern int WINAPI ShimMainCRTStartup() {
 #endif
 	} else {
 #ifdef FASTER_GODOT
-		MessageBoxW(NULL, L"A CPU and operating system with SSE4.2, AVX, AVX2, FMA, and AVX OS state support is required.", L"Godot Engine", MB_OK | MB_ICONEXCLAMATION | MB_TASKMODAL);
+		MessageBoxW(NULL, L"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, and AVX OS state support is required.", L"Godot Engine", MB_OK | MB_ICONEXCLAMATION | MB_TASKMODAL);
 #else
 		MessageBoxW(NULL, L"A CPU with SSE4.2 instruction set support is required.", L"Godot Engine", MB_OK | MB_ICONEXCLAMATION | MB_TASKMODAL);
 #endif

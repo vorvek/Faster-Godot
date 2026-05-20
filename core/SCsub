@@ -155,6 +155,10 @@ if env["builtin_zstd"]:
 
     env_thirdparty.Prepend(CPPPATH=[thirdparty_zstd_dir, thirdparty_zstd_dir + "common"])
     env_thirdparty.Append(CPPDEFINES=["ZSTD_STATIC_LINKING_ONLY"])
+    if env["faster_godot"] and env["arch"] == "x86_64" and (not env.msvc or methods.using_clang(env)):
+        # Keep BMI2/LZCNT/TZCNT conditional: zstd builds target-attributed BMI2
+        # entry points and dispatches to them only when CPUID reports BMI2.
+        env_thirdparty.AppendUnique(CPPDEFINES=[("DYNAMIC_BMI2", 1)])
     env.Prepend(CPPPATH=thirdparty_zstd_dir)
     # Also needed in main env includes will trigger warnings
     env.Append(CPPDEFINES=["ZSTD_STATIC_LINKING_ONLY"])

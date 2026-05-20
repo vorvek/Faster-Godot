@@ -87,8 +87,10 @@ int main(int argc, char *argv[]) {
 	godot_cpuid(cpuinfo7, 0x07, 0x00);
 
 	const bool cpuid_sse42_supported = cpuinfo[2] & (1 << 20);
+	const bool cpuid_popcnt_supported = cpuinfo[2] & (1 << 23);
 	const bool cpuid_avx_supported = cpuinfo[2] & (1 << 28);
 	const bool cpuid_fma_supported = cpuinfo[2] & (1 << 12);
+	const bool cpuid_f16c_supported = cpuinfo[2] & (1 << 29);
 	const bool cpuid_osxsave_supported = cpuinfo[2] & (1 << 27);
 	const bool cpuid_avx2_supported = cpuinfo7[1] & (1 << 5);
 	bool os_avx_state_supported = false;
@@ -97,18 +99,18 @@ int main(int argc, char *argv[]) {
 		os_avx_state_supported = (xcr0 & 0x6) == 0x6;
 	}
 
-	if (!(cpuid_sse42_supported && cpuid_avx_supported && cpuid_fma_supported && cpuid_avx2_supported && os_avx_state_supported)) {
-		printf("A CPU and operating system with SSE4.2, AVX, AVX2, FMA, and AVX OS state support is required.\n");
+	if (!(cpuid_sse42_supported && cpuid_popcnt_supported && cpuid_avx_supported && cpuid_fma_supported && cpuid_f16c_supported && cpuid_avx2_supported && os_avx_state_supported)) {
+		printf("A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, and AVX OS state support is required.\n");
 
-		int ret = system("zenity --warning --title \"Godot Engine\" --text \"A CPU and operating system with SSE4.2, AVX, AVX2, FMA, and AVX OS state support is required.\" 2> /dev/null");
+		int ret = system("zenity --warning --title \"Godot Engine\" --text \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, and AVX OS state support is required.\" 2> /dev/null");
 		if (ret != 0) {
-			ret = system("kdialog --title \"Godot Engine\" --sorry \"A CPU and operating system with SSE4.2, AVX, AVX2, FMA, and AVX OS state support is required.\" 2> /dev/null");
+			ret = system("kdialog --title \"Godot Engine\" --sorry \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, and AVX OS state support is required.\" 2> /dev/null");
 		}
 		if (ret != 0) {
-			ret = system("Xdialog --title \"Godot Engine\" --msgbox \"A CPU and operating system with SSE4.2, AVX, AVX2, FMA, and AVX OS state support is required.\" 0 0 2> /dev/null");
+			ret = system("Xdialog --title \"Godot Engine\" --msgbox \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, and AVX OS state support is required.\" 0 0 2> /dev/null");
 		}
 		if (ret != 0) {
-			ret = system("xmessage -center -title \"Godot Engine\" \"A CPU and operating system with SSE4.2, AVX, AVX2, FMA, and AVX OS state support is required.\" 2> /dev/null");
+			ret = system("xmessage -center -title \"Godot Engine\" \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, and AVX OS state support is required.\" 2> /dev/null");
 		}
 		abort();
 	}
