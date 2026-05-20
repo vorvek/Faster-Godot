@@ -31,6 +31,9 @@ far came mostly from the renderer-profile and hot-path changes:
 - Occlusion raycast backend: Embree is updated to 4.4.1 and the viewport
   occlusion path stays enabled for fixed-camera rooms, corridors, and dense
   static scenes.
+- Hardware RTGI and path tracing: Forward+ Vulkan can use a hardware ray
+  tracing global illumination path exposed through `Environment`, intended for
+  dark 3D scenes where moving local lights need real bounce lighting.
 - Windows input pump: Raw mouse input is drained in batches and normal message
   processing is capped per frame to avoid high-polling mice flooding
   `PeekMessage()` and tanking CanvasItem-heavy scenes.
