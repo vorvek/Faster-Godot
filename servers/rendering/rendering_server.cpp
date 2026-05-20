@@ -3763,6 +3763,11 @@ void RenderingServer::init() {
 	GLOBAL_DEF_RST(PropertyInfo(Variant::FLOAT, "rendering/anti_aliasing/quality/smaa_edge_detection_threshold", PROPERTY_HINT_RANGE, "0.01,0.2,0.01"), 0.05);
 
 	GLOBAL_DEF("rendering/anti_aliasing/quality/use_debanding", false);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/anti_aliasing/quality/taa_sharpness", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 0.20f);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/anti_aliasing/quality/taa_history_weight", PROPERTY_HINT_RANGE, "0.0,0.99,0.001"), 0.90f);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/anti_aliasing/quality/taa_disocclusion_threshold", PROPERTY_HINT_RANGE, "0.0,8.0,0.01"), 2.0f);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/anti_aliasing/quality/taa_jitter_phase_count", PROPERTY_HINT_RANGE, "2,64,1"), 16);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/anti_aliasing/quality/taa_jitter_scale", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 1.0f);
 
 	{
 		String mode_hints;

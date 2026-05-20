@@ -37,7 +37,6 @@
 #define FLT_MIN 0.00000001
 #define FLT_MAX 32767.0
 #define RPC_9 0.11111111111
-#define RPC_16 0.0625
 
 #define DISOCCLUSION_SCALE 0.01 // Scale the weight of this pixel calculated as (change in velocity - threshold) * scale.
 
@@ -58,6 +57,8 @@ layout(push_constant, std430) uniform Params {
 	float variance_dynamic;
 	float raytracing_denoise;
 	float rt_history_validity_enabled;
+	float history_weight;
+	float sharpness;
 }
 params;
 
@@ -302,7 +303,7 @@ vec3 rt_firefly_clamp_3x3(uvec2 group_pos, vec3 center) {
 }
 
 // Clip history to the neighbourhood of the current sample
-vec3 clip_history_3x3(uvec2 group_pos, vec3 color_history, vec2 velocity_closest) {
+vec3 clip_history_3x3(uvec2 group_pos, vec3 color_history, vec2 velocity_closest, out vec3 neighborhood_avg, out vec3 neighborhood_min, out vec3 neighborhood_max) {
 	// Sample a 3x3 neighbourhood
 	vec3 s1 = load_color(group_pos + kOffsets3x3[0]);
 	vec3 s2 = load_color(group_pos + kOffsets3x3[1]);
@@ -321,6 +322,9 @@ vec3 clip_history_3x3(uvec2 group_pos, vec3 color_history, vec2 velocity_closest
 	// Compute min and max (with an adaptive box size, which greatly reduces ghosting)
 	vec3 color_avg = (s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9) * RPC_9;
 	vec3 color_avg2 = ((s1 * s1) + (s2 * s2) + (s3 * s3) + (s4 * s4) + (s5 * s5) + (s6 * s6) + (s7 * s7) + (s8 * s8) + (s9 * s9)) * RPC_9;
+	neighborhood_avg = color_avg;
+	neighborhood_min = min(s1, min(s2, min(s3, min(s4, min(s5, min(s6, min(s7, min(s8, s9))))))));
+	neighborhood_max = max(s1, max(s2, max(s3, max(s4, max(s5, max(s6, max(s7, max(s8, s9))))))));
 	// Use variance clipping as described in https://developer.download.nvidia.com/gameworks/events/GDC2016/msalvi_temporal_supersampling.pdf
 	float box_size = mix(0.0f, params.variance_dynamic, smoothstep(0.02f, 0.0f, length(velocity_closest)));
 	vec3 dev = sqrt(abs(color_avg2 - (color_avg * color_avg))) * box_size;
@@ -381,10 +385,13 @@ vec3 temporal_antialiasing(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_
 	// Clip history to the neighbourhood of the current sample (fixes a lot of the ghosting).
 	vec2 velocity_closest = vec2(0.0); // This is best done by using the velocity with the closest depth.
 	get_closest_pixel_velocity_3x3(pos_group, pos_group_top_left, velocity_closest);
-	color_history = clip_history_3x3(pos_group, color_history, velocity_closest);
+	vec3 neighborhood_avg = vec3(0.0);
+	vec3 neighborhood_min = vec3(0.0);
+	vec3 neighborhood_max = vec3(0.0);
+	color_history = clip_history_3x3(pos_group, color_history, velocity_closest, neighborhood_avg, neighborhood_min, neighborhood_max);
 
 	// Compute blend factor
-	float blend_factor = RPC_16; // We want to be able to accumulate as many jitter samples as we generated, that is, 16.
+	float blend_factor = 1.0 - params.history_weight;
 	{
 		// If re-projected UV is out of screen, converge to current color immediately.
 		float factor_screen = any(lessThan(uv_reprojected, vec2(0.0))) || any(greaterThan(uv_reprojected, vec2(1.0))) ? 1.0 : 0.0;
@@ -419,6 +426,10 @@ vec3 temporal_antialiasing(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_
 
 		// Inverse tonemap
 		color_resolved = reinhard_inverse(color_resolved);
+	}
+
+	if (params.sharpness > 0.0) {
+		color_resolved = clamp(color_resolved + (color_resolved - neighborhood_avg) * params.sharpness, neighborhood_min, neighborhood_max);
 	}
 
 	return color_resolved;

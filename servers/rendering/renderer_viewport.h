@@ -61,6 +61,7 @@ public:
 		RS::ViewportAnisotropicFiltering anisotropic_filtering_level = RenderingServer::VIEWPORT_ANISOTROPY_4X;
 		bool fsr_enabled = false;
 		uint32_t jitter_phase_count = 0;
+		float jitter_scale = 1.0f;
 		RS::ViewportUpdateMode update_mode = RenderingServer::VIEWPORT_UPDATE_WHEN_VISIBLE;
 		RID render_target;
 		RID render_target_texture;

@@ -253,17 +253,19 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 			}
 
 			uint32_t jitter_phase_count = 0;
+			float jitter_scale = 1.0f;
 			if (scaling_type == RS::VIEWPORT_SCALING_3D_TYPE_TEMPORAL) {
 				// Implementation has been copied from ffxFsr2GetJitterPhaseCount.
 				// Also used for MetalFX Temporal scaling.
 				jitter_phase_count = uint32_t(8.0f * std::pow(float(target_width) / render_width, 2.0f));
 			} else if (use_taa) {
-				// Default jitter count for TAA.
-				jitter_phase_count = 16;
+				jitter_phase_count = CLAMP(int(GLOBAL_GET_CACHED(int, "rendering/anti_aliasing/quality/taa_jitter_phase_count")), 2, 64);
+				jitter_scale = CLAMP(GLOBAL_GET_CACHED(float, "rendering/anti_aliasing/quality/taa_jitter_scale"), 0.0f, 1.0f);
 			}
 
 			p_viewport->internal_size = Size2(render_width, render_height);
 			p_viewport->jitter_phase_count = jitter_phase_count;
+			p_viewport->jitter_scale = jitter_scale;
 
 			// At resolution scales lower than 1.0, use negative texture mipmap bias
 			// to compensate for the loss of sharpness.
@@ -315,7 +317,7 @@ void RendererViewport::_draw_3d(Viewport *p_viewport) {
 	}
 
 	float screen_mesh_lod_threshold = p_viewport->mesh_lod_threshold / float(p_viewport->size.width);
-	RSG::scene->render_camera(p_viewport->render_buffers, p_viewport->camera, p_viewport->scenario, p_viewport->self, p_viewport->internal_size, p_viewport->jitter_phase_count, screen_mesh_lod_threshold, p_viewport->shadow_atlas, xr_interface, &p_viewport->render_info);
+	RSG::scene->render_camera(p_viewport->render_buffers, p_viewport->camera, p_viewport->scenario, p_viewport->self, p_viewport->internal_size, p_viewport->jitter_phase_count, p_viewport->jitter_scale, screen_mesh_lod_threshold, p_viewport->shadow_atlas, xr_interface, &p_viewport->render_info);
 
 	RENDER_TIMESTAMP("< Render 3D Scene");
 #endif // _3D_DISABLED

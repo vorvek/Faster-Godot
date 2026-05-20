@@ -50,8 +50,8 @@ private:
 		float variance_dynamic;
 		float raytracing_denoise;
 		float rt_history_validity_enabled;
-		float pad1;
-		float pad2;
+		float history_weight;
+		float sharpness;
 	};
 
 	TaaResolveShaderRD taa_shader;

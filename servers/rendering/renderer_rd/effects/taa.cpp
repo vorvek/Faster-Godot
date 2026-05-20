@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "taa.h"
+#include "core/config/project_settings.h"
 #include "servers/rendering/renderer_rd/effects/copy_effects.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
@@ -70,10 +71,12 @@ void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_pr
 	memset(&push_constant, 0, sizeof(TAAResolvePushConstant));
 	push_constant.resolution_width = p_resolution.width;
 	push_constant.resolution_height = p_resolution.height;
-	push_constant.disocclusion_threshold = 2.5f; // If velocity changes by less than this amount of texels we can retain the accumulation buffer.
+	push_constant.disocclusion_threshold = CLAMP(GLOBAL_GET_CACHED(float, "rendering/anti_aliasing/quality/taa_disocclusion_threshold"), 0.0f, 8.0f); // If velocity changes by less than this amount of texels we can retain the accumulation buffer.
 	push_constant.variance_dynamic = CLAMP(base_variance * variance_scale, base_variance_min, base_variance_max); // Variance dynamically scales based on resolution
 	push_constant.raytracing_denoise = p_raytracing_denoise ? 1.0f : 0.0f;
 	push_constant.rt_history_validity_enabled = (p_rt_history_validity.is_valid() && p_rt_prev_history_validity.is_valid()) ? 1.0f : 0.0f;
+	push_constant.history_weight = CLAMP(GLOBAL_GET_CACHED(float, "rendering/anti_aliasing/quality/taa_history_weight"), 0.0f, 0.99f);
+	push_constant.sharpness = CLAMP(GLOBAL_GET_CACHED(float, "rendering/anti_aliasing/quality/taa_sharpness"), 0.0f, 1.0f);
 
 	RID rt_history_validity = p_rt_history_validity.is_valid() ? p_rt_history_validity : texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
 	RID rt_prev_history_validity = p_rt_prev_history_validity.is_valid() ? p_rt_prev_history_validity : texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
