@@ -125,6 +125,7 @@ private:
 	};
 
 	bool is_compute = false;
+	bool is_raytracing = false;
 
 	String name;
 
@@ -149,6 +150,11 @@ private:
 		STAGE_TYPE_VERTEX,
 		STAGE_TYPE_FRAGMENT,
 		STAGE_TYPE_COMPUTE,
+		STAGE_TYPE_RAYGEN,
+		STAGE_TYPE_ANY_HIT,
+		STAGE_TYPE_CLOSEST_HIT,
+		STAGE_TYPE_MISS,
+		STAGE_TYPE_INTERSECTION,
 		STAGE_TYPE_MAX,
 	};
 
@@ -169,6 +175,7 @@ private:
 protected:
 	ShaderRD();
 	void setup(const char *p_vertex_code, const char *p_fragment_code, const char *p_compute_code, const char *p_name);
+	void setup_raytracing(const char *p_raygen_code, const char *p_any_hit_code, const char *p_closest_hit_code, const char *p_miss_code, const char *p_intersection_code, const char *p_name);
 
 public:
 	RID version_create(bool p_embedded = true);

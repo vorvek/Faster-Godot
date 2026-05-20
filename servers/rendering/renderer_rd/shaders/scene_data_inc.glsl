@@ -81,4 +81,9 @@ struct SceneData {
 	float IBL_exposure_normalization;
 	uint camera_visible_layers;
 	float pass_alpha_multiplier;
+
+	float fog_sky_affect;
+	float scene_data_pad0;
+	float scene_data_pad1;
+	float scene_data_pad2;
 };

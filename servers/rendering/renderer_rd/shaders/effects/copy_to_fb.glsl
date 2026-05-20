@@ -82,7 +82,7 @@ layout(push_constant, std430) uniform Params {
 }
 params;
 
-#ifndef MODE_SET_COLOR
+#if !defined(MODE_SET_COLOR)
 #ifdef USE_MULTIVIEW
 layout(location = 0) in vec3 uv_interp;
 #else
@@ -103,7 +103,9 @@ layout(set = 1, binding = 0) uniform sampler2D source_color2;
 #endif /* USE_MULTIVIEW */
 #endif /* !SET_COLOR */
 
+#ifndef MODE_COPY_DEPTH
 layout(location = 0) out vec4 frag_color;
+#endif
 
 vec3 linear_to_srgb(vec3 color) {
 	//if going to srgb, clamp from 0 to 1.
@@ -157,6 +159,10 @@ void main() {
 	}
 #endif /* MODE_PANORAMA_TO_DP */
 
+#ifdef MODE_COPY_DEPTH
+	gl_FragDepth = textureLod(source_color, uv, 0.0).r;
+#else
+
 #ifdef USE_MULTIVIEW
 	vec4 color = textureLod(source_color, uv, 0.0);
 #ifdef MODE_TWO_SOURCES
@@ -191,5 +197,6 @@ void main() {
 	}
 
 	frag_color = color / params.luminance_multiplier;
+#endif /* MODE_COPY_DEPTH */
 #endif // MODE_SET_COLOR
 }

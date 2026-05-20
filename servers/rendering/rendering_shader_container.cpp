@@ -370,14 +370,17 @@ Error RenderingShaderContainer::reflect_spirv(const String &p_shader_name, Span<
 							is_image = true;
 						} break;
 						case SPV_REFLECT_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: {
-							ERR_PRINT("Acceleration structure not supported.");
-							continue;
+							uniform.type = RDC::UNIFORM_TYPE_ACCELERATION_STRUCTURE;
 						} break;
 					}
 
 					if (need_array_dimensions) {
 						uniform.length = 1;
 						for (uint32_t k = 0; k < binding.array.dims_count; k++) {
+							if (binding.array.dims[k] == SPV_REFLECT_ARRAY_DIM_RUNTIME) {
+								uniform.length = 0;
+								break;
+							}
 							uniform.length *= binding.array.dims[k];
 						}
 					} else if (need_block_size) {
@@ -692,6 +695,10 @@ RenderingDeviceCommons::ShaderReflection RenderingShaderContainer::get_shader_re
 			uniform.length = binding.length;
 			uniform.binding = binding.binding;
 			uniform.stages = binding.stages;
+			uniform.unbounded = binding.length == 0 &&
+					(uniform.type == RDC::UNIFORM_TYPE_SAMPLER ||
+							uniform.type == RDC::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE ||
+							uniform.type == RDC::UNIFORM_TYPE_TEXTURE);
 		}
 	}
 

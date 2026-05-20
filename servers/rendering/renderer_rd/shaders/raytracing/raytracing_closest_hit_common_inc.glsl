@@ -233,7 +233,7 @@ vec3 fog_sample_radiance(vec3 vertex, float mip_level) {
 	return textureLod(sampler2D(radiance_octmap, radiance_sampler), cube_uv, roughness_lod).rgb;
 }
 
-#include "../fog_inc.glsl"
+#include "raytracing_fog_inc.glsl"
 
 /// Apply environment fog for the ray segment that was just traversed.
 /// Attenuates throughput and adds in-scattered fog color.

@@ -133,6 +133,7 @@ void ShaderRD::_add_stage(const char *p_code, StageType p_stage_type) {
 
 void ShaderRD::setup(const char *p_vertex_code, const char *p_fragment_code, const char *p_compute_code, const char *p_name) {
 	name = p_name;
+	is_raytracing = false;
 
 	if (p_compute_code) {
 		_add_stage(p_compute_code, STAGE_TYPE_COMPUTE);
@@ -158,6 +159,48 @@ void ShaderRD::setup(const char *p_vertex_code, const char *p_fragment_code, con
 	tohash.append(p_fragment_code ? p_fragment_code : "");
 	tohash.append("[Compute]");
 	tohash.append(p_compute_code ? p_compute_code : "");
+	tohash.append("[DebugInfo]");
+	tohash.append(Engine::get_singleton()->is_generate_spirv_debug_info_enabled() ? "1" : "0");
+
+	base_sha256 = tohash.as_string().sha256_text();
+}
+
+void ShaderRD::setup_raytracing(const char *p_raygen_code, const char *p_any_hit_code, const char *p_closest_hit_code, const char *p_miss_code, const char *p_intersection_code, const char *p_name) {
+	name = p_name;
+	is_compute = false;
+	is_raytracing = true;
+
+	if (p_raygen_code) {
+		_add_stage(p_raygen_code, STAGE_TYPE_RAYGEN);
+	}
+	if (p_any_hit_code) {
+		_add_stage(p_any_hit_code, STAGE_TYPE_ANY_HIT);
+	}
+	if (p_closest_hit_code) {
+		_add_stage(p_closest_hit_code, STAGE_TYPE_CLOSEST_HIT);
+	}
+	if (p_miss_code) {
+		_add_stage(p_miss_code, STAGE_TYPE_MISS);
+	}
+	if (p_intersection_code) {
+		_add_stage(p_intersection_code, STAGE_TYPE_INTERSECTION);
+	}
+
+	StringBuilder tohash;
+	tohash.append("[GodotVersionNumber]");
+	tohash.append(GODOT_VERSION_NUMBER);
+	tohash.append("[GodotVersionHash]");
+	tohash.append(GODOT_VERSION_HASH);
+	tohash.append("[Raygen]");
+	tohash.append(p_raygen_code ? p_raygen_code : "");
+	tohash.append("[AnyHit]");
+	tohash.append(p_any_hit_code ? p_any_hit_code : "");
+	tohash.append("[ClosestHit]");
+	tohash.append(p_closest_hit_code ? p_closest_hit_code : "");
+	tohash.append("[Miss]");
+	tohash.append(p_miss_code ? p_miss_code : "");
+	tohash.append("[Intersection]");
+	tohash.append(p_intersection_code ? p_intersection_code : "");
 	tohash.append("[DebugInfo]");
 	tohash.append(Engine::get_singleton()->is_generate_spirv_debug_info_enabled() ? "1" : "0");
 
@@ -271,7 +314,30 @@ Vector<String> ShaderRD::_build_variant_stage_sources(uint32_t p_variant, Compil
 	Vector<String> stage_sources;
 	stage_sources.resize(RD::SHADER_STAGE_MAX);
 
-	if (is_compute) {
+	if (is_raytracing) {
+		struct RayStage {
+			StageType template_stage;
+			RD::ShaderStage shader_stage;
+		};
+
+		static constexpr RayStage ray_stages[] = {
+			{ STAGE_TYPE_RAYGEN, RD::SHADER_STAGE_RAYGEN },
+			{ STAGE_TYPE_ANY_HIT, RD::SHADER_STAGE_ANY_HIT },
+			{ STAGE_TYPE_CLOSEST_HIT, RD::SHADER_STAGE_CLOSEST_HIT },
+			{ STAGE_TYPE_MISS, RD::SHADER_STAGE_MISS },
+			{ STAGE_TYPE_INTERSECTION, RD::SHADER_STAGE_INTERSECTION },
+		};
+
+		for (const RayStage &ray_stage : ray_stages) {
+			if (stage_templates[ray_stage.template_stage].chunks.is_empty()) {
+				continue;
+			}
+
+			StringBuilder builder;
+			_build_variant_code(builder, p_variant, p_data.version, stage_templates[ray_stage.template_stage]);
+			stage_sources.write[ray_stage.shader_stage] = builder.as_string();
+		}
+	} else if (is_compute) {
 		// Compute stage.
 		StringBuilder builder;
 		_build_variant_code(builder, p_variant, p_data.version, stage_templates[STAGE_TYPE_COMPUTE]);
@@ -338,7 +404,35 @@ RS::ShaderNativeSourceCode ShaderRD::version_get_native_source_code(RID p_versio
 	source_code.versions.resize(variant_defines.size());
 
 	for (int i = 0; i < source_code.versions.size(); i++) {
-		if (!is_compute) {
+		if (is_raytracing) {
+			struct RayStage {
+				StageType template_stage;
+				const char *name;
+			};
+
+			static constexpr RayStage ray_stages[] = {
+				{ STAGE_TYPE_RAYGEN, "raygen" },
+				{ STAGE_TYPE_ANY_HIT, "any_hit" },
+				{ STAGE_TYPE_CLOSEST_HIT, "closest_hit" },
+				{ STAGE_TYPE_MISS, "miss" },
+				{ STAGE_TYPE_INTERSECTION, "intersection" },
+			};
+
+			for (const RayStage &ray_stage : ray_stages) {
+				if (stage_templates[ray_stage.template_stage].chunks.is_empty()) {
+					continue;
+				}
+
+				StringBuilder builder;
+				_build_variant_code(builder, i, version, stage_templates[ray_stage.template_stage]);
+
+				RS::ShaderNativeSourceCode::Version::Stage stage;
+				stage.name = ray_stage.name;
+				stage.code = builder.as_string();
+
+				source_code.versions.write[i].stages.push_back(stage);
+			}
+		} else if (!is_compute) {
 			//vertex stage
 
 			StringBuilder builder;
@@ -351,7 +445,7 @@ RS::ShaderNativeSourceCode ShaderRD::version_get_native_source_code(RID p_versio
 			source_code.versions.write[i].stages.push_back(stage);
 		}
 
-		if (!is_compute) {
+		if (!is_raytracing && !is_compute) {
 			//fragment stage
 
 			StringBuilder builder;
@@ -997,7 +1091,7 @@ Vector<RD::ShaderStageSPIRVData> ShaderRD::compile_stages(const Vector<String> &
 	}
 
 	if (compilation_failed) {
-		ERR_PRINT("Error compiling " + String(compilation_failed_stage == RD::SHADER_STAGE_COMPUTE ? "Compute " : (compilation_failed_stage == RD::SHADER_STAGE_VERTEX ? "Vertex" : "Fragment")) + " shader.");
+		ERR_PRINT("Error compiling " + String(RD::SHADER_STAGE_NAMES[compilation_failed_stage]) + " shader.");
 		ERR_PRINT(error);
 
 #ifdef DEBUG_ENABLED
