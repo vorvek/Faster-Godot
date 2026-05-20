@@ -20,6 +20,7 @@ The feature is exposed on `Environment`, so it appears through the same
 - `rtgi_samples_per_pixel`
 - `rtgi_max_bounces`
 - `rtgi_energy`
+- `rtgi_disable_in_editor`
 - `rtgi_temporal_accumulation`
 - `rtgi_temporal_accumulation_weight`
 - `rtgi_denoiser`
@@ -38,7 +39,7 @@ The feature is exposed on `Environment`, so it appears through the same
   - Turns the hardware RTGI/path tracing path on for this environment when the
     active renderer is desktop Forward+ Vulkan and the selected GPU exposes
     Vulkan ray tracing. If support is missing, the scene falls back to the
-    normal non-RT rendering path.
+    normal non-RT rendering path. This is off by default for new environments.
 - `rtgi_mode`
   - `Hybrid RTGI`: keeps the normal Forward+ raster path for primary visibility
     and direct rendering, then injects ray-traced indirect diffuse/specular
@@ -60,6 +61,10 @@ The feature is exposed on `Environment`, so it appears through the same
 - `rtgi_energy`
   - Multiplies the RT lighting contribution after tracing. This is an artistic
     intensity control, not a replacement for physically scaled light energy.
+- `rtgi_disable_in_editor`
+  - Disables RTGI only for editor viewport previews. This lets authored scenes
+    keep RTGI enabled for the running project and exported builds without
+    making normal editor navigation pay the RTGI cost. The default is `true`.
 - `rtgi_temporal_accumulation`
   - Enables accumulation of RT lighting across frames. It improves convergence
     at low sample counts but depends on valid motion, depth, and RT history

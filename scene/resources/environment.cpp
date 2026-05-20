@@ -703,6 +703,15 @@ float Environment::get_rtgi_energy() const {
 	return rtgi_energy;
 }
 
+void Environment::set_rtgi_disable_in_editor(bool p_disabled) {
+	rtgi_disable_in_editor = p_disabled;
+	_update_pathtracing();
+}
+
+bool Environment::is_rtgi_disabled_in_editor() const {
+	return rtgi_disable_in_editor;
+}
+
 void Environment::set_rtgi_temporal_accumulation(bool p_enabled) {
 	rtgi_temporal_accumulation = p_enabled;
 	_update_pathtracing();
@@ -753,7 +762,8 @@ Environment::PathtracingDebugMode Environment::get_rtgi_debug_mode() const {
 }
 
 void Environment::_update_pathtracing() {
-	RS::get_singleton()->environment_set_pathtracing(environment, pathtracing_enabled);
+	const bool editor_disabled = Engine::get_singleton()->is_editor_hint() && rtgi_disable_in_editor;
+	RS::get_singleton()->environment_set_pathtracing(environment, pathtracing_enabled && !editor_disabled);
 
 	PackedFloat32Array params;
 	params.resize(16);
@@ -1618,6 +1628,8 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_rtgi_max_bounces"), &Environment::get_rtgi_max_bounces);
 	ClassDB::bind_method(D_METHOD("set_rtgi_energy", "energy"), &Environment::set_rtgi_energy);
 	ClassDB::bind_method(D_METHOD("get_rtgi_energy"), &Environment::get_rtgi_energy);
+	ClassDB::bind_method(D_METHOD("set_rtgi_disable_in_editor", "disabled"), &Environment::set_rtgi_disable_in_editor);
+	ClassDB::bind_method(D_METHOD("is_rtgi_disabled_in_editor"), &Environment::is_rtgi_disabled_in_editor);
 	ClassDB::bind_method(D_METHOD("set_rtgi_temporal_accumulation", "enabled"), &Environment::set_rtgi_temporal_accumulation);
 	ClassDB::bind_method(D_METHOD("is_rtgi_temporal_accumulation_enabled"), &Environment::is_rtgi_temporal_accumulation_enabled);
 	ClassDB::bind_method(D_METHOD("set_rtgi_temporal_accumulation_weight", "weight"), &Environment::set_rtgi_temporal_accumulation_weight);
@@ -1633,6 +1645,7 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_samples_per_pixel", PROPERTY_HINT_RANGE, "1,16,1"), "set_rtgi_samples_per_pixel", "get_rtgi_samples_per_pixel");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_max_bounces", PROPERTY_HINT_RANGE, "1,8,1"), "set_rtgi_max_bounces", "get_rtgi_max_bounces");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_energy", PROPERTY_HINT_RANGE, "0,16,0.01,or_greater"), "set_rtgi_energy", "get_rtgi_energy");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_disable_in_editor"), "set_rtgi_disable_in_editor", "is_rtgi_disabled_in_editor");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_temporal_accumulation"), "set_rtgi_temporal_accumulation", "is_rtgi_temporal_accumulation_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_temporal_accumulation_weight", PROPERTY_HINT_RANGE, "0,0.99,0.001"), "set_rtgi_temporal_accumulation_weight", "get_rtgi_temporal_accumulation_weight");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "Auto,Internal,NVIDIA,AMD,Intel Arc,Off"), "set_rtgi_denoiser", "get_rtgi_denoiser");

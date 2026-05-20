@@ -202,6 +202,12 @@
 		<member name="reflected_light_source" type="int" setter="set_reflection_source" getter="get_reflection_source" enum="Environment.ReflectionSource" default="0">
 			The reflected (specular) light source.
 		</member>
+		<member name="rtgi_disable_in_editor" type="bool" setter="set_rtgi_disable_in_editor" getter="is_rtgi_disabled_in_editor" default="true">
+			If [code]true[/code], disables RTGI while this environment is previewed in the editor. This does not affect running projects or exported builds.
+		</member>
+		<member name="rtgi_enabled" type="bool" setter="set_rtgi_enabled" getter="is_rtgi_enabled" default="false">
+			If [code]true[/code], enables hardware RTGI or path tracing for this environment when the active renderer and GPU support Vulkan ray tracing.
+		</member>
 		<member name="rtgi_temporal_accumulation_weight" type="float" setter="set_rtgi_temporal_accumulation_weight" getter="get_rtgi_temporal_accumulation_weight" default="0.94">
 			Sets how much previous frame history contributes to RTGI temporal accumulation. Higher values reduce ray-traced lighting speckles, but can increase light ghosting or wobbling during camera motion.
 		</member>

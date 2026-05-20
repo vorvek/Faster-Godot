@@ -212,6 +212,7 @@ private:
 	RSE::PathtracingDenoiser pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL;
 	RTGIMode rtgi_mode = RTGI_MODE_PATH_TRACED;
 	float rtgi_energy = 1.0;
+	bool rtgi_disable_in_editor = true;
 	bool rtgi_temporal_accumulation = true;
 	float rtgi_temporal_accumulation_weight = 0.94f;
 	RTGIDenoiser rtgi_denoiser = RTGI_DENOISER_AUTO;
@@ -426,6 +427,8 @@ public:
 	int get_rtgi_max_bounces() const;
 	void set_rtgi_energy(float p_energy);
 	float get_rtgi_energy() const;
+	void set_rtgi_disable_in_editor(bool p_disabled);
+	bool is_rtgi_disabled_in_editor() const;
 	void set_rtgi_temporal_accumulation(bool p_enabled);
 	bool is_rtgi_temporal_accumulation_enabled() const;
 	void set_rtgi_temporal_accumulation_weight(float p_weight);
