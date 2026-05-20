@@ -1018,6 +1018,15 @@
 		<member name="interface/editor/main_font_size" type="int" setter="" getter="">
 			The size of the font in the editor interface.
 		</member>
+		<member name="interface/editor/max_fps" type="int" setter="" getter="">
+			Maximum number of frames per second the editor can render. A value of [code]0[/code] means "no limit". The actual number of frames per second may still be below this value if the CPU or GPU cannot keep up with the editor logic and rendering.
+			Limiting the editor FPS can be useful to reduce system power consumption, heat, and noise emissions. It can also reduce the performance impact of a continuously redrawing editor viewport.
+			See also [member interface/editor/max_fps_while_playing].
+		</member>
+		<member name="interface/editor/max_fps_while_playing" type="int" setter="" getter="">
+			Maximum number of frames per second the editor can render while the project is running from the editor. A value of [code]0[/code] keeps using [member interface/editor/max_fps].
+			This can be useful to reduce the editor's CPU/GPU usage while testing the running project, especially when an editor viewport is expensive to redraw.
+		</member>
 		<member name="interface/editor/mouse_extra_buttons_navigate_history" type="bool" setter="" getter="">
 			If [code]true[/code], the mouse's additional side buttons will be usable to navigate in the script editor's file history. Set this to [code]false[/code] if you're using the side buttons for other purposes (such as a push-to-talk button in a VoIP program).
 		</member>

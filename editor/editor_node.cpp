@@ -438,6 +438,19 @@ void EditorNode::_update_vsync_mode() {
 	DisplayServer::get_singleton()->window_set_vsync_mode(window_vsync_mode);
 }
 
+void EditorNode::_update_max_fps(bool p_force_playing) {
+	int max_fps = int(EDITOR_GET("interface/editor/max_fps"));
+	const bool is_playing = p_force_playing || (project_run_bar && project_run_bar->is_playing());
+	if (is_playing) {
+		const int max_fps_while_playing = int(EDITOR_GET("interface/editor/max_fps_while_playing"));
+		if (max_fps_while_playing > 0) {
+			max_fps = max_fps_while_playing;
+		}
+	}
+
+	Engine::get_singleton()->set_max_fps(max_fps);
+}
+
 void EditorNode::_update_from_settings() {
 	if (!is_inside_tree()) {
 		return;
@@ -883,6 +896,7 @@ void EditorNode::_notification(int p_what) {
 			_update_theme(true);
 
 			OS::get_singleton()->set_low_processor_usage_mode_sleep_usec(int(EDITOR_GET("interface/editor/low_processor_mode_sleep_usec")));
+			_update_max_fps();
 			get_tree()->get_root()->set_as_audio_listener_3d(false);
 			get_tree()->get_root()->set_as_audio_listener_2d(false);
 			get_tree()->get_root()->set_snap_2d_transforms_to_pixel(false);
@@ -1104,6 +1118,7 @@ void EditorNode::_notification(int p_what) {
 
 			if (EditorSettings::get_singleton()->check_changed_settings_in_group("interface/editor")) {
 				_update_update_spinner();
+				_update_max_fps();
 				_update_vsync_mode();
 				_update_main_menu_type();
 				DisplayServer::get_singleton()->screen_set_keep_on(EDITOR_GET("interface/editor/keep_screen_on"));
@@ -5342,6 +5357,8 @@ void EditorNode::_quick_opened(const String &p_file_path) {
 }
 
 void EditorNode::_project_run_started() {
+	_update_max_fps(true);
+
 	if (bool(EDITOR_GET("run/output/always_clear_output_on_play"))) {
 		log->clear();
 	}
@@ -5355,6 +5372,8 @@ void EditorNode::_project_run_started() {
 }
 
 void EditorNode::_project_run_stopped() {
+	_update_max_fps();
+
 	int action_on_stop = EDITOR_GET("run/bottom_panel/action_on_stop");
 	if (action_on_stop == ACTION_ON_STOP_CLOSE_BUTTOM_PANEL) {
 		bottom_panel->hide_bottom_panel();

@@ -692,7 +692,7 @@ uint64_t OS::get_frame_delay(bool p_can_draw) const {
 		dynamic_delay = get_low_processor_usage_mode_sleep_usec();
 	}
 	const int max_fps = Engine::get_singleton()->get_max_fps();
-	if (max_fps > 0 && !Engine::get_singleton()->is_editor_hint()) {
+	if (max_fps > 0) {
 		// Override the low processor usage mode sleep delay if the target FPS is lower.
 		dynamic_delay = MAX(dynamic_delay, (uint64_t)(1000000 / max_fps));
 	}
@@ -717,7 +717,7 @@ void OS::add_frame_delay(bool p_can_draw, bool p_wake_for_events) {
 		dynamic_delay = get_low_processor_usage_mode_sleep_usec();
 	}
 	const int max_fps = Engine::get_singleton()->get_max_fps();
-	if (max_fps > 0 && !Engine::get_singleton()->is_editor_hint()) {
+	if (max_fps > 0) {
 		// Override the low processor usage mode sleep delay if the target FPS is lower.
 		dynamic_delay = MAX(dynamic_delay, (uint64_t)(1000000 / max_fps));
 	}

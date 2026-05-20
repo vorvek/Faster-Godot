@@ -37,6 +37,9 @@ far came mostly from the renderer-profile and hot-path changes:
   dark 3D scenes where moving local lights need real bounce lighting. RTGI
   denoiser selections that do not have a shipped vendor backend fall through to
   the internal temporal denoiser instead of leaving raw noisy output.
+- Editor frame-rate caps: Editor Settings expose separate max FPS values for
+  normal editor use and for when a project is running, so expensive 3D editor
+  viewports can be throttled while testing the game.
 - Windows input pump: Raw mouse input is drained in batches and normal message
   processing is capped per frame to avoid high-polling mice flooding
   `PeekMessage()` and tanking CanvasItem-heavy scenes.

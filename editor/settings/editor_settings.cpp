@@ -529,6 +529,8 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
 #endif
 
 	_initial_set("interface/editor/keep_screen_on", false, true);
+	EDITOR_SETTING_BASIC(Variant::INT, PROPERTY_HINT_RANGE, "interface/editor/max_fps", 0, "0,1000,1,or_greater,suffix:FPS")
+	EDITOR_SETTING_BASIC(Variant::INT, PROPERTY_HINT_RANGE, "interface/editor/max_fps_while_playing", 0, "0,1000,1,or_greater,suffix:FPS")
 	EDITOR_SETTING_USAGE(Variant::INT, PROPERTY_HINT_RANGE, "interface/editor/low_processor_mode_sleep_usec", 6900, "1,100000,1", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_RESTART_IF_CHANGED)
 	// Default unfocused usec sleep is for 10 FPS. Allow an unfocused FPS limit
 	// as low as 1 FPS for those who really need low power usage (but don't need
