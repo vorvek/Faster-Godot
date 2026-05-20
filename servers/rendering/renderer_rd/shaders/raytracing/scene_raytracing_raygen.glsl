@@ -98,6 +98,9 @@ void main() {
 
 	vec3 final_radiance = total_radiance / float(samples_per_pixel);
 	final_radiance *= max(0.0, get_rt_param(RT_PARAM_ENERGY));
+	final_radiance = mix(final_radiance, vec3(0.0), isnan(final_radiance));
+	final_radiance = mix(final_radiance, vec3(65504.0), isinf(final_radiance));
+	final_radiance = clamp(final_radiance, vec3(0.0), vec3(65504.0));
 
 	imageStore(image, ivec2(pixel), vec4(final_radiance, 1.0));
 }

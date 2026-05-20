@@ -1118,6 +1118,7 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 		fade_alpha *= inst->force_alpha * inst->parent_fade_alpha;
 
 		flags = (flags & ~INSTANCE_DATA_FLAGS_FADE_MASK) | (uint32_t(fade_alpha * 255.0) << INSTANCE_DATA_FLAGS_FADE_SHIFT);
+		bool alpha_only_particles = p_alpha_only && (inst->data->base_type == RSE::INSTANCE_PARTICLES || (inst->base_flags & INSTANCE_DATA_FLAG_PARTICLES));
 
 		if (p_render_list == RENDER_LIST_OPAQUE) {
 			// Detect if object moved since last frame.
@@ -1140,7 +1141,6 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 			// Alpha-only (RT path): skip instances with no transparent/fading
 			// surfaces; opaque geometry is in the TLAS. Uses rt_pass_flags so
 			// `#if defined(RT)` overrides are honoured.
-			bool alpha_only_particles = p_alpha_only && inst->data->base_type == RSE::INSTANCE_PARTICLES;
 			if (p_alpha_only && !alpha_only_particles && fade_alpha >= FADE_ALPHA_PASS_THRESHOLD) {
 				bool has_alpha_surface = false;
 				const GeometryInstanceSurfaceDataCache *s = inst->surface_caches;
@@ -1287,7 +1287,7 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 				if (fade_alpha < FADE_ALPHA_PASS_THRESHOLD) {
 					force_alpha = true;
 				}
-				if (p_alpha_only && inst->data->base_type == RSE::INSTANCE_PARTICLES) {
+				if (alpha_only_particles) {
 					force_alpha = true;
 				}
 

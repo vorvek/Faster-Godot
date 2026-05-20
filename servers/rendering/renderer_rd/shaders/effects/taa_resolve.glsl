@@ -96,6 +96,12 @@ float luminance(vec3 color) {
 	return max(dot(color, lumCoeff), 0.0001f);
 }
 
+vec3 sanitize_color(vec3 color) {
+	color = mix(color, vec3(0.0), isnan(color));
+	color = mix(color, vec3(FLT_MAX), isinf(color));
+	return clamp(color, vec3(0.0), vec3(FLT_MAX));
+}
+
 float get_depth(ivec2 thread_id) {
 	return texelFetch(depth_buffer, thread_id, 0).r;
 }
@@ -125,7 +131,7 @@ void store_color_depth(uvec2 group_thread_id, ivec2 thread_id) {
 	// out of bounds clamp
 	thread_id = clamp(thread_id, ivec2(0, 0), ivec2(params.resolution) - ivec2(1, 1));
 
-	store_color(group_thread_id, imageLoad(color_buffer, thread_id).rgb);
+	store_color(group_thread_id, sanitize_color(imageLoad(color_buffer, thread_id).rgb));
 	store_depth(group_thread_id, get_depth(thread_id));
 }
 
@@ -347,21 +353,21 @@ vec3 clip_history_3x3(uvec2 group_pos, vec3 color_history, vec2 velocity_closest
 // This is "velocity disocclusion" as described by https://www.elopezr.com/temporal-aa-and-the-quest-for-the-holy-trail/.
 // We use texel space, so our scale and threshold differ.
 float get_factor_disocclusion(vec2 uv_reprojected, vec2 velocity) {
-	vec2 velocity_previous = imageLoad(last_velocity_buffer, ivec2(uv_reprojected * params.resolution)).xy;
+	ivec2 previous_pos = clamp(ivec2(uv_reprojected * params.resolution), ivec2(0), ivec2(params.resolution) - ivec2(1));
+	vec2 velocity_previous = imageLoad(last_velocity_buffer, previous_pos).xy;
 	vec2 velocity_texels = velocity * params.resolution;
 	vec2 prev_velocity_texels = velocity_previous * params.resolution;
 	float disocclusion = length(prev_velocity_texels - velocity_texels) - params.disocclusion_threshold;
 	return clamp(disocclusion * DISOCCLUSION_SCALE, 0.0, 1.0);
 }
 
-bool rt_history_is_invalid(uvec2 pos_screen, vec2 uv_reprojected) {
+bool rt_history_is_invalid(uvec2 pos_screen, vec2 uv_reprojected, bool reprojected_in_screen) {
 	if (params.rt_history_validity_enabled < 0.5) {
 		return false;
 	}
 
 	float current_valid = texelFetch(rt_history_validity_buffer, ivec2(pos_screen), 0).r;
-	bool previous_in_screen = all(greaterThanEqual(uv_reprojected, vec2(0.0))) && all(lessThanEqual(uv_reprojected, vec2(1.0)));
-	float previous_valid = previous_in_screen ? textureLod(rt_prev_history_validity_buffer, uv_reprojected, 0.0).r : 0.0;
+	float previous_valid = reprojected_in_screen ? textureLod(rt_prev_history_validity_buffer, uv_reprojected, 0.0).r : 0.0;
 
 	return current_valid < 0.5 || previous_valid < 0.5;
 }
@@ -372,35 +378,42 @@ vec3 temporal_antialiasing(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_
 
 	// Get reprojected uv
 	vec2 uv_reprojected = uv + velocity;
+	bool reprojected_in_screen = all(greaterThanEqual(uv_reprojected, vec2(0.0))) && all(lessThanEqual(uv_reprojected, vec2(1.0)));
 
 	// Get input color
 	vec3 color_input = load_color(pos_group);
 	if (params.raytracing_denoise > 0.5) {
 		color_input = rt_firefly_clamp_3x3(pos_group, color_input);
 	}
+	color_input = sanitize_color(color_input);
 
 	// Get history color (catmull-rom reduces a lot of the blurring that you get under motion)
-	vec3 color_history = sample_catmull_rom_9(tex_history, uv_reprojected, params.resolution).rgb;
-
-	// Clip history to the neighbourhood of the current sample (fixes a lot of the ghosting).
+	vec3 color_history = color_input;
 	vec2 velocity_closest = vec2(0.0); // This is best done by using the velocity with the closest depth.
-	get_closest_pixel_velocity_3x3(pos_group, pos_group_top_left, velocity_closest);
-	vec3 neighborhood_avg = vec3(0.0);
-	vec3 neighborhood_min = vec3(0.0);
-	vec3 neighborhood_max = vec3(0.0);
-	color_history = clip_history_3x3(pos_group, color_history, velocity_closest, neighborhood_avg, neighborhood_min, neighborhood_max);
+	vec3 neighborhood_avg = color_input;
+	vec3 neighborhood_min = color_input;
+	vec3 neighborhood_max = color_input;
+	if (reprojected_in_screen) {
+		color_history = sanitize_color(sample_catmull_rom_9(tex_history, uv_reprojected, params.resolution).rgb);
+
+		// Clip history to the neighbourhood of the current sample (fixes a lot of the ghosting).
+		get_closest_pixel_velocity_3x3(pos_group, pos_group_top_left, velocity_closest);
+		color_history = sanitize_color(clip_history_3x3(pos_group, color_history, velocity_closest, neighborhood_avg, neighborhood_min, neighborhood_max));
+	}
 
 	// Compute blend factor
 	float blend_factor = 1.0 - params.history_weight;
+	bool force_current = false;
 	{
 		// If re-projected UV is out of screen, converge to current color immediately.
-		float factor_screen = any(lessThan(uv_reprojected, vec2(0.0))) || any(greaterThan(uv_reprojected, vec2(1.0))) ? 1.0 : 0.0;
+		float factor_screen = reprojected_in_screen ? 0.0 : 1.0;
 
 		// Increase blend factor when there is disocclusion (fixes a lot of the remaining ghosting).
-		float factor_disocclusion = get_factor_disocclusion(uv_reprojected, velocity);
+		float factor_disocclusion = reprojected_in_screen ? get_factor_disocclusion(uv_reprojected, velocity) : 0.0;
 
 		// RT denoise keeps opaque history only when both the current and reprojected prior samples are valid.
-		float factor_history_invalid = rt_history_is_invalid(pos_screen, uv_reprojected) ? 1.0 : 0.0;
+		float factor_history_invalid = rt_history_is_invalid(pos_screen, uv_reprojected, reprojected_in_screen) ? 1.0 : 0.0;
+		force_current = (factor_screen + factor_history_invalid) > 0.5;
 
 		// Add to the blend factor
 		blend_factor = clamp(blend_factor + factor_screen + factor_disocclusion + factor_history_invalid, 0.0, 1.0);
@@ -419,13 +432,13 @@ vec3 temporal_antialiasing(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_
 		float diff = abs(lum_color - lum_history) / max(lum_color, max(lum_history, 1.001));
 		diff = 1.0 - diff;
 		diff = diff * diff;
-		blend_factor = mix(0.0, blend_factor, diff);
+		blend_factor = force_current ? 1.0 : mix(0.0, blend_factor, diff);
 
 		// Lerp/blend
 		color_resolved = mix(color_history, color_input, blend_factor);
 
 		// Inverse tonemap
-		color_resolved = reinhard_inverse(color_resolved);
+		color_resolved = sanitize_color(reinhard_inverse(color_resolved));
 	}
 
 	if (params.sharpness > 0.0) {

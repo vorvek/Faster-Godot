@@ -2169,7 +2169,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 		if (!inst || !inst->data) {
 			continue;
 		}
-		if (inst->data->base_type == RSE::INSTANCE_PARTICLES) {
+		if (inst->data->base_type == RSE::INSTANCE_PARTICLES || (inst->base_flags & RenderForwardClustered::INSTANCE_DATA_FLAG_PARTICLES)) {
 			continue;
 		}
 		const Transform3D &instance_transform = inst->transform;
