@@ -53,7 +53,8 @@ private:
 		float rt_history_id_enabled;
 		float history_weight;
 		float sharpness;
-		float _pad[3];
+		float rt_history_filter_strength;
+		float _pad[2];
 	};
 
 	TaaResolveShaderRD taa_shader;

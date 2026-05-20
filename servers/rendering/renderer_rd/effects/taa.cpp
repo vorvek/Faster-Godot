@@ -79,9 +79,14 @@ void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_pr
 	push_constant.rt_history_id_enabled = (p_rt_history_id.is_valid() && p_rt_prev_history_id.is_valid()) ? 1.0f : 0.0f;
 	push_constant.history_weight = CLAMP(GLOBAL_GET_CACHED(float, "rendering/anti_aliasing/quality/taa_history_weight"), 0.0f, 0.99f);
 	push_constant.sharpness = CLAMP(GLOBAL_GET_CACHED(float, "rendering/anti_aliasing/quality/taa_sharpness"), 0.0f, 1.0f);
+	push_constant.rt_history_filter_strength = 0.0f;
 	if (p_raytracing_denoise) {
 		push_constant.history_weight = CLAMP(p_raytracing_history_weight, 0.0f, 0.99f);
 		push_constant.sharpness = 0.0f;
+		const float low_resolution_baseline = 720.0f;
+		const float low_resolution_range = 360.0f;
+		const float min_resolution = MIN(p_resolution.width, p_resolution.height);
+		push_constant.rt_history_filter_strength = CLAMP((low_resolution_baseline - min_resolution) / low_resolution_range, 0.0f, 1.0f);
 	}
 
 	RID rt_history_validity = p_rt_history_validity.is_valid() ? p_rt_history_validity : texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE);

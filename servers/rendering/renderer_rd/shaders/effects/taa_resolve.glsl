@@ -62,6 +62,7 @@ layout(push_constant, std430) uniform Params {
 	float rt_history_id_enabled;
 	float history_weight;
 	float sharpness;
+	float rt_history_filter_strength;
 }
 params;
 
@@ -413,36 +414,99 @@ float get_factor_disocclusion(vec2 uv_reprojected, vec2 velocity) {
 	return clamp(disocclusion * DISOCCLUSION_SCALE, 0.0, 1.0);
 }
 
-bool rt_history_is_invalid(uvec2 pos_screen, vec2 uv_reprojected, bool reprojected_in_screen) {
+bool rt_current_history_is_invalid(uvec2 pos_screen) {
 	if (params.rt_history_validity_enabled < 0.5) {
 		return false;
 	}
 
 	float current_valid = texelFetch(rt_history_validity_buffer, ivec2(pos_screen), 0).r;
-	float previous_valid = 0.0;
-	if (reprojected_in_screen) {
-		ivec2 previous_pos = ivec2(uv_reprojected * params.resolution);
-		ivec2 max_pos = ivec2(params.resolution) - ivec2(1);
-		previous_valid = texelFetch(rt_prev_history_validity_buffer, clamp(previous_pos, ivec2(0), max_pos), 0).r;
-	}
-
-	return current_valid < 0.5 || previous_valid < 0.5;
+	return current_valid < 0.5;
 }
 
 bool rt_history_id_matches(vec4 a, vec4 b) {
 	return max(max(abs(a.x - b.x), abs(a.y - b.y)), max(abs(a.z - b.z), abs(a.w - b.w))) < (0.5 / 255.0);
 }
 
-bool rt_history_id_mismatch(uvec2 pos_screen, vec2 uv_reprojected, bool reprojected_in_screen) {
-	if (params.rt_history_id_enabled < 0.5 || !reprojected_in_screen) {
+bool rt_previous_history_tap_matches(ivec2 previous_pos, vec4 current_id) {
+	if (any(lessThan(previous_pos, ivec2(0))) || any(greaterThanEqual(previous_pos, ivec2(params.resolution)))) {
 		return false;
 	}
 
-	vec4 current_id = texelFetch(rt_history_id_buffer, ivec2(pos_screen), 0);
-	ivec2 previous_pos = ivec2(uv_reprojected * params.resolution);
+	if (params.rt_history_validity_enabled > 0.5 && texelFetch(rt_prev_history_validity_buffer, previous_pos, 0).r < 0.5) {
+		return false;
+	}
+
+	if (params.rt_history_id_enabled > 0.5) {
+		vec4 prev_id = texelFetch(rt_prev_history_id_buffer, previous_pos, 0);
+		if (!rt_history_id_matches(current_id, prev_id)) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+void rt_accumulate_history_tap(sampler2D tex_history, ivec2 previous_pos, vec4 current_id, float tap_weight, inout vec3 color_sum, inout float weight_sum) {
+	if (tap_weight <= 0.0 || !rt_previous_history_tap_matches(previous_pos, current_id)) {
+		return;
+	}
+
+	color_sum += sanitize_color(texelFetch(tex_history, previous_pos, 0).rgb) * tap_weight;
+	weight_sum += tap_weight;
+}
+
+struct RtHistorySample {
+	vec3 color;
+	float confidence;
+};
+
+RtHistorySample sample_rt_history(sampler2D tex_history, uvec2 pos_screen, vec2 uv_reprojected, bool reprojected_in_screen) {
+	RtHistorySample result;
+	result.color = vec3(0.0);
+	result.confidence = 0.0;
+
+	if (!reprojected_in_screen || rt_current_history_is_invalid(pos_screen)) {
+		return result;
+	}
+
+	vec4 current_id = params.rt_history_id_enabled > 0.5 ? texelFetch(rt_history_id_buffer, ivec2(pos_screen), 0) : vec4(0.0);
 	ivec2 max_pos = ivec2(params.resolution) - ivec2(1);
-	vec4 prev_id = texelFetch(rt_prev_history_id_buffer, clamp(previous_pos, ivec2(0), max_pos), 0);
-	return !rt_history_id_matches(current_id, prev_id);
+	ivec2 nearest_pos = clamp(ivec2(uv_reprojected * params.resolution), ivec2(0), max_pos);
+	vec3 nearest_color = sanitize_color(texelFetch(tex_history, nearest_pos, 0).rgb);
+	bool nearest_matches = rt_previous_history_tap_matches(nearest_pos, current_id);
+
+	if (params.rt_history_filter_strength <= 0.001) {
+		result.color = nearest_color;
+		result.confidence = nearest_matches ? 1.0 : 0.0;
+		return result;
+	}
+
+	vec2 history_pos = uv_reprojected * params.resolution - vec2(0.5);
+	ivec2 base_pos = ivec2(floor(history_pos));
+	vec2 fraction = fract(history_pos);
+
+	vec3 filtered_color_sum = vec3(0.0);
+	float filtered_weight_sum = 0.0;
+	rt_accumulate_history_tap(tex_history, base_pos + ivec2(0, 0), current_id, (1.0 - fraction.x) * (1.0 - fraction.y), filtered_color_sum, filtered_weight_sum);
+	rt_accumulate_history_tap(tex_history, base_pos + ivec2(1, 0), current_id, fraction.x * (1.0 - fraction.y), filtered_color_sum, filtered_weight_sum);
+	rt_accumulate_history_tap(tex_history, base_pos + ivec2(0, 1), current_id, (1.0 - fraction.x) * fraction.y, filtered_color_sum, filtered_weight_sum);
+	rt_accumulate_history_tap(tex_history, base_pos + ivec2(1, 1), current_id, fraction.x * fraction.y, filtered_color_sum, filtered_weight_sum);
+
+	if (filtered_weight_sum > 0.0) {
+		vec3 filtered_color = filtered_color_sum / filtered_weight_sum;
+		if (nearest_matches) {
+			result.color = mix(nearest_color, filtered_color, params.rt_history_filter_strength);
+			result.confidence = mix(1.0, filtered_weight_sum, params.rt_history_filter_strength);
+		} else {
+			result.color = filtered_color;
+			result.confidence = filtered_weight_sum * params.rt_history_filter_strength;
+		}
+	} else {
+		result.color = nearest_color;
+		result.confidence = nearest_matches ? 1.0 - params.rt_history_filter_strength : 0.0;
+	}
+
+	return result;
 }
 
 vec3 temporal_antialiasing(ivec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_screen, vec2 uv, sampler2D tex_history) {
@@ -466,10 +530,12 @@ vec3 temporal_antialiasing(ivec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_
 	vec3 neighborhood_avg = color_input;
 	vec3 neighborhood_min = color_input;
 	vec3 neighborhood_max = color_input;
+	float rt_history_confidence = 1.0;
 	if (reprojected_in_screen) {
-		if (params.rt_history_id_enabled > 0.5) {
-			ivec2 previous_pos = clamp(ivec2(uv_reprojected * params.resolution), ivec2(0), ivec2(params.resolution) - ivec2(1));
-			color_history = sanitize_color(texelFetch(tex_history, previous_pos, 0).rgb);
+		if (params.rt_history_validity_enabled > 0.5 || params.rt_history_id_enabled > 0.5) {
+			RtHistorySample rt_history = sample_rt_history(tex_history, pos_screen, uv_reprojected, reprojected_in_screen);
+			color_history = sanitize_color(rt_history.color);
+			rt_history_confidence = rt_history.confidence;
 		} else {
 			color_history = sanitize_color(sample_catmull_rom_9(tex_history, uv_reprojected, params.resolution).rgb);
 		}
@@ -489,12 +555,8 @@ vec3 temporal_antialiasing(ivec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_
 		// Increase blend factor when there is disocclusion (fixes a lot of the remaining ghosting).
 		float factor_disocclusion = reprojected_in_screen ? get_factor_disocclusion(uv_reprojected, velocity) : 0.0;
 
-		// RT denoise keeps opaque history only when both the current and reprojected prior samples are valid.
-		float factor_history_invalid = (rt_history_is_invalid(pos_screen, uv_reprojected, reprojected_in_screen) ||
-											   rt_history_id_mismatch(pos_screen, uv_reprojected, reprojected_in_screen)) ?
-				1.0 :
-				0.0;
-		force_current = (factor_screen + factor_history_invalid) > 0.5;
+		float factor_history_invalid = clamp(1.0 - rt_history_confidence, 0.0, 1.0);
+		force_current = factor_screen > 0.5 || rt_history_confidence <= 0.001;
 
 		// Add to the blend factor
 		blend_factor = clamp(blend_factor + factor_screen + factor_disocclusion + factor_history_invalid, 0.0, 1.0);
