@@ -103,10 +103,12 @@ The feature is exposed on `Environment`, so it appears through the same
 
 ## Rendering Behavior
 
-RTGI is a view-time override. Existing SDFGI, VoxelGI, LightmapGI, lightmap
-capture SH, and baked resources stay in the scene for fallback and comparison,
-but they are not sampled as indirect lighting while RTGI is enabled and hardware
-ray tracing support is available.
+RTGI is a view-time override. Existing SDFGI and VoxelGI resources stay in the
+scene for fallback and comparison, but they are not sampled as indirect lighting
+while RTGI is enabled and hardware ray tracing support is available. Hybrid RTGI
+keeps raster lightmaps and lightmap capture SH in the primary Forward+ pass so
+scenes that rely on baked/static lighting do not collapse to a black base image;
+Path Traced mode still disables those baked contributions.
 
 Hybrid RTGI writes ray-traced indirect diffuse/specular lighting into the
 existing Forward+ GI composition path. Path Traced mode routes full lighting

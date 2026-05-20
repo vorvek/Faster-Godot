@@ -4021,10 +4021,10 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 	// Binding 28: Velocity output (RG16F). Past the 16-27 sampler range.
 	{
 		Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
-		bool hybrid_mode = false;
+		bool hybrid_mode = true;
 		if (p_render_data && p_render_data->environment.is_valid()) {
 			const float *env_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
-			hybrid_mode = env_params && (uint32_t)env_params[SceneShaderRaytracing::RT_PARAM_MODE] == 0u;
+			hybrid_mode = !env_params || (uint32_t)env_params[SceneShaderRaytracing::RT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_HYBRID;
 		}
 		RD::Uniform u;
 		u.binding = 28;

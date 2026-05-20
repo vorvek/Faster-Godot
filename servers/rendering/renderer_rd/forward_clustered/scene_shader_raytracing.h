@@ -107,6 +107,9 @@ public:
 	static constexpr int RT_PARAM_LIGHT_COUNT = RSE::PT_PARAM_LIGHT_COUNT;
 	static constexpr int RT_PARAM_FRAME_INDEX = RSE::PT_PARAM_FRAME_INDEX;
 
+	static constexpr uint32_t RT_MODE_HYBRID = 0;
+	static constexpr uint32_t RT_MODE_PATH_TRACED = 1;
+
 	static inline uint32_t rt_flags_pack(uint32_t p_flags, uint32_t p_sample_count, uint32_t p_max_bounces) {
 		uint32_t result = p_flags;
 		const uint32_t sample_count = MAX(1u, MIN(RT_SAMPLE_COUNT_MASK, p_sample_count));

@@ -1934,7 +1934,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	const float *rt_env_params = scene_features.rt && p_render_data->environment.is_valid()
 			? RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment)
 			: nullptr;
-	bool rt_replaces_opaque = scene_features.rt && (!rt_env_params || (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] != 0u);
+	bool rt_replaces_opaque = scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_PATH_TRACED;
 	const bool rt_internal_denoiser = rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] == RSE::PT_DENOISER_INTERNAL;
 	const bool rt_dlss_rr_denoiser = rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] == RSE::PT_DENOISER_DLSS_RAY_RECONSTRUCTION;
 	const bool rt_temporal_denoiser = rt_internal_denoiser || rt_dlss_rr_denoiser;
@@ -2146,8 +2146,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	RD::get_singleton()->draw_command_begin_label("Render Setup");
 
-	if (!scene_features.rt) {
+	if (!rt_replaces_opaque) {
 		_setup_lightmaps(p_render_data, *p_render_data->lightmaps, p_render_data->scene_data->cam_transform);
+	}
+	if (!scene_features.rt) {
 		_setup_voxelgis(*p_render_data->voxel_gi_instances);
 	}
 
