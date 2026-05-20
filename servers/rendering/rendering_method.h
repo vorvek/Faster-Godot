@@ -91,6 +91,8 @@ public:
 	virtual void instance_teleport(RID p_instance) = 0;
 
 	virtual void instance_set_custom_aabb(RID p_instance, AABB p_aabb) = 0;
+	virtual void instance_set_rt_procedural(RID p_instance, bool p_procedural, AABB p_aabb) = 0;
+	virtual void instance_set_rt_procedural_bounds(RID p_instance, const PackedFloat32Array &p_aabb_data, bool p_expose_bounds) = 0;
 
 	virtual void instance_attach_skeleton(RID p_instance, RID p_skeleton) = 0;
 
@@ -309,6 +311,11 @@ public:
 	virtual void environment_set_sdfgi_frames_to_converge(RS::EnvironmentSDFGIFramesToConverge p_frames) = 0;
 	virtual void environment_set_sdfgi_frames_to_update_light(RS::EnvironmentSDFGIFramesToUpdateLight p_update) = 0;
 
+	virtual void environment_set_pathtracing(RID p_env, bool p_enable) = 0;
+	virtual void environment_set_pathtracing_params(RID p_env, const PackedFloat32Array &p_params) = 0;
+	virtual bool environment_get_pathtracing_enabled(RID p_env) const = 0;
+	virtual PackedFloat32Array environment_get_pathtracing_params(RID p_env) const = 0;
+
 	virtual void environment_set_adjustment(RID p_env, bool p_enable, float p_brightness, float p_contrast, float p_saturation, bool p_use_1d_color_correction, RID p_color_correction) = 0;
 
 	virtual bool environment_get_adjustments_enabled(RID p_env) const = 0;
@@ -349,6 +356,7 @@ public:
 	};
 
 	virtual void render_camera(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_camera, RID p_scenario, RID p_viewport, Size2 p_viewport_size, uint32_t p_jitter_phase_count, float p_mesh_lod_threshold, RID p_shadow_atlas, Ref<XRInterface> &p_xr_interface, RenderInfo *r_render_info = nullptr) = 0;
+	virtual PackedByteArray bake_render_area_light_atlas(const TypedArray<RID> &p_area_light_textures, const TypedArray<Rect2> &p_area_light_atlas_texture_rects, const Size2i &p_size, int p_mipmaps) = 0;
 
 	virtual void update() = 0;
 	virtual void render_probes() = 0;

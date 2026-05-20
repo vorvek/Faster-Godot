@@ -406,4 +406,12 @@ void ToneMapper::tonemapper_subpass(RD::DrawListID p_subpass_draw_list, RID p_so
 	RD::get_singleton()->draw_list_set_push_constant(p_subpass_draw_list, &tonemap_mobile.push_constant, sizeof(TonemapPushConstantMobile));
 	RD::get_singleton()->draw_list_draw(p_subpass_draw_list, false, 1u, 3u);
 }
+#else
+void ToneMapper::tonemapper_mobile(RID p_source_color, RID p_dst_framebuffer, const TonemapSettings &p_settings) {
+	tonemapper(p_source_color, p_dst_framebuffer, p_settings);
+}
+
+void ToneMapper::tonemapper_subpass(RD::DrawListID p_subpass_draw_list, RID p_source_color, RD::FramebufferFormatID p_dst_format_id, const TonemapSettings &p_settings) {
+	ERR_FAIL_MSG("Subpass tonemapping is not available in Forward+ only builds.");
+}
 #endif

@@ -32,6 +32,7 @@
 
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_data_rd.h"
+#include "servers/rendering/rendering_server_types.h"
 #include "servers/rendering/storage/render_data.h"
 
 class RenderDataRD : public RenderData {
@@ -74,7 +75,9 @@ public:
 
 	bool lightmap_bicubic_filter = false;
 
-	RenderingMethod::RenderInfo *render_info = nullptr;
+	float window_output_max_value = 1.0f;
+
+	RenderingServerTypes::RenderInfo *render_info = nullptr;
 
 	/* Viewport data */
 	bool transparent_bg = false;
@@ -94,4 +97,8 @@ public:
 	const RendererSceneRender::RenderSDFGIUpdateData *sdfgi_update_data = nullptr;
 
 	uint32_t voxel_gi_count = 0;
+
+	/* RT-extra: AABB-culled instances/lights outside frustum for TLAS and light gathering. */
+	const PagedArray<RenderGeometryInstance *> *rt_instances = nullptr;
+	const PagedArray<RID> *rt_lights = nullptr;
 };

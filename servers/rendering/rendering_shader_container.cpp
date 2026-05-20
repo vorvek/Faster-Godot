@@ -668,7 +668,7 @@ RenderingDeviceCommons::ShaderReflection RenderingShaderContainer::get_shader_re
 	shader_refl.push_constant_stages = reflection_data.push_constant_stages_mask;
 	shader_refl.vertex_input_mask = reflection_data.vertex_input_mask;
 	shader_refl.fragment_output_mask = reflection_data.fragment_output_mask;
-	shader_refl.is_compute = reflection_data.is_compute;
+	shader_refl.pipeline_type = reflection_data.is_compute ? RDC::PIPELINE_TYPE_COMPUTE : RDC::PIPELINE_TYPE_RASTERIZATION;
 	shader_refl.has_multiview = reflection_data.has_multiview;
 	shader_refl.has_dynamic_buffers = reflection_data.has_dynamic_buffers;
 	shader_refl.compute_local_size[0] = reflection_data.compute_local_size[0];
@@ -707,8 +707,12 @@ RenderingDeviceCommons::ShaderReflection RenderingShaderContainer::get_shader_re
 
 	shader_refl.stages_vector.resize(reflection_data.stage_count);
 	for (uint32_t i = 0; i < reflection_data.stage_count; i++) {
-		shader_refl.stages_vector.set(i, reflection_shader_stages[i]);
-		shader_refl.stages_bits.set_flag(RDC::ShaderStage(1U << reflection_shader_stages[i]));
+		RDC::ShaderStage stage = reflection_shader_stages[i];
+		shader_refl.stages_vector.set(i, stage);
+		shader_refl.stages_bits.set_flag(RDC::ShaderStage(1U << stage));
+		if (stage >= RDC::SHADER_STAGE_RAYGEN && stage < RDC::SHADER_STAGE_MAX) {
+			shader_refl.pipeline_type = RDC::PIPELINE_TYPE_RAYTRACING;
+		}
 	}
 
 	return shader_refl;

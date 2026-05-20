@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "core/math/color.h"
 #include "core/math/rect2.h"
 #include "core/math/transform_3d.h"
 #include "core/templates/rid.h"
@@ -66,12 +67,16 @@ public:
 	virtual Transform3D get_transform() = 0;
 	virtual AABB get_aabb() = 0;
 
-	virtual void pair_light_instances(const RID *p_light_instances, uint32_t p_light_instance_count) = 0;
+	virtual void clear_light_instances() = 0;
+	virtual void pair_light_instance(const RID p_light_instance, RSE::LightType light_type, uint32_t placement_idx) = 0;
 	virtual void pair_reflection_probe_instances(const RID *p_reflection_probe_instances, uint32_t p_reflection_probe_instance_count) = 0;
 	virtual void pair_decal_instances(const RID *p_decal_instances, uint32_t p_decal_instance_count) = 0;
 	virtual void pair_voxel_gi_instances(const RID *p_voxel_gi_instances, uint32_t p_voxel_gi_instance_count) = 0;
 
 	virtual void set_softshadow_projector_pairing(bool p_softshadow, bool p_projector) = 0;
+
+	virtual void set_rt_procedural(bool p_procedural, const AABB &p_aabb) {}
+	virtual void set_rt_procedural_bounds(const Vector<float> &p_aabb_data, bool p_expose_bounds) {}
 };
 
 // Base implementation of RenderGeometryInstance shared by internal renderers.

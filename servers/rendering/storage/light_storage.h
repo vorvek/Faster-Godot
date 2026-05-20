@@ -48,6 +48,9 @@ public:
 	virtual RID spot_light_allocate() = 0;
 	virtual void spot_light_initialize(RID p_rid) = 0;
 
+	virtual RID area_light_allocate() { return RID(); }
+	virtual void area_light_initialize(RID p_rid) {}
+
 	virtual void light_free(RID p_rid) = 0;
 
 	virtual void light_set_color(RID p_light, const Color &p_color) = 0;
@@ -70,6 +73,13 @@ public:
 	virtual bool light_directional_get_blend_splits(RID p_light) const = 0;
 	virtual void light_directional_set_sky_mode(RID p_light, RS::LightDirectionalSkyMode p_mode) = 0;
 	virtual RS::LightDirectionalSkyMode light_directional_get_sky_mode(RID p_light) const = 0;
+
+	virtual void light_area_set_size(RID p_light, const Vector2 &p_size) {}
+	virtual void light_area_set_normalize_energy(RID p_light, bool p_enabled) {}
+	virtual void light_area_set_texture(RID p_light, RID p_texture) {}
+	virtual Vector2 light_area_get_size(RID p_light) const { return Vector2(1.0, 1.0); }
+	virtual bool light_area_get_normalize_energy(RID p_light) const { return true; }
+	virtual RID light_area_get_texture(RID p_light) const { return RID(); }
 
 	virtual RS::LightDirectionalShadowMode light_directional_get_shadow_mode(RID p_light) = 0;
 	virtual RS::LightOmniShadowMode light_omni_get_shadow_mode(RID p_light) = 0;

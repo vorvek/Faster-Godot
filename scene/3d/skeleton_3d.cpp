@@ -32,6 +32,7 @@
 #include "skeleton_3d.compat.inc"
 
 #include "scene/3d/skeleton_modifier_3d.h"
+#include "servers/rendering/rendering_server.h"
 #if !defined(DISABLE_DEPRECATED) && !defined(PHYSICS_3D_DISABLED)
 #include "scene/3d/physics/physical_bone_simulator_3d.h"
 #endif // _DISABLE_DEPRECATED && PHYSICS_3D_DISABLED

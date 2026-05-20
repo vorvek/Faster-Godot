@@ -30,32 +30,34 @@
 
 #pragma once
 
+#include "core/io/resource.h"
+#include "core/object/class_db.h"
 #include "servers/rendering/rendering_device.h"
 
-#define RD_SETGET(m_type, m_member)            \
+#define RD_SETGET(m_type, m_member) \
 	void set_##m_member(m_type p_##m_member) { \
-		base.m_member = p_##m_member;          \
-	}                                          \
-	m_type get_##m_member() const {            \
-		return base.m_member;                  \
+		base.m_member = p_##m_member; \
+	} \
+	m_type get_##m_member() const { \
+		return base.m_member; \
 	}
 
-#define RD_BIND(m_variant_type, m_class, m_member)                                                          \
+#define RD_BIND(m_variant_type, m_class, m_member) \
 	ClassDB::bind_method(D_METHOD("set_" _MKSTR(m_member), "p_" _MKSTR(member)), &m_class::set_##m_member); \
-	ClassDB::bind_method(D_METHOD("get_" _MKSTR(m_member)), &m_class::get_##m_member);                      \
+	ClassDB::bind_method(D_METHOD("get_" _MKSTR(m_member)), &m_class::get_##m_member); \
 	ADD_PROPERTY(PropertyInfo(m_variant_type, #m_member), "set_" _MKSTR(m_member), "get_" _MKSTR(m_member))
 
-#define RD_SETGET_SUB(m_type, m_sub, m_member)           \
+#define RD_SETGET_SUB(m_type, m_sub, m_member) \
 	void set_##m_sub##_##m_member(m_type p_##m_member) { \
-		base.m_sub.m_member = p_##m_member;              \
-	}                                                    \
-	m_type get_##m_sub##_##m_member() const {            \
-		return base.m_sub.m_member;                      \
+		base.m_sub.m_member = p_##m_member; \
+	} \
+	m_type get_##m_sub##_##m_member() const { \
+		return base.m_sub.m_member; \
 	}
 
-#define RD_BIND_SUB(m_variant_type, m_class, m_sub, m_member)                                                                           \
+#define RD_BIND_SUB(m_variant_type, m_class, m_sub, m_member) \
 	ClassDB::bind_method(D_METHOD("set_" _MKSTR(m_sub) "_" _MKSTR(m_member), "p_" _MKSTR(member)), &m_class::set_##m_sub##_##m_member); \
-	ClassDB::bind_method(D_METHOD("get_" _MKSTR(m_sub) "_" _MKSTR(m_member)), &m_class::get_##m_sub##_##m_member);                      \
+	ClassDB::bind_method(D_METHOD("get_" _MKSTR(m_sub) "_" _MKSTR(m_member)), &m_class::get_##m_sub##_##m_member); \
 	ADD_PROPERTY(PropertyInfo(m_variant_type, _MKSTR(m_sub) "_" _MKSTR(m_member)), "set_" _MKSTR(m_sub) "_" _MKSTR(m_member), "get_" _MKSTR(m_sub) "_" _MKSTR(m_member))
 
 class RDTextureFormat : public RefCounted {
@@ -276,6 +278,11 @@ protected:
 		ADD_PROPERTYI(PropertyInfo(Variant::STRING, "source_tesselation_control"), "set_stage_source", "get_stage_source", RD::SHADER_STAGE_TESSELATION_CONTROL);
 		ADD_PROPERTYI(PropertyInfo(Variant::STRING, "source_tesselation_evaluation"), "set_stage_source", "get_stage_source", RD::SHADER_STAGE_TESSELATION_EVALUATION);
 		ADD_PROPERTYI(PropertyInfo(Variant::STRING, "source_compute"), "set_stage_source", "get_stage_source", RD::SHADER_STAGE_COMPUTE);
+		ADD_PROPERTYI(PropertyInfo(Variant::STRING, "source_raygen"), "set_stage_source", "get_stage_source", RD::SHADER_STAGE_RAYGEN);
+		ADD_PROPERTYI(PropertyInfo(Variant::STRING, "source_any_hit"), "set_stage_source", "get_stage_source", RD::SHADER_STAGE_ANY_HIT);
+		ADD_PROPERTYI(PropertyInfo(Variant::STRING, "source_closest_hit"), "set_stage_source", "get_stage_source", RD::SHADER_STAGE_CLOSEST_HIT);
+		ADD_PROPERTYI(PropertyInfo(Variant::STRING, "source_miss"), "set_stage_source", "get_stage_source", RD::SHADER_STAGE_MISS);
+		ADD_PROPERTYI(PropertyInfo(Variant::STRING, "source_intersection"), "set_stage_source", "get_stage_source", RD::SHADER_STAGE_INTERSECTION);
 		ADD_GROUP("Syntax", "source_");
 		ADD_PROPERTY(PropertyInfo(Variant::INT, "language", PROPERTY_HINT_RANGE, "GLSL,HLSL"), "set_language", "get_language");
 	}
@@ -335,12 +342,22 @@ protected:
 		ADD_PROPERTYI(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "bytecode_tesselation_control"), "set_stage_bytecode", "get_stage_bytecode", RD::SHADER_STAGE_TESSELATION_CONTROL);
 		ADD_PROPERTYI(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "bytecode_tesselation_evaluation"), "set_stage_bytecode", "get_stage_bytecode", RD::SHADER_STAGE_TESSELATION_EVALUATION);
 		ADD_PROPERTYI(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "bytecode_compute"), "set_stage_bytecode", "get_stage_bytecode", RD::SHADER_STAGE_COMPUTE);
+		ADD_PROPERTYI(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "bytecode_raygen"), "set_stage_bytecode", "get_stage_bytecode", RD::SHADER_STAGE_RAYGEN);
+		ADD_PROPERTYI(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "bytecode_any_hit"), "set_stage_bytecode", "get_stage_bytecode", RD::SHADER_STAGE_ANY_HIT);
+		ADD_PROPERTYI(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "bytecode_closest_hit"), "set_stage_bytecode", "get_stage_bytecode", RD::SHADER_STAGE_CLOSEST_HIT);
+		ADD_PROPERTYI(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "bytecode_miss"), "set_stage_bytecode", "get_stage_bytecode", RD::SHADER_STAGE_MISS);
+		ADD_PROPERTYI(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "bytecode_intersection"), "set_stage_bytecode", "get_stage_bytecode", RD::SHADER_STAGE_INTERSECTION);
 		ADD_GROUP("Compile Error", "compile_error_");
 		ADD_PROPERTYI(PropertyInfo(Variant::STRING, "compile_error_vertex"), "set_stage_compile_error", "get_stage_compile_error", RD::SHADER_STAGE_VERTEX);
 		ADD_PROPERTYI(PropertyInfo(Variant::STRING, "compile_error_fragment"), "set_stage_compile_error", "get_stage_compile_error", RD::SHADER_STAGE_FRAGMENT);
 		ADD_PROPERTYI(PropertyInfo(Variant::STRING, "compile_error_tesselation_control"), "set_stage_compile_error", "get_stage_compile_error", RD::SHADER_STAGE_TESSELATION_CONTROL);
 		ADD_PROPERTYI(PropertyInfo(Variant::STRING, "compile_error_tesselation_evaluation"), "set_stage_compile_error", "get_stage_compile_error", RD::SHADER_STAGE_TESSELATION_EVALUATION);
 		ADD_PROPERTYI(PropertyInfo(Variant::STRING, "compile_error_compute"), "set_stage_compile_error", "get_stage_compile_error", RD::SHADER_STAGE_COMPUTE);
+		ADD_PROPERTYI(PropertyInfo(Variant::STRING, "compile_error_raygen"), "set_stage_compile_error", "get_stage_compile_error", RD::SHADER_STAGE_RAYGEN);
+		ADD_PROPERTYI(PropertyInfo(Variant::STRING, "compile_error_any_hit"), "set_stage_compile_error", "get_stage_compile_error", RD::SHADER_STAGE_ANY_HIT);
+		ADD_PROPERTYI(PropertyInfo(Variant::STRING, "compile_error_closest_hit"), "set_stage_compile_error", "get_stage_compile_error", RD::SHADER_STAGE_CLOSEST_HIT);
+		ADD_PROPERTYI(PropertyInfo(Variant::STRING, "compile_error_miss"), "set_stage_compile_error", "get_stage_compile_error", RD::SHADER_STAGE_MISS);
+		ADD_PROPERTYI(PropertyInfo(Variant::STRING, "compile_error_intersection"), "set_stage_compile_error", "get_stage_compile_error", RD::SHADER_STAGE_INTERSECTION);
 	}
 };
 
@@ -726,5 +743,171 @@ protected:
 		ClassDB::bind_method(D_METHOD("set_attachments", "attachments"), &RDPipelineColorBlendState::set_attachments);
 		ClassDB::bind_method(D_METHOD("get_attachments"), &RDPipelineColorBlendState::get_attachments);
 		ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "attachments", PROPERTY_HINT_ARRAY_TYPE, "RDPipelineColorBlendStateAttachment"), "set_attachments", "get_attachments");
+	}
+};
+
+// Two-level nested variant of RD_SETGET_SUB. Routes a flat GDScript property
+// (m_name) onto a `base.m_sub1.m_sub2.m_field` access path. The property name
+// is decoupled from the C++ field name so nested union/discriminator layouts
+// can still expose a flat, stable GDScript API.
+#define RD_SETGET_SUB2(m_type, m_sub1, m_sub2, m_field, m_name) \
+	void set_##m_name(m_type p_##m_name) {                      \
+		base.m_sub1.m_sub2.m_field = p_##m_name;                \
+	}                                                           \
+	m_type get_##m_name() const {                               \
+		return base.m_sub1.m_sub2.m_field;                      \
+	}
+
+class RDAccelerationStructureGeometry : public RefCounted {
+	GDCLASS(RDAccelerationStructureGeometry, RefCounted)
+	friend class RenderingDevice;
+	RD::AccelerationStructureGeometry base;
+
+public:
+	// Mirrors RD::AccelerationStructureGeometry::Type so the enum can be
+	// exposed to GDScript without leaking a nested type into the binding API.
+	enum Type {
+		TYPE_TRIANGLES = RD::AccelerationStructureGeometry::TYPE_TRIANGLES,
+		TYPE_AABBS = RD::AccelerationStructureGeometry::TYPE_AABBS,
+	};
+
+	void set_type(Type p_type) { base.type = static_cast<RD::AccelerationStructureGeometry::Type>(p_type); }
+	Type get_type() const { return static_cast<Type>(base.type); }
+
+	RD_SETGET(BitField<RD::AccelerationStructureGeometryFlagBits>, flags)
+
+	// Triangle geometry (active when type == TYPE_TRIANGLES, which is the
+	// default so unchanged GDScript code keeps working).
+	RD_SETGET_SUB2(RID, geometry, triangles, vertex_buffer, vertex_buffer)
+	RD_SETGET_SUB2(uint32_t, geometry, triangles, vertex_offset, vertex_offset)
+	RD_SETGET_SUB2(uint32_t, geometry, triangles, vertex_stride, vertex_stride)
+	RD_SETGET_SUB2(uint32_t, geometry, triangles, vertex_count, vertex_count)
+	RD_SETGET_SUB2(RD::DataFormat, geometry, triangles, vertex_format, vertex_format)
+	RD_SETGET_SUB2(RID, geometry, triangles, index_buffer, index_buffer)
+	RD_SETGET_SUB2(uint32_t, geometry, triangles, index_offset, index_offset)
+	RD_SETGET_SUB2(uint32_t, geometry, triangles, index_count, index_count)
+
+	// Procedural AABB geometry (active when type == TYPE_AABBS).
+	RD_SETGET_SUB2(RID, geometry, aabbs, buffer, aabb_buffer)
+	RD_SETGET_SUB2(uint32_t, geometry, aabbs, offset, aabb_offset)
+	RD_SETGET_SUB2(uint32_t, geometry, aabbs, stride, aabb_stride)
+	RD_SETGET_SUB2(uint32_t, geometry, aabbs, count, aabb_count)
+
+protected:
+	static void _bind_methods() {
+		RD_BIND(Variant::INT, RDAccelerationStructureGeometry, type);
+		RD_BIND(Variant::INT, RDAccelerationStructureGeometry, flags);
+
+		RD_BIND(Variant::RID, RDAccelerationStructureGeometry, vertex_buffer);
+		RD_BIND(Variant::INT, RDAccelerationStructureGeometry, vertex_offset);
+		RD_BIND(Variant::INT, RDAccelerationStructureGeometry, vertex_stride);
+		RD_BIND(Variant::INT, RDAccelerationStructureGeometry, vertex_count);
+		RD_BIND(Variant::INT, RDAccelerationStructureGeometry, vertex_format);
+		RD_BIND(Variant::RID, RDAccelerationStructureGeometry, index_buffer);
+		RD_BIND(Variant::INT, RDAccelerationStructureGeometry, index_offset);
+		RD_BIND(Variant::INT, RDAccelerationStructureGeometry, index_count);
+
+		RD_BIND(Variant::RID, RDAccelerationStructureGeometry, aabb_buffer);
+		RD_BIND(Variant::INT, RDAccelerationStructureGeometry, aabb_offset);
+		RD_BIND(Variant::INT, RDAccelerationStructureGeometry, aabb_stride);
+		RD_BIND(Variant::INT, RDAccelerationStructureGeometry, aabb_count);
+
+		BIND_ENUM_CONSTANT(TYPE_TRIANGLES);
+		BIND_ENUM_CONSTANT(TYPE_AABBS);
+	}
+};
+
+VARIANT_ENUM_CAST(RDAccelerationStructureGeometry::Type);
+
+class RDAccelerationStructureInstance : public RefCounted {
+	GDCLASS(RDAccelerationStructureInstance, RefCounted)
+	friend class RenderingDevice;
+	RD::AccelerationStructureInstance base;
+
+public:
+	RD_SETGET(Transform3D, transform)
+	RD_SETGET(uint32_t, id)
+	RD_SETGET(uint8_t, mask)
+	RD_SETGET(RD::HitShaderBindingTableRange, hit_sbt_range)
+	RD_SETGET(BitField<RD::AccelerationStructureInstanceFlagBits>, flags)
+	RD_SETGET(RID, blas)
+
+protected:
+	static void _bind_methods() {
+		RD_BIND(Variant::TRANSFORM3D, RDAccelerationStructureInstance, transform);
+		RD_BIND(Variant::INT, RDAccelerationStructureInstance, id);
+		RD_BIND(Variant::INT, RDAccelerationStructureInstance, mask);
+		RD_BIND(Variant::INT, RDAccelerationStructureInstance, hit_sbt_range);
+		RD_BIND(Variant::INT, RDAccelerationStructureInstance, flags);
+		RD_BIND(Variant::RID, RDAccelerationStructureInstance, blas);
+	}
+};
+
+class RDPipelineShader : public RefCounted {
+	GDCLASS(RDPipelineShader, RefCounted)
+	friend class RenderingDevice;
+	RD::PipelineShader base;
+
+	TypedArray<RDPipelineSpecializationConstant> specialization_constants;
+
+public:
+	RD_SETGET(RID, shader)
+
+	void set_specialization_constants(const TypedArray<RDPipelineSpecializationConstant> &p_specialization_constants) {
+		specialization_constants = p_specialization_constants;
+	}
+
+	TypedArray<RDPipelineSpecializationConstant> get_specialization_constants() const {
+		return specialization_constants;
+	}
+
+protected:
+	static void _bind_methods() {
+		RD_BIND(Variant::RID, RDPipelineShader, shader);
+
+		ClassDB::bind_method(D_METHOD("set_specialization_constants", "specialization_constants"), &RDPipelineShader::set_specialization_constants);
+		ClassDB::bind_method(D_METHOD("get_specialization_constants"), &RDPipelineShader::get_specialization_constants);
+		ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "specialization_constants", PROPERTY_HINT_ARRAY_TYPE, "RDPipelineSpecializationConstant"), "set_specialization_constants", "get_specialization_constants");
+	}
+};
+
+class RDHitGroup : public RefCounted {
+	GDCLASS(RDHitGroup, RefCounted)
+	friend class RenderingDevice;
+
+	Ref<RDPipelineShader> closest_hit_shader;
+	Ref<RDPipelineShader> any_hit_shader;
+	Ref<RDPipelineShader> intersection_shader;
+
+public:
+	void set_closest_hit_shader(const Ref<RDPipelineShader> &p_closest_hit_shader) {
+		closest_hit_shader = p_closest_hit_shader;
+	}
+
+	Ref<RDPipelineShader> get_closest_hit_shader() const {
+		return closest_hit_shader;
+	}
+
+	void set_any_hit_shader(const Ref<RDPipelineShader> &p_any_hit_shader) {
+		any_hit_shader = p_any_hit_shader;
+	}
+
+	Ref<RDPipelineShader> get_any_hit_shader() const {
+		return any_hit_shader;
+	}
+
+	void set_intersection_shader(const Ref<RDPipelineShader> &p_intersection_shader) {
+		intersection_shader = p_intersection_shader;
+	}
+
+	Ref<RDPipelineShader> get_intersection_shader() const {
+		return intersection_shader;
+	}
+
+protected:
+	static void _bind_methods() {
+		RD_BIND(Variant::OBJECT, RDHitGroup, closest_hit_shader);
+		RD_BIND(Variant::OBJECT, RDHitGroup, any_hit_shader);
+		RD_BIND(Variant::OBJECT, RDHitGroup, intersection_shader);
 	}
 };

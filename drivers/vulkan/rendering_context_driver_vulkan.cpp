@@ -32,13 +32,22 @@
 
 #include "rendering_context_driver_vulkan.h"
 
-#include "vk_enum_string_helper.h"
+#include "core/config/engine.h"
+
+#if defined(USE_VOLK) && defined(STREAMLINE_ENABLED) && defined(_WIN32)
+#include <windows.h>
+#endif
 
 #include "core/config/project_settings.h"
 #include "core/version.h"
+#include "drivers/vulkan/rendering_device_driver_vulkan.h"
+#include "drivers/vulkan/vulkan_hooks.h"
 
-#include "rendering_device_driver_vulkan.h"
-#include "vulkan_hooks.h"
+#ifndef DEV_ENABLED
+#include "core/os/os.h"
+#endif
+
+#include <vk_enum_string_helper.h>
 
 #if defined(VK_TRACK_DRIVER_MEMORY)
 /*************************************************/
@@ -436,6 +445,9 @@ Error RenderingContextDriverVulkan::_initialize_instance_extensions() {
 	// This extension allows us to use the properties2 features to query additional device capabilities.
 	_register_requested_instance_extension(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, false);
 
+	// This extension allows us to use colorspaces other than SRGB.
+	_register_requested_instance_extension(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME, false);
+
 #if defined(USE_VOLK) && (defined(MACOS_ENABLED) || defined(IOS_ENABLED))
 	_register_requested_instance_extension(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME, true);
 #endif
@@ -468,7 +480,7 @@ Error RenderingContextDriverVulkan::_initialize_instance_extensions() {
 
 #ifdef DEV_ENABLED
 	for (uint32_t i = 0; i < instance_extension_count; i++) {
-		print_verbose(String("VULKAN: Found instance extension ") + String::utf8(instance_extensions[i].extensionName) + String("."));
+		print_verbose(String("Vulkan: Found instance extension ") + String::utf8(instance_extensions[i].extensionName) + String("."));
 	}
 #endif
 
@@ -484,9 +496,9 @@ Error RenderingContextDriverVulkan::_initialize_instance_extensions() {
 	for (KeyValue<CharString, bool> &requested_extension : requested_instance_extensions) {
 		if (!enabled_instance_extension_names.has(requested_extension.key)) {
 			if (requested_extension.value) {
-				ERR_FAIL_V_MSG(ERR_BUG, String("Required extension ") + String::utf8(requested_extension.key) + String(" not found."));
+				ERR_FAIL_V_MSG(ERR_BUG, String("Required Vulkan instance extension ") + String::utf8(requested_extension.key) + String(" not found."));
 			} else {
-				print_verbose(String("Optional extension ") + String::utf8(requested_extension.key) + String(" not found."));
+				print_verbose(String("Optional Vulkan instance extension ") + String::utf8(requested_extension.key) + String(" not found."));
 			}
 		}
 	}
@@ -915,7 +927,19 @@ Error RenderingContextDriverVulkan::_create_vulkan_instance(const VkInstanceCrea
 Error RenderingContextDriverVulkan::initialize() {
 	Error err;
 
-#ifdef USE_VOLK
+#if defined(USE_VOLK) && defined(STREAMLINE_ENABLED) && defined(_WIN32)
+	HMODULE module;
+	module = LoadLibraryA("sl.interposer.dll");
+	if (module != nullptr) {
+		// note: function pointer is cast through void function pointer to silence cast-function-type warning on gcc8
+		PFN_vkGetInstanceProcAddr vk_getInstanceProcAddr = (PFN_vkGetInstanceProcAddr)(void (*)(void))GetProcAddress(module, "vkGetInstanceProcAddr");
+		volkInitializeCustom(vk_getInstanceProcAddr);
+	} else {
+		if (volkInitialize() != VK_SUCCESS) {
+			return FAILED;
+		}
+	}
+#elif defined(USE_VOLK)
 	if (volkInitialize() != VK_SUCCESS) {
 		return FAILED;
 	}
@@ -991,6 +1015,52 @@ DisplayServer::VSyncMode RenderingContextDriverVulkan::surface_get_vsync_mode(Su
 	return surface->vsync_mode;
 }
 
+void RenderingContextDriverVulkan::surface_set_hdr_output_enabled(SurfaceID p_surface, bool p_enabled) {
+	Surface *surface = (Surface *)(p_surface);
+	surface->hdr_output = p_enabled;
+	surface->needs_resize = true;
+}
+
+bool RenderingContextDriverVulkan::surface_get_hdr_output_enabled(SurfaceID p_surface) const {
+	Surface *surface = (Surface *)(p_surface);
+	return surface->hdr_output;
+}
+
+void RenderingContextDriverVulkan::surface_set_hdr_output_reference_luminance(SurfaceID p_surface, float p_reference_luminance) {
+	Surface *surface = (Surface *)(p_surface);
+	surface->hdr_reference_luminance = p_reference_luminance;
+}
+
+float RenderingContextDriverVulkan::surface_get_hdr_output_reference_luminance(SurfaceID p_surface) const {
+	Surface *surface = (Surface *)(p_surface);
+	return surface->hdr_reference_luminance;
+}
+
+void RenderingContextDriverVulkan::surface_set_hdr_output_max_luminance(SurfaceID p_surface, float p_max_luminance) {
+	Surface *surface = (Surface *)(p_surface);
+	surface->hdr_max_luminance = p_max_luminance;
+}
+
+float RenderingContextDriverVulkan::surface_get_hdr_output_max_luminance(SurfaceID p_surface) const {
+	Surface *surface = (Surface *)(p_surface);
+	return surface->hdr_max_luminance;
+}
+
+void RenderingContextDriverVulkan::surface_set_hdr_output_linear_luminance_scale(SurfaceID p_surface, float p_linear_luminance_scale) {
+	Surface *surface = (Surface *)(p_surface);
+	surface->hdr_linear_luminance_scale = p_linear_luminance_scale;
+}
+
+float RenderingContextDriverVulkan::surface_get_hdr_output_linear_luminance_scale(SurfaceID p_surface) const {
+	Surface *surface = (Surface *)(p_surface);
+	return surface->hdr_linear_luminance_scale;
+}
+
+float RenderingContextDriverVulkan::surface_get_hdr_output_max_value(SurfaceID p_surface) const {
+	Surface *surface = (Surface *)(p_surface);
+	return MAX(surface->hdr_max_luminance / MAX(surface->hdr_reference_luminance, 1.0f), 1.0f);
+}
+
 uint32_t RenderingContextDriverVulkan::surface_get_width(SurfaceID p_surface) const {
 	Surface *surface = (Surface *)(p_surface);
 	return surface->width;
@@ -1019,6 +1089,10 @@ void RenderingContextDriverVulkan::surface_destroy(SurfaceID p_surface) {
 
 bool RenderingContextDriverVulkan::is_debug_utils_enabled() const {
 	return enabled_instance_extension_names.has(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+}
+
+bool RenderingContextDriverVulkan::is_colorspace_supported() const {
+	return enabled_instance_extension_names.has(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
 }
 
 VkInstance RenderingContextDriverVulkan::instance_get() const {

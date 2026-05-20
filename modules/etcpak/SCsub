@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 from misc.utility.scons_hints import *
 
+import methods
+
 Import("env")
 Import("env_modules")
 
@@ -23,6 +25,22 @@ thirdparty_sources = [thirdparty_dir + file for file in thirdparty_sources]
 env_etcpak.Prepend(CPPPATH=[thirdparty_dir])
 
 env_thirdparty = env_etcpak.Clone()
+if env["faster_godot"] and env["arch"] == "x86_64" and env.msvc and not methods.using_clang(env):
+    # MSVC's /arch:AVX2 build does not expose the full set of GNU-style
+    # feature macros ETCpak uses to keep its AVX2 and SSE4.1 tables in sync.
+    env_thirdparty.AppendUnique(
+        CPPDEFINES=[
+            "__SSE__",
+            "__SSE2__",
+            "__SSE3__",
+            "__SSSE3__",
+            "__SSE4_1__",
+            "__SSE4_2__",
+            "__AVX__",
+            "__AVX2__",
+            "__FMA__",
+        ]
+    )
 env_thirdparty.disable_warnings()
 env_thirdparty.add_source_files(thirdparty_obj, thirdparty_sources)
 env.modules_sources += thirdparty_obj

@@ -46,7 +46,7 @@
 // ***********************************************************************************
 
 #include "core/object/object.h"
-#include "core/variant/type_info.h"
+#include "core/templates/paged_allocator.h"
 #include "servers/rendering/rendering_context_driver.h"
 #include "servers/rendering/rendering_device_commons.h"
 
@@ -98,28 +98,28 @@ public:
 				id(p_id) {}
 	};
 
-#define DEFINE_ID(m_name)                                                         \
-	struct m_name##ID : public ID {                                               \
-		_ALWAYS_INLINE_ explicit operator bool() const {                          \
-			return id != 0;                                                       \
-		}                                                                         \
-		_ALWAYS_INLINE_ m_name##ID &operator=(m_name##ID p_other) {               \
-			id = p_other.id;                                                      \
-			return *this;                                                         \
-		}                                                                         \
-		_ALWAYS_INLINE_ bool operator<(const m_name##ID &p_other) const {         \
-			return id < p_other.id;                                               \
-		}                                                                         \
-		_ALWAYS_INLINE_ bool operator==(const m_name##ID &p_other) const {        \
-			return id == p_other.id;                                              \
-		}                                                                         \
-		_ALWAYS_INLINE_ bool operator!=(const m_name##ID &p_other) const {        \
-			return id != p_other.id;                                              \
-		}                                                                         \
+#define DEFINE_ID(m_name) \
+	struct m_name##ID : public ID { \
+		_ALWAYS_INLINE_ explicit operator bool() const { \
+			return id != 0; \
+		} \
+		_ALWAYS_INLINE_ m_name##ID &operator=(m_name##ID p_other) { \
+			id = p_other.id; \
+			return *this; \
+		} \
+		_ALWAYS_INLINE_ bool operator<(const m_name##ID &p_other) const { \
+			return id < p_other.id; \
+		} \
+		_ALWAYS_INLINE_ bool operator==(const m_name##ID &p_other) const { \
+			return id == p_other.id; \
+		} \
+		_ALWAYS_INLINE_ bool operator!=(const m_name##ID &p_other) const { \
+			return id != p_other.id; \
+		} \
 		_ALWAYS_INLINE_ m_name##ID(const m_name##ID &p_other) : ID(p_other.id) {} \
-		_ALWAYS_INLINE_ explicit m_name##ID(uint64_t p_int) : ID(p_int) {}        \
+		_ALWAYS_INLINE_ explicit m_name##ID(uint64_t p_int) : ID(p_int) {} \
 		_ALWAYS_INLINE_ explicit m_name##ID(void *p_ptr) : ID((uint64_t)p_ptr) {} \
-		_ALWAYS_INLINE_ m_name##ID() = default;                                   \
+		_ALWAYS_INLINE_ m_name##ID() = default; \
 	};
 
 	// Id types declared before anything else to prevent cyclic dependencies between the different concerns.
@@ -140,6 +140,8 @@ public:
 	DEFINE_ID(QueryPool);
 	DEFINE_ID(Fence);
 	DEFINE_ID(Semaphore);
+	DEFINE_ID(AccelerationStructure);
+	DEFINE_ID(RaytracingPipeline);
 
 public:
 	/*****************/
@@ -170,7 +172,10 @@ public:
 		BUFFER_USAGE_INDEX_BIT = (1 << 6),
 		BUFFER_USAGE_VERTEX_BIT = (1 << 7),
 		BUFFER_USAGE_INDIRECT_BIT = (1 << 8),
+		BUFFER_USAGE_SHADER_BINDING_TABLE_BIT = (1 << 10),
 		BUFFER_USAGE_DEVICE_ADDRESS_BIT = (1 << 17),
+		BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT = (1 << 19),
+		BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT = (1 << 20),
 		// There are no Vulkan-equivalent. Try to use unused/unclaimed bits.
 		BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT = (1 << 31),
 	};
@@ -325,8 +330,10 @@ public:
 		PIPELINE_STAGE_ALL_GRAPHICS_BIT = (1 << 15),
 		PIPELINE_STAGE_ALL_COMMANDS_BIT = (1 << 16),
 		PIPELINE_STAGE_CLEAR_STORAGE_BIT = (1 << 17),
+		PIPELINE_STAGE_RAY_TRACING_SHADER_BIT = (1 << 21),
 		PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT = (1 << 22),
 		PIPELINE_STAGE_FRAGMENT_DENSITY_PROCESS_BIT = (1 << 23),
+		PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT = (1 << 25),
 	};
 
 	enum BarrierAccessBits {
@@ -347,6 +354,8 @@ public:
 		BARRIER_ACCESS_HOST_WRITE_BIT = (1 << 14),
 		BARRIER_ACCESS_MEMORY_READ_BIT = (1 << 15),
 		BARRIER_ACCESS_MEMORY_WRITE_BIT = (1 << 16),
+		BARRIER_ACCESS_ACCELERATION_STRUCTURE_READ_BIT = (1 << 21),
+		BARRIER_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT = (1 << 22),
 		BARRIER_ACCESS_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT = (1 << 23),
 		BARRIER_ACCESS_FRAGMENT_DENSITY_MAP_ATTACHMENT_READ_BIT = (1 << 24),
 		BARRIER_ACCESS_RESOLVE_READ_BIT = (1 << 25),
@@ -377,13 +386,22 @@ public:
 		TextureSubresourceRange subresources;
 	};
 
+	struct AccelerationStructureBarrier {
+		AccelerationStructureID acceleration_structure;
+		BitField<BarrierAccessBits> src_access;
+		BitField<BarrierAccessBits> dst_access;
+		uint64_t offset = 0;
+		uint64_t size = 0;
+	};
+
 	virtual void command_pipeline_barrier(
 			CommandBufferID p_cmd_buffer,
 			BitField<PipelineStageBits> p_src_stages,
 			BitField<PipelineStageBits> p_dst_stages,
 			VectorView<MemoryAccessBarrier> p_memory_barriers,
 			VectorView<BufferBarrier> p_buffer_barriers,
-			VectorView<TextureBarrier> p_texture_barriers) = 0;
+			VectorView<TextureBarrier> p_texture_barriers,
+			VectorView<AccelerationStructureBarrier> p_acceleration_structure_barriers) = 0;
 
 	/****************/
 	/**** FENCES ****/
@@ -463,6 +481,12 @@ public:
 	// Retrieve the format used by the swap chain's framebuffers.
 	virtual DataFormat swap_chain_get_format(SwapChainID p_swap_chain) = 0;
 
+	// Retrieve the color space used by the swap chain's framebuffers.
+	virtual ColorSpace swap_chain_get_color_space(SwapChainID p_swap_chain) = 0;
+
+	// Retrieve whether the swapchain supports our preferred HDR formats.
+	virtual bool swap_chain_get_hdr_output_supported(SwapChainID p_swap_chain) = 0;
+
 	// Tells the swapchain the max_fps so it can use the proper frame pacing.
 	// Android uses this with Swappy library. Some implementations or platforms may ignore this hint.
 	virtual void swap_chain_set_max_fps(SwapChainID p_swap_chain, int p_max_fps) {}
@@ -508,6 +532,7 @@ public:
 		// Flag to indicate  that this is an immutable sampler so it is skipped when creating uniform
 		// sets, as it would be set previously when creating the pipeline layout.
 		bool immutable_sampler = false;
+		bool variable_count = false;
 
 		_FORCE_INLINE_ bool is_dynamic() const {
 			return type == UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC || type == UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC;
@@ -715,6 +740,110 @@ public:
 
 	virtual PipelineID compute_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) = 0;
 
+	/********************/
+	/**** RAYTRACING ****/
+	/********************/
+
+	// ----- ACCELERATION STRUCTURE -----
+
+	// BLAS geometry entry. Describes one triangle set or one AABB set that
+	// contributes to a BLAS. A single BLAS can combine multiple entries; each
+	// entry must pick exactly one variant via `type` and populate the matching
+	// fields of the `geometry` union. The variant members have no default
+	// initializers so the union stays trivially default-constructible; the
+	// active fields are always written explicitly by the caller.
+	struct AccelerationStructureGeometry {
+		enum Type {
+			TYPE_TRIANGLES,
+			TYPE_AABBS,
+		};
+
+		struct Triangles {
+			BufferID vertex_buffer;
+			uint32_t vertex_offset;
+			uint32_t vertex_stride;
+			uint32_t vertex_count;
+			DataFormat vertex_format;
+			BufferID index_buffer;
+			uint32_t index_offset;
+			uint32_t index_count;
+			IndexBufferFormat index_format;
+		};
+
+		// Procedural geometry: each AABB is two float3 (min, max), packed
+		// tightly by default (stride = sizeof(VkAabbPositionsKHR) = 24).
+		struct Aabbs {
+			BufferID buffer;
+			uint32_t offset;
+			uint32_t stride;
+			uint32_t count;
+		};
+
+		union Geometry {
+			Triangles triangles;
+			Aabbs aabbs;
+			Geometry() {}
+		};
+
+		Type type = TYPE_TRIANGLES;
+		BitField<AccelerationStructureGeometryFlagBits> flags = {};
+		Geometry geometry;
+	};
+
+	virtual AccelerationStructureID blas_create(VectorView<AccelerationStructureGeometry> p_geometries, BitField<AccelerationStructureFlagBits> p_flags) = 0;
+
+	struct AccelerationStructureInstance {
+		Transform3D transform;
+		uint32_t id = 0;
+		uint8_t mask = 0;
+		uint32_t hit_sbt_offset = 0;
+		BitField<AccelerationStructureInstanceFlagBits> flags = {};
+		AccelerationStructureID blas;
+	};
+
+	virtual AccelerationStructureID tlas_create(uint32_t p_max_instance_count, BitField<AccelerationStructureFlagBits> p_flags) = 0;
+	virtual void acceleration_structure_instance_write(uint8_t *r_driver_instance, const AccelerationStructureInstance &p_instance) = 0;
+	virtual void acceleration_structure_free(AccelerationStructureID p_acceleration_structure) = 0;
+	virtual uint32_t acceleration_structure_get_scratch_size_bytes(AccelerationStructureID p_acceleration_structure) = 0;
+
+	// ----- PIPELINE -----
+
+	struct PipelineShader {
+		ShaderID shader;
+		VectorView<PipelineSpecializationConstant> specialization_constants;
+		ShaderStage shader_stage = {};
+	};
+
+	struct HitGroup {
+		uint32_t closest_hit_shader_index = UINT32_MAX;
+		uint32_t any_hit_shader_index = UINT32_MAX;
+		uint32_t intersection_shader_index = UINT32_MAX;
+	};
+
+	virtual RaytracingPipelineID raytracing_pipeline_create(VectorView<PipelineShader> p_shaders, VectorView<uint32_t> p_raygen_shader_indices, VectorView<uint32_t> p_miss_shader_indices, VectorView<HitGroup> p_hit_groups, uint32_t p_max_trace_recursion_depth, ShaderID p_layout_defining_shader) = 0;
+	virtual void raytracing_pipeline_free(RaytracingPipelineID p_pipeline) = 0;
+
+	virtual bool raytracing_pipeline_get_shader_group_handles(RaytracingPipelineID p_pipeline, uint32_t p_group_index_offset, VectorView<uint32_t> p_group_indices, uint8_t *r_data, uint32_t p_data_stride_bytes) = 0;
+
+	// ----- COMMANDS -----
+
+	virtual void command_build_blas(CommandBufferID p_cmd_buffer, AccelerationStructureID p_acceleration_structure, BufferID p_scratch_buffer) = 0;
+	// In-place refit of a BLAS previously built with ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT.
+	// Geometry topology / counts must be unchanged; only vertex positions may differ.
+	virtual void command_update_blas(CommandBufferID p_cmd_buffer, AccelerationStructureID p_acceleration_structure, BufferID p_scratch_buffer) = 0;
+	virtual void command_build_tlas(CommandBufferID p_cmd_buffer, AccelerationStructureID p_acceleration_structure, BufferID p_scratch_buffer, BufferID p_instance_buffer, uint32_t p_instance_offset, uint32_t p_instance_count) = 0;
+	virtual void command_bind_raytracing_pipeline(CommandBufferID p_cmd_buffer, RaytracingPipelineID p_pipeline) = 0;
+	virtual void command_bind_raytracing_uniform_set(CommandBufferID p_cmd_buffer, UniformSetID p_uniform_set, ShaderID p_shader, uint32_t p_set_index) = 0;
+
+	struct ShaderBindingTable {
+		BufferID buffer;
+		uint32_t offset = 0;
+		uint32_t stride = 0;
+		uint32_t size = 0;
+	};
+
+	virtual void command_trace_rays(CommandBufferID p_cmd_buffer, const ShaderBindingTable &p_raygen_sbt, const ShaderBindingTable &p_miss_sbt, const ShaderBindingTable &p_hit_sbt, uint32_t p_width, uint32_t p_height, uint32_t p_depth) = 0;
+
 	/******************/
 	/**** CALLBACK ****/
 	/******************/
@@ -749,6 +878,9 @@ public:
 	/****************/
 	virtual void command_insert_breadcrumb(CommandBufferID p_cmd_buffer, uint32_t p_data) = 0;
 
+	/// Returns the underlying native command buffer handle (e.g. ID3D12GraphicsCommandList* or VkCommandBuffer).
+	virtual void *command_buffer_get_native_handle(CommandBufferID p_cmd_buffer) { return nullptr; }
+
 	/********************/
 	/**** SUBMISSION ****/
 	/********************/
@@ -767,6 +899,8 @@ public:
 		OBJECT_TYPE_SHADER,
 		OBJECT_TYPE_UNIFORM_SET,
 		OBJECT_TYPE_PIPELINE,
+		OBJECT_TYPE_ACCELERATION_STRUCTURE,
+		OBJECT_TYPE_RAYTRACING_PIPELINE,
 	};
 
 	struct MultiviewCapabilities {
@@ -807,13 +941,17 @@ public:
 		API_TRAIT_USE_GENERAL_IN_COPY_QUEUES,
 		API_TRAIT_BUFFERS_REQUIRE_TRANSITIONS,
 		API_TRAIT_TEXTURE_OUTPUTS_REQUIRE_CLEARS,
+		API_TRAIT_ACCELERATION_STRUCTURE_INSTANCE_SIZE,
+		API_TRAIT_SHADER_GROUP_HANDLE_SIZE,
+		API_TRAIT_SHADER_GROUP_BASE_ALIGNMENT,
+		API_TRAIT_SHADER_GROUP_HANDLE_ALIGNMENT,
 	};
 
 	enum ShaderChangeInvalidation {
 		SHADER_CHANGE_INVALIDATION_ALL_BOUND_UNIFORM_SETS,
 		// What Vulkan does.
 		SHADER_CHANGE_INVALIDATION_INCOMPATIBLE_SETS_PLUS_CASCADE,
-		// Invalidate according to the layout hash only.
+		// What D3D12 does.
 		SHADER_CHANGE_INVALIDATION_ALL_OR_NONE_ACCORDING_TO_LAYOUT_HASH,
 	};
 

@@ -34,6 +34,7 @@
 #include "core/templates/local_vector.h"
 #include "core/templates/rid_owner.h"
 #include "core/templates/self_list.h"
+#include "servers/rendering/renderer_compositor.h"
 #include "servers/rendering/renderer_rd/shaders/skeleton.glsl.gen.h"
 #include "servers/rendering/storage/mesh_storage.h"
 #include "servers/rendering/storage/utilities.h"
@@ -139,6 +140,8 @@ private:
 			uint32_t blend_shape_buffer_size = 0;
 
 			RID material;
+
+			uint32_t rt_invalidation_counter = 0;
 
 			uint32_t render_index = 0;
 			uint64_t render_pass = 0;
@@ -268,7 +271,7 @@ private:
 
 	MultiMesh *multimesh_dirty_list = nullptr;
 
-	_FORCE_INLINE_ void _multimesh_make_local(MultiMesh *multimesh) const;
+	void _multimesh_make_local(MultiMesh *multimesh) const;
 	_FORCE_INLINE_ void _multimesh_enable_motion_vectors(MultiMesh *multimesh);
 	_FORCE_INLINE_ void _multimesh_update_motion_vectors_data_cache(MultiMesh *multimesh);
 	_FORCE_INLINE_ bool _multimesh_uses_motion_vectors(MultiMesh *multimesh);
@@ -476,6 +479,61 @@ public:
 		return s->uv_scale;
 	}
 
+	_FORCE_INLINE_ RID mesh_surface_get_vertex_buffer(void *p_surface) {
+		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+		return s->vertex_buffer;
+	}
+
+	_FORCE_INLINE_ RID mesh_instance_get_vertex_buffer(RID p_mesh_instance, uint32_t p_surface_index) {
+		MeshInstance *mi = mesh_instance_owner.get_or_null(p_mesh_instance);
+		if (!mi || p_surface_index >= mi->surfaces.size()) {
+			return RID();
+		}
+		const MeshInstance::Surface &mis = mi->surfaces[p_surface_index];
+		return mis.vertex_buffer[mis.current_buffer];
+	}
+
+	_FORCE_INLINE_ RID mesh_instance_get_prev_vertex_buffer(RID p_mesh_instance, uint32_t p_surface_index) {
+		MeshInstance *mi = mesh_instance_owner.get_or_null(p_mesh_instance);
+		if (!mi || p_surface_index >= mi->surfaces.size()) {
+			return RID();
+		}
+		const MeshInstance::Surface &mis = mi->surfaces[p_surface_index];
+		uint32_t previous_buffer = RSG::rasterizer->get_frame_number() == mis.last_change ? mis.previous_buffer : mis.current_buffer;
+		return mis.vertex_buffer[previous_buffer];
+	}
+
+	_FORCE_INLINE_ uint64_t mesh_instance_get_last_change(RID p_mesh_instance, uint32_t p_surface_index) {
+		MeshInstance *mi = mesh_instance_owner.get_or_null(p_mesh_instance);
+		if (!mi || p_surface_index >= mi->surfaces.size()) {
+			return 0;
+		}
+		return mi->surfaces[p_surface_index].last_change;
+	}
+
+	_FORCE_INLINE_ RID mesh_surface_get_attribute_buffer(void *p_surface) {
+		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+		return s->attribute_buffer;
+	}
+
+	_FORCE_INLINE_ RID mesh_surface_get_index_buffer(void *p_surface, uint32_t p_lod = 0) {
+		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+		if (p_lod == 0) {
+			return s->index_buffer;
+		}
+		ERR_FAIL_UNSIGNED_INDEX_V(p_lod - 1, s->lod_count, RID());
+		return s->lods[p_lod - 1].index_buffer;
+	}
+
+	_FORCE_INLINE_ uint32_t mesh_surface_get_index_count(void *p_surface, uint32_t p_lod = 0) {
+		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+		if (p_lod == 0) {
+			return s->index_count;
+		}
+		ERR_FAIL_UNSIGNED_INDEX_V(p_lod - 1, s->lod_count, 0);
+		return s->lods[p_lod - 1].index_count;
+	}
+
 	_FORCE_INLINE_ uint32_t mesh_surface_get_lod(void *p_surface, float p_model_scale, float p_distance_threshold, float p_mesh_lod_threshold, uint32_t &r_index_count) const {
 		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
 
@@ -504,6 +562,11 @@ public:
 		} else {
 			return s->lods[p_lod - 1].index_array;
 		}
+	}
+
+	_FORCE_INLINE_ uint32_t mesh_surface_get_rt_invalidation_counter(void *p_surface) const {
+		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+		return s->rt_invalidation_counter;
 	}
 
 	_FORCE_INLINE_ void mesh_surface_get_vertex_arrays_and_format(void *p_surface, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, RID &r_vertex_array_rd, RD::VertexFormatID &r_vertex_format) {
@@ -724,6 +787,30 @@ public:
 			return multimesh->visible_instances;
 		}
 		return multimesh->instances;
+	}
+
+	_FORCE_INLINE_ const float *multimesh_get_local_data_ptr(RID p_multimesh) const {
+		MultiMesh *multimesh = multimesh_owner.get_or_null(p_multimesh);
+		if (!multimesh) {
+			return nullptr;
+		}
+		_multimesh_make_local(multimesh);
+		return multimesh->data_cache.is_empty() ? nullptr : multimesh->data_cache.ptr();
+	}
+
+	_FORCE_INLINE_ uint32_t multimesh_get_stride(RID p_multimesh) const {
+		MultiMesh *multimesh = multimesh_owner.get_or_null(p_multimesh);
+		return multimesh ? multimesh->stride_cache : 0;
+	}
+
+	_FORCE_INLINE_ uint32_t multimesh_get_current_instance_offset(RID p_multimesh) const {
+		MultiMesh *multimesh = multimesh_owner.get_or_null(p_multimesh);
+		return multimesh ? multimesh->motion_vectors_current_offset : 0;
+	}
+
+	_FORCE_INLINE_ RID multimesh_get_gpu_buffer(RID p_multimesh) const {
+		MultiMesh *multimesh = multimesh_owner.get_or_null(p_multimesh);
+		return multimesh ? multimesh->buffer : RID();
 	}
 
 	_FORCE_INLINE_ RID multimesh_get_3d_uniform_set(RID p_multimesh, RID p_shader, uint32_t p_set) const {

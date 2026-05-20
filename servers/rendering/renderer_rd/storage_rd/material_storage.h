@@ -77,6 +77,7 @@ public:
 		virtual bool is_parameter_texture(const StringName &p_param) const;
 
 		virtual void set_code(const String &p_Code) = 0;
+		virtual void set_code_rt(const String &p_code_rt) {}
 		virtual bool is_animated() const = 0;
 		virtual bool casts_shadows() const = 0;
 		virtual RS::ShaderNativeSourceCode get_native_source_code() const = 0;
@@ -217,6 +218,9 @@ private:
 	struct Shader {
 		ShaderData *data = nullptr;
 		String code;
+		String code_rt;
+		uint64_t code_rt_hash = 0;
+		uint64_t code_rt_hash_b = 0;
 		String path_hint;
 		ShaderType type;
 		HashMap<StringName, HashMap<int, RID>> default_texture_parameter;
@@ -249,6 +253,8 @@ private:
 		int32_t priority = 0;
 		RID next_pass;
 		SelfList<Material> update_element;
+
+		uint16_t rt_invalidation_counter = 0;
 
 		Dependency dependency;
 
@@ -404,6 +410,8 @@ public:
 	virtual void global_shader_parameters_instance_update(RID p_instance, int p_index, const Variant &p_value, int p_flags_count = 0) override;
 
 	RID global_shader_uniforms_get_storage_buffer() const;
+	RID global_shader_uniform_get_texture(const StringName &p_name) const;
+	int32_t global_shader_uniform_get_buffer_index(const StringName &p_name) const;
 
 	/* SHADER API */
 
@@ -414,6 +422,7 @@ public:
 	virtual void shader_free(RID p_rid) override;
 
 	virtual void shader_set_code(RID p_shader, const String &p_code) override;
+	virtual void shader_set_code_rt(RID p_shader, const String &p_code_rt) override;
 	virtual void shader_set_path_hint(RID p_shader, const String &p_path) override;
 	virtual String shader_get_code(RID p_shader) const override;
 	virtual void get_shader_parameter_list(RID p_shader, List<PropertyInfo> *p_param_list) const override;
@@ -442,6 +451,11 @@ public:
 
 	virtual void material_set_shader(RID p_material, RID p_shader) override;
 	ShaderData *material_get_shader_data(RID p_material);
+
+	String material_get_shader_code(RID p_material) const;
+	String material_get_shader_code_rt(RID p_material) const;
+	uint64_t material_get_shader_code_rt_hash(RID p_material) const;
+	uint64_t material_get_shader_code_rt_hash_b(RID p_material) const;
 
 	virtual void material_set_param(RID p_material, const StringName &p_param, const Variant &p_value) override;
 	virtual Variant material_get_param(RID p_material, const StringName &p_param) const override;
@@ -472,6 +486,11 @@ public:
 		} else {
 			return material->data;
 		}
+	}
+
+	_FORCE_INLINE_ uint16_t material_get_rt_invalidation_counter(RID p_material) const {
+		Material *material = material_owner.get_or_null(p_material);
+		return material ? material->rt_invalidation_counter : 0;
 	}
 };
 

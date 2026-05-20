@@ -446,6 +446,10 @@ AABB LightStorage::light_get_aabb(RID p_light) const {
 			float r = light->param[RS::LIGHT_PARAM_RANGE];
 			return AABB(-Vector3(r, r, r), Vector3(r, r, r) * 2);
 		};
+		case RS::LIGHT_AREA: {
+			float r = light->param[RS::LIGHT_PARAM_RANGE];
+			return AABB(-Vector3(r, r, r), Vector3(r, r, r) * 2);
+		};
 		case RS::LIGHT_DIRECTIONAL: {
 			return AABB();
 		};
@@ -806,6 +810,9 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				spot_light_sort[spot_light_count].depth = distance;
 				spot_light_count++;
 			} break;
+			case RS::LIGHT_AREA: {
+				continue;
+			} break;
 		}
 
 		light_instance->last_pass = RSG::rasterizer->get_frame_number();
@@ -1030,7 +1037,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		light_instance->cull_mask = light->cull_mask;
 
 		// hook for subclass to do further processing.
-		RendererSceneRenderRD::get_singleton()->setup_added_light(type, light_transform, radius, spot_angle);
+		RendererSceneRenderRD::get_singleton()->setup_added_light(type, light_transform, radius, spot_angle, Vector2());
 
 		r_positional_light_count++;
 	}

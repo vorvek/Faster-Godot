@@ -1069,6 +1069,17 @@ void RendererViewport::viewport_set_size(RID p_viewport, int p_width, int p_heig
 	_viewport_set_size(viewport, p_width, p_height, 1);
 }
 
+void RendererViewport::viewport_set_size(RID p_viewport, int p_width, int p_height, int p_view_count) {
+	ERR_FAIL_COND(p_width < 0 || p_height < 0);
+	ERR_FAIL_COND(p_view_count <= 0);
+
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+	ERR_FAIL_COND_MSG(viewport->use_xr, "Cannot set viewport size when using XR");
+
+	_viewport_set_size(viewport, p_width, p_height, p_view_count);
+}
+
 void RendererViewport::_viewport_set_size(Viewport *p_viewport, int p_width, int p_height, uint32_t p_view_count) {
 	Size2i new_size(p_width, p_height);
 	if (p_viewport->size != new_size || p_viewport->view_count != p_view_count) {
@@ -1691,6 +1702,10 @@ void RendererViewport::viewport_set_canvas_cull_mask(RID p_viewport, uint32_t p_
 // Workaround for setting this on thread.
 void RendererViewport::call_set_vsync_mode(DisplayServer::VSyncMode p_mode, DisplayServer::WindowID p_window) {
 	DisplayServer::get_singleton()->window_set_vsync_mode(p_mode, p_window);
+}
+
+void RendererViewport::call_set_vsync_mode(DisplayServerEnums::VSyncMode p_mode, DisplayServerEnums::WindowID p_window) {
+	DisplayServer::get_singleton()->window_set_vsync_mode((DisplayServer::VSyncMode)p_mode, p_window);
 }
 
 int RendererViewport::get_total_objects_drawn() const {

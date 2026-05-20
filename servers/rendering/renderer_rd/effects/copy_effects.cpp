@@ -605,7 +605,13 @@ void CopyEffects::copy_to_atlas_fb(RID p_source_rd_texture, RID p_dest_framebuff
 	RD::get_singleton()->draw_list_draw(draw_list, true);
 }
 
-void CopyEffects::copy_to_fb_rect(RID p_source_rd_texture, RID p_dest_framebuffer, const Rect2i &p_rect, bool p_flip_y, bool p_force_luminance, bool p_alpha_to_zero, bool p_srgb, RID p_secondary, bool p_multiview, bool p_alpha_to_one, bool p_linear, bool p_normal, const Rect2 &p_src_rect, float p_linear_luminance_multiplier) {
+void CopyEffects::copy_r32f_to_depth_fb(RID p_source_r32f, RID p_dest_depth_framebuffer, const Rect2i &p_rect) {
+	copy_depth_to_rect(p_source_r32f, p_dest_depth_framebuffer, p_rect);
+}
+
+void CopyEffects::copy_to_fb_rect(RID p_source_rd_texture, RID p_dest_framebuffer, const Rect2i &p_rect, bool p_flip_y, bool p_force_luminance, bool p_alpha_to_zero, bool p_srgb, RID p_secondary, bool p_multiview, bool p_alpha_to_one, bool p_linear, bool p_normal, const Rect2 &p_src_rect, float p_linear_luminance_multiplier, bool p_bilinear_filtering, CopyToFbFlagMode p_flag_mode) {
+	(void)p_bilinear_filtering;
+	(void)p_flag_mode;
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();

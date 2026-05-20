@@ -188,6 +188,7 @@ public:
 		float tonemapper_params[4] = { 0.0, 0.0, 0.0, 0.0 };
 		float exposure = 1.0;
 		float white = 1.0;
+		float max_value = 1.0;
 
 		bool use_auto_exposure = false;
 		float auto_exposure_scale = 0.5;
@@ -213,15 +214,14 @@ public:
 		Vector2i texture_size;
 		Vector2i dest_texture_size;
 		uint32_t view_count = 1;
+		bool bilinear_filtering = true;
 
 		bool convert_to_srgb = false;
 	};
 
 	void tonemapper(RID p_source_color, RID p_dst_framebuffer, const TonemapSettings &p_settings);
-#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 	void tonemapper_mobile(RID p_source_color, RID p_dst_framebuffer, const TonemapSettings &p_settings);
 	void tonemapper_subpass(RD::DrawListID p_subpass_draw_list, RID p_source_color, RD::FramebufferFormatID p_dst_format_id, const TonemapSettings &p_settings);
-#endif
 };
 
 } // namespace RendererRD

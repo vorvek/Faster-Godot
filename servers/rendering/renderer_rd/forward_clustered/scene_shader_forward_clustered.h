@@ -30,9 +30,10 @@
 
 #pragma once
 
-#include "../storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/pipeline_hash_map_rd.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl.gen.h"
+#include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
+#include "servers/rendering/rendering_server_types.h"
 
 namespace RendererSceneRenderImplementation {
 
@@ -189,7 +190,7 @@ public:
 			RD::VertexFormatID vertex_format_id;
 			RD::FramebufferFormatID framebuffer_format_id;
 			RD::PolygonCullMode cull_mode = RD::POLYGON_CULL_MAX;
-			RS::PrimitiveType primitive_type = RS::PRIMITIVE_MAX;
+			RSE::PrimitiveType primitive_type = RSE::PRIMITIVE_MAX;
 			PipelineVersion version = PipelineVersion::PIPELINE_VERSION_MAX;
 			uint32_t color_pass_flags = 0;
 			ShaderSpecialization shader_specialization = {};
@@ -265,7 +266,7 @@ public:
 		bool uses_world_coordinates = false;
 		bool uses_screen_texture_mipmaps = false;
 		bool uses_z_clip_scale = false;
-		RS::CullMode cull_mode = RS::CULL_MODE_DISABLED;
+		RSE::CullMode cull_mode = RSE::CULL_MODE_DISABLED;
 
 		bool stencil_enabled = false;
 		uint32_t stencil_flags = 0;
@@ -274,6 +275,25 @@ public:
 
 		uint64_t last_pass = 0;
 		uint32_t index = 0;
+
+		// RT Classification. Lazily allocated only when the shader has `#if defined(RT)` divergence.
+		struct RTClassification {
+			String code;
+			DepthDraw depth_draw = DEPTH_DRAW_OPAQUE;
+			DepthTest depth_test = DEPTH_TEST_ENABLED;
+			int blend_mode = BLEND_MODE_MIX;
+			int alpha_antialiasing_mode = ALPHA_ANTIALIASING_OFF;
+			RSE::CullMode cull_mode = RSE::CULL_MODE_BACK;
+			bool uses_alpha = false;
+			bool uses_blend_alpha = false;
+			bool uses_alpha_clip = false;
+			bool uses_alpha_antialiasing = false;
+			bool uses_depth_prepass_alpha = false;
+			bool uses_screen_texture = false;
+			bool uses_depth_texture = false;
+			bool uses_normal_texture = false;
+		};
+		RTClassification *rt = nullptr;
 
 		_FORCE_INLINE_ bool uses_alpha_pass() const {
 			bool has_read_screen_alpha = uses_screen_texture || uses_depth_texture || uses_normal_texture;
@@ -291,16 +311,44 @@ public:
 			return (uses_depth_prepass_alpha || uses_alpha_antialiasing) && !(no_depth_draw || no_depth_test);
 		}
 
+		// RT-side alpha-pass helpers; fall back to raster when no divergence.
+		_FORCE_INLINE_ bool rt_uses_alpha_pass() const {
+			if (!rt) {
+				return uses_alpha_pass();
+			}
+			bool has_read_screen_alpha = rt->uses_screen_texture || rt->uses_depth_texture || rt->uses_normal_texture;
+			bool has_base_alpha = (rt->uses_alpha && (!rt->uses_alpha_clip || rt->uses_alpha_antialiasing)) || has_read_screen_alpha;
+			bool has_blend_alpha = rt->uses_blend_alpha;
+			bool has_alpha = has_base_alpha || has_blend_alpha;
+			bool no_depth_draw = rt->depth_draw == DEPTH_DRAW_DISABLED;
+			bool no_depth_test = rt->depth_test != DEPTH_TEST_ENABLED;
+			return has_alpha || has_read_screen_alpha || no_depth_draw || no_depth_test;
+		}
+
+		_FORCE_INLINE_ bool rt_uses_depth_in_alpha_pass() const {
+			if (!rt) {
+				return uses_depth_in_alpha_pass();
+			}
+			bool no_depth_draw = rt->depth_draw == DEPTH_DRAW_DISABLED;
+			bool no_depth_test = rt->depth_test != DEPTH_TEST_ENABLED;
+			return (rt->uses_depth_prepass_alpha || rt->uses_alpha_antialiasing) && !(no_depth_draw || no_depth_test);
+		}
+
+		_FORCE_INLINE_ RSE::CullMode rt_cull_mode() const {
+			return rt ? rt->cull_mode : cull_mode;
+		}
+
 		_FORCE_INLINE_ bool uses_shared_shadow_material() const {
-			bool backface_culling = cull_mode == RS::CULL_MODE_BACK;
+			bool backface_culling = cull_mode == RSE::CULL_MODE_BACK;
 			return !uses_particle_trails && !writes_modelview_or_projection && !uses_vertex && !uses_position && !uses_discard && !uses_depth_prepass_alpha && !uses_alpha_clip && !uses_alpha_antialiasing && backface_culling && !uses_point_size && !uses_world_coordinates && !wireframe && !uses_z_clip_scale && !stencil_enabled;
 		}
 
 		virtual void set_code(const String &p_Code);
+		virtual void set_code_rt(const String &p_code_rt) override;
 
 		virtual bool is_animated() const;
 		virtual bool casts_shadows() const;
-		virtual RS::ShaderNativeSourceCode get_native_source_code() const;
+		virtual RenderingServerTypes::ShaderNativeSourceCode get_native_source_code() const;
 		virtual Pair<ShaderRD *, RID> get_native_shader_and_version() const;
 		uint16_t _get_shader_version(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader) const;
 		RID _get_shader_variant(uint16_t p_shader_version) const;
@@ -369,7 +417,7 @@ public:
 
 	ShaderSpecialization default_specialization = {};
 
-	uint32_t pipeline_compilations[RS::PIPELINE_SOURCE_MAX] = {};
+	uint32_t pipeline_compilations[RSE::PIPELINE_SOURCE_MAX] = {};
 
 	SceneShaderForwardClustered();
 	~SceneShaderForwardClustered();
@@ -380,7 +428,7 @@ public:
 	void enable_advanced_shader_group(bool p_needs_multiview = false);
 	bool is_multiview_shader_group_enabled() const;
 	bool is_advanced_shader_group_enabled(bool p_multiview) const;
-	uint32_t get_pipeline_compilations(RS::PipelineSource p_source);
+	uint32_t get_pipeline_compilations(RSE::PipelineSource p_source);
 };
 
 } // namespace RendererSceneRenderImplementation

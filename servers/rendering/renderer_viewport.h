@@ -221,6 +221,7 @@ public:
 #endif // XR_DISABLED
 
 	void viewport_set_size(RID p_viewport, int p_width, int p_height);
+	void viewport_set_size(RID p_viewport, int p_width, int p_height, int p_view_count);
 
 	void viewport_attach_to_screen(RID p_viewport, const Rect2 &p_rect = Rect2(), DisplayServer::WindowID p_screen = DisplayServer::MAIN_WINDOW_ID);
 	void viewport_set_render_direct_to_screen(RID p_viewport, bool p_enable);
@@ -316,6 +317,7 @@ public:
 
 	// Workaround for setting this on thread.
 	void call_set_vsync_mode(DisplayServer::VSyncMode p_mode, DisplayServer::WindowID p_window);
+	void call_set_vsync_mode(DisplayServerEnums::VSyncMode p_mode, DisplayServerEnums::WindowID p_window);
 
 	RendererViewport();
 	virtual ~RendererViewport() {}

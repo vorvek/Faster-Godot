@@ -30,6 +30,9 @@
 
 #include "mesh_storage.h"
 
+#include "servers/rendering/renderer_viewport.h"
+#include "servers/rendering/storage/compositor_storage.h"
+
 using namespace RendererRD;
 
 MeshStorage *MeshStorage::singleton = nullptr;
@@ -575,6 +578,7 @@ void MeshStorage::mesh_surface_update_vertex_region(RID p_mesh, int p_surface, i
 	const uint8_t *r = p_data.ptr();
 
 	RD::get_singleton()->buffer_update(mesh->surfaces[p_surface]->vertex_buffer, p_offset, data_size, r);
+	mesh->surfaces[p_surface]->rt_invalidation_counter++;
 }
 
 void MeshStorage::mesh_surface_update_attribute_region(RID p_mesh, int p_surface, int p_offset, const Vector<uint8_t> &p_data) {
@@ -588,6 +592,7 @@ void MeshStorage::mesh_surface_update_attribute_region(RID p_mesh, int p_surface
 	const uint8_t *r = p_data.ptr();
 
 	RD::get_singleton()->buffer_update(mesh->surfaces[p_surface]->attribute_buffer, p_offset, data_size, r);
+	mesh->surfaces[p_surface]->rt_invalidation_counter++;
 }
 
 void MeshStorage::mesh_surface_update_skin_region(RID p_mesh, int p_surface, int p_offset, const Vector<uint8_t> &p_data) {
@@ -601,6 +606,7 @@ void MeshStorage::mesh_surface_update_skin_region(RID p_mesh, int p_surface, int
 	const uint8_t *r = p_data.ptr();
 
 	RD::get_singleton()->buffer_update(mesh->surfaces[p_surface]->skin_buffer, p_offset, data_size, r);
+	mesh->surfaces[p_surface]->rt_invalidation_counter++;
 }
 
 void RendererRD::MeshStorage::mesh_surface_update_index_region(RID p_mesh, int p_surface, int p_offset, const Vector<uint8_t> &p_data) {
@@ -614,6 +620,7 @@ void RendererRD::MeshStorage::mesh_surface_update_index_region(RID p_mesh, int p
 	const uint8_t *r = p_data.ptr();
 
 	RD::get_singleton()->buffer_update(mesh->surfaces[p_surface]->index_buffer, p_offset, data_size, r);
+	mesh->surfaces[p_surface]->rt_invalidation_counter++;
 }
 
 void MeshStorage::mesh_surface_set_material(RID p_mesh, int p_surface, RID p_material) {
@@ -621,6 +628,7 @@ void MeshStorage::mesh_surface_set_material(RID p_mesh, int p_surface, RID p_mat
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
 	mesh->surfaces[p_surface]->material = p_material;
+	mesh->surfaces[p_surface]->rt_invalidation_counter++;
 
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MATERIAL);
 	mesh->material_cache.clear();

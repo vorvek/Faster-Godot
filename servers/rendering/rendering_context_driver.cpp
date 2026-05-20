@@ -75,6 +75,74 @@ DisplayServer::VSyncMode RenderingContextDriver::window_get_vsync_mode(DisplaySe
 	}
 }
 
+void RenderingContextDriver::window_set_hdr_output_enabled(DisplayServer::WindowID p_window, bool p_enabled) {
+	SurfaceID surface = surface_get_from_window(p_window);
+	if (surface) {
+		surface_set_hdr_output_enabled(surface, p_enabled);
+	}
+}
+
+bool RenderingContextDriver::window_get_hdr_output_enabled(DisplayServer::WindowID p_window) const {
+	SurfaceID surface = surface_get_from_window(p_window);
+	if (surface) {
+		return surface_get_hdr_output_enabled(surface);
+	}
+	return false;
+}
+
+void RenderingContextDriver::window_set_hdr_output_reference_luminance(DisplayServer::WindowID p_window, float p_reference_luminance) {
+	SurfaceID surface = surface_get_from_window(p_window);
+	if (surface) {
+		surface_set_hdr_output_reference_luminance(surface, p_reference_luminance);
+	}
+}
+
+float RenderingContextDriver::window_get_hdr_output_reference_luminance(DisplayServer::WindowID p_window) const {
+	SurfaceID surface = surface_get_from_window(p_window);
+	if (surface) {
+		return surface_get_hdr_output_reference_luminance(surface);
+	}
+	return 0.0f;
+}
+
+void RenderingContextDriver::window_set_hdr_output_max_luminance(DisplayServer::WindowID p_window, float p_max_luminance) {
+	SurfaceID surface = surface_get_from_window(p_window);
+	if (surface) {
+		surface_set_hdr_output_max_luminance(surface, p_max_luminance);
+	}
+}
+
+float RenderingContextDriver::window_get_hdr_output_max_luminance(DisplayServer::WindowID p_window) const {
+	SurfaceID surface = surface_get_from_window(p_window);
+	if (surface) {
+		return surface_get_hdr_output_max_luminance(surface);
+	}
+	return 0.0f;
+}
+
+void RenderingContextDriver::window_set_hdr_output_linear_luminance_scale(DisplayServer::WindowID p_window, float p_linear_luminance_scale) {
+	SurfaceID surface = surface_get_from_window(p_window);
+	if (surface) {
+		surface_set_hdr_output_linear_luminance_scale(surface, p_linear_luminance_scale);
+	}
+}
+
+float RenderingContextDriver::window_get_hdr_output_linear_luminance_scale(DisplayServer::WindowID p_window) const {
+	SurfaceID surface = surface_get_from_window(p_window);
+	if (surface) {
+		return surface_get_hdr_output_linear_luminance_scale(surface);
+	}
+	return 0.0f;
+}
+
+float RenderingContextDriver::window_get_output_max_linear_value(DisplayServer::WindowID p_window) const {
+	SurfaceID surface = surface_get_from_window(p_window);
+	if (surface && surface_get_hdr_output_enabled(surface)) {
+		return surface_get_hdr_output_max_value(surface);
+	}
+	return 1.0f;
+}
+
 void RenderingContextDriver::window_destroy(DisplayServer::WindowID p_window) {
 	SurfaceID surface = surface_get_from_window(p_window);
 	if (surface) {
@@ -131,6 +199,38 @@ String RenderingContextDriver::get_driver_and_device_memory_report() const {
 
 const char *RenderingContextDriver::get_tracked_object_name(uint32_t p_type_index) const {
 	return "Tracking Unsupported by API";
+}
+
+void RenderingContextDriver::surface_set_hdr_output_enabled(SurfaceID p_surface, bool p_enabled) {
+}
+
+bool RenderingContextDriver::surface_get_hdr_output_enabled(SurfaceID p_surface) const {
+	return false;
+}
+
+void RenderingContextDriver::surface_set_hdr_output_reference_luminance(SurfaceID p_surface, float p_reference_luminance) {
+}
+
+float RenderingContextDriver::surface_get_hdr_output_reference_luminance(SurfaceID p_surface) const {
+	return 0.0f;
+}
+
+void RenderingContextDriver::surface_set_hdr_output_max_luminance(SurfaceID p_surface, float p_max_luminance) {
+}
+
+float RenderingContextDriver::surface_get_hdr_output_max_luminance(SurfaceID p_surface) const {
+	return 0.0f;
+}
+
+void RenderingContextDriver::surface_set_hdr_output_linear_luminance_scale(SurfaceID p_surface, float p_linear_luminance_scale) {
+}
+
+float RenderingContextDriver::surface_get_hdr_output_linear_luminance_scale(SurfaceID p_surface) const {
+	return 0.0f;
+}
+
+float RenderingContextDriver::surface_get_hdr_output_max_value(SurfaceID p_surface) const {
+	return 1.0f;
 }
 
 uint64_t RenderingContextDriver::get_tracked_object_type_count() const {

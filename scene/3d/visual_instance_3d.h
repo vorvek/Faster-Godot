@@ -31,6 +31,8 @@
 #pragma once
 
 #include "scene/3d/node_3d.h"
+#include "scene/resources/material.h"
+#include "servers/rendering/rendering_server.h"
 
 class TriangleMesh;
 

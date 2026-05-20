@@ -29,9 +29,10 @@
 /**************************************************************************/
 
 #include "scene_shader_forward_clustered.h"
+
 #include "core/config/project_settings.h"
 #include "core/math/math_defs.h"
-#include "render_forward_clustered.h"
+#include "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h"
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 
@@ -55,7 +56,7 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	depth_test_disabledi = 0;
 	depth_test_invertedi = 0;
 	alpha_antialiasing_mode = ALPHA_ANTIALIASING_OFF;
-	int cull_modei = RS::CULL_MODE_BACK;
+	int cull_modei = RSE::CULL_MODE_BACK;
 
 	uses_point_size = false;
 	uses_alpha = false;
@@ -111,9 +112,9 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	actions.render_mode_values["depth_test_disabled"] = Pair<int *, int>(&depth_test_disabledi, 1);
 	actions.render_mode_values["depth_test_inverted"] = Pair<int *, int>(&depth_test_invertedi, 1);
 
-	actions.render_mode_values["cull_disabled"] = Pair<int *, int>(&cull_modei, RS::CULL_MODE_DISABLED);
-	actions.render_mode_values["cull_front"] = Pair<int *, int>(&cull_modei, RS::CULL_MODE_FRONT);
-	actions.render_mode_values["cull_back"] = Pair<int *, int>(&cull_modei, RS::CULL_MODE_BACK);
+	actions.render_mode_values["cull_disabled"] = Pair<int *, int>(&cull_modei, RSE::CULL_MODE_DISABLED);
+	actions.render_mode_values["cull_front"] = Pair<int *, int>(&cull_modei, RSE::CULL_MODE_FRONT);
+	actions.render_mode_values["cull_back"] = Pair<int *, int>(&cull_modei, RSE::CULL_MODE_BACK);
 
 	actions.render_mode_flags["unshaded"] = &unshaded;
 	actions.render_mode_flags["wireframe"] = &wireframe;
@@ -170,7 +171,7 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	Error err = OK;
 	{
 		MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
-		err = SceneShaderForwardClustered::singleton->compiler.compile(RS::SHADER_SPATIAL, code, &actions, path, gen_code);
+		err = SceneShaderForwardClustered::singleton->compiler.compile(RSE::SHADER_SPATIAL, code, &actions, path, gen_code);
 	}
 
 	if (err != OK) {
@@ -193,7 +194,7 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	} else {
 		depth_test = DEPTH_TEST_ENABLED;
 	}
-	cull_mode = RS::CullMode(cull_modei);
+	cull_mode = RSE::CullMode(cull_modei);
 	uses_screen_texture_mipmaps = gen_code.uses_screen_texture_mipmaps;
 	uses_screen_texture = gen_code.uses_screen_texture;
 	uses_depth_texture = gen_code.uses_depth_texture;
@@ -243,6 +244,114 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	uses_blend_alpha = blend_mode_uses_blend_alpha(BlendMode(blend_mode));
 }
 
+void SceneShaderForwardClustered::ShaderData::set_code_rt(const String &p_code_rt) {
+	// No `#if defined(RT)` divergence
+	if (p_code_rt.is_empty() || p_code_rt == code) {
+		if (rt) {
+			memdelete(rt);
+			rt = nullptr;
+		}
+		return;
+	}
+
+	// Flag-extraction-only pass; raster pipeline state is untouched.
+	int blend_modei = BLEND_MODE_MIX;
+	int depth_drawi = DEPTH_DRAW_OPAQUE;
+	int depth_test_disabledi_local = 0;
+	int depth_test_invertedi_local = 0;
+	int alpha_antialiasing_modei = ALPHA_ANTIALIASING_OFF;
+	int cull_modei = RSE::CULL_MODE_BACK;
+
+	bool local_uses_alpha = false;
+	bool local_uses_alpha_clip = false;
+	bool local_uses_alpha_antialiasing = false;
+	bool local_uses_depth_prepass_alpha = false;
+
+	ShaderCompiler::IdentifierActions actions;
+	actions.entry_point_stages["vertex"] = ShaderCompiler::STAGE_VERTEX;
+	actions.entry_point_stages["fragment"] = ShaderCompiler::STAGE_FRAGMENT;
+	actions.entry_point_stages["light"] = ShaderCompiler::STAGE_FRAGMENT;
+
+	// Only the inputs that influence `rt_uses_alpha_pass` / `rt_uses_depth_in_alpha_pass`.
+	actions.render_mode_values["blend_add"] = Pair<int *, int>(&blend_modei, BLEND_MODE_ADD);
+	actions.render_mode_values["blend_mix"] = Pair<int *, int>(&blend_modei, BLEND_MODE_MIX);
+	actions.render_mode_values["blend_sub"] = Pair<int *, int>(&blend_modei, BLEND_MODE_SUB);
+	actions.render_mode_values["blend_mul"] = Pair<int *, int>(&blend_modei, BLEND_MODE_MUL);
+	actions.render_mode_values["blend_premul_alpha"] = Pair<int *, int>(&blend_modei, BLEND_MODE_PREMULTIPLIED_ALPHA);
+
+	actions.render_mode_values["alpha_to_coverage"] = Pair<int *, int>(&alpha_antialiasing_modei, ALPHA_ANTIALIASING_ALPHA_TO_COVERAGE);
+	actions.render_mode_values["alpha_to_coverage_and_one"] = Pair<int *, int>(&alpha_antialiasing_modei, ALPHA_ANTIALIASING_ALPHA_TO_COVERAGE_AND_TO_ONE);
+
+	actions.render_mode_values["depth_draw_never"] = Pair<int *, int>(&depth_drawi, DEPTH_DRAW_DISABLED);
+	actions.render_mode_values["depth_draw_opaque"] = Pair<int *, int>(&depth_drawi, DEPTH_DRAW_OPAQUE);
+	actions.render_mode_values["depth_draw_always"] = Pair<int *, int>(&depth_drawi, DEPTH_DRAW_ALWAYS);
+
+	actions.render_mode_values["depth_test_disabled"] = Pair<int *, int>(&depth_test_disabledi_local, 1);
+	actions.render_mode_values["depth_test_inverted"] = Pair<int *, int>(&depth_test_invertedi_local, 1);
+
+	actions.render_mode_values["cull_disabled"] = Pair<int *, int>(&cull_modei, RSE::CULL_MODE_DISABLED);
+	actions.render_mode_values["cull_front"] = Pair<int *, int>(&cull_modei, RSE::CULL_MODE_FRONT);
+	actions.render_mode_values["cull_back"] = Pair<int *, int>(&cull_modei, RSE::CULL_MODE_BACK);
+
+	actions.render_mode_flags["depth_prepass_alpha"] = &local_uses_depth_prepass_alpha;
+
+	actions.usage_flag_pointers["ALPHA"] = &local_uses_alpha;
+	actions.usage_flag_pointers["ALPHA_SCISSOR_THRESHOLD"] = &local_uses_alpha_clip;
+	actions.usage_flag_pointers["ALPHA_HASH_SCALE"] = &local_uses_alpha_clip;
+	actions.usage_flag_pointers["ALPHA_ANTIALIASING_EDGE"] = &local_uses_alpha_antialiasing;
+	actions.usage_flag_pointers["ALPHA_TEXTURE_COORDINATE"] = &local_uses_alpha_antialiasing;
+
+	HashMap<StringName, ShaderLanguage::ShaderNode::Uniform> rt_uniform_sink;
+	actions.uniforms = &rt_uniform_sink;
+
+	ShaderCompiler::GeneratedCode rt_gen_code;
+	Error err = OK;
+	{
+		MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
+		err = SceneShaderForwardClustered::singleton->compiler.compile(RSE::SHADER_SPATIAL, p_code_rt, &actions, path, rt_gen_code);
+	}
+
+	if (err != OK) {
+		// RT compile failed: drop any prior divergence -> fall back to raster.
+		if (rt) {
+			memdelete(rt);
+			rt = nullptr;
+		}
+		WARN_PRINT(vformat("Forward Clustered: RT-variant classification compile failed for shader %s. Falling back to raster-side flags for ray-tracing routing.", path.is_empty() ? String("<inline>") : path));
+		return;
+	}
+
+	if (alpha_antialiasing_modei != ALPHA_ANTIALIASING_OFF) {
+		blend_modei = BLEND_MODE_ALPHA_TO_COVERAGE;
+	}
+
+	if (!rt) {
+		rt = memnew(RTClassification);
+	}
+	rt->code = p_code_rt;
+	rt->blend_mode = blend_modei;
+	rt->alpha_antialiasing_mode = alpha_antialiasing_modei;
+	rt->depth_draw = DepthDraw(depth_drawi);
+	rt->cull_mode = RSE::CullMode(cull_modei);
+	if (depth_test_disabledi_local) {
+		rt->depth_test = DEPTH_TEST_DISABLED;
+	} else if (depth_test_invertedi_local) {
+		rt->depth_test = DEPTH_TEST_ENABLED_INVERTED;
+	} else {
+		rt->depth_test = DEPTH_TEST_ENABLED;
+	}
+
+	rt->uses_alpha = local_uses_alpha;
+	rt->uses_alpha_clip = local_uses_alpha_clip;
+	rt->uses_alpha_antialiasing = local_uses_alpha_antialiasing;
+	rt->uses_depth_prepass_alpha = local_uses_depth_prepass_alpha;
+	rt->uses_blend_alpha = blend_mode_uses_blend_alpha(BlendMode(rt->blend_mode));
+
+	rt->uses_screen_texture = rt_gen_code.uses_screen_texture;
+	rt->uses_depth_texture = rt_gen_code.uses_depth_texture;
+	rt->uses_normal_texture = rt_gen_code.uses_normal_roughness_texture;
+}
+
 bool SceneShaderForwardClustered::ShaderData::is_animated() const {
 	return (uses_fragment_time && uses_discard) || (uses_vertex_time && uses_vertex);
 }
@@ -255,11 +364,11 @@ bool SceneShaderForwardClustered::ShaderData::casts_shadows() const {
 	return !has_alpha || (uses_depth_prepass_alpha && !(depth_draw == DEPTH_DRAW_DISABLED || depth_test != DEPTH_TEST_ENABLED));
 }
 
-RS::ShaderNativeSourceCode SceneShaderForwardClustered::ShaderData::get_native_source_code() const {
+RenderingServerTypes::ShaderNativeSourceCode SceneShaderForwardClustered::ShaderData::get_native_source_code() const {
 	if (version.is_valid()) {
 		return SceneShaderForwardClustered::singleton->shader.version_get_native_source_code(version);
 	} else {
-		return RS::ShaderNativeSourceCode();
+		return RenderingServerTypes::ShaderNativeSourceCode();
 	}
 }
 
@@ -403,7 +512,7 @@ void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pip
 
 	bool depth_pre_pass_enabled = bool(GLOBAL_GET_CACHED(bool, "rendering/driver/depth_prepass/enable"));
 
-	RD::RenderPrimitive primitive_rd_table[RS::PRIMITIVE_MAX] = {
+	RD::RenderPrimitive primitive_rd_table[RSE::PRIMITIVE_MAX] = {
 		RD::RENDER_PRIMITIVE_POINTS,
 		RD::RENDER_PRIMITIVE_LINES,
 		RD::RENDER_PRIMITIVE_LINESTRIPS,
@@ -570,6 +679,11 @@ SceneShaderForwardClustered::ShaderData::~ShaderData() {
 		ERR_FAIL_NULL(SceneShaderForwardClustered::singleton);
 		SceneShaderForwardClustered::singleton->shader.version_free(version);
 	}
+
+	if (rt) {
+		memdelete(rt);
+		rt = nullptr;
+	}
 }
 
 RendererRD::MaterialStorage::ShaderData *SceneShaderForwardClustered::_create_shader_func() {
@@ -580,7 +694,7 @@ RendererRD::MaterialStorage::ShaderData *SceneShaderForwardClustered::_create_sh
 }
 
 void SceneShaderForwardClustered::MaterialData::set_render_priority(int p_priority) {
-	priority = p_priority - RS::MATERIAL_RENDER_PRIORITY_MIN; //8 bits
+	priority = p_priority - RSE::MATERIAL_RENDER_PRIORITY_MIN; //8 bits
 }
 
 void SceneShaderForwardClustered::MaterialData::set_next_pass(RID p_pass) {
@@ -730,6 +844,7 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 		//builtins
 
 		actions.renames["TIME"] = "global_time";
+		actions.renames["PREV_TIME"] = "global_prev_time";
 		actions.renames["EXPOSURE"] = "(1.0 / scene_data_block.data.emissive_exposure_normalization)";
 		actions.renames["PI"] = String::num(Math::PI);
 		actions.renames["TAU"] = String::num(Math::TAU);
@@ -796,6 +911,9 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 		actions.renames["SPECULAR_AMOUNT"] = "specular_amount_highp";
 		actions.renames["LIGHT_COLOR"] = "light_color_highp";
 		actions.renames["LIGHT_IS_DIRECTIONAL"] = "is_directional";
+		actions.renames["LIGHT_IS_AREA"] = "is_area";
+		actions.renames["LIGHT_AREA_DIFFUSE_MULTIPLIER"] = "area_diffuse";
+		actions.renames["LIGHT_AREA_SPECULAR_MULTIPLIER"] = "area_specular";
 		actions.renames["LIGHT"] = "light_highp";
 		actions.renames["ATTENUATION"] = "attenuation_highp";
 		actions.renames["DIFFUSE_LIGHT"] = "diffuse_light_highp";
@@ -828,6 +946,9 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 		actions.usage_defines["POSITION"] = "#define OVERRIDE_POSITION\n";
 		actions.usage_defines["LIGHT_VERTEX"] = "#define LIGHT_VERTEX_USED\n";
 		actions.usage_defines["Z_CLIP_SCALE"] = "#define Z_CLIP_SCALE_USED\n";
+		actions.usage_defines["LIGHT_AREA_DIFFUSE_MULTIPLIER"] = "#define AREA_LIGHT_CODE_USED\n";
+		actions.usage_defines["LIGHT_AREA_SPECULAR_MULTIPLIER"] = "@LIGHT_AREA_DIFFUSE_MULTIPLIER";
+		actions.usage_defines["LIGHT_IS_AREA"] = "@LIGHT_AREA_DIFFUSE_MULTIPLIER";
 
 		actions.usage_defines["ALPHA_SCISSOR_THRESHOLD"] = "#define ALPHA_SCISSOR_USED\n";
 		actions.usage_defines["ALPHA_HASH_SCALE"] = "#define ALPHA_HASH_USED\n";
@@ -1033,7 +1154,7 @@ bool SceneShaderForwardClustered::is_advanced_shader_group_enabled(bool p_multiv
 	}
 }
 
-uint32_t SceneShaderForwardClustered::get_pipeline_compilations(RS::PipelineSource p_source) {
+uint32_t SceneShaderForwardClustered::get_pipeline_compilations(RSE::PipelineSource p_source) {
 	MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
 	return pipeline_compilations[p_source];
 }
