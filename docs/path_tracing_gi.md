@@ -31,6 +31,59 @@ The feature is exposed on `Environment`, so it appears through the same
 - RTGI debug draw modes for lighting, rays/noise, TLAS/instance coverage, and
   denoiser input/output.
 
+## RTGI Panel Option Differences
+
+- `rtgi_enabled`
+  - Turns the hardware RTGI/path tracing path on for this environment when the
+    active renderer is desktop Forward+ Vulkan and the selected GPU exposes
+    Vulkan ray tracing. If support is missing, the scene falls back to the
+    normal non-RT rendering path.
+- `rtgi_mode`
+  - `Hybrid RTGI`: keeps the normal Forward+ raster path for primary visibility
+    and direct rendering, then injects ray-traced indirect diffuse/specular
+    lighting into the GI composition. This is the practical mode for normal game
+    scenes that need moving-light bounce lighting.
+  - `Path Traced`: routes full opaque lighting through the ray tracing path for
+    the view. It disables incompatible baked and screen-space GI contributions
+    and then composites transparent raster overlays after RT denoising. This is
+    heavier and is intended for high-quality dark scenes, captures, and RT
+    debugging rather than broad fallback compatibility.
+- `rtgi_samples_per_pixel`
+  - Controls how many RT samples are traced per pixel each frame. Higher values
+    reduce raw noise but cost more GPU time. Lower values rely more heavily on
+    temporal accumulation and denoising.
+- `rtgi_max_bounces`
+  - Controls the maximum indirect bounce depth. One bounce is cheaper and works
+    well for most local-light GI; extra bounces can brighten enclosed scenes but
+    increase cost and noise.
+- `rtgi_energy`
+  - Multiplies the RT lighting contribution after tracing. This is an artistic
+    intensity control, not a replacement for physically scaled light energy.
+- `rtgi_temporal_accumulation`
+  - Enables accumulation of RT lighting across frames. It improves convergence
+    at low sample counts but depends on valid motion, depth, and RT history
+    masks. Newly visible or newly RT-ready geometry rejects stale history.
+- `rtgi_denoiser`
+  - `Auto`: uses the best shipped path for this build. In this fork that means
+    the internal temporal RT denoiser unless a vendor backend is explicitly
+    added.
+  - `Internal`: forces the built-in temporal RT denoiser. It uses RT depth,
+    velocity, validity, and history ID textures to reject stale history.
+  - `NVIDIA`: keeps the NVIDIA/DLSS Ray Reconstruction buffer routing and debug
+    outputs available. Because this fork does not ship Streamline/DLSS RR as a
+    runtime dependency, final denoising falls through to the internal temporal
+    RT denoiser.
+  - `AMD` and `Intel`: reserved for optional vendor denoiser integrations. With
+    no shipped backend present, they fall through to the internal temporal RT
+    denoiser instead of exposing raw noisy output.
+  - `Off`: disables the RT denoiser so the raw sampled RT result is visible.
+    This is useful for debugging sample distribution, material hits, and TLAS
+    coverage, but it is expected to show more noise.
+- RTGI debug draw modes
+  - Lighting/debug views show intermediate RT lighting, raw ray noise, TLAS and
+    instance coverage, and denoiser input/output. They are diagnostic views and
+    should not be treated as final color output.
+
 ## Rendering Behavior
 
 RTGI is a view-time override. Existing SDFGI, VoxelGI, LightmapGI, lightmap
@@ -42,6 +95,20 @@ Hybrid RTGI writes ray-traced indirect diffuse/specular lighting into the
 existing Forward+ GI composition path. Path Traced mode routes full lighting
 through the ray tracing path and disables incompatible screen-space or baked GI
 contributions for that view.
+
+The path-traced Forward+ flow denoises the opaque RT result before transparent
+rendering. Transparent particles and other alpha overlay instances are kept out
+of the TLAS and rendered as the normal Forward+ transparent pass after RT
+denoise, so they remain visible without contributing to RT GI, shadows, or
+reflections. This avoids particle-driven TLAS spikes and black RT speckle from
+billboard particle geometry.
+
+RT temporal denoising writes explicit history validity and history ID masks from
+the primary hit/miss path. The TAA resolve rejects history when the current hit
+is invalid, when the reprojected previous validity mask is invalid, or when the
+history IDs no longer match. Newly visible geometry, newly loaded materials, and
+geometry that has just become RT-ready therefore start from fresh samples instead
+of borrowing stale accumulated lighting.
 
 If the GPU or driver does not expose the required Vulkan ray tracing features,
 the settings remain visible, a warning is printed, and rendering falls back to
@@ -67,10 +134,22 @@ the existing non-ray-traced path instead of destructively changing scene data.
   - Builds and updates ray tracing scene state for Forward+.
   - Handles geometry instances, materials, lights, temporal accumulation, and
     denoised output.
+  - Skips `INSTANCE_PARTICLES` and alpha-overlay instances in TLAS construction.
+  - Tracks per-viewport RT geometry/material history so newly visible or newly
+    ready surfaces reject stale denoiser history.
+  - Mirrors more StandardMaterial texture behavior in RT, including ORM,
+    roughness, metallic, vertex color, sampler repeat/filter flags, alpha
+    scissor/hash, UV2 for custom hit groups, and conservative fallback for
+    unsupported ShaderMaterial sampler types.
 - `servers/rendering/renderer_rd/forward_clustered/scene_shader_raytracing.*`
   - Adds ray tracing shader version management.
 - `servers/rendering/renderer_rd/shaders/raytracing/`
   - Adds ray generation and shared ray tracing shader includes.
+- `servers/rendering/renderer_rd/effects/taa.*`
+  - Allows the RT denoiser path to provide current/previous RT validity and
+    history ID textures to the TAA resolve.
+- `servers/rendering/renderer_rd/shaders/effects/taa_resolve.glsl`
+  - Rejects reprojected history when RT validity or history ID checks fail.
 - `servers/rendering/renderer_rd/effects/depth_reconstruct.*`
   - Adds depth reconstruction used by the ray tracing path.
 - `servers/rendering/storage/ltc/`
@@ -111,6 +190,10 @@ Validated so far:
   - The NVIDIA RTGI denoiser selection now participates in the temporal RT
     denoising resolve while preserving DLSS RR auxiliary buffers for debug and
     future backend integration.
+  - Internal screenshot capture of the Euphorica test scene with the lantern
+    OmniLight shadows off and on. The captured sequences stayed lit, did not
+    produce the previous all-black frames, and did not log shader push-constant
+    or RT pipeline setup errors.
 
 ## Pros
 
@@ -130,3 +213,5 @@ Validated so far:
   count, denoising settings, and GPU class.
 - Vendor denoiser integrations are optional and are not shipped as required
   runtime dependencies.
+- Transparent particles are raster-only in this implementation; they do not
+  contribute to RT GI, shadows, or reflections.

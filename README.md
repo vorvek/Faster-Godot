@@ -34,9 +34,12 @@ far came mostly from the renderer-profile and hot-path changes:
   static scenes.
 - Hardware RTGI and path tracing: Forward+ Vulkan can use a hardware ray
   tracing global illumination path exposed through `Environment`, intended for
-  dark 3D scenes where moving local lights need real bounce lighting. RTGI
-  denoiser selections that do not have a shipped vendor backend fall through to
-  the internal temporal denoiser instead of leaving raw noisy output.
+  dark 3D scenes where moving local lights need real bounce lighting. RT
+  denoising runs before transparent particles are composited, particle
+  instances stay out of the TLAS, and RT history validity masks reject stale
+  history when geometry becomes newly visible or newly ready. RTGI denoiser
+  selections that do not have a shipped vendor backend fall through to the
+  internal temporal denoiser instead of leaving raw noisy output.
 - TAA quality controls: Forward+ TAA exposes project settings for sharpness,
   history weight, disocclusion threshold, jitter phase count, and jitter scale.
   See the focused note in [docs/taa_quality_controls.md](docs/taa_quality_controls.md).

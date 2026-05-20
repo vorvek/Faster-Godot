@@ -10,7 +10,7 @@ desktop Forward+ profile. The detailed notes are split by change area:
 | x86_64 AVX2/FMA/F16C/POPCNT baseline and codec SIMD hooks | [docs/x86_64_avx2_fma.md](docs/x86_64_avx2_fma.md) |
 | Windows and Linux target profile | [docs/windows_linux_target_profile.md](docs/windows_linux_target_profile.md) |
 | Jolt-only physics profile | [docs/jolt_only_physics.md](docs/jolt_only_physics.md) |
-| Hardware RTGI, path tracing, and RTGI denoiser routing | [docs/path_tracing_gi.md](docs/path_tracing_gi.md) |
+| Hardware RTGI, path tracing, denoiser history, and particle stability | [docs/path_tracing_gi.md](docs/path_tracing_gi.md) |
 | TAA quality controls | [docs/taa_quality_controls.md](docs/taa_quality_controls.md) |
 | Editor frame-rate limits while testing | [docs/editor_frame_rate_limits.md](docs/editor_frame_rate_limits.md) |
 | Forward+ rendering hot-path tuning | [docs/rendering_hot_path_tuning.md](docs/rendering_hot_path_tuning.md) |
