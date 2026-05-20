@@ -137,6 +137,12 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 			bool upscaler_available = p_viewport->fsr_enabled;
 			RS::ViewportScaling3DType scaling_type = RS::scaling_3d_mode_type(scaling_3d_mode);
 
+			if (scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_DLSS) {
+				WARN_PRINT_ONCE("DLSS 3D resolution scaling is not available. Falling back to FSR 2 3D resolution scaling.");
+				scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_FSR2;
+				scaling_type = RS::scaling_3d_mode_type(scaling_3d_mode);
+			}
+
 			if ((!upscaler_available || (scaling_type == RS::VIEWPORT_SCALING_3D_TYPE_SPATIAL)) && scaling_3d_scale >= (1.0 - EPSILON) && scaling_3d_scale <= (1.0 + EPSILON)) {
 				// No 3D scaling for spatial modes? Ignore scaling mode, this just introduces overhead.
 				// - Mobile can't perform optimal path
@@ -362,6 +368,9 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 	}
 
 	bool can_draw_3d = RSG::scene->is_camera(p_viewport->camera) && !p_viewport->disable_3d;
+	if (!can_draw_3d) {
+		_viewport_set_rt_temporal_motion_vectors(p_viewport, false);
+	}
 
 	if ((scenario_draw_canvas_bg || can_draw_3d) && !p_viewport->render_buffers.is_valid()) {
 		//wants to draw 3D but there is no render buffer, create
@@ -1098,7 +1107,24 @@ void RendererViewport::_viewport_set_size(Viewport *p_viewport, int p_width, int
 bool RendererViewport::_viewport_requires_motion_vectors(Viewport *p_viewport) {
 	return p_viewport->use_taa ||
 			RS::scaling_3d_mode_type(p_viewport->scaling_3d_mode) == RS::VIEWPORT_SCALING_3D_TYPE_TEMPORAL ||
-			p_viewport->debug_draw == RenderingServer::VIEWPORT_DEBUG_DRAW_MOTION_VECTORS || p_viewport->force_motion_vectors;
+			p_viewport->debug_draw == RenderingServer::VIEWPORT_DEBUG_DRAW_MOTION_VECTORS || p_viewport->force_motion_vectors ||
+			p_viewport->rt_temporal_motion_vectors;
+}
+
+void RendererViewport::_viewport_set_rt_temporal_motion_vectors(Viewport *p_viewport, bool p_enable) {
+	if (p_viewport->rt_temporal_motion_vectors == p_enable) {
+		return;
+	}
+
+	bool motion_vectors_before = _viewport_requires_motion_vectors(p_viewport);
+	p_viewport->rt_temporal_motion_vectors = p_enable;
+
+	bool motion_vectors_after = _viewport_requires_motion_vectors(p_viewport);
+	if (motion_vectors_before != motion_vectors_after) {
+		num_viewports_with_motion_vectors += motion_vectors_after ? 1 : -1;
+	}
+
+	_configure_3d_render_buffers(p_viewport);
 }
 
 void RendererViewport::viewport_set_active(RID p_viewport, bool p_active) {
@@ -1110,6 +1136,7 @@ void RendererViewport::viewport_set_active(RID p_viewport, bool p_active) {
 		viewport->occlusion_buffer_dirty = true;
 		active_viewports.push_back(viewport);
 	} else {
+		_viewport_set_rt_temporal_motion_vectors(viewport, false);
 		active_viewports.erase(viewport);
 	}
 
@@ -1246,6 +1273,9 @@ void RendererViewport::viewport_set_environment_mode(RID p_viewport, RS::Viewpor
 	ERR_FAIL_NULL(viewport);
 
 	viewport->disable_environment = p_mode;
+	if (viewport_is_environment_disabled(viewport)) {
+		_viewport_set_rt_temporal_motion_vectors(viewport, false);
+	}
 }
 
 bool RendererViewport::viewport_is_environment_disabled(Viewport *viewport) {
@@ -1263,6 +1293,9 @@ void RendererViewport::viewport_set_disable_3d(RID p_viewport, bool p_disable) {
 	ERR_FAIL_NULL(viewport);
 
 	viewport->disable_3d = p_disable;
+	if (p_disable) {
+		_viewport_set_rt_temporal_motion_vectors(viewport, false);
+	}
 }
 
 void RendererViewport::viewport_attach_camera(RID p_viewport, RID p_camera) {
@@ -1270,6 +1303,9 @@ void RendererViewport::viewport_attach_camera(RID p_viewport, RID p_camera) {
 	ERR_FAIL_NULL(viewport);
 
 	viewport->camera = p_camera;
+	if (!RSG::scene->is_camera(p_camera)) {
+		_viewport_set_rt_temporal_motion_vectors(viewport, false);
+	}
 }
 
 void RendererViewport::viewport_set_scenario(RID p_viewport, RID p_scenario) {
@@ -1281,6 +1317,9 @@ void RendererViewport::viewport_set_scenario(RID p_viewport, RID p_scenario) {
 	}
 
 	viewport->scenario = p_scenario;
+	if (!RSG::scene->is_scenario(p_scenario)) {
+		_viewport_set_rt_temporal_motion_vectors(viewport, false);
+	}
 	if (viewport->use_occlusion_culling) {
 		RendererSceneOcclusionCull::get_singleton()->buffer_set_scenario(p_viewport, p_scenario);
 	}
@@ -1462,6 +1501,13 @@ void RendererViewport::viewport_set_force_motion_vectors(RID p_viewport, bool p_
 	ERR_FAIL_NULL(viewport);
 
 	_viewport_set_force_motion_vectors(viewport, p_force_motion_vectors);
+}
+
+void RendererViewport::viewport_set_rt_temporal_motion_vectors(RID p_viewport, bool p_enable) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+
+	_viewport_set_rt_temporal_motion_vectors(viewport, p_enable);
 }
 
 void RendererViewport::_viewport_set_force_motion_vectors(RendererViewport::Viewport *p_viewport, bool p_force_motion_vectors) {

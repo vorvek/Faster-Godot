@@ -49,7 +49,7 @@ TAA::~TAA() {
 	taa_shader.version_free(shader_version);
 }
 
-void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_prev_velocity, RID p_history, RID p_rt_history_validity, RID p_rt_prev_history_validity, Size2 p_resolution, float p_z_near, float p_z_far, bool p_raytracing_denoise) {
+void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_prev_velocity, RID p_history, RID p_rt_history_validity, RID p_rt_prev_history_validity, RID p_rt_history_id, RID p_rt_prev_history_id, Size2 p_resolution, float p_z_near, float p_z_far, bool p_raytracing_denoise) {
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
@@ -61,6 +61,7 @@ void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_pr
 	ERR_FAIL_COND(shader.is_null());
 
 	RID default_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID nearest_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 
 	float base_variance = 1.1f;
 	float base_variance_min = 0.75f;
@@ -75,11 +76,18 @@ void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_pr
 	push_constant.variance_dynamic = CLAMP(base_variance * variance_scale, base_variance_min, base_variance_max); // Variance dynamically scales based on resolution
 	push_constant.raytracing_denoise = p_raytracing_denoise ? 1.0f : 0.0f;
 	push_constant.rt_history_validity_enabled = (p_rt_history_validity.is_valid() && p_rt_prev_history_validity.is_valid()) ? 1.0f : 0.0f;
+	push_constant.rt_history_id_enabled = (p_rt_history_id.is_valid() && p_rt_prev_history_id.is_valid()) ? 1.0f : 0.0f;
 	push_constant.history_weight = CLAMP(GLOBAL_GET_CACHED(float, "rendering/anti_aliasing/quality/taa_history_weight"), 0.0f, 0.99f);
 	push_constant.sharpness = CLAMP(GLOBAL_GET_CACHED(float, "rendering/anti_aliasing/quality/taa_sharpness"), 0.0f, 1.0f);
+	if (p_raytracing_denoise) {
+		push_constant.history_weight = MAX(push_constant.history_weight, 0.97f);
+		push_constant.sharpness = 0.0f;
+	}
 
 	RID rt_history_validity = p_rt_history_validity.is_valid() ? p_rt_history_validity : texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
 	RID rt_prev_history_validity = p_rt_prev_history_validity.is_valid() ? p_rt_prev_history_validity : texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
+	RID rt_history_id = p_rt_history_id.is_valid() ? p_rt_history_id : texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
+	RID rt_prev_history_id = p_rt_prev_history_id.is_valid() ? p_rt_prev_history_id : texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
@@ -90,21 +98,22 @@ void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_pr
 	RD::Uniform u_prev_velocity(RD::UNIFORM_TYPE_IMAGE, 3, { p_prev_velocity });
 	RD::Uniform u_history(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 4, { default_sampler, p_history });
 	RD::Uniform u_frame_dest(RD::UNIFORM_TYPE_IMAGE, 5, { p_temp });
-	RD::Uniform u_rt_history_validity(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 6, { default_sampler, rt_history_validity });
-	RD::Uniform u_rt_prev_history_validity(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 7, { default_sampler, rt_prev_history_validity });
+	RD::Uniform u_rt_history_validity(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 6, { nearest_sampler, rt_history_validity });
+	RD::Uniform u_rt_prev_history_validity(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 7, { nearest_sampler, rt_prev_history_validity });
+	RD::Uniform u_rt_history_id(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 8, { nearest_sampler, rt_history_id });
+	RD::Uniform u_rt_prev_history_id(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 9, { nearest_sampler, rt_prev_history_id });
 
-	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 0, u_frame_source, u_depth, u_velocity, u_prev_velocity, u_history, u_frame_dest, u_rt_history_validity, u_rt_prev_history_validity), 0);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 0, u_frame_source, u_depth, u_velocity, u_prev_velocity, u_history, u_frame_dest, u_rt_history_validity, u_rt_prev_history_validity, u_rt_history_id, u_rt_prev_history_id), 0);
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(TAAResolvePushConstant));
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_resolution.width, p_resolution.height, 1);
 	RD::get_singleton()->compute_list_end();
 }
 
-void TAA::process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far, bool p_raytracing_denoise, RID p_rt_history_validity, RID p_rt_prev_history_validity) {
+void TAA::process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far, bool p_raytracing_denoise, RID p_rt_history_validity, RID p_rt_prev_history_validity, RID p_rt_history_id, RID p_rt_prev_history_id) {
 	CopyEffects *copy_effects = CopyEffects::get_singleton();
 
 	uint32_t view_count = p_render_buffers->get_view_count();
 	Size2i internal_size = p_render_buffers->get_internal_size();
-	Size2i target_size = p_render_buffers->get_target_size();
 
 	bool just_allocated = false;
 	if (!p_render_buffers->has_texture(SNAME("taa"), SNAME("history"))) {
@@ -130,14 +139,17 @@ void TAA::process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_f
 		if (!just_allocated) {
 			RID depth_texture = p_render_buffers->get_depth_texture(v);
 			RID taa_temp = p_render_buffers->get_texture_slice(SNAME("taa"), SNAME("temp"), v, 0);
-			resolve(internal_texture, taa_temp, depth_texture, velocity_buffer, taa_prev_velocity, taa_history, p_rt_history_validity, p_rt_prev_history_validity, Size2(internal_size.x, internal_size.y), p_z_near, p_z_far, p_raytracing_denoise);
+			resolve(internal_texture, taa_temp, depth_texture, velocity_buffer, taa_prev_velocity, taa_history, p_rt_history_validity, p_rt_prev_history_validity, p_rt_history_id, p_rt_prev_history_id, Size2(internal_size.x, internal_size.y), p_z_near, p_z_far, p_raytracing_denoise);
 			copy_effects->copy_to_rect(taa_temp, internal_texture, Rect2(0, 0, internal_size.x, internal_size.y));
 		}
 
 		copy_effects->copy_to_rect(internal_texture, taa_history, Rect2(0, 0, internal_size.x, internal_size.y));
-		copy_effects->copy_to_rect(velocity_buffer, taa_prev_velocity, Rect2(0, 0, target_size.x, target_size.y));
+		copy_effects->copy_to_rect(velocity_buffer, taa_prev_velocity, Rect2(0, 0, internal_size.x, internal_size.y));
 		if (p_rt_history_validity.is_valid() && p_rt_prev_history_validity.is_valid()) {
-			copy_effects->copy_to_rect(p_rt_history_validity, p_rt_prev_history_validity, Rect2(0, 0, internal_size.x, internal_size.y), false, false, false, true);
+			RD::get_singleton()->texture_copy(p_rt_history_validity, p_rt_prev_history_validity, Vector3(), Vector3(), Vector3(internal_size.x, internal_size.y, 1), 0, 0, v, v);
+		}
+		if (p_rt_history_id.is_valid() && p_rt_prev_history_id.is_valid()) {
+			RD::get_singleton()->texture_copy(p_rt_history_id, p_rt_prev_history_id, Vector3(), Vector3(), Vector3(internal_size.x, internal_size.y, 1), 0, 0, v, v);
 		}
 	}
 

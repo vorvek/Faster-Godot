@@ -19,10 +19,21 @@ struct HitData {
 	vec3 tangent; // World space.
 	vec3 bitangent; // World space.
 	vec2 uv; // Raw UV (no material scale/offset applied).
+	vec2 uv2; // Raw UV2 (no material scale/offset applied).
 	vec4 color; // Vertex color (white if not present).
 	bool is_front_face;
 	uint geometry_idx;
 };
+
+vec3 rt_orthonormalize_tangent(vec3 world_tangent, vec3 world_normal) {
+	vec3 tangent = world_tangent - world_normal * dot(world_normal, world_tangent);
+	float len_sq = dot(tangent, tangent);
+	if (len_sq > 1e-12) {
+		return tangent * inversesqrt(len_sq);
+	}
+	vec3 axis = abs(world_normal.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
+	return normalize(cross(axis, world_normal));
+}
 
 /// Fetch vertex attributes and transform to world space.
 /// Requires hitAttributeEXT HitAttribs and GeometryBuffer/MaterialBuffer bindings.
@@ -30,30 +41,21 @@ HitData compute_hit_data() {
 	HitData h;
 	h.geometry_idx = gl_InstanceCustomIndexEXT;
 	GeometryData geom = geometries[h.geometry_idx];
+	h.uv = vec2(0.0);
+	h.uv2 = vec2(0.0);
+	h.color = vec4(1.0);
 
-	// Custom hit groups may reference vertex color in their fragment code, so
-	// pull all attributes; default HGs can skip color for perf.
-#ifdef RT_CUSTOM_HIT_GROUP
-	VertexAttributes attrs = fetch_vertex_attributes(geom, attribs, FETCH_ALL);
-#else
-	VertexAttributes attrs = fetch_vertex_attributes(geom, attribs, FETCH_UV | FETCH_TBN);
-#endif
-	h.uv = attrs.uv;
-	h.color = attrs.color;
-
-	mat3 model_rotation = mat3(gl_ObjectToWorldEXT);
-	mat3 normal_matrix = mat3(
-			normalize(model_rotation[0]),
-			normalize(model_rotation[1]),
-			normalize(model_rotation[2]));
+	mat3 model_matrix = mat3(gl_ObjectToWorldEXT);
+	mat3 normal_matrix = transpose(mat3(gl_WorldToObjectEXT));
 
 #ifdef ENABLE_INTERSECTION_SHADERS
 	if ((geom.flags & FLAG_PROCEDURAL) != 0u) {
 		h.uv = hit_attribs.bary_or_uv;
+		h.uv2 = hit_attribs.bary_or_uv;
 		vec3 obj_normal = normalize(unpackSnorm4x8(hit_attribs.packed_normal).xyz);
 		vec3 obj_tangent = normalize(unpackSnorm4x8(hit_attribs.packed_tangent).xyz);
 		h.geometry_normal = normalize(normal_matrix * obj_normal);
-		h.tangent = normalize(normal_matrix * obj_tangent);
+		h.tangent = rt_orthonormalize_tangent(model_matrix * obj_tangent, h.geometry_normal);
 		h.bitangent = cross(h.geometry_normal, h.tangent);
 
 		h.is_front_face = (dot(h.geometry_normal, -gl_WorldRayDirectionEXT) > 0.0);
@@ -63,10 +65,14 @@ HitData compute_hit_data() {
 	} else
 #endif
 	{
-		// Triangle hit: reuse `attrs` from the top-level fetch (already has
-		// UV / TBN from FETCH_UV | FETCH_TBN or FETCH_ALL).
+		VertexAttributes attrs = fetch_vertex_attributes(geom, attribs, FETCH_ALL);
+		h.uv = attrs.uv;
+		h.uv2 = attrs.uv2;
+		h.color = attrs.color;
+
+		// Triangle hit: reuse `attrs` from the top-level fetch.
 		h.geometry_normal = normalize(normal_matrix * attrs.normal);
-		h.tangent = normalize(normal_matrix * attrs.tangent);
+		h.tangent = rt_orthonormalize_tangent(model_matrix * attrs.tangent, h.geometry_normal);
 		h.bitangent = cross(h.geometry_normal, h.tangent) * attrs.bitangent_sign;
 
 		h.is_front_face = (gl_HitKindEXT == gl_HitKindFrontFacingTriangleEXT);
@@ -84,22 +90,25 @@ HitData compute_hit_data() {
 // HELPERS
 // ============================================================================
 
+#ifndef RT_MATERIAL_TEXTURE_SAMPLING_DEFINED
+#define RT_MATERIAL_TEXTURE_SAMPLING_DEFINED
 vec4 sample_bindless_texture(uint tex_idx, vec2 uv) {
 	return texture(sampler2D(bindless_textures[nonuniformEXT(tex_idx)], SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), uv);
 }
 
-/// Sample with point/nearest filtering (for pixel art textures).
-vec4 sample_bindless_texture_point(uint tex_idx, vec2 uv) {
-	return texture(sampler2D(bindless_textures[nonuniformEXT(tex_idx)], SAMPLER_NEAREST_REPEAT), uv);
-}
-
-/// Sample with the appropriate filter based on material flags (bit 2 = point filtering).
 vec4 sample_material_texture(uint tex_idx, vec2 uv, uint mat_flags) {
-	if ((mat_flags & 4u) != 0u) {
-		return sample_bindless_texture_point(tex_idx, uv);
+	bool point_filter = (mat_flags & RT_MAT_FLAG_POINT_FILTER) != 0u;
+	bool repeat_disabled = (mat_flags & RT_MAT_FLAG_REPEAT_DISABLED) != 0u;
+	if (point_filter) {
+		return repeat_disabled ?
+				texture(sampler2D(bindless_textures[nonuniformEXT(tex_idx)], SAMPLER_NEAREST_CLAMP), uv) :
+				texture(sampler2D(bindless_textures[nonuniformEXT(tex_idx)], SAMPLER_NEAREST_REPEAT), uv);
 	}
-	return sample_bindless_texture(tex_idx, uv);
+	return repeat_disabled ?
+			texture(sampler2D(bindless_textures[nonuniformEXT(tex_idx)], SAMPLER_LINEAR_WITH_MIPMAPS_CLAMP), uv) :
+			texture(sampler2D(bindless_textures[nonuniformEXT(tex_idx)], SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), uv);
 }
+#endif
 
 /// Apply tangent-space normal map to geometry normal.
 vec3 apply_normal_map(HitData h, vec3 tangent_space_normal, float normal_map_depth) {
@@ -129,6 +138,25 @@ void write_primary_hit_depth(vec3 hit_pos) {
 // HISTORY VALIDITY WRITE (primary ray only)
 // ============================================================================
 
+vec4 pack_history_id(uint id) {
+	uvec4 bytes = uvec4(
+			id & 0xFFu,
+			(id >> 8u) & 0xFFu,
+			(id >> 16u) & 0xFFu,
+			(id >> 24u) & 0xFFu);
+	return vec4(bytes) * (1.0 / 255.0);
+}
+
+uint mix_history_id(uint id, uint value) {
+	uint h = id ^ (value + 0x9e3779b9u + (id << 6u) + (id >> 2u));
+	h ^= h >> 16u;
+	h *= 0x7feb352du;
+	h ^= h >> 15u;
+	h *= 0x846ca68bu;
+	h ^= h >> 16u;
+	return h == 0u ? 1u : h;
+}
+
 void write_primary_hit_history_validity() {
 	if (get_total_bounces(payload.packed_bounces_flags) != 0u || !is_sample_zero(payload.packed_bounces_flags)) {
 		return;
@@ -137,7 +165,10 @@ void write_primary_hit_history_validity() {
 	uint geom_idx = gl_InstanceCustomIndexEXT;
 	GeometryData geom = geometries[geom_idx];
 	float valid = ((geom.flags & FLAG_HISTORY_INVALID) != 0u) ? 0.0 : 1.0;
-	imageStore(rt_history_validity_image, ivec2(gl_LaunchIDEXT.xy), vec4(valid, 0.0, 0.0, 0.0));
+	uint history_id = geom.history_id;
+	ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
+	imageStore(rt_history_validity_image, pixel, vec4(valid, 0.0, 0.0, 0.0));
+	imageStore(rt_history_id_image, pixel, pack_history_id(history_id));
 }
 
 // ============================================================================
@@ -200,13 +231,13 @@ void write_primary_hit_velocity(vec3 hit_pos) {
 			uint stride_floats = geom.position_stride >> 2;
 			vec3 p0 = vec3(prev_vb.v[i0 * stride_floats + 0u],
 					prev_vb.v[i0 * stride_floats + 1u],
-					prev_vb.v[i0 * stride_floats + 2u]);
+					stride_floats >= 3u ? prev_vb.v[i0 * stride_floats + 2u] : 0.0);
 			vec3 p1 = vec3(prev_vb.v[i1 * stride_floats + 0u],
 					prev_vb.v[i1 * stride_floats + 1u],
-					prev_vb.v[i1 * stride_floats + 2u]);
+					stride_floats >= 3u ? prev_vb.v[i1 * stride_floats + 2u] : 0.0);
 			vec3 p2 = vec3(prev_vb.v[i2 * stride_floats + 0u],
 					prev_vb.v[i2 * stride_floats + 1u],
-					prev_vb.v[i2 * stride_floats + 2u]);
+					stride_floats >= 3u ? prev_vb.v[i2 * stride_floats + 2u] : 0.0);
 			prev_obj_pos = bary.x * p0 + bary.y * p1 + bary.z * p2;
 		}
 	}
@@ -511,23 +542,51 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		float spec_hit_dist = -1.0;
 		if (m.roughness < MAX_DENOISER_SPECULAR_HIT_THRESHOLD) {
 			vec3 spec_dir = reflect(-V, N);
-			vec3 spec_origin = offset_ray_origin(h.hit_pos, spec_dir);
-
-			rayQueryEXT spec_rq;
-			rayQueryInitializeEXT(spec_rq, tlas, RT_RAY_FLAGS | gl_RayFlagsTerminateOnFirstHitEXT,
-					0xFF, spec_origin, 0.001, spec_dir, 10000.0);
-			while (rayQueryProceedEXT(spec_rq)) {
-				if (rayQueryGetIntersectionTypeEXT(spec_rq, false) == gl_RayQueryCandidateIntersectionTriangleEXT) {
-					if (ray_query_alpha_test(
-								rayQueryGetIntersectionInstanceCustomIndexEXT(spec_rq, false),
-								rayQueryGetIntersectionPrimitiveIndexEXT(spec_rq, false),
-								rayQueryGetIntersectionBarycentricsEXT(spec_rq, false))) {
-						rayQueryConfirmIntersectionEXT(spec_rq);
-					}
+			bool spec_dir_valid = true;
+			if (dot(spec_dir, h.geometry_normal) < 0.0) {
+				vec3 recovered_spec_dir;
+				if (recoverBelowHemisphereSample(spec_dir, h.geometry_normal, recovered_spec_dir)) {
+					spec_dir = recovered_spec_dir;
+				} else {
+					spec_dir_valid = false;
 				}
 			}
-			if (rayQueryGetIntersectionTypeEXT(spec_rq, true) != gl_RayQueryCommittedIntersectionNoneEXT) {
-				spec_hit_dist = rayQueryGetIntersectionTEXT(spec_rq, true);
+			if (spec_dir_valid) {
+				vec3 spec_origin = offset_ray_origin(h.hit_pos, h.geometry_normal);
+
+				rayQueryEXT spec_rq;
+				rayQueryInitializeEXT(spec_rq, tlas, RT_RAY_FLAGS | gl_RayFlagsTerminateOnFirstHitEXT,
+						RT_INSTANCE_MASK_VISIBLE, spec_origin, 0.001, spec_dir, 10000.0);
+				float spec_unsupported_t = 1e20;
+				while (rayQueryProceedEXT(spec_rq)) {
+					uint candidate_type = rayQueryGetIntersectionTypeEXT(spec_rq, false);
+					if (candidate_type == gl_RayQueryCandidateIntersectionTriangleEXT) {
+						uint candidate_geometry_idx = rayQueryGetIntersectionInstanceCustomIndexEXT(spec_rq, false);
+						MaterialData candidate_mat = materials[candidate_geometry_idx];
+						if ((candidate_mat.flags & (RT_MAT_FLAG_ALPHA_TEST | RT_MAT_FLAG_CUSTOM_SHADER)) ==
+								(RT_MAT_FLAG_ALPHA_TEST | RT_MAT_FLAG_CUSTOM_SHADER)) {
+							spec_unsupported_t = min(spec_unsupported_t, rayQueryGetIntersectionTEXT(spec_rq, false));
+							continue;
+						}
+						if (ray_query_alpha_test(
+									candidate_geometry_idx,
+									rayQueryGetIntersectionPrimitiveIndexEXT(spec_rq, false),
+									rayQueryGetIntersectionBarycentricsEXT(spec_rq, false),
+									rayQueryGetIntersectionObjectRayOriginEXT(spec_rq, false) +
+											rayQueryGetIntersectionObjectRayDirectionEXT(spec_rq, false) *
+													rayQueryGetIntersectionTEXT(spec_rq, false))) {
+							rayQueryConfirmIntersectionEXT(spec_rq);
+						}
+					} else if (candidate_type == gl_RayQueryCandidateIntersectionAABBEXT) {
+						spec_unsupported_t = min(spec_unsupported_t, rayQueryGetIntersectionTEXT(spec_rq, false));
+					}
+				}
+				if (rayQueryGetIntersectionTypeEXT(spec_rq, true) != gl_RayQueryCommittedIntersectionNoneEXT) {
+					float committed_t = rayQueryGetIntersectionTEXT(spec_rq, true);
+					if (spec_unsupported_t >= committed_t) {
+						spec_hit_dist = committed_t;
+					}
+				}
 			}
 		}
 		imageStore(dlss_rr_specular_hit_dist, pixel, vec4(spec_hit_dist));
@@ -541,10 +600,10 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 
 	uint rt_light_count = uint(get_rt_param(RT_PARAM_LIGHT_COUNT));
 	if (rt_light_count > 0u) {
-		vec3 hit_pos_offset = offset_ray_origin(h.hit_pos, h.geometry_normal);
 		bool is_indirect = (diffuse_bounces > 0u);
+		uint receiver_layer_mask = geometries[h.geometry_idx].layer_mask;
 		vec3 direct_light = lights_evaluate_direct_lighting(
-				hit_pos_offset, N, V, brdf_mat, ps.rng_state, is_indirect, rt_light_count);
+				h.hit_pos, h.geometry_normal, N, V, brdf_mat, ps.rng_state, is_indirect, receiver_layer_mask, rt_light_count);
 		ps.radiance += ps.throughput * direct_light;
 	}
 

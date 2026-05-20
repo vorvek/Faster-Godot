@@ -49,9 +49,9 @@ vec2 project_uv(vec3 world_pos, mat4 vp) {
 }
 
 #ifdef DLSS_RR_ENABLED
-layout(set = 0, binding = 9, rgba16f) uniform image2D dlss_rr_diffuse_albedo;
+layout(set = 0, binding = 9, rgba8) uniform image2D dlss_rr_diffuse_albedo;
 layout(set = 0, binding = 10, rgba16f) uniform image2D dlss_rr_specular_albedo;
-layout(set = 0, binding = 11, rgba16f) uniform image2D dlss_rr_normal_roughness;
+layout(set = 0, binding = 11, rgba8_snorm) uniform image2D dlss_rr_normal_roughness;
 layout(set = 0, binding = 12, r16f) uniform image2D dlss_rr_specular_hit_dist;
 #endif
 
@@ -60,6 +60,7 @@ layout(set = 0, binding = 12, r16f) uniform image2D dlss_rr_specular_hit_dist;
 // channels start at the first free slots past them so we do not collide with either.
 layout(set = 0, binding = 28, rg16f) uniform image2D rt_velocity_image;
 layout(set = 0, binding = 29, r8) uniform image2D rt_history_validity_image;
+layout(set = 0, binding = 30, rgba8) uniform image2D rt_history_id_image;
 layout(set = 0, binding = 15, r32f) uniform image2D rt_depth_image;
 
 #endif // !RT_STAGE_ANY_HIT

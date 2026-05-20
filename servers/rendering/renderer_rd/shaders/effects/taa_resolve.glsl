@@ -50,6 +50,8 @@ layout(set = 0, binding = 4) uniform sampler2D history_buffer;
 layout(rgba16f, set = 0, binding = 5) uniform restrict writeonly image2D output_buffer;
 layout(set = 0, binding = 6) uniform sampler2D rt_history_validity_buffer;
 layout(set = 0, binding = 7) uniform sampler2D rt_prev_history_validity_buffer;
+layout(set = 0, binding = 8) uniform sampler2D rt_history_id_buffer;
+layout(set = 0, binding = 9) uniform sampler2D rt_prev_history_id_buffer;
 
 layout(push_constant, std430) uniform Params {
 	vec2 resolution;
@@ -57,6 +59,7 @@ layout(push_constant, std430) uniform Params {
 	float variance_dynamic;
 	float raytracing_denoise;
 	float rt_history_validity_enabled;
+	float rt_history_id_enabled;
 	float history_weight;
 	float sharpness;
 }
@@ -109,16 +112,21 @@ float get_depth(ivec2 thread_id) {
 shared vec3 tile_color[kTileDimension][kTileDimension];
 shared float tile_depth[kTileDimension][kTileDimension];
 
-vec3 load_color(uvec2 group_thread_id) {
+vec3 load_color(ivec2 group_thread_id) {
 	group_thread_id += kBorderSize;
 	return tile_color[group_thread_id.x][group_thread_id.y];
+}
+
+vec3 load_color_screen(ivec2 screen_pos) {
+	screen_pos = clamp(screen_pos, ivec2(0), ivec2(params.resolution) - ivec2(1));
+	return sanitize_color(imageLoad(color_buffer, screen_pos).rgb);
 }
 
 void store_color(uvec2 group_thread_id, vec3 color) {
 	tile_color[group_thread_id.x][group_thread_id.y] = color;
 }
 
-float load_depth(uvec2 group_thread_id) {
+float load_depth(ivec2 group_thread_id) {
 	group_thread_id += kBorderSize;
 	return tile_depth[group_thread_id.x][group_thread_id.y];
 }
@@ -159,32 +167,34 @@ void populate_group_shared_memory(uvec2 group_id, uint group_index) {
 								VELOCITY
 ------------------------------------------------------------------------------*/
 
-void depth_test_min(uvec2 pos, inout float min_depth, inout uvec2 min_pos) {
+void depth_test_closest(ivec2 pos, inout float closest_depth, inout ivec2 closest_pos) {
 	float depth = load_depth(pos);
 
-	if (depth < min_depth) {
-		min_depth = depth;
-		min_pos = pos;
+	if (depth > closest_depth) {
+		closest_depth = depth;
+		closest_pos = pos;
 	}
 }
 
 // Returns velocity with closest depth (3x3 neighborhood)
-void get_closest_pixel_velocity_3x3(in uvec2 group_pos, uvec2 group_top_left, out vec2 velocity) {
-	float min_depth = 1.0;
-	uvec2 min_pos = group_pos;
+void get_closest_pixel_velocity_3x3(in uvec2 group_pos, ivec2 group_top_left, out vec2 velocity) {
+	float closest_depth = 0.0;
+	ivec2 local_pos = ivec2(group_pos);
+	ivec2 closest_pos = local_pos;
 
-	depth_test_min(group_pos + kOffsets3x3[0], min_depth, min_pos);
-	depth_test_min(group_pos + kOffsets3x3[1], min_depth, min_pos);
-	depth_test_min(group_pos + kOffsets3x3[2], min_depth, min_pos);
-	depth_test_min(group_pos + kOffsets3x3[3], min_depth, min_pos);
-	depth_test_min(group_pos + kOffsets3x3[4], min_depth, min_pos);
-	depth_test_min(group_pos + kOffsets3x3[5], min_depth, min_pos);
-	depth_test_min(group_pos + kOffsets3x3[6], min_depth, min_pos);
-	depth_test_min(group_pos + kOffsets3x3[7], min_depth, min_pos);
-	depth_test_min(group_pos + kOffsets3x3[8], min_depth, min_pos);
+	depth_test_closest(local_pos + kOffsets3x3[0], closest_depth, closest_pos);
+	depth_test_closest(local_pos + kOffsets3x3[1], closest_depth, closest_pos);
+	depth_test_closest(local_pos + kOffsets3x3[2], closest_depth, closest_pos);
+	depth_test_closest(local_pos + kOffsets3x3[3], closest_depth, closest_pos);
+	depth_test_closest(local_pos + kOffsets3x3[4], closest_depth, closest_pos);
+	depth_test_closest(local_pos + kOffsets3x3[5], closest_depth, closest_pos);
+	depth_test_closest(local_pos + kOffsets3x3[6], closest_depth, closest_pos);
+	depth_test_closest(local_pos + kOffsets3x3[7], closest_depth, closest_pos);
+	depth_test_closest(local_pos + kOffsets3x3[8], closest_depth, closest_pos);
 
 	// Velocity out
-	velocity = imageLoad(velocity_buffer, ivec2(group_top_left + min_pos)).xy;
+	ivec2 velocity_pos = clamp(group_top_left + closest_pos + ivec2(kBorderSize), ivec2(0), ivec2(params.resolution) - ivec2(1));
+	velocity = imageLoad(velocity_buffer, velocity_pos).xy;
 }
 
 /*------------------------------------------------------------------------------
@@ -277,7 +287,7 @@ vec3 clip_aabb(vec3 aabb_min, vec3 aabb_max, vec3 p, vec3 q) {
 	return p + r;
 }
 
-vec3 rt_firefly_clamp_3x3(uvec2 group_pos, vec3 center) {
+vec3 rt_firefly_clamp_3x3(ivec2 group_pos, vec3 center) {
 	vec3 n1 = load_color(group_pos + kOffsets3x3[0]);
 	vec3 n2 = load_color(group_pos + kOffsets3x3[1]);
 	vec3 n3 = load_color(group_pos + kOffsets3x3[2]);
@@ -308,21 +318,63 @@ vec3 rt_firefly_clamp_3x3(uvec2 group_pos, vec3 center) {
 	return center;
 }
 
+vec3 rt_firefly_clamp_screen_3x3(ivec2 screen_pos, vec3 center) {
+	vec3 n1 = load_color_screen(screen_pos + kOffsets3x3[0]);
+	vec3 n2 = load_color_screen(screen_pos + kOffsets3x3[1]);
+	vec3 n3 = load_color_screen(screen_pos + kOffsets3x3[2]);
+	vec3 n4 = load_color_screen(screen_pos + kOffsets3x3[3]);
+	vec3 n6 = load_color_screen(screen_pos + kOffsets3x3[5]);
+	vec3 n7 = load_color_screen(screen_pos + kOffsets3x3[6]);
+	vec3 n8 = load_color_screen(screen_pos + kOffsets3x3[7]);
+	vec3 n9 = load_color_screen(screen_pos + kOffsets3x3[8]);
+
+	float l1 = luminance(n1);
+	float l2 = luminance(n2);
+	float l3 = luminance(n3);
+	float l4 = luminance(n4);
+	float l6 = luminance(n6);
+	float l7 = luminance(n7);
+	float l8 = luminance(n8);
+	float l9 = luminance(n9);
+	float mean = (l1 + l2 + l3 + l4 + l6 + l7 + l8 + l9) * 0.125;
+	float mean2 = (l1 * l1 + l2 * l2 + l3 * l3 + l4 * l4 + l6 * l6 + l7 * l7 + l8 * l8 + l9 * l9) * 0.125;
+	float deviation = sqrt(max(mean2 - mean * mean, 0.0));
+	float limit = max(mean + deviation * 3.0, mean * 3.0 + 0.05);
+	float center_luma = luminance(center);
+
+	if (center_luma > limit) {
+		return center * (limit / center_luma);
+	}
+
+	return center;
+}
+
 // Clip history to the neighbourhood of the current sample
-vec3 clip_history_3x3(uvec2 group_pos, vec3 color_history, vec2 velocity_closest, out vec3 neighborhood_avg, out vec3 neighborhood_min, out vec3 neighborhood_max) {
+vec3 clip_history_3x3(uvec2 group_pos, uvec2 screen_pos, vec3 color_history, vec2 velocity_closest, out vec3 neighborhood_avg, out vec3 neighborhood_min, out vec3 neighborhood_max) {
+	ivec2 local_pos = ivec2(group_pos);
+
 	// Sample a 3x3 neighbourhood
-	vec3 s1 = load_color(group_pos + kOffsets3x3[0]);
-	vec3 s2 = load_color(group_pos + kOffsets3x3[1]);
-	vec3 s3 = load_color(group_pos + kOffsets3x3[2]);
-	vec3 s4 = load_color(group_pos + kOffsets3x3[3]);
-	vec3 s5 = load_color(group_pos + kOffsets3x3[4]);
-	vec3 s6 = load_color(group_pos + kOffsets3x3[5]);
-	vec3 s7 = load_color(group_pos + kOffsets3x3[6]);
-	vec3 s8 = load_color(group_pos + kOffsets3x3[7]);
-	vec3 s9 = load_color(group_pos + kOffsets3x3[8]);
+	vec3 s1 = load_color(local_pos + kOffsets3x3[0]);
+	vec3 s2 = load_color(local_pos + kOffsets3x3[1]);
+	vec3 s3 = load_color(local_pos + kOffsets3x3[2]);
+	vec3 s4 = load_color(local_pos + kOffsets3x3[3]);
+	vec3 s5 = load_color(local_pos + kOffsets3x3[4]);
+	vec3 s6 = load_color(local_pos + kOffsets3x3[5]);
+	vec3 s7 = load_color(local_pos + kOffsets3x3[6]);
+	vec3 s8 = load_color(local_pos + kOffsets3x3[7]);
+	vec3 s9 = load_color(local_pos + kOffsets3x3[8]);
 
 	if (params.raytracing_denoise > 0.5) {
-		s5 = rt_firefly_clamp_3x3(group_pos, s5);
+		ivec2 screen = ivec2(screen_pos);
+		s1 = rt_firefly_clamp_screen_3x3(screen + kOffsets3x3[0], s1);
+		s2 = rt_firefly_clamp_screen_3x3(screen + kOffsets3x3[1], s2);
+		s3 = rt_firefly_clamp_screen_3x3(screen + kOffsets3x3[2], s3);
+		s4 = rt_firefly_clamp_screen_3x3(screen + kOffsets3x3[3], s4);
+		s5 = rt_firefly_clamp_screen_3x3(screen + kOffsets3x3[4], s5);
+		s6 = rt_firefly_clamp_screen_3x3(screen + kOffsets3x3[5], s6);
+		s7 = rt_firefly_clamp_screen_3x3(screen + kOffsets3x3[6], s7);
+		s8 = rt_firefly_clamp_screen_3x3(screen + kOffsets3x3[7], s8);
+		s9 = rt_firefly_clamp_screen_3x3(screen + kOffsets3x3[8], s9);
 	}
 
 	// Compute min and max (with an adaptive box size, which greatly reduces ghosting)
@@ -367,12 +419,33 @@ bool rt_history_is_invalid(uvec2 pos_screen, vec2 uv_reprojected, bool reproject
 	}
 
 	float current_valid = texelFetch(rt_history_validity_buffer, ivec2(pos_screen), 0).r;
-	float previous_valid = reprojected_in_screen ? textureLod(rt_prev_history_validity_buffer, uv_reprojected, 0.0).r : 0.0;
+	float previous_valid = 0.0;
+	if (reprojected_in_screen) {
+		ivec2 previous_pos = ivec2(uv_reprojected * params.resolution);
+		ivec2 max_pos = ivec2(params.resolution) - ivec2(1);
+		previous_valid = texelFetch(rt_prev_history_validity_buffer, clamp(previous_pos, ivec2(0), max_pos), 0).r;
+	}
 
 	return current_valid < 0.5 || previous_valid < 0.5;
 }
 
-vec3 temporal_antialiasing(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_screen, vec2 uv, sampler2D tex_history) {
+bool rt_history_id_matches(vec4 a, vec4 b) {
+	return max(max(abs(a.x - b.x), abs(a.y - b.y)), max(abs(a.z - b.z), abs(a.w - b.w))) < (0.5 / 255.0);
+}
+
+bool rt_history_id_mismatch(uvec2 pos_screen, vec2 uv_reprojected, bool reprojected_in_screen) {
+	if (params.rt_history_id_enabled < 0.5 || !reprojected_in_screen) {
+		return false;
+	}
+
+	vec4 current_id = texelFetch(rt_history_id_buffer, ivec2(pos_screen), 0);
+	ivec2 previous_pos = ivec2(uv_reprojected * params.resolution);
+	ivec2 max_pos = ivec2(params.resolution) - ivec2(1);
+	vec4 prev_id = texelFetch(rt_prev_history_id_buffer, clamp(previous_pos, ivec2(0), max_pos), 0);
+	return !rt_history_id_matches(current_id, prev_id);
+}
+
+vec3 temporal_antialiasing(ivec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_screen, vec2 uv, sampler2D tex_history) {
 	// Get the velocity of the current pixel
 	vec2 velocity = imageLoad(velocity_buffer, ivec2(pos_screen)).xy;
 
@@ -381,9 +454,9 @@ vec3 temporal_antialiasing(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_
 	bool reprojected_in_screen = all(greaterThanEqual(uv_reprojected, vec2(0.0))) && all(lessThanEqual(uv_reprojected, vec2(1.0)));
 
 	// Get input color
-	vec3 color_input = load_color(pos_group);
+	vec3 color_input = load_color(ivec2(pos_group));
 	if (params.raytracing_denoise > 0.5) {
-		color_input = rt_firefly_clamp_3x3(pos_group, color_input);
+		color_input = rt_firefly_clamp_3x3(ivec2(pos_group), color_input);
 	}
 	color_input = sanitize_color(color_input);
 
@@ -394,11 +467,16 @@ vec3 temporal_antialiasing(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_
 	vec3 neighborhood_min = color_input;
 	vec3 neighborhood_max = color_input;
 	if (reprojected_in_screen) {
-		color_history = sanitize_color(sample_catmull_rom_9(tex_history, uv_reprojected, params.resolution).rgb);
+		if (params.rt_history_id_enabled > 0.5) {
+			ivec2 previous_pos = clamp(ivec2(uv_reprojected * params.resolution), ivec2(0), ivec2(params.resolution) - ivec2(1));
+			color_history = sanitize_color(texelFetch(tex_history, previous_pos, 0).rgb);
+		} else {
+			color_history = sanitize_color(sample_catmull_rom_9(tex_history, uv_reprojected, params.resolution).rgb);
+		}
 
 		// Clip history to the neighbourhood of the current sample (fixes a lot of the ghosting).
 		get_closest_pixel_velocity_3x3(pos_group, pos_group_top_left, velocity_closest);
-		color_history = sanitize_color(clip_history_3x3(pos_group, color_history, velocity_closest, neighborhood_avg, neighborhood_min, neighborhood_max));
+		color_history = sanitize_color(clip_history_3x3(pos_group, pos_screen, color_history, velocity_closest, neighborhood_avg, neighborhood_min, neighborhood_max));
 	}
 
 	// Compute blend factor
@@ -412,7 +490,10 @@ vec3 temporal_antialiasing(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_
 		float factor_disocclusion = reprojected_in_screen ? get_factor_disocclusion(uv_reprojected, velocity) : 0.0;
 
 		// RT denoise keeps opaque history only when both the current and reprojected prior samples are valid.
-		float factor_history_invalid = rt_history_is_invalid(pos_screen, uv_reprojected, reprojected_in_screen) ? 1.0 : 0.0;
+		float factor_history_invalid = (rt_history_is_invalid(pos_screen, uv_reprojected, reprojected_in_screen) ||
+											   rt_history_id_mismatch(pos_screen, uv_reprojected, reprojected_in_screen)) ?
+				1.0 :
+				0.0;
 		force_current = (factor_screen + factor_history_invalid) > 0.5;
 
 		// Add to the blend factor
@@ -457,7 +538,7 @@ void main() {
 	}
 
 	const uvec2 pos_group = gl_LocalInvocationID.xy;
-	const uvec2 pos_group_top_left = gl_WorkGroupID.xy * kGroupSize - kBorderSize;
+	const ivec2 pos_group_top_left = ivec2(gl_WorkGroupID.xy) * kGroupSize - ivec2(kBorderSize);
 	const uvec2 pos_screen = gl_GlobalInvocationID.xy;
 	const vec2 uv = (gl_GlobalInvocationID.xy + 0.5f) / params.resolution;
 

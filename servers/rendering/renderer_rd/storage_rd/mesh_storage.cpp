@@ -49,6 +49,7 @@ static BitField<RD::BufferCreationBits> rt_buffer_creation_bits(bool p_as_build_
 	}
 
 	BitField<RD::BufferCreationBits> bits = RD::BUFFER_CREATION_DEVICE_ADDRESS_BIT;
+	bits.set_flag(RD::BUFFER_CREATION_AS_STORAGE_BIT);
 	if (p_as_build_input) {
 		bits.set_flag(RD::BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
 	}
@@ -430,9 +431,18 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 
 	if (new_surface.index_count) {
 		bool is_index_16 = new_surface.vertex_count <= 65536 && new_surface.vertex_count > 0;
+		uint32_t index_buffer_count = new_surface.index_count;
+		Span<uint8_t> index_data = new_surface.index_data;
+		Vector<uint8_t> padded_index_data;
+		if (is_index_16 && (new_surface.index_count & 1)) {
+			padded_index_data = new_surface.index_data;
+			padded_index_data.resize_initialized(padded_index_data.size() + sizeof(uint16_t));
+			index_buffer_count++;
+			index_data = padded_index_data;
+		}
 
-		s->index_buffer = RD::get_singleton()->index_buffer_create(new_surface.index_count, is_index_16 ? RD::INDEX_BUFFER_FORMAT_UINT16 : RD::INDEX_BUFFER_FORMAT_UINT32, new_surface.index_data, false, rt_as_input_bits);
-		s->index_buffer_size = new_surface.index_data.size();
+		s->index_buffer = RD::get_singleton()->index_buffer_create(index_buffer_count, is_index_16 ? RD::INDEX_BUFFER_FORMAT_UINT16 : RD::INDEX_BUFFER_FORMAT_UINT32, index_data, false, rt_as_input_bits);
+		s->index_buffer_size = index_data.size();
 		s->index_count = new_surface.index_count;
 		s->index_array = RD::get_singleton()->index_array_create(s->index_buffer, 0, s->index_count);
 		if (new_surface.lods.size()) {
@@ -441,8 +451,17 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 
 			for (int i = 0; i < new_surface.lods.size(); i++) {
 				uint32_t indices = new_surface.lods[i].index_data.size() / (is_index_16 ? 2 : 4);
-				s->lods[i].index_buffer = RD::get_singleton()->index_buffer_create(indices, is_index_16 ? RD::INDEX_BUFFER_FORMAT_UINT16 : RD::INDEX_BUFFER_FORMAT_UINT32, new_surface.lods[i].index_data, false, rt_as_input_bits);
-				s->lods[i].index_buffer_size = new_surface.lods[i].index_data.size();
+				uint32_t lod_index_buffer_count = indices;
+				Span<uint8_t> lod_index_data = new_surface.lods[i].index_data;
+				Vector<uint8_t> padded_lod_index_data;
+				if (is_index_16 && (indices & 1)) {
+					padded_lod_index_data = new_surface.lods[i].index_data;
+					padded_lod_index_data.resize_initialized(padded_lod_index_data.size() + sizeof(uint16_t));
+					lod_index_buffer_count++;
+					lod_index_data = padded_lod_index_data;
+				}
+				s->lods[i].index_buffer = RD::get_singleton()->index_buffer_create(lod_index_buffer_count, is_index_16 ? RD::INDEX_BUFFER_FORMAT_UINT16 : RD::INDEX_BUFFER_FORMAT_UINT32, lod_index_data, false, rt_as_input_bits);
+				s->lods[i].index_buffer_size = lod_index_data.size();
 				s->lods[i].index_array = RD::get_singleton()->index_array_create(s->lods[i].index_buffer, 0, indices);
 				s->lods[i].edge_length = new_surface.lods[i].edge_length;
 				s->lods[i].index_count = indices;
@@ -1615,6 +1634,8 @@ void MeshStorage::_multimesh_allocate_data(RID p_multimesh, int p_instances, RS:
 	multimesh->motion_vectors_previous_offset = 0;
 	multimesh->motion_vectors_last_change = -1;
 	multimesh->motion_vectors_enabled = false;
+	multimesh->rt_transform_last_change = RSG::rasterizer->get_frame_number();
+	multimesh->rt_appearance_last_change = multimesh->rt_transform_last_change;
 
 	if (multimesh->instances) {
 		uint32_t buffer_size = multimesh->instances * multimesh->stride_cache * sizeof(float);
@@ -1693,6 +1714,8 @@ void MeshStorage::_multimesh_set_mesh(RID p_multimesh, RID p_mesh) {
 		return;
 	}
 	multimesh->mesh = p_mesh;
+	multimesh->rt_transform_last_change = RSG::rasterizer->get_frame_number();
+	multimesh->rt_appearance_last_change = multimesh->rt_transform_last_change;
 
 	if (multimesh->indirect) {
 		Mesh *mesh = mesh_owner.get_or_null(p_mesh);
@@ -1914,6 +1937,7 @@ void MeshStorage::_multimesh_instance_set_transform(RID p_multimesh, int p_index
 	}
 
 	_multimesh_update_motion_vectors_data_cache(multimesh);
+	multimesh->rt_transform_last_change = RSG::rasterizer->get_frame_number();
 
 	{
 		float *w = multimesh->data_cache.ptrw();
@@ -1945,6 +1969,7 @@ void MeshStorage::_multimesh_instance_set_transform_2d(RID p_multimesh, int p_in
 
 	_multimesh_make_local(multimesh);
 	_multimesh_update_motion_vectors_data_cache(multimesh);
+	multimesh->rt_transform_last_change = RSG::rasterizer->get_frame_number();
 
 	{
 		float *w = multimesh->data_cache.ptrw();
@@ -1972,6 +1997,7 @@ void MeshStorage::_multimesh_instance_set_color(RID p_multimesh, int p_index, co
 
 	_multimesh_make_local(multimesh);
 	_multimesh_update_motion_vectors_data_cache(multimesh);
+	multimesh->rt_appearance_last_change = RSG::rasterizer->get_frame_number();
 
 	{
 		float *w = multimesh->data_cache.ptrw();
@@ -1995,6 +2021,7 @@ void MeshStorage::_multimesh_instance_set_custom_data(RID p_multimesh, int p_ind
 
 	_multimesh_make_local(multimesh);
 	_multimesh_update_motion_vectors_data_cache(multimesh);
+	multimesh->rt_appearance_last_change = RSG::rasterizer->get_frame_number();
 
 	{
 		float *w = multimesh->data_cache.ptrw();
@@ -2157,6 +2184,8 @@ void MeshStorage::_multimesh_set_buffer(RID p_multimesh, const Vector<float> &p_
 		}
 		multimesh->buffer_set = true;
 	}
+	multimesh->rt_transform_last_change = RSG::rasterizer->get_frame_number();
+	multimesh->rt_appearance_last_change = multimesh->rt_transform_last_change;
 
 	if (multimesh->data_cache.size()) {
 		float *cache_data = multimesh->data_cache.ptrw();
@@ -2214,6 +2243,8 @@ void MeshStorage::_multimesh_set_visible_instances(RID p_multimesh, int p_visibl
 	if (multimesh->visible_instances == p_visible) {
 		return;
 	}
+	multimesh->rt_transform_last_change = RSG::rasterizer->get_frame_number();
+	multimesh->rt_appearance_last_change = multimesh->rt_transform_last_change;
 
 	if (multimesh->data_cache.size()) {
 		// There is a data cache, but we may need to update some sections.

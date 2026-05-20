@@ -104,6 +104,7 @@ platform/web/node_modules/
 
 # Misc
 *.debug
+/tools/
 
 #############################
 ### IDE and tool specific ###

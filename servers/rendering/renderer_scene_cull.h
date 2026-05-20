@@ -468,6 +468,10 @@ public:
 		SelfList<Instance> update_item;
 
 		AABB *custom_aabb = nullptr; // <Zylann> would using aabb directly with a bool be better?
+		bool rt_procedural_enabled = false;
+		AABB rt_procedural_base_aabb;
+		AABB rt_procedural_aabb;
+		PackedFloat32Array rt_procedural_aabb_data;
 		float extra_margin;
 		ObjectID object_id;
 

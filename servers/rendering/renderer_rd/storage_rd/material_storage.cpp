@@ -1644,6 +1644,7 @@ void MaterialStorage::global_shader_parameter_add(const StringName &p_name, RS::
 	}
 
 	global_shader_uniforms.variables[p_name] = gv;
+	global_shader_uniforms.version++;
 }
 
 void MaterialStorage::global_shader_parameter_remove(const StringName &p_name) {
@@ -1660,6 +1661,7 @@ void MaterialStorage::global_shader_parameter_remove(const StringName &p_name) {
 	}
 
 	global_shader_uniforms.variables.erase(p_name);
+	global_shader_uniforms.version++;
 }
 
 Vector<StringName> MaterialStorage::global_shader_parameter_get_list() const {
@@ -1679,6 +1681,7 @@ void MaterialStorage::global_shader_parameter_set(const StringName &p_name, cons
 	ERR_FAIL_COND(!global_shader_uniforms.variables.has(p_name));
 	GlobalShaderUniforms::Variable &gv = global_shader_uniforms.variables[p_name];
 	gv.value = p_value;
+	global_shader_uniforms.version++;
 	if (gv.override.get_type() == Variant::NIL) {
 		if (gv.buffer_index >= 0) {
 			//buffer
@@ -1706,6 +1709,7 @@ void MaterialStorage::global_shader_parameter_set_override(const StringName &p_n
 	GlobalShaderUniforms::Variable &gv = global_shader_uniforms.variables[p_name];
 
 	gv.override = p_value;
+	global_shader_uniforms.version++;
 
 	if (gv.buffer_index >= 0) {
 		//buffer
@@ -1837,6 +1841,7 @@ void MaterialStorage::global_shader_parameters_load_settings(bool p_load_texture
 
 void MaterialStorage::global_shader_parameters_clear() {
 	global_shader_uniforms.variables.clear(); //not right but for now enough
+	global_shader_uniforms.version++;
 }
 
 RID MaterialStorage::global_shader_uniforms_get_storage_buffer() const {
@@ -1858,6 +1863,10 @@ RID MaterialStorage::global_shader_uniform_get_texture(const StringName &p_name)
 int32_t MaterialStorage::global_shader_uniform_get_buffer_index(const StringName &p_name) const {
 	const GlobalShaderUniforms::Variable *v = global_shader_uniforms.variables.getptr(p_name);
 	return v ? v->buffer_index : -1;
+}
+
+uint64_t MaterialStorage::global_shader_uniforms_get_version() const {
+	return global_shader_uniforms.version;
 }
 
 int32_t MaterialStorage::global_shader_parameters_instance_allocate(RID p_instance) {
@@ -2038,6 +2047,7 @@ void MaterialStorage::shader_set_code(RID p_shader, const String &p_code) {
 	Shader *shader = shader_owner.get_or_null(p_shader);
 	ERR_FAIL_NULL(shader);
 
+	const bool changed = shader->code != p_code;
 	shader->code = p_code;
 	String mode_string = ShaderLanguage::get_shader_type(p_code);
 
@@ -2107,6 +2117,9 @@ void MaterialStorage::shader_set_code(RID p_shader, const String &p_code) {
 
 	for (Material *E : shader->owners) {
 		Material *material = E;
+		if (changed) {
+			material->rt_invalidation_counter++;
+		}
 		material->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MATERIAL);
 		_material_queue_update(material, true, true);
 	}
@@ -2170,11 +2183,18 @@ void MaterialStorage::shader_set_default_texture_parameter(RID p_shader, const S
 	Shader *shader = shader_owner.get_or_null(p_shader);
 	ERR_FAIL_NULL(shader);
 
+	RID previous_texture;
+	if (shader->default_texture_parameter.has(p_name) && shader->default_texture_parameter[p_name].has(p_index)) {
+		previous_texture = shader->default_texture_parameter[p_name][p_index];
+	}
+
+	RID new_texture;
 	if (p_texture.is_valid() && TextureStorage::get_singleton()->owns_texture(p_texture)) {
 		if (!shader->default_texture_parameter.has(p_name)) {
 			shader->default_texture_parameter[p_name] = HashMap<int, RID>();
 		}
 		shader->default_texture_parameter[p_name][p_index] = p_texture;
+		new_texture = p_texture;
 	} else {
 		if (shader->default_texture_parameter.has(p_name) && shader->default_texture_parameter[p_name].has(p_index)) {
 			shader->default_texture_parameter[p_name].erase(p_index);
@@ -2187,8 +2207,12 @@ void MaterialStorage::shader_set_default_texture_parameter(RID p_shader, const S
 	if (shader->data) {
 		shader->data->set_default_texture_parameter(p_name, p_texture, p_index);
 	}
+	const bool changed = previous_texture != new_texture;
 	for (Material *E : shader->owners) {
 		Material *material = E;
+		if (changed) {
+			material->rt_invalidation_counter++;
+		}
 		_material_queue_update(material, false, true);
 	}
 }

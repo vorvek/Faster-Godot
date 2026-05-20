@@ -203,6 +203,7 @@ private:
 
 		bool must_update_texture_materials = false;
 		bool must_update_buffer_materials = false;
+		uint64_t version = 1;
 
 		HashMap<RID, int32_t> instance_buffer_pos;
 	} global_shader_uniforms;
@@ -412,6 +413,7 @@ public:
 	RID global_shader_uniforms_get_storage_buffer() const;
 	RID global_shader_uniform_get_texture(const StringName &p_name) const;
 	int32_t global_shader_uniform_get_buffer_index(const StringName &p_name) const;
+	uint64_t global_shader_uniforms_get_version() const;
 
 	/* SHADER API */
 
@@ -477,6 +479,17 @@ public:
 	_FORCE_INLINE_ uint32_t material_get_shader_id(RID p_material) {
 		Material *material = material_owner.get_or_null(p_material);
 		return material->shader_id;
+	}
+
+	_FORCE_INLINE_ RID material_get_shader_default_texture_parameter(RID p_material, const StringName &p_name, int p_index) const {
+		Material *material = material_owner.get_or_null(p_material);
+		if (!material || !material->shader) {
+			return RID();
+		}
+		if (material->shader->default_texture_parameter.has(p_name) && material->shader->default_texture_parameter[p_name].has(p_index)) {
+			return material->shader->default_texture_parameter[p_name][p_index];
+		}
+		return RID();
 	}
 
 	_FORCE_INLINE_ MaterialData *material_get_data(RID p_material, ShaderType p_shader_type) {

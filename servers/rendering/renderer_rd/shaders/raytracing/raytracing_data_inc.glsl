@@ -48,7 +48,10 @@ struct GeometryData {
 	uint prev_vertex_address_lo;
 	uint prev_vertex_address_hi;
 
-	uint _pad[5];
+	uint layer_mask;
+	uint history_id;
+	uint uv2_byte_offset;
+	uint _pad[2];
 };
 
 void get_aabb_compression_xforms(GeometryData geom, out mat4 aabb_xform, out mat4 inv_aabb_xform) {
@@ -57,7 +60,7 @@ void get_aabb_compression_xforms(GeometryData geom, out mat4 aabb_xform, out mat
 		inv_aabb_xform = mat4(1.0);
 		return;
 	}
-	vec3 aabb_sz = vec3(geom.aabb_size_x, geom.aabb_size_y, geom.aabb_size_z);
+	vec3 aabb_sz = max(vec3(geom.aabb_size_x, geom.aabb_size_y, geom.aabb_size_z), vec3(0.0001));
 	vec3 aabb_po = vec3(geom.aabb_pos_x, geom.aabb_pos_y, geom.aabb_pos_z);
 	aabb_xform = mat4(
 			vec4(aabb_sz.x, 0.0, 0.0, 0.0),
@@ -80,7 +83,7 @@ struct InstanceMotionData {
 };
 
 // ============================================================================
-// MATERIAL DATA (matches C++ layout, 96 bytes)
+// MATERIAL DATA (matches C++ layout, 112 bytes)
 // ============================================================================
 struct MaterialData {
 	uint albedo_texture_idx;
@@ -102,5 +105,52 @@ struct MaterialData {
 
 	float normal_map_depth; // Normal map strength (default 1.0)
 	float specular; // Dielectric specular [0..1], default 0.5 -> F0 = 0.04.
+	float alpha_scissor_threshold;
+	float alpha_hash_scale;
+	uint metallic_texture_idx;
+	uint _pad0;
 	uint64_t uniform_address; // BDA for custom shader uniform buffer (0 = none)
 };
+
+#define RT_MAT_FLAG_HAS_NORMAL_MAP 1u
+#define RT_MAT_FLAG_HAS_EMISSION_TEX 2u
+#define RT_MAT_FLAG_POINT_FILTER 4u
+#define RT_MAT_FLAG_CUSTOM_SHADER 8u
+#define RT_MAT_FLAG_ALPHA_HASH 16u
+#define RT_MAT_FLAG_CUSTOM_ALPHA_CLIP 32u
+#define RT_MAT_FLAG_ALPHA_TEST 64u
+#define RT_MAT_FLAG_VERTEX_COLOR_ALBEDO 128u
+#define RT_MAT_FLAG_VERTEX_COLOR_SRGB 256u
+#define RT_MAT_FLAG_ROUGHNESS_TEXTURE 512u
+#define RT_MAT_FLAG_ROUGHNESS_CHANNEL_SHIFT 10u
+#define RT_MAT_FLAG_REPEAT_DISABLED 8192u
+#define RT_MAT_FLAG_ORM_TEXTURE 16384u
+#define RT_MAT_FLAG_METALLIC_TEXTURE 32768u
+#define RT_MAT_FLAG_METALLIC_CHANNEL_SHIFT 16u
+
+float rt_material_texture_channel(vec4 texel, uint channel) {
+	if (channel == 1u) {
+		return texel.g;
+	} else if (channel == 2u) {
+		return texel.b;
+	} else if (channel == 3u) {
+		return texel.a;
+	} else if (channel == 4u) {
+		return dot(texel.rgb, vec3(0.333333));
+	}
+	return texel.r;
+}
+
+vec4 rt_material_vertex_color(MaterialData mat, vec4 color) {
+	if ((mat.flags & RT_MAT_FLAG_VERTEX_COLOR_ALBEDO) == 0u) {
+		return vec4(1.0);
+	}
+
+	vec4 vertex_color = color;
+	if ((mat.flags & RT_MAT_FLAG_VERTEX_COLOR_SRGB) != 0u) {
+		vec3 low = vertex_color.rgb * (1.0 / 12.92);
+		vec3 high = pow((vertex_color.rgb + vec3(0.055)) * (1.0 / 1.055), vec3(2.4));
+		vertex_color.rgb = mix(high, low, lessThan(vertex_color.rgb, vec3(0.04045)));
+	}
+	return vertex_color;
+}

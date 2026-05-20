@@ -624,7 +624,7 @@ Environment::PathtracingDebugMode Environment::get_pathtracing_debug_mode() cons
 }
 
 void Environment::set_pathtracing_samples_per_pixel(int p_samples) {
-	pathtracing_samples_per_pixel = MAX(1, p_samples);
+	pathtracing_samples_per_pixel = CLAMP(p_samples, 1, 255);
 	_update_pathtracing();
 }
 
@@ -643,6 +643,17 @@ int Environment::get_pathtracing_max_bounces() const {
 
 void Environment::set_pathtracing_denoiser(RSE::PathtracingDenoiser p_denoiser) {
 	pathtracing_denoiser = p_denoiser;
+	switch (p_denoiser) {
+		case RSE::PT_DENOISER_DLSS_RAY_RECONSTRUCTION:
+			rtgi_denoiser = RTGI_DENOISER_NVIDIA;
+			break;
+		case RSE::PT_DENOISER_INTERNAL:
+			rtgi_denoiser = RTGI_DENOISER_INTERNAL;
+			break;
+		case RSE::PT_DENOISER_NONE:
+			rtgi_denoiser = RTGI_DENOISER_OFF;
+			break;
+	}
 	_update_pathtracing();
 }
 
@@ -703,7 +714,20 @@ bool Environment::is_rtgi_temporal_accumulation_enabled() const {
 
 void Environment::set_rtgi_denoiser(RTGIDenoiser p_denoiser) {
 	rtgi_denoiser = p_denoiser;
-	pathtracing_denoiser = RSE::PT_DENOISER_NONE;
+	switch (p_denoiser) {
+		case RTGI_DENOISER_AUTO:
+		case RTGI_DENOISER_INTERNAL:
+		case RTGI_DENOISER_AMD:
+		case RTGI_DENOISER_INTEL:
+			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL;
+			break;
+		case RTGI_DENOISER_NVIDIA:
+			pathtracing_denoiser = RSE::PT_DENOISER_DLSS_RAY_RECONSTRUCTION;
+			break;
+		case RTGI_DENOISER_OFF:
+			pathtracing_denoiser = RSE::PT_DENOISER_NONE;
+			break;
+	}
 	_update_pathtracing();
 }
 
@@ -722,28 +746,12 @@ Environment::PathtracingDebugMode Environment::get_rtgi_debug_mode() const {
 void Environment::_update_pathtracing() {
 	RS::get_singleton()->environment_set_pathtracing(environment, pathtracing_enabled);
 
-	RSE::PathtracingDenoiser denoiser = pathtracing_denoiser;
-	switch (rtgi_denoiser) {
-		case RTGI_DENOISER_AUTO:
-		case RTGI_DENOISER_INTERNAL:
-		case RTGI_DENOISER_AMD:
-		case RTGI_DENOISER_INTEL:
-			denoiser = RSE::PT_DENOISER_INTERNAL;
-			break;
-		case RTGI_DENOISER_NVIDIA:
-			denoiser = RSE::PT_DENOISER_DLSS_RAY_RECONSTRUCTION;
-			break;
-		case RTGI_DENOISER_OFF:
-			denoiser = RSE::PT_DENOISER_NONE;
-			break;
-	}
-
 	PackedFloat32Array params;
 	params.resize(16);
 	params.write[RSE::PT_PARAM_VIS_MODE] = (float)pathtracing_debug_mode;
 	params.write[RSE::PT_PARAM_SAMPLE_COUNT] = (float)pathtracing_samples_per_pixel;
 	params.write[RSE::PT_PARAM_MAX_BOUNCES] = (float)pathtracing_max_bounces;
-	params.write[RSE::PT_PARAM_DENOISER] = (float)(int)denoiser;
+	params.write[RSE::PT_PARAM_DENOISER] = (float)(int)pathtracing_denoiser;
 	params.write[RSE::PT_PARAM_ENERGY] = rtgi_energy;
 	params.write[RSE::PT_PARAM_TEMPORAL_ACCUMULATION] = rtgi_temporal_accumulation ? 1.0f : 0.0f;
 	params.write[RSE::PT_PARAM_MODE] = (float)(int)rtgi_mode;

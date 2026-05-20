@@ -1119,15 +1119,49 @@ void RendererSceneCull::instance_set_custom_aabb(RID p_instance, AABB p_aabb) {
 	}
 }
 
+static bool _rt_procedural_bounds_from_aabb_data(const PackedFloat32Array &p_aabb_data, AABB &r_aabb) {
+	if (p_aabb_data.size() < 6 || (p_aabb_data.size() % 6) != 0) {
+		return false;
+	}
+
+	Vector3 min_pos(p_aabb_data[0], p_aabb_data[1], p_aabb_data[2]);
+	Vector3 max_pos(p_aabb_data[3], p_aabb_data[4], p_aabb_data[5]);
+	for (int32_t i = 6; i < p_aabb_data.size(); i += 6) {
+		min_pos.x = MIN(min_pos.x, (real_t)p_aabb_data[i + 0]);
+		min_pos.y = MIN(min_pos.y, (real_t)p_aabb_data[i + 1]);
+		min_pos.z = MIN(min_pos.z, (real_t)p_aabb_data[i + 2]);
+		max_pos.x = MAX(max_pos.x, (real_t)p_aabb_data[i + 3]);
+		max_pos.y = MAX(max_pos.y, (real_t)p_aabb_data[i + 4]);
+		max_pos.z = MAX(max_pos.z, (real_t)p_aabb_data[i + 5]);
+	}
+
+	r_aabb = AABB(min_pos, max_pos - min_pos);
+	return true;
+}
+
 void RendererSceneCull::instance_set_rt_procedural(RID p_instance, bool p_procedural, AABB p_aabb) {
 	Instance *instance = instance_owner.get_or_null(p_instance);
 	ERR_FAIL_NULL(instance);
 
-	if (instance->base_type == RSE::INSTANCE_MESH && instance->base_data) {
-		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
-		if (geom->geometry_instance) {
-			geom->geometry_instance->set_rt_procedural(p_procedural, p_aabb);
-		}
+	if (instance->base_type != RSE::INSTANCE_MESH || !instance->base_data) {
+		return;
+	}
+
+	instance->rt_procedural_enabled = p_procedural;
+	if (p_procedural) {
+		instance->rt_procedural_base_aabb = p_aabb;
+		AABB data_aabb;
+		instance->rt_procedural_aabb = _rt_procedural_bounds_from_aabb_data(instance->rt_procedural_aabb_data, data_aabb) ? data_aabb : p_aabb;
+	} else {
+		instance->rt_procedural_base_aabb = AABB();
+		instance->rt_procedural_aabb = AABB();
+	}
+	InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
+	if (geom->geometry_instance) {
+		geom->geometry_instance->set_rt_procedural(p_procedural, p_aabb);
+	}
+	if (instance->scenario) {
+		_instance_queue_update(instance, true, false);
 	}
 }
 
@@ -1135,11 +1169,27 @@ void RendererSceneCull::instance_set_rt_procedural_bounds(RID p_instance, const 
 	Instance *instance = instance_owner.get_or_null(p_instance);
 	ERR_FAIL_NULL(instance);
 
-	if (instance->base_type == RSE::INSTANCE_MESH && instance->base_data) {
-		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
-		if (geom->geometry_instance) {
-			geom->geometry_instance->set_rt_procedural_bounds(p_aabb_data, p_expose_bounds);
+	if (instance->base_type != RSE::INSTANCE_MESH || !instance->base_data) {
+		return;
+	}
+
+	instance->rt_procedural_aabb_data = p_aabb_data;
+
+	bool aabb_changed = false;
+	if (instance->rt_procedural_enabled) {
+		AABB data_aabb;
+		AABB next_aabb = _rt_procedural_bounds_from_aabb_data(p_aabb_data, data_aabb) ? data_aabb : (p_aabb_data.size() == 0 ? instance->rt_procedural_base_aabb : AABB());
+		if (next_aabb != instance->rt_procedural_aabb) {
+			instance->rt_procedural_aabb = next_aabb;
+			aabb_changed = true;
 		}
+	}
+	InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
+	if (geom->geometry_instance) {
+		geom->geometry_instance->set_rt_procedural_bounds(p_aabb_data, p_expose_bounds);
+	}
+	if (aabb_changed && instance->scenario) {
+		_instance_queue_update(instance, true, false);
 	}
 }
 
@@ -1367,6 +1417,7 @@ void RendererSceneCull::instance_geometry_set_cast_shadows_setting(RID p_instanc
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 		ERR_FAIL_NULL(geom->geometry_instance);
 
+		geom->geometry_instance->set_cast_shadows_only(instance->cast_shadows == RSE::SHADOW_CASTING_SETTING_SHADOWS_ONLY);
 		geom->geometry_instance->set_cast_double_sided_shadows(instance->cast_shadows == RSE::SHADOW_CASTING_SETTING_DOUBLE_SIDED);
 	}
 
@@ -2077,6 +2128,10 @@ void RendererSceneCull::_update_instance_aabb(Instance *p_instance) const {
 
 	if (p_instance->extra_margin) {
 		new_aabb.grow_by(p_instance->extra_margin);
+	}
+
+	if (p_instance->rt_procedural_enabled && p_instance->rt_procedural_aabb.has_surface()) {
+		new_aabb = new_aabb.has_surface() ? new_aabb.merge(p_instance->rt_procedural_aabb) : p_instance->rt_procedural_aabb;
 	}
 
 	p_instance->aabb = new_aabb;
@@ -2796,6 +2851,19 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 	RID environment = _render_get_environment(p_camera, p_scenario);
 	RID compositor = _render_get_compositor(p_camera, p_scenario);
 
+	if (p_viewport.is_valid()) {
+		bool rt_temporal_motion_vectors = false;
+		if (camera_data.view_count == 1 && environment.is_valid() && scene_render->environment_get_pathtracing_enabled(environment)) {
+			PackedFloat32Array params = scene_render->environment_get_pathtracing_params(environment);
+			if (params.size() > RSE::PT_PARAM_TEMPORAL_ACCUMULATION && params[RSE::PT_PARAM_TEMPORAL_ACCUMULATION] != 0.0f) {
+				const uint32_t denoiser = params.size() > RSE::PT_PARAM_DENOISER ? (uint32_t)params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
+				rt_temporal_motion_vectors = denoiser == RSE::PT_DENOISER_INTERNAL ||
+						denoiser == RSE::PT_DENOISER_DLSS_RAY_RECONSTRUCTION;
+			}
+		}
+		RSG::viewport->viewport_set_rt_temporal_motion_vectors(p_viewport, rt_temporal_motion_vectors);
+	}
+
 	RENDER_TIMESTAMP("Update Occlusion Buffer")
 	// For now just cull on the first camera
 	RendererSceneOcclusionCull::get_singleton()->buffer_update(p_viewport, camera_data.main_transform, camera_data.main_projection, camera_data.is_orthogonal);
@@ -3299,7 +3367,8 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 			// Prefer the parent: exclude the child from RT until the parent becomes
 			// HIDDEN_CLOSE_RANGE (fully faded out), matching the point where raster
 			// switches over. In-frustum children are subject to the same rule.
-			if (cull_data.cull->rt_enabled && (idata.layer_mask & ((1 << 20) - 1))) {
+			const uint32_t rt_visible_layer_mask = cull_data.visible_layers & ((1 << 20) - 1);
+			if (cull_data.cull->rt_enabled && (idata.layer_mask & rt_visible_layer_mask)) {
 				// For off-frustum instances, also run VIS_CHECK to match raster gating.
 				bool rt_in_range = in_frustum || (cull_data.scenario->instance_aabbs[i].in_aabb(cull_data.cull->rt_aabb) && VIS_CHECK);
 				if (rt_in_range) {
@@ -3319,8 +3388,7 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 						uint32_t base_type = idata.flags & InstanceData::FLAG_BASE_TYPE_MASK;
 						if (base_type == RSE::INSTANCE_LIGHT) {
 							cull_result.rt_light_instances.push_back(RID::from_uint64(idata.instance_data_rid));
-						} else if ((base_type == RSE::INSTANCE_MESH || base_type == RSE::INSTANCE_MULTIMESH) &&
-								!(idata.flags & InstanceData::FLAG_CAST_SHADOWS_ONLY)) {
+						} else if (base_type == RSE::INSTANCE_MESH || base_type == RSE::INSTANCE_MULTIMESH) {
 							cull_result.rt_geometry_instances.push_back(idata.instance_geometry);
 							mesh_visible = true; // For skinned/deformed meshes..
 						}
@@ -3428,7 +3496,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	cull.frustum = Frustum(planes);
 
 	// RT: build wider AABB cull volume for TLAS and light gathering.
-	cull.rt_enabled = p_environment.is_valid() &&
+	cull.rt_enabled = p_camera_data->view_count == 1 && p_environment.is_valid() &&
 			scene_render->environment_get_pathtracing_enabled(p_environment);
 	if (cull.rt_enabled) {
 		float z_far = p_camera_data->main_projection.get_z_far();
@@ -4408,6 +4476,9 @@ void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
 
 				geom->can_cast_shadows = can_cast_shadows;
 			}
+			geom->geometry_instance->set_cast_shadows(can_cast_shadows);
+			geom->geometry_instance->set_shadow_casting_setting_enabled(p_instance->cast_shadows != RSE::SHADOW_CASTING_SETTING_OFF);
+			geom->geometry_instance->set_cast_shadows_only(p_instance->cast_shadows == RSE::SHADOW_CASTING_SETTING_SHADOWS_ONLY);
 
 			geom->material_is_animated = is_animated;
 

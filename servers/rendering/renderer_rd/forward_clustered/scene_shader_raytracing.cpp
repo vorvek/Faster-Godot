@@ -430,20 +430,73 @@ void SceneShaderRaytracing::_free_task_owned_pipeline_outputs(PipelineBuildTask 
 }
 
 void SceneShaderRaytracing::_strip_texture_globals(String &r_globals, const String &p_tex_name) {
-	const String decl_marker = " m_" + p_tex_name + ";";
+	const String decl_marker = " m_" + p_tex_name;
 	int pos = r_globals.find(decl_marker);
+	while (pos >= 0) {
+		const int marker_end = pos + decl_marker.length();
+		if (marker_end < r_globals.length() && (r_globals[marker_end] == ';' || r_globals[marker_end] == '[')) {
+			break;
+		}
+		pos = r_globals.find(decl_marker, marker_end);
+	}
 	if (pos < 0) {
+		return;
+	}
+	int semicolon = r_globals.find(";", pos);
+	if (semicolon < 0) {
 		return;
 	}
 	int line_start = r_globals.rfind("\n", pos);
 	line_start = (line_start < 0) ? 0 : line_start + 1;
 	int line_end = r_globals.find("\n", pos);
+	if (line_end >= 0 && semicolon > line_end) {
+		return;
+	}
 	if (line_end < 0) {
 		line_end = r_globals.length();
 	} else {
 		line_end += 1;
 	}
 	r_globals = r_globals.substr(0, line_start) + r_globals.substr(line_end);
+}
+
+static void _replace_texture_array_references(String &r_code, const String &p_tex_name) {
+	const String marker = "m_" + p_tex_name + "[";
+	int pos = r_code.find(marker);
+	while (pos >= 0) {
+		const int index_start = pos + marker.length();
+		int index_end = index_start;
+		int depth = 1;
+		while (index_end < r_code.length() && depth > 0) {
+			const char32_t c = r_code[index_end++];
+			if (c == '[') {
+				depth++;
+			} else if (c == ']') {
+				depth--;
+			}
+		}
+		if (depth != 0) {
+			pos = r_code.find(marker, index_start);
+			continue;
+		}
+
+		const String index_expr = r_code.substr(index_start, index_end - index_start - 1);
+		const String replacement = "bindless_textures[nonuniformEXT(material.m_" + p_tex_name + "[" + index_expr + "])]";
+		r_code = r_code.substr(0, pos) + replacement + r_code.substr(index_end);
+		pos = r_code.find(marker, pos + replacement.length());
+	}
+}
+
+static uint32_t _rt_uniform_std140_size(const ShaderLanguage::ShaderNode::Uniform &p_uniform) {
+	uint32_t size = ShaderLanguage::get_datatype_size(p_uniform.type);
+	if (p_uniform.array_size > 0) {
+		size *= p_uniform.array_size;
+		uint32_t array_alignment = 16U * (uint32_t)p_uniform.array_size;
+		if ((size % array_alignment) != 0U) {
+			size += array_alignment - (size % array_alignment);
+		}
+	}
+	return size;
 }
 
 void SceneShaderRaytracing::_finalize_uniforms_with_textures(
@@ -460,7 +513,7 @@ void SceneShaderRaytracing::_finalize_uniforms_with_textures(
 		if (ShaderLanguage::is_sampler_type(uu.type) || uu.order < 0 || uu.order >= (int)p_gen_code.uniform_offsets.size()) {
 			continue;
 		}
-		uint32_t end = p_gen_code.uniform_offsets[uu.order] + ShaderLanguage::get_datatype_size(uu.type);
+		uint32_t end = p_gen_code.uniform_offsets[uu.order] + _rt_uniform_std140_size(uu);
 		if (end > raw_uniform_end) {
 			raw_uniform_end = end;
 		}
@@ -479,20 +532,34 @@ void SceneShaderRaytracing::_finalize_uniforms_with_textures(
 
 		// Append a bindless-index uint member to the uniform buffer.
 		uint32_t offset = raw_uniform_end;
-		if (offset % 4 != 0) {
-			offset += 4 - (offset % 4);
+		uint32_t alignment = tex.array_size > 0 ? 16u : 4u;
+		if (offset % alignment != 0) {
+			offset += alignment - (offset % alignment);
 		}
 
 		TextureUniformInfo tui;
 		tui.name = tex.name;
+		tui.type = tex.type;
 		tui.hint = tex.hint;
 		tui.use_color = tex.use_color;
 		tui.is_global = tex.global;
+		tui.array_size = tex.array_size;
 		tui.buffer_offset = offset;
 		r_entry.texture_uniforms.push_back(tui);
 
-		r_entry.uniform_members += "uint m_" + tex.name + ";\n";
-		raw_uniform_end = offset + 4;
+		const int texture_count = tex.array_size > 0 ? tex.array_size : 1;
+		if (tex.array_size > 0) {
+			r_entry.uniform_members += "uint m_" + tex.name + "[" + itos(texture_count) + "];\n";
+			_replace_texture_array_references(r_entry.fragment_code, tex.name);
+			_replace_texture_array_references(r_entry.fragment_globals, tex.name);
+			if (p_strip_intersection_globals) {
+				_replace_texture_array_references(r_entry.intersection_code, tex.name);
+				_replace_texture_array_references(r_entry.intersection_globals, tex.name);
+			}
+		} else {
+			r_entry.uniform_members += "uint m_" + tex.name + ";\n";
+		}
+		raw_uniform_end = offset + uint32_t(tex.array_size > 0 ? 16 * texture_count : 4);
 	}
 
 	r_entry.uniform_total_size = raw_uniform_end;
@@ -519,10 +586,15 @@ uint32_t SceneShaderRaytracing::_register_slot(uint32_t /*p_shader_id*/, RID p_m
 	if (hash.is_zero()) {
 		return 0;
 	}
+	hash.b ^= p_is_procedural ? 0x9e3779b97f4a7c15ULL : 0xd1b54a32d192ed03ULL;
 
 	HashMap<SourceHash128, uint32_t, SourceHash128Hasher>::Iterator it = source_hash_to_slot.find(hash);
 	if (it != source_hash_to_slot.end()) {
-		return it->value;
+		uint32_t slot_index = it->value;
+		if (slot_index >= hit_group_slots.size() || hit_group_slots[slot_index].state == HGState::Failed) {
+			return 0;
+		}
+		return slot_index;
 	}
 
 	// New slot: preprocess here; heavy compile is on worker.
@@ -548,6 +620,10 @@ uint32_t SceneShaderRaytracing::_register_slot(uint32_t /*p_shader_id*/, RID p_m
 	}
 	if (!p_is_procedural && entry.uses_light_shader) {
 		WARN_PRINT_ONCE("RT: ShaderMaterial light() functions are not run in the path tracer yet; using the MaterialData fallback for those surfaces.");
+		return 0;
+	}
+	if (!p_is_procedural && !entry.vertex_code.is_empty()) {
+		WARN_PRINT_ONCE("RT: ShaderMaterial vertex() functions are not run before path-traced intersections yet; using the MaterialData fallback for those surfaces.");
 		return 0;
 	}
 	if (p_is_procedural && entry.intersection_code.is_empty()) {
@@ -586,8 +662,21 @@ bool SceneShaderRaytracing::_preprocess_shader(RID p_material, bool p_is_procedu
 	}
 
 	bool detected_alpha_clip = false;
+	bool detected_discard = false;
+	bool detected_time = false;
+	bool detected_unsupported_custom_attribs = false;
 	actions.usage_flag_pointers["ALPHA_SCISSOR_THRESHOLD"] = &detected_alpha_clip;
 	actions.usage_flag_pointers["ALPHA_HASH_SCALE"] = &detected_alpha_clip;
+	actions.usage_flag_pointers["DISCARD"] = &detected_discard;
+	actions.usage_flag_pointers["TIME"] = &detected_time;
+	actions.usage_flag_pointers["PREV_TIME"] = &detected_time;
+	actions.usage_flag_pointers["INSTANCE_CUSTOM"] = &detected_unsupported_custom_attribs;
+	actions.usage_flag_pointers["CUSTOM0"] = &detected_unsupported_custom_attribs;
+	actions.usage_flag_pointers["CUSTOM1"] = &detected_unsupported_custom_attribs;
+	actions.usage_flag_pointers["CUSTOM2"] = &detected_unsupported_custom_attribs;
+	actions.usage_flag_pointers["CUSTOM3"] = &detected_unsupported_custom_attribs;
+	actions.usage_flag_pointers["BONE_INDICES"] = &detected_unsupported_custom_attribs;
+	actions.usage_flag_pointers["BONE_WEIGHTS"] = &detected_unsupported_custom_attribs;
 
 	HashMap<StringName, ShaderLanguage::ShaderNode::Uniform> uniform_sink;
 	actions.uniforms = &uniform_sink;
@@ -599,23 +688,49 @@ bool SceneShaderRaytracing::_preprocess_shader(RID p_material, bool p_is_procedu
 				p_is_procedural ? String("procedural") : String("custom")));
 		return false;
 	}
+	if (detected_discard) {
+		WARN_PRINT_ONCE("RT: ShaderMaterial discard is not supported in path-traced custom hit groups; use alpha scissor/hash or RT-specific shader code. Falling back to MaterialData for this surface.");
+		return false;
+	}
+	if (detected_unsupported_custom_attribs) {
+		WARN_PRINT_ONCE("RT: ShaderMaterial INSTANCE_CUSTOM, CUSTOM0..3, and bone attribute built-ins are not populated in path-traced custom hit groups yet; falling back to MaterialData for this surface.");
+		return false;
+	}
 
 	r_entry.is_procedural = p_is_procedural;
 	r_entry.uses_light_shader = !p_is_procedural &&
 			((gen_code.code.has("light") && !String(gen_code.code["light"]).is_empty()) ||
 					code.find("void light") >= 0);
 	r_entry.uses_alpha_clip = detected_alpha_clip;
+	r_entry.uses_time = detected_time;
 	r_entry.vertex_code = gen_code.code.has("vertex") ? gen_code.code["vertex"] : String();
 	r_entry.fragment_code = gen_code.code.has("fragment") ? gen_code.code["fragment"] : String();
 	r_entry.fragment_globals = gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT];
 	if (p_is_procedural) {
 		r_entry.intersection_code = gen_code.code.has("intersection") ? gen_code.code["intersection"] : String();
 		r_entry.intersection_globals = gen_code.stage_globals[ShaderCompiler::STAGE_INTERSECTION];
+		r_entry.writes_prev_position = code.find("PREV_POSITION") >= 0;
 	}
 	r_entry.uniform_members = gen_code.uniforms;
 	r_entry.uniform_total_size = gen_code.uniform_total_size;
 	r_entry.uniform_offsets = gen_code.uniform_offsets;
 	r_entry.uniforms = uniform_sink;
+	for (const KeyValue<StringName, ShaderLanguage::ShaderNode::Uniform> &kv : uniform_sink) {
+		if (kv.value.scope == ShaderLanguage::ShaderNode::Uniform::SCOPE_INSTANCE) {
+			WARN_PRINT_ONCE("RT: Instance uniforms are not supported in path-traced custom hit groups yet; falling back to MaterialData for this surface.");
+			return false;
+		}
+		if (kv.value.scope == ShaderLanguage::ShaderNode::Uniform::SCOPE_GLOBAL) {
+			r_entry.uses_global_uniforms = true;
+		}
+	}
+	for (int ti = 0; ti < gen_code.texture_uniforms.size(); ti++) {
+		const ShaderCompiler::GeneratedCode::Texture &tex = gen_code.texture_uniforms[ti];
+		if (tex.type != ShaderLanguage::TYPE_SAMPLER2D) {
+			WARN_PRINT_ONCE("RT: Only sampler2D uniforms are supported in path-traced custom hit groups yet; falling back to MaterialData for this surface.");
+			return false;
+		}
+	}
 	_finalize_uniforms_with_textures(r_entry, gen_code, uniform_sink, /*strip_intersection_globals=*/p_is_procedural);
 	return true;
 }
@@ -682,9 +797,8 @@ uint32_t SceneShaderRaytracing::compute_rt_flags(const float *p_env_params, bool
 		flags |= RT_FLAG_FOG_ENABLED;
 	}
 
-	if (GLOBAL_GET("rendering/pathtracer/use_shader_execution_reordering")) {
-		flags |= RT_FLAG_SER_ENABLED;
-	}
+	// Keep SER disabled until the RD exposes a device capability bit and the
+	// shadow path can execute any-hit before visibility decisions.
 
 	return rt_flags_pack(flags, sample_count, max_bounces);
 }
@@ -980,6 +1094,9 @@ SceneShaderRaytracing::PipelineBuildTask *SceneShaderRaytracing::_make_pipeline_
 		String tex_defines;
 		for (int ti = 0; ti < entry.texture_uniforms.size(); ti++) {
 			const TextureUniformInfo &tui = entry.texture_uniforms[ti];
+			if (tui.array_size > 0) {
+				continue;
+			}
 			tex_defines += "#define m_" + tui.name + " bindless_textures[nonuniformEXT(material.m_" + tui.name + ")]\n";
 		}
 		String uniform_members = entry.uniform_members.is_empty() ? String("float _rt_pad;") : entry.uniform_members;
@@ -999,9 +1116,24 @@ SceneShaderRaytracing::PipelineBuildTask *SceneShaderRaytracing::_make_pipeline_
 					"vec4 albedo_tex = sample_material_texture(rt_mat.albedo_texture_idx, mat_uv, rt_mat.flags);\n"
 					"albedo = albedo_tex.rgb * rt_mat.albedo_color.rgb;\n"
 					"alpha = albedo_tex.a * rt_mat.albedo_color.a;\n"
-					"vec3 orm = sample_material_texture(rt_mat.orm_texture_idx, mat_uv, rt_mat.flags).rgb;\n"
-					"roughness = orm.g * rt_mat.roughness;\n"
-					"metallic = orm.b * rt_mat.metallic;\n"
+					"roughness = rt_mat.roughness;\n"
+					"metallic = rt_mat.metallic;\n"
+					"if ((rt_mat.flags & RT_MAT_FLAG_ORM_TEXTURE) != 0u) {\n"
+					"    vec3 orm = sample_material_texture(rt_mat.orm_texture_idx, mat_uv, rt_mat.flags).rgb;\n"
+					"    roughness = clamp(orm.g, 0.0, 1.0);\n"
+					"    metallic = clamp(orm.b, 0.0, 1.0);\n"
+					"} else {\n"
+					"    if ((rt_mat.flags & RT_MAT_FLAG_ROUGHNESS_TEXTURE) != 0u) {\n"
+					"        vec4 roughness_sample = sample_material_texture(rt_mat.orm_texture_idx, mat_uv, rt_mat.flags);\n"
+					"        uint roughness_channel = (rt_mat.flags >> RT_MAT_FLAG_ROUGHNESS_CHANNEL_SHIFT) & 7u;\n"
+					"        roughness = clamp(rt_material_texture_channel(roughness_sample, roughness_channel) * rt_mat.roughness, 0.0, 1.0);\n"
+					"    }\n"
+					"    if ((rt_mat.flags & RT_MAT_FLAG_METALLIC_TEXTURE) != 0u) {\n"
+					"        vec4 metallic_sample = sample_material_texture(rt_mat.metallic_texture_idx, mat_uv, rt_mat.flags);\n"
+					"        uint metallic_channel = (rt_mat.flags >> RT_MAT_FLAG_METALLIC_CHANNEL_SHIFT) & 7u;\n"
+					"        metallic = clamp(rt_material_texture_channel(metallic_sample, metallic_channel) * rt_mat.metallic, 0.0, 1.0);\n"
+					"    }\n"
+					"}\n"
 					"if ((rt_mat.flags & 1u) != 0u) {\n"
 					"    normal_map = sample_material_texture(rt_mat.normal_texture_idx, mat_uv, rt_mat.flags).rgb;\n"
 					"    normal_map_depth = rt_mat.normal_map_depth;\n"
@@ -1660,8 +1792,6 @@ void SceneShaderRaytracing::init(const String p_defines) {
 		actions.default_filter = ShaderLanguage::FILTER_LINEAR_MIPMAP;
 		actions.default_repeat = ShaderLanguage::REPEAT_ENABLE;
 		actions.global_buffer_array_variable = "global_shader_uniforms.data";
-		actions.instance_uniform_index_variable = "instances.data[instance_index_interp].instance_uniforms_ofs";
-
 		actions.check_multiview_samplers = RendererCompositorRD::get_singleton()->is_xr_enabled(); // Make sure we check sampling multiview textures.
 
 		// Intersection stage built-in renames (must match locals in the GLSL template).

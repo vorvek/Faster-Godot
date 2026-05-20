@@ -98,13 +98,18 @@ public:
 	static constexpr int RT_PARAM_SAMPLE_COUNT = RSE::PT_PARAM_SAMPLE_COUNT;
 	static constexpr int RT_PARAM_MAX_BOUNCES = RSE::PT_PARAM_MAX_BOUNCES;
 	static constexpr int RT_PARAM_DENOISER = RSE::PT_PARAM_DENOISER;
+	static constexpr int RT_PARAM_BACKGROUND_USES_SKY = 7;
+	static constexpr int RT_PARAM_BACKGROUND_R = 8;
+	static constexpr int RT_PARAM_BACKGROUND_G = 9;
+	static constexpr int RT_PARAM_BACKGROUND_B = 10;
 	static constexpr int RT_PARAM_MODE = RSE::PT_PARAM_MODE;
 	static constexpr int RT_PARAM_LIGHT_COUNT = RSE::PT_PARAM_LIGHT_COUNT;
 	static constexpr int RT_PARAM_FRAME_INDEX = RSE::PT_PARAM_FRAME_INDEX;
 
 	static inline uint32_t rt_flags_pack(uint32_t p_flags, uint32_t p_sample_count, uint32_t p_max_bounces) {
 		uint32_t result = p_flags;
-		result |= (p_sample_count & RT_SAMPLE_COUNT_MASK) << RT_SAMPLE_COUNT_SHIFT;
+		const uint32_t sample_count = MAX(1u, MIN(RT_SAMPLE_COUNT_MASK, p_sample_count));
+		result |= sample_count << RT_SAMPLE_COUNT_SHIFT;
 		// Max bounces is offset by 1 (0=1 bounce, 7=8 bounces)
 		result |= (MAX(1u, MIN(8u, p_max_bounces)) - 1u) << RT_MAX_BOUNCES_SHIFT;
 		return result;
@@ -344,9 +349,11 @@ public:
 
 	struct TextureUniformInfo {
 		StringName name;
+		ShaderLanguage::DataType type = ShaderLanguage::DataType::TYPE_VOID;
 		ShaderLanguage::ShaderNode::Uniform::Hint hint = ShaderLanguage::ShaderNode::Uniform::HINT_NONE;
 		bool use_color = false;
 		bool is_global = false;
+		int array_size = 0;
 		uint32_t buffer_offset = 0; // Stored as bindless index in UBO
 	};
 
@@ -365,6 +372,9 @@ public:
 		bool uses_alpha_clip = false; // Writes ALPHA_SCISSOR_THRESHOLD; needs per-HG any-hit
 		bool uses_light_shader = false; // Custom light() is raster-only; RT falls back to MaterialData.
 		bool is_procedural = false; // Uses intersection shader instead of triangle geometry
+		bool uses_time = false;
+		bool uses_global_uniforms = false;
+		bool writes_prev_position = false;
 	};
 
 	// 128-bit identity (dual hash64 with distinct salt). Treated as source equality.

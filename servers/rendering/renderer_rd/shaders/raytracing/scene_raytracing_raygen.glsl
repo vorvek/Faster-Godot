@@ -21,7 +21,7 @@
 #define RT_STAGE_RAYGEN 1
 #include "raytracing_common_inc.glsl"
 
-layout(set = 0, binding = 0, rgba32f) uniform image2D image;
+layout(set = 0, binding = 0, rgba16f) uniform image2D image;
 layout(set = 0, binding = 1) uniform accelerationStructureEXT tlas;
 
 layout(location = 0) rayPayloadEXT PathPayload payload;
@@ -68,7 +68,7 @@ void main() {
 
 #ifdef USE_SER
 			hitObjectNV hitObject;
-			hitObjectTraceRayNV(hitObject, tlas, RT_RAY_FLAGS, 0xFF, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
+			hitObjectTraceRayNV(hitObject, tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
 
 			// Reorder with a coherence hint that has 8 bits
 			uint hint = 0;
@@ -80,7 +80,7 @@ void main() {
 
 			hitObjectExecuteShaderNV(hitObject, 0);
 #else
-			traceRayEXT(tlas, RT_RAY_FLAGS, 0xFF, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
+			traceRayEXT(tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
 #endif
 
 			ps = path_unpack(payload);
@@ -98,9 +98,7 @@ void main() {
 
 	vec3 final_radiance = total_radiance / float(samples_per_pixel);
 	final_radiance *= max(0.0, get_rt_param(RT_PARAM_ENERGY));
-	final_radiance = mix(final_radiance, vec3(0.0), isnan(final_radiance));
-	final_radiance = mix(final_radiance, vec3(65504.0), isinf(final_radiance));
-	final_radiance = clamp(final_radiance, vec3(0.0), vec3(65504.0));
+	final_radiance = sanitize_payload_vec3(final_radiance);
 
 	imageStore(image, ivec2(pixel), vec4(final_radiance, 1.0));
 }
@@ -163,13 +161,17 @@ void main() {
 			ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
 
 			imageStore(rt_depth_image, pixel, vec4(0.0));
-			imageStore(rt_history_validity_image, pixel, vec4(1.0, 0.0, 0.0, 0.0));
 
 			// Sky velocity: reproject a far-plane point using unjittered VPs.
 			{
 				vec3 far_world = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * 10000.0;
-				vec2 curr_uv = project_uv(far_world, curr_vp_unjittered);
-				vec2 prev_uv = project_uv(far_world, prev_vp_unjittered);
+				vec4 curr_clip = curr_vp_unjittered * vec4(far_world, 1.0);
+				vec4 prev_clip = prev_vp_unjittered * vec4(far_world, 1.0);
+				vec2 curr_uv = curr_clip.xy / curr_clip.w * 0.5 + 0.5;
+				vec2 prev_uv = (abs(prev_clip.w) > 1e-5) ? (prev_clip.xy / prev_clip.w * 0.5 + 0.5) : curr_uv;
+				float history_valid = (prev_clip.w > 1e-5) ? 1.0 : 0.0;
+				imageStore(rt_history_validity_image, pixel, vec4(history_valid, 0.0, 0.0, 0.0));
+				imageStore(rt_history_id_image, pixel, vec4(normalize(gl_WorldRayDirectionEXT) * 0.5 + 0.5, 1.0));
 				imageStore(rt_velocity_image, pixel, vec4(prev_uv - curr_uv, 0.0, 0.0));
 			}
 		}
@@ -183,13 +185,19 @@ void main() {
 			1.0 - scene_data_block.data.radiance_border_size * 2.0);
 	vec2 sky_uv = vec3_to_oct_with_border(sky_dir, border);
 
-	vec3 sky_color = textureLod(sampler2D(radiance_octmap, radiance_sampler), sky_uv, 0.0).rgb;
-	sky_color *= scene_data_block.data.IBL_exposure_normalization;
+	bool background_uses_sky = get_rt_param(RT_PARAM_BACKGROUND_USES_SKY) > 0.5;
+	vec3 sky_color;
+	if (background_uses_sky) {
+		sky_color = textureLod(sampler2D(radiance_octmap, radiance_sampler), sky_uv, 0.0).rgb;
+		sky_color *= scene_data_block.data.IBL_exposure_normalization;
+	} else {
+		sky_color = vec3(get_rt_param(RT_PARAM_BACKGROUND_R), get_rt_param(RT_PARAM_BACKGROUND_G), get_rt_param(RT_PARAM_BACKGROUND_B));
+	}
 
 	if ((RT_FLAGS & RT_FLAG_FOG_ENABLED) != 0u) {
 		vec3 fog_color = scene_data_block.data.fog_light_color;
 
-		if (scene_data_block.data.fog_aerial_perspective > 0.0) {
+		if (background_uses_sky && scene_data_block.data.fog_aerial_perspective > 0.0) {
 			vec3 sky_fog = textureLod(sampler2D(radiance_octmap, radiance_sampler), sky_uv, 1.0).rgb;
 			sky_fog *= scene_data_block.data.IBL_exposure_normalization;
 			fog_color = mix(fog_color, sky_fog, scene_data_block.data.fog_aerial_perspective);
@@ -318,6 +326,7 @@ void main() {
 	uint rt_geometry_idx = h.geometry_idx;
 	vec3 rt_hit_pos = h.hit_pos;
 	vec2 rt_uv = h.uv;
+	vec2 rt_uv2 = h.uv2;
 	vec4 rt_color = h.color;
 	vec3 rt_normal = h.geometry_normal;
 	vec3 rt_tangent = h.tangent;
@@ -367,7 +376,7 @@ void main() {
 	vec3 tangent_space_normal = vec3(0.0, 0.0, 1.0);
 	vec3 final_normal = h.geometry_normal;
 	if ((mat.flags & 1u) != 0u) {
-		vec3 normal_sample = sample_bindless_texture(mat.normal_texture_idx, uv).rgb;
+		vec3 normal_sample = sample_material_texture(mat.normal_texture_idx, uv, mat.flags).rgb;
 		tangent_space_normal.xy = normal_sample.xy * 2.0 - 1.0;
 		tangent_space_normal.z = sqrt(max(0.0, 1.0 - dot(tangent_space_normal.xy, tangent_space_normal.xy)));
 		final_normal = apply_normal_map(h, tangent_space_normal, mat.normal_map_depth);
@@ -375,10 +384,28 @@ void main() {
 
 	// Texture sampling.
 	vec4 albedo_tex = sample_material_texture(mat.albedo_texture_idx, uv, mat.flags);
+	albedo_tex *= rt_material_vertex_color(mat, h.color);
 	vec3 albedo = albedo_tex.rgb * mat.albedo_color.rgb;
-	vec3 orm = sample_material_texture(mat.orm_texture_idx, uv, mat.flags).rgb;
-	float roughness = saturate(orm.g * mat.roughness);
-	float metalness = saturate(orm.b * mat.metallic);
+	float roughness = mat.roughness;
+	float metalness = mat.metallic;
+	vec3 orm = vec3(1.0, roughness, metalness);
+	if ((mat.flags & RT_MAT_FLAG_ORM_TEXTURE) != 0u) {
+		orm = sample_material_texture(mat.orm_texture_idx, uv, mat.flags).rgb;
+		roughness = saturate(orm.g);
+		metalness = saturate(orm.b);
+	} else {
+		if ((mat.flags & RT_MAT_FLAG_ROUGHNESS_TEXTURE) != 0u) {
+			vec4 roughness_sample = sample_material_texture(mat.orm_texture_idx, uv, mat.flags);
+			uint roughness_channel = (mat.flags >> RT_MAT_FLAG_ROUGHNESS_CHANNEL_SHIFT) & 7u;
+			roughness = saturate(rt_material_texture_channel(roughness_sample, roughness_channel) * mat.roughness);
+		}
+		if ((mat.flags & RT_MAT_FLAG_METALLIC_TEXTURE) != 0u) {
+			vec4 metallic_sample = sample_material_texture(mat.metallic_texture_idx, uv, mat.flags);
+			uint metallic_channel = (mat.flags >> RT_MAT_FLAG_METALLIC_CHANNEL_SHIFT) & 7u;
+			metalness = saturate(rt_material_texture_channel(metallic_sample, metallic_channel) * mat.metallic);
+		}
+		orm = vec3(1.0, roughness, metalness);
+	}
 
 	vec3 emissive = mat.emission_color * mat.emission_strength;
 	if ((mat.flags & 2u) != 0u) {
@@ -459,6 +486,26 @@ layout(set = 1, binding = 0) uniform texture2D bindless_textures[];
 
 #include "raytracing_samplers_inc.glsl"
 
+#ifndef RT_MATERIAL_TEXTURE_SAMPLING_DEFINED
+#define RT_MATERIAL_TEXTURE_SAMPLING_DEFINED
+vec4 sample_bindless_texture(uint tex_idx, vec2 uv) {
+	return texture(sampler2D(bindless_textures[nonuniformEXT(tex_idx)], SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), uv);
+}
+
+vec4 sample_material_texture(uint tex_idx, vec2 uv, uint mat_flags) {
+	bool point_filter = (mat_flags & RT_MAT_FLAG_POINT_FILTER) != 0u;
+	bool repeat_disabled = (mat_flags & RT_MAT_FLAG_REPEAT_DISABLED) != 0u;
+	if (point_filter) {
+		return repeat_disabled ?
+				texture(sampler2D(bindless_textures[nonuniformEXT(tex_idx)], SAMPLER_NEAREST_CLAMP), uv) :
+				texture(sampler2D(bindless_textures[nonuniformEXT(tex_idx)], SAMPLER_NEAREST_REPEAT), uv);
+	}
+	return repeat_disabled ?
+			texture(sampler2D(bindless_textures[nonuniformEXT(tex_idx)], SAMPLER_LINEAR_WITH_MIPMAPS_CLAMP), uv) :
+			texture(sampler2D(bindless_textures[nonuniformEXT(tex_idx)], SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), uv);
+}
+#endif
+
 // clang-format off
 layout(set = 0, binding = 32, std430) readonly buffer MotionTransforms {
 	InstanceMotionData motion_transforms[];
@@ -472,52 +519,120 @@ layout(set = 0, binding = 32, std430) readonly buffer MotionTransforms {
 #include "raytracing_custom_globals_inc.glsl"
 #endif
 
+vec3 rt_orthonormalize_tangent(vec3 world_tangent, vec3 world_normal) {
+	vec3 tangent = world_tangent - world_normal * dot(world_normal, world_tangent);
+	float len_sq = dot(tangent, tangent);
+	if (len_sq > 1e-12) {
+		return tangent * inversesqrt(len_sq);
+	}
+	vec3 axis = abs(world_normal.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
+	return normalize(cross(axis, world_normal));
+}
+
 void main() {
 	uint geometry_idx = gl_InstanceCustomIndexEXT;
 	GeometryData geom = geometries[geometry_idx];
 
-	uint i0, i1, i2;
-	get_triangle_indices(geom, i0, i1, i2);
-	vec3 bary = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
-
-#ifdef RT_CUSTOM_HIT_GROUP
-	// Compute hit data inline (cannot include closest_hit_common_inc here).
-	uint rt_geometry_idx = geometry_idx;
-	vec2 rt_uv = fetch_uv(geom, i0, i1, i2, bary);
-	TBNResult ah_tbn = fetch_tbn(geom, i0, i1, i2, bary);
-
-	mat3 model_rotation = mat3(gl_ObjectToWorldEXT);
-	mat3 normal_matrix = mat3(
-			normalize(model_rotation[0]),
-			normalize(model_rotation[1]),
-			normalize(model_rotation[2]));
-
-	vec3 rt_normal = normalize(normal_matrix * ah_tbn.normal);
-	vec3 rt_tangent = normalize(normal_matrix * ah_tbn.tangent);
-	vec3 rt_bitangent = cross(rt_normal, rt_tangent) * ah_tbn.bitangent_sign;
-
-	bool rt_front_face = (gl_HitKindEXT == gl_HitKindFrontFacingTriangleEXT);
-	if (!rt_front_face) {
-		rt_normal = -rt_normal;
+	bool shadow_ray = is_shadow_ray(payload.packed_bounces_flags);
+	if (shadow_ray && (geom.layer_mask & payload.rng_state) == 0u) {
+		ignoreIntersectionEXT;
+		return;
 	}
 
+	MaterialData mat = materials[geometry_idx];
+	if ((mat.flags & RT_MAT_FLAG_ALPHA_TEST) == 0u) {
+		return;
+	}
+
+#ifdef RT_CUSTOM_HIT_GROUP
+	uint rt_geometry_idx = geometry_idx;
+	vec2 rt_uv;
+	vec2 rt_uv2;
+	vec3 rt_normal;
+	vec3 rt_tangent;
+	vec3 rt_bitangent;
+	bool rt_front_face;
 	vec3 rt_hit_pos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
-	vec4 rt_color = fetch_color(geom, i0, i1, i2, bary);
+	vec4 rt_color = vec4(1.0);
+
+	mat3 model_matrix = mat3(gl_ObjectToWorldEXT);
+	mat3 normal_matrix = transpose(mat3(gl_WorldToObjectEXT));
+
+	if ((geom.flags & FLAG_PROCEDURAL) != 0u) {
+		rt_uv = hit_attribs.bary_or_uv;
+		rt_uv2 = hit_attribs.bary_or_uv;
+
+		vec3 obj_normal = normalize(unpackSnorm4x8(hit_attribs.packed_normal).xyz);
+		vec3 obj_tangent = normalize(unpackSnorm4x8(hit_attribs.packed_tangent).xyz);
+		rt_normal = normalize(normal_matrix * obj_normal);
+		rt_tangent = rt_orthonormalize_tangent(model_matrix * obj_tangent, rt_normal);
+		rt_bitangent = cross(rt_normal, rt_tangent);
+
+		rt_front_face = (dot(rt_normal, -gl_WorldRayDirectionEXT) > 0.0);
+		if (!rt_front_face) {
+			rt_normal = -rt_normal;
+		}
+	} else {
+		uint i0, i1, i2;
+		get_triangle_indices(geom, i0, i1, i2);
+		vec3 bary = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
+
+		rt_uv = fetch_uv(geom, i0, i1, i2, bary);
+		rt_uv2 = fetch_uv2(geom, i0, i1, i2, bary);
+		TBNResult ah_tbn = fetch_tbn(geom, i0, i1, i2, bary);
+
+		rt_normal = normalize(normal_matrix * ah_tbn.normal);
+		rt_tangent = rt_orthonormalize_tangent(model_matrix * ah_tbn.tangent, rt_normal);
+		rt_bitangent = cross(rt_normal, rt_tangent) * ah_tbn.bitangent_sign;
+
+		rt_front_face = (gl_HitKindEXT == gl_HitKindFrontFacingTriangleEXT);
+		if (!rt_front_face) {
+			rt_normal = -rt_normal;
+		}
+
+		rt_color = fetch_color(geom, i0, i1, i2, bary);
+	}
 
 #include "raytracing_custom_fragment_inc.glsl"
 
 	if (alpha_scissor_threshold > 0.0 && alpha < alpha_scissor_threshold) {
 		ignoreIntersectionEXT;
 	}
+#ifdef ALPHA_HASH_USED
+	vec3 rt_hash_object_pos = (inverse(read_model_matrix) * inv_view_matrix * vec4(vertex, 1.0)).xyz;
+	if (alpha < rt_alpha_hash_threshold(rt_hash_object_pos, alpha_hash_scale)) {
+		ignoreIntersectionEXT;
+	}
+#endif
 #else
+	if ((geom.flags & FLAG_PROCEDURAL) != 0u) {
+		return;
+	}
+
+	uint i0, i1, i2;
+	get_triangle_indices(geom, i0, i1, i2);
+	vec3 bary = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
+
 	// HG0: Standard material alpha test.
 	vec2 uv = fetch_uv(geom, i0, i1, i2, bary);
-	MaterialData mat = materials[geometry_idx];
 	uv = uv * mat.uv1_scale + mat.uv1_offset;
-	float alpha = texture(sampler2D(bindless_textures[nonuniformEXT(mat.albedo_texture_idx)], SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), uv).a;
+	float alpha = sample_material_texture(mat.albedo_texture_idx, uv, mat.flags).a;
+	alpha *= rt_material_vertex_color(mat, fetch_color(geom, i0, i1, i2, bary)).a;
 	alpha *= mat.albedo_color.a;
 
-	if (alpha < 0.5) {
+	if ((mat.flags & RT_MAT_FLAG_ALPHA_HASH) != 0u) {
+		mat4 rt_aabb_xform;
+		mat4 rt_inv_aabb_xform;
+		get_aabb_compression_xforms(geom, rt_aabb_xform, rt_inv_aabb_xform);
+		vec3 rt_hit_pos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
+		vec3 rt_hash_object_pos = (rt_aabb_xform * mat4(gl_WorldToObjectEXT) * vec4(rt_hit_pos, 1.0)).xyz;
+		if (alpha < rt_alpha_hash_threshold(rt_hash_object_pos, mat.alpha_hash_scale)) {
+			ignoreIntersectionEXT;
+		}
+		return;
+	}
+
+	if (alpha < mat.alpha_scissor_threshold) {
 		ignoreIntersectionEXT;
 	}
 #endif
@@ -585,17 +700,42 @@ layout(buffer_reference, std140) readonly buffer CustomMaterialUniforms{
 /* RT_CUSTOM_TEXTURE_DEFINES */
 
 // File-scope built-ins accessible from user helper functions in globals.
-float global_time = scene_data_block.data.time;
+float global_time = 0.0;
 float global_prev_time = 0.0;
 mat4 read_model_matrix = mat4(0.0);
 mat4 m_INV_MODEL_MATRIX = mat4(0.0);
-mat4 read_view_matrix = transpose(mat4(scene_data_block.data.view_matrix[0], scene_data_block.data.view_matrix[1], scene_data_block.data.view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
-mat4 inv_view_matrix = transpose(mat4(scene_data_block.data.inv_view_matrix[0], scene_data_block.data.inv_view_matrix[1], scene_data_block.data.inv_view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
-mat4 projection_matrix = scene_data_block.data.projection_matrix;
-mat4 inv_projection_matrix = scene_data_block.data.inv_projection_matrix;
-vec2 read_viewport_size = scene_data_block.data.viewport_size;
-float m_Z_NEAR = scene_data_block.data.z_near;
-float m_Z_FAR = scene_data_block.data.z_far;
+mat4 read_view_matrix = mat4(1.0);
+mat4 inv_view_matrix = mat4(1.0);
+mat4 projection_matrix = mat4(1.0);
+mat4 inv_projection_matrix = mat4(1.0);
+vec2 read_viewport_size = vec2(1.0);
+float m_Z_NEAR = 0.0;
+float m_Z_FAR = 0.0;
+float rt_point_size = 1.0;
+int rt_instance_id = 0;
+int rt_vertex_id = 0;
+int ViewIndex = 0;
+vec3 eye_offset = vec3(0.0);
+vec4 instance_custom = vec4(0.0);
+uvec4 bone_attrib = uvec4(0u);
+vec4 weight_attrib = vec4(0.0);
+vec4 custom0_attrib = vec4(0.0);
+vec4 custom1_attrib = vec4(0.0);
+vec4 custom2_attrib = vec4(0.0);
+vec4 custom3_attrib = vec4(0.0);
+vec3 light_vertex = vec3(0.0);
+vec2 rt_point_coord = vec2(0.0);
+float rt_depth = 0.0;
+vec4 fog = vec4(0.0);
+vec4 custom_radiance = vec4(0.0);
+vec4 custom_irradiance = vec4(0.0);
+float specular_amount = 0.0;
+vec3 light_color = vec3(0.0);
+bool is_directional = false;
+vec3 light = vec3(0.0);
+float attenuation = 1.0;
+vec3 diffuse_light = vec3(0.0);
+vec3 specular_light = vec3(0.0);
 
 uint64_t _rt_material_address;
 #define material CustomMaterialUniforms(_rt_material_address)
@@ -619,7 +759,19 @@ void main() {
 	vec3 m_WORLD_DIRECTION = gl_WorldRayDirectionEXT;
 	float m_T_MIN = gl_RayTminEXT;
 	float m_T_MAX = gl_RayTmaxEXT;
+	global_time = scene_data_block.data.time;
 	global_prev_time = scene_data_block.prev_data.time;
+	read_view_matrix = transpose(mat4(scene_data_block.data.view_matrix[0], scene_data_block.data.view_matrix[1], scene_data_block.data.view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
+	inv_view_matrix = transpose(mat4(scene_data_block.data.inv_view_matrix[0], scene_data_block.data.inv_view_matrix[1], scene_data_block.data.inv_view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
+	projection_matrix = scene_data_block.data.projection_matrix;
+	inv_projection_matrix = scene_data_block.data.inv_projection_matrix;
+	read_viewport_size = scene_data_block.data.viewport_size;
+	m_Z_NEAR = scene_data_block.data.z_near;
+	m_Z_FAR = scene_data_block.data.z_far;
+	rt_instance_id = int(gl_InstanceID);
+	rt_vertex_id = int(gl_PrimitiveID);
+	ViewIndex = 0;
+	eye_offset = vec3(0.0);
 
 	// Resolve custom material uniforms via BDA (assigns file-scope address).
 	uint rt_geometry_idx = gl_InstanceCustomIndexEXT;

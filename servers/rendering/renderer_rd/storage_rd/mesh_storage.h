@@ -244,6 +244,8 @@ private:
 		uint32_t motion_vectors_current_offset = 0;
 		uint32_t motion_vectors_previous_offset = 0;
 		uint64_t motion_vectors_last_change = -1;
+		uint64_t rt_transform_last_change = 0;
+		uint64_t rt_appearance_last_change = 0;
 		uint32_t stride_cache = 0;
 		uint32_t color_offset_cache = 0;
 		uint32_t custom_data_offset_cache = 0;
@@ -798,6 +800,11 @@ public:
 		return multimesh->data_cache.is_empty() ? nullptr : multimesh->data_cache.ptr();
 	}
 
+	_FORCE_INLINE_ const float *multimesh_get_cached_local_data_ptr(RID p_multimesh) const {
+		MultiMesh *multimesh = multimesh_owner.get_or_null(p_multimesh);
+		return multimesh && !multimesh->data_cache.is_empty() ? multimesh->data_cache.ptr() : nullptr;
+	}
+
 	_FORCE_INLINE_ uint32_t multimesh_get_stride(RID p_multimesh) const {
 		MultiMesh *multimesh = multimesh_owner.get_or_null(p_multimesh);
 		return multimesh ? multimesh->stride_cache : 0;
@@ -806,6 +813,16 @@ public:
 	_FORCE_INLINE_ uint32_t multimesh_get_current_instance_offset(RID p_multimesh) const {
 		MultiMesh *multimesh = multimesh_owner.get_or_null(p_multimesh);
 		return multimesh ? multimesh->motion_vectors_current_offset : 0;
+	}
+
+	_FORCE_INLINE_ uint64_t multimesh_get_rt_transform_last_change(RID p_multimesh) const {
+		MultiMesh *multimesh = multimesh_owner.get_or_null(p_multimesh);
+		return multimesh ? multimesh->rt_transform_last_change : 0;
+	}
+
+	_FORCE_INLINE_ uint64_t multimesh_get_rt_appearance_last_change(RID p_multimesh) const {
+		MultiMesh *multimesh = multimesh_owner.get_or_null(p_multimesh);
+		return multimesh ? multimesh->rt_appearance_last_change : 0;
 	}
 
 	_FORCE_INLINE_ RID multimesh_get_gpu_buffer(RID p_multimesh) const {

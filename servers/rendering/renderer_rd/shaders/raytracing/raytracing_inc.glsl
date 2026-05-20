@@ -22,7 +22,11 @@
 #define RT_PARAM_ENERGY 4 // rt_params[1].x - RTGI energy multiplier
 #define RT_PARAM_TEMPORAL_ACCUMULATION 5 // rt_params[1].y - Temporal accumulation enabled
 #define RT_PARAM_MODE 6 // rt_params[1].z - 0=Hybrid RTGI, 1=Path Traced
-// Indices 7-13 reserved for future use
+#define RT_PARAM_BACKGROUND_USES_SKY 7 // rt_params[1].w - Miss shader samples sky radiance
+#define RT_PARAM_BACKGROUND_R 8 // rt_params[2].x - Linear fallback background color
+#define RT_PARAM_BACKGROUND_G 9 // rt_params[2].y
+#define RT_PARAM_BACKGROUND_B 10 // rt_params[2].z
+// Indices 11-13 reserved for future use
 #define RT_PARAM_LIGHT_COUNT 14 // rt_params[3].z - Number of active lights in light buffer
 #define RT_PARAM_FRAME_INDEX 15 // rt_params[3].w - Frame counter for temporal variation
 
@@ -40,6 +44,29 @@
 // 16-bit unorm octahedral pairs (effective angular error <~0.001 deg,
 // below the 8-bit normal quantization baked into offset_ray_origin).
 // Use PathState + path_pack/path_unpack for fp32 working copies.
+
+const float RT_FP16_MAX = 65504.0;
+
+vec3 sanitize_payload_vec3(vec3 v) {
+	v = mix(v, vec3(0.0), isnan(v));
+	v = mix(v, vec3(0.0), bvec3(isinf(v.x) && v.x < 0.0, isinf(v.y) && v.y < 0.0, isinf(v.z) && v.z < 0.0));
+	v = mix(v, vec3(RT_FP16_MAX), bvec3(isinf(v.x) && v.x > 0.0, isinf(v.y) && v.y > 0.0, isinf(v.z) && v.z > 0.0));
+	return clamp(v, vec3(0.0), vec3(RT_FP16_MAX));
+}
+
+float rt_hash_2d(vec2 p) {
+	return fract(1.0e4 * sin(17.0 * p.x + 0.1 * p.y) *
+			(0.1 + abs(sin(13.0 * p.y + p.x))));
+}
+
+float rt_hash_3d(vec3 p) {
+	return rt_hash_2d(vec2(rt_hash_2d(p.xy), p.z));
+}
+
+float rt_alpha_hash_threshold(vec3 object_pos, float hash_scale) {
+	float scale = max(hash_scale, 0.0001);
+	return clamp(rt_hash_3d(floor(object_pos * scale * 64.0)), 0.00001, 1.0);
+}
 
 struct PathPayload {
 	uint packed_rt[3]; // 12 bytes - radiance+throughput interleaved as fp16
@@ -66,8 +93,8 @@ PathState path_unpack(PathPayload p) {
 	vec2 rg = unpackHalf2x16(p.packed_rt[0]);
 	vec2 bR = unpackHalf2x16(p.packed_rt[1]);
 	vec2 GB = unpackHalf2x16(p.packed_rt[2]);
-	s.radiance = max(vec3(rg.x, rg.y, bR.x), vec3(0.0));
-	s.throughput = max(vec3(bR.y, GB.x, GB.y), vec3(0.0));
+	s.radiance = sanitize_payload_vec3(vec3(rg.x, rg.y, bR.x));
+	s.throughput = sanitize_payload_vec3(vec3(bR.y, GB.x, GB.y));
 	s.packed_bounces_flags = p.packed_bounces_flags;
 	s.rng_state = p.rng_state;
 	s.hit_t = p.hit_t;
@@ -77,9 +104,8 @@ PathState path_unpack(PathPayload p) {
 }
 
 void path_pack(inout PathPayload p, PathState s) {
-	const float FP16_MAX = 65504.0;
-	vec3 r = clamp(s.radiance, vec3(0.0), vec3(FP16_MAX));
-	vec3 t = clamp(s.throughput, vec3(0.0), vec3(FP16_MAX));
+	vec3 r = sanitize_payload_vec3(s.radiance);
+	vec3 t = sanitize_payload_vec3(s.throughput);
 	p.packed_rt[0] = packHalf2x16(vec2(r.r, r.g));
 	p.packed_rt[1] = packHalf2x16(vec2(r.b, t.r));
 	p.packed_rt[2] = packHalf2x16(vec2(t.g, t.b));
@@ -144,12 +170,16 @@ bool is_path_terminated(uint packed) {
 // CONSTANTS
 // ============================================================================
 const uint OFFSET_NONE = 0xFFFFFFFFu;
+const uint RT_INSTANCE_MASK_VISIBLE = 1u;
+const uint RT_INSTANCE_MASK_SHADOW = 2u;
 const uint FLAG_COMPRESSED = 1u;
 const uint FLAG_PROCEDURAL = 2u;
 // Set when the BLAS uses a per-frame-deformed vertex buffer.
 const uint FLAG_DEFORMED = 4u;
 // Set when this TLAS entry was not present in the previous RT history set.
 const uint FLAG_HISTORY_INVALID = 8u;
+// Set when the attribute buffer is still in the compressed surface layout.
+const uint FLAG_COMPRESSED_ATTRIBUTES = 16u;
 
 // ============================================================================
 // RANDOM NUMBER GENERATION - PCG (Permuted Congruential Generator)

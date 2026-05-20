@@ -209,7 +209,7 @@ private:
 	PathtracingDebugMode pathtracing_debug_mode = RT_DEBUG_DISABLED;
 	int pathtracing_samples_per_pixel = 1;
 	int pathtracing_max_bounces = 3;
-	RSE::PathtracingDenoiser pathtracing_denoiser = RSE::PT_DENOISER_NONE;
+	RSE::PathtracingDenoiser pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL;
 	RTGIMode rtgi_mode = RTGI_MODE_PATH_TRACED;
 	float rtgi_energy = 1.0;
 	bool rtgi_temporal_accumulation = true;
