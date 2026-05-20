@@ -56,9 +56,10 @@ layout(set = 0, binding = 12, r16f) uniform image2D dlss_rr_specular_hit_dist;
 #endif
 
 // Binding 14 is reserved for GlobalShaderUniformData (declared above).
-// Samplers occupy 16-27 (see raytracing_samplers_inc.glsl); velocity sits at
-// the first free slot past them so we do not collide with either.
+// Samplers occupy 16-27 (see raytracing_samplers_inc.glsl); RT output side
+// channels start at the first free slots past them so we do not collide with either.
 layout(set = 0, binding = 28, rg16f) uniform image2D rt_velocity_image;
+layout(set = 0, binding = 29, r8) uniform image2D rt_history_validity_image;
 layout(set = 0, binding = 15, r32f) uniform image2D rt_depth_image;
 
 #endif // !RT_STAGE_ANY_HIT

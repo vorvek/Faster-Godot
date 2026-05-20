@@ -162,6 +162,9 @@ public:
 		RID rt_get_texture() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING); }
 		bool rt_has_depth_texture() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH); }
 		RID rt_get_depth_texture() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH); }
+		bool rt_has_history_validity() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_VALIDITY); }
+		RID rt_get_history_validity() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_VALIDITY); }
+		RID rt_get_prev_history_validity() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_VALIDITY_PREV); }
 
 		// DLSS Ray Reconstruction output buffers
 		void dlss_rr_ensure_buffers();

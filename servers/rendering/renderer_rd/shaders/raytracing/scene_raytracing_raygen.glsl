@@ -160,6 +160,7 @@ void main() {
 			ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
 
 			imageStore(rt_depth_image, pixel, vec4(0.0));
+			imageStore(rt_history_validity_image, pixel, vec4(1.0, 0.0, 0.0, 0.0));
 
 			// Sky velocity: reproject a far-plane point using unjittered VPs.
 			{
@@ -307,6 +308,7 @@ layout(set = 0, binding = 8) uniform sampler radiance_sampler;
 void main() {
 	HitData h = compute_hit_data();
 	write_primary_hit_depth(h.hit_pos);
+	write_primary_hit_history_validity();
 	write_primary_hit_velocity(h.hit_pos);
 
 #ifdef RT_CUSTOM_HIT_GROUP

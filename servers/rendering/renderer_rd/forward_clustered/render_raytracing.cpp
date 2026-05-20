@@ -58,6 +58,28 @@ static void _rt_free_acceleration_structure_if_alive(RID &r_rid) {
 	r_rid = RID();
 }
 
+static uint64_t _rt_history_mix(uint64_t p_hash, uint64_t p_value) {
+	return p_hash ^ (p_value + 0x9e3779b97f4a7c15ULL + (p_hash << 6) + (p_hash >> 2));
+}
+
+static uint64_t _rt_history_mix_rid(uint64_t p_hash, RID p_rid) {
+	return _rt_history_mix(p_hash, p_rid.is_valid() ? p_rid.get_id() : 0);
+}
+
+static bool _rt_history_key_is_valid(RTViewportState *p_state, uint64_t p_key) {
+	bool valid = p_state->previous_history_keys.has(p_key);
+	p_state->current_history_keys.insert(p_key);
+	return valid;
+}
+
+static RT_GeometryData _rt_geometry_with_history_validity(RTViewportState *p_state, const RT_GeometryData &p_geometry, uint64_t p_history_key) {
+	RT_GeometryData geometry = p_geometry;
+	if (!_rt_history_key_is_valid(p_state, p_history_key)) {
+		geometry.flags |= RT_GEOM_FLAG_HISTORY_INVALID;
+	}
+	return geometry;
+}
+
 // ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
@@ -2099,6 +2121,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 	}
 
 	prepare_frame();
+	state->current_history_keys.clear();
 
 	// Builds bundle if needed; live_ready_mask drives TLAS inclusion below.
 	SceneShaderRaytracing *rt_shader_singleton = SceneShaderRaytracing::get_singleton();
@@ -2135,6 +2158,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 		bool transform_moved;
 		RTMaterialData *mat_data;
 		uint32_t inst_flags;
+		uint64_t history_key;
 	};
 	LocalVector<PendingMMSurface> pending_mm_surfaces;
 
@@ -2143,6 +2167,9 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 		const RenderForwardClustered::GeometryInstanceForwardClustered *inst =
 				static_cast<const RenderForwardClustered::GeometryInstanceForwardClustered *>(rt_instances[i]);
 		if (!inst || !inst->data) {
+			continue;
+		}
+		if (inst->data->base_type == RSE::INSTANCE_PARTICLES) {
 			continue;
 		}
 		const Transform3D &instance_transform = inst->transform;
@@ -2200,7 +2227,11 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 				geom.aabb_size_x = (float)ps->culling_aabb.size.x;
 				geom.aabb_size_y = (float)ps->culling_aabb.size.y;
 				geom.aabb_size_z = (float)ps->culling_aabb.size.z;
-				geometry_data.push_back(geom);
+				uint64_t history_key = _rt_history_mix(0x70726f6365647572ULL, (uint64_t)(uintptr_t)inst);
+				history_key = _rt_history_mix_rid(history_key, proc_material_rid);
+				history_key = _rt_history_mix(history_key, shader_id);
+				history_key = _rt_history_mix(history_key, hg_index);
+				geometry_data.push_back(_rt_geometry_with_history_validity(state, geom, history_key));
 
 				if (inst->transform_status == RenderForwardClustered::GeometryInstanceForwardClustered::TransformStatus::MOVED) {
 					motion_indices.push_back((int32_t)motion_transforms.size());
@@ -2321,6 +2352,14 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 				pending.transform_moved = transform_moved;
 				pending.mat_data = mat_data;
 				pending.inst_flags = inst_flags;
+				uint64_t history_key = _rt_history_mix(0x6d756c74696d6573ULL, (uint64_t)(uintptr_t)inst);
+				history_key = _rt_history_mix_rid(history_key, mm_rid);
+				history_key = _rt_history_mix(history_key, mm_surf->surface_index);
+				history_key = _rt_history_mix(history_key, surface_counter);
+				history_key = _rt_history_mix_rid(history_key, material_rid);
+				history_key = _rt_history_mix(history_key, material_counter);
+				history_key = _rt_history_mix(history_key, mat_data->rt_sbt_offset);
+				pending.history_key = history_key;
 				pending_mm_surfaces.push_back(pending);
 
 				mm_surf = mm_surf->next;
@@ -2409,7 +2448,15 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 			blas_transforms.push_back(final_transform);
 
 			blass.push_back(surf_data->blas);
-			geometry_data.push_back(surf_data->geometry);
+			uint64_t history_key = _rt_history_mix(0x6d65736873757266ULL, (uint64_t)(uintptr_t)inst);
+			history_key = _rt_history_mix_rid(history_key, surf->owner->data->base);
+			history_key = _rt_history_mix(history_key, surf->surface_index);
+			history_key = _rt_history_mix(history_key, surface_counter);
+			history_key = _rt_history_mix_rid(history_key, material_rid);
+			history_key = _rt_history_mix(history_key, material_counter);
+			history_key = _rt_history_mix(history_key, mat_data->rt_sbt_offset);
+			history_key = _rt_history_mix(history_key, surf_data->geometry.flags);
+			geometry_data.push_back(_rt_geometry_with_history_validity(state, surf_data->geometry, history_key));
 
 			if (inst->transform_status == RenderForwardClustered::GeometryInstanceForwardClustered::TransformStatus::MOVED) {
 				motion_indices.push_back((int32_t)motion_transforms.size());
@@ -2500,7 +2547,8 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 		if (use_merged) {
 			blass.push_back(merged_sd.blas);
 			blas_transforms.push_back(pending.instance_transform);
-			geometry_data.push_back(merged_sd.geometry);
+			uint64_t history_key = _rt_history_mix(pending.history_key, merged_sd.geometry.flags);
+			geometry_data.push_back(_rt_geometry_with_history_validity(state, merged_sd.geometry, history_key));
 			sbt_offsets.push_back(pending.mat_data->rt_sbt_offset);
 			material_data.push_back(pending.mat_data->data);
 			motion_indices.push_back(-1);
@@ -2558,7 +2606,9 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 
 				blass.push_back(surf_data->blas);
 				blas_transforms.push_back(final_transform);
-				geometry_data.push_back(surf_data->geometry);
+				uint64_t history_key = _rt_history_mix(pending.history_key, mi);
+				history_key = _rt_history_mix(history_key, surf_data->geometry.flags);
+				geometry_data.push_back(_rt_geometry_with_history_validity(state, surf_data->geometry, history_key));
 				sbt_offsets.push_back(pending.mat_data->rt_sbt_offset);
 				material_data.push_back(pending.mat_data->data);
 
@@ -2617,6 +2667,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 
 	build_acceleration_structures(state, dirty_blas_list, dirty_blas_update_list);
 	finalize_buffers(state);
+	state->previous_history_keys = state->current_history_keys;
 
 	return state;
 }
@@ -3091,6 +3142,15 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		u.binding = 28;
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
 		u.append_id(rb->get_velocity_buffer(false));
+		uniforms.push_back(u);
+	}
+
+	// Binding 29: RT history-validity output (R8). Written by primary hit/miss shaders.
+	{
+		RD::Uniform u;
+		u.binding = 29;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		u.append_id(rb_data->rt_get_history_validity());
 		uniforms.push_back(u);
 	}
 

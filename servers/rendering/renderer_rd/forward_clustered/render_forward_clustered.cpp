@@ -89,7 +89,8 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 
 	uint32_t usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT |
 			RD::TEXTURE_USAGE_SAMPLING_BIT |
-			RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
+			RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT |
+			RD::TEXTURE_USAGE_CAN_COPY_TO_BIT;
 
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING)) {
 		render_buffers->create_texture(
@@ -105,6 +106,24 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 				RB_SCOPE_FORWARD_CLUSTERED,
 				RB_TEX_RT_DEPTH,
 				RD::DATA_FORMAT_R32_SFLOAT,
+				usage_bits,
+				RD::TEXTURE_SAMPLES_1);
+	}
+
+	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_VALIDITY)) {
+		render_buffers->create_texture(
+				RB_SCOPE_FORWARD_CLUSTERED,
+				RB_TEX_RT_HISTORY_VALIDITY,
+				RD::DATA_FORMAT_R8_UNORM,
+				usage_bits,
+				RD::TEXTURE_SAMPLES_1);
+	}
+
+	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_VALIDITY_PREV)) {
+		render_buffers->create_texture(
+				RB_SCOPE_FORWARD_CLUSTERED,
+				RB_TEX_RT_HISTORY_VALIDITY_PREV,
+				RD::DATA_FORMAT_R8_UNORM,
 				usage_bits,
 				RD::TEXTURE_SAMPLES_1);
 	}
@@ -1121,7 +1140,8 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 			// Alpha-only (RT path): skip instances with no transparent/fading
 			// surfaces; opaque geometry is in the TLAS. Uses rt_pass_flags so
 			// `#if defined(RT)` overrides are honoured.
-			if (p_alpha_only && fade_alpha >= FADE_ALPHA_PASS_THRESHOLD) {
+			bool alpha_only_particles = p_alpha_only && inst->data->base_type == RSE::INSTANCE_PARTICLES;
+			if (p_alpha_only && !alpha_only_particles && fade_alpha >= FADE_ALPHA_PASS_THRESHOLD) {
 				bool has_alpha_surface = false;
 				const GeometryInstanceSurfaceDataCache *s = inst->surface_caches;
 				while (s) {
@@ -1265,6 +1285,9 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 #endif
 
 				if (fade_alpha < FADE_ALPHA_PASS_THRESHOLD) {
+					force_alpha = true;
+				}
+				if (p_alpha_only && inst->data->base_type == RSE::INSTANCE_PARTICLES) {
 					force_alpha = true;
 				}
 
@@ -1943,7 +1966,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RENDER_TIMESTAMP("Setup 3D Scene");
 
 	bool using_debug_mvs = get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_MOTION_VECTORS;
-	bool using_taa = rb->get_use_taa() || (!is_reflection_probe && scene_features.rt && rt_temporal_denoiser && rt_temporal_accumulation);
+	bool using_rt_temporal_denoise = !is_reflection_probe && scene_features.rt && rt_temporal_denoiser && rt_temporal_accumulation;
+	bool using_taa = rb->get_use_taa() || using_rt_temporal_denoise;
 
 	enum {
 		SCALE_NONE,
@@ -2560,6 +2584,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// (written to rt_velocity_image). No raster motion pass needed.
 
 		raytracing->copy_output_texture(p_render_data);
+
+		if (using_rt_temporal_denoise) {
+			RD::get_singleton()->draw_command_begin_label("RT Denoise");
+			RENDER_TIMESTAMP("RT Denoise");
+			taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, true, rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity());
+			RD::get_singleton()->draw_command_end_label();
+		}
 	}
 
 	{
@@ -2859,7 +2890,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 			RD::get_singleton()->draw_command_end_label();
 #endif
-		} else if (using_taa) {
+		} else if (using_taa && !using_rt_temporal_denoise) {
 			RD::get_singleton()->draw_command_begin_label("TAA");
 			RENDER_TIMESTAMP("TAA");
 			taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, scene_features.rt && rt_temporal_denoiser);

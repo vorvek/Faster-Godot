@@ -126,6 +126,21 @@ void write_primary_hit_depth(vec3 hit_pos) {
 }
 
 // ============================================================================
+// HISTORY VALIDITY WRITE (primary ray only)
+// ============================================================================
+
+void write_primary_hit_history_validity() {
+	if (get_total_bounces(payload.packed_bounces_flags) != 0u || !is_sample_zero(payload.packed_bounces_flags)) {
+		return;
+	}
+
+	uint geom_idx = gl_InstanceCustomIndexEXT;
+	GeometryData geom = geometries[geom_idx];
+	float valid = ((geom.flags & FLAG_HISTORY_INVALID) != 0u) ? 0.0 : 1.0;
+	imageStore(rt_history_validity_image, ivec2(gl_LaunchIDEXT.xy), vec4(valid, 0.0, 0.0, 0.0));
+}
+
+// ============================================================================
 // VELOCITY WRITE (primary ray only, MV-gated)
 // ============================================================================
 

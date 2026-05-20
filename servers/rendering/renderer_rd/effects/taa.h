@@ -40,7 +40,7 @@ public:
 	TAA();
 	~TAA();
 
-	void process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far, bool p_raytracing_denoise = false);
+	void process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far, bool p_raytracing_denoise = false, RID p_rt_history_validity = RID(), RID p_rt_prev_history_validity = RID());
 
 private:
 	struct TAAResolvePushConstant {
@@ -49,7 +49,7 @@ private:
 		float disocclusion_threshold;
 		float variance_dynamic;
 		float raytracing_denoise;
-		float pad0;
+		float rt_history_validity_enabled;
 		float pad1;
 		float pad2;
 	};
@@ -58,7 +58,7 @@ private:
 	RID shader_version;
 	RID pipeline;
 
-	void resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_prev_velocity, RID p_history, Size2 p_resolution, float p_z_near, float p_z_far, bool p_raytracing_denoise);
+	void resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_prev_velocity, RID p_history, RID p_rt_history_validity, RID p_rt_prev_history_validity, Size2 p_resolution, float p_z_near, float p_z_far, bool p_raytracing_denoise);
 };
 
 } // namespace RendererRD

@@ -33,6 +33,7 @@
 #include "core/math/transform_3d.h"
 #include "core/string/string_name.h"
 #include "core/templates/hash_map.h"
+#include "core/templates/hash_set.h"
 #include "core/templates/local_vector.h"
 #include "core/templates/vector.h"
 #include "servers/rendering/renderer_rd/bindless_block.h"
@@ -41,6 +42,8 @@
 
 #define RB_TEX_RAYTRACING SNAME("raytracing")
 #define RB_TEX_RT_DEPTH SNAME("rt_depth")
+#define RB_TEX_RT_HISTORY_VALIDITY SNAME("rt_history_validity")
+#define RB_TEX_RT_HISTORY_VALIDITY_PREV SNAME("rt_history_validity_prev")
 
 #define RB_SCOPE_DLSS_RR SNAME("dlss_rr")
 #define RB_TEX_DLSS_RR_DIFFUSE_ALBEDO SNAME("diffuse_albedo")
@@ -176,6 +179,8 @@ enum {
 	RT_GEOM_FLAG_PROCEDURAL = 2u,
 	// Set when the BLAS uses a per-frame-deformed vertex buffer.
 	RT_GEOM_FLAG_DEFORMED = 4u,
+	// Set on TLAS entries that were not part of the previous RT history set.
+	RT_GEOM_FLAG_HISTORY_INVALID = 8u,
 };
 
 /// Per-instance state for procedural RT geometry. Heap-allocated, only exists for procedural instances.
@@ -297,6 +302,8 @@ struct RTViewportState {
 	RID uniform_set;
 
 	uint32_t frame_counter = 0;
+	HashSet<uint64_t> previous_history_keys;
+	HashSet<uint64_t> current_history_keys;
 };
 
 class RenderRaytracing {

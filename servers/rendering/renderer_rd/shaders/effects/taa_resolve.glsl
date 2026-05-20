@@ -49,12 +49,15 @@ layout(rg16f, set = 0, binding = 2) uniform restrict readonly image2D velocity_b
 layout(rg16f, set = 0, binding = 3) uniform restrict readonly image2D last_velocity_buffer;
 layout(set = 0, binding = 4) uniform sampler2D history_buffer;
 layout(rgba16f, set = 0, binding = 5) uniform restrict writeonly image2D output_buffer;
+layout(set = 0, binding = 6) uniform sampler2D rt_history_validity_buffer;
+layout(set = 0, binding = 7) uniform sampler2D rt_prev_history_validity_buffer;
 
 layout(push_constant, std430) uniform Params {
 	vec2 resolution;
 	float disocclusion_threshold; // 0.1 / max(params.resolution.x, params.resolution.y)
 	float variance_dynamic;
 	float raytracing_denoise;
+	float rt_history_validity_enabled;
 }
 params;
 
@@ -347,6 +350,18 @@ float get_factor_disocclusion(vec2 uv_reprojected, vec2 velocity) {
 	return clamp(disocclusion * DISOCCLUSION_SCALE, 0.0, 1.0);
 }
 
+bool rt_history_is_invalid(uvec2 pos_screen, vec2 uv_reprojected) {
+	if (params.rt_history_validity_enabled < 0.5) {
+		return false;
+	}
+
+	float current_valid = texelFetch(rt_history_validity_buffer, ivec2(pos_screen), 0).r;
+	bool previous_in_screen = all(greaterThanEqual(uv_reprojected, vec2(0.0))) && all(lessThanEqual(uv_reprojected, vec2(1.0)));
+	float previous_valid = previous_in_screen ? textureLod(rt_prev_history_validity_buffer, uv_reprojected, 0.0).r : 0.0;
+
+	return current_valid < 0.5 || previous_valid < 0.5;
+}
+
 vec3 temporal_antialiasing(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_screen, vec2 uv, sampler2D tex_history) {
 	// Get the velocity of the current pixel
 	vec2 velocity = imageLoad(velocity_buffer, ivec2(pos_screen)).xy;
@@ -377,8 +392,11 @@ vec3 temporal_antialiasing(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_
 		// Increase blend factor when there is disocclusion (fixes a lot of the remaining ghosting).
 		float factor_disocclusion = get_factor_disocclusion(uv_reprojected, velocity);
 
+		// RT denoise keeps opaque history only when both the current and reprojected prior samples are valid.
+		float factor_history_invalid = rt_history_is_invalid(pos_screen, uv_reprojected) ? 1.0 : 0.0;
+
 		// Add to the blend factor
-		blend_factor = clamp(blend_factor + factor_screen + factor_disocclusion, 0.0, 1.0);
+		blend_factor = clamp(blend_factor + factor_screen + factor_disocclusion + factor_history_invalid, 0.0, 1.0);
 	}
 
 	// Resolve

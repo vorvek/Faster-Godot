@@ -148,6 +148,8 @@ const uint FLAG_COMPRESSED = 1u;
 const uint FLAG_PROCEDURAL = 2u;
 // Set when the BLAS uses a per-frame-deformed vertex buffer.
 const uint FLAG_DEFORMED = 4u;
+// Set when this TLAS entry was not present in the previous RT history set.
+const uint FLAG_HISTORY_INVALID = 8u;
 
 // ============================================================================
 // RANDOM NUMBER GENERATION - PCG (Permuted Congruential Generator)
