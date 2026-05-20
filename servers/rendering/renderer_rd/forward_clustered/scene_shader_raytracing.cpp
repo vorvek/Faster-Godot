@@ -380,7 +380,7 @@ void SceneShaderRaytracing::invalidate_pipeline_bundles() {
 	variant_compile_contexts.clear();
 }
 
-// Async bundle rebuild task (worker: SPIR-V + pipeline; main thread: SBT + swap). Single-lane globally.
+// Async bundle rebuild task (worker: SPIR-V; main thread: pipeline + SBT + swap). Single-lane globally.
 
 struct SceneShaderRaytracing::PipelineBuildTask {
 	uint32_t rt_flags = 0;
@@ -402,6 +402,7 @@ struct SceneShaderRaytracing::PipelineBuildTask {
 	};
 	LocalVector<SlotInput> slots;
 
+	LocalVector<Vector<uint8_t>> new_per_hg_binaries;
 	LocalVector<RID> new_per_hg_shaders;
 	LocalVector<bool> new_ready_mask;
 	RID new_pipeline;
@@ -412,6 +413,21 @@ struct SceneShaderRaytracing::PipelineBuildTask {
 	SafeFlag done;
 	WorkerThreadPool::TaskID worker_id = WorkerThreadPool::INVALID_TASK_ID;
 };
+
+void SceneShaderRaytracing::_free_task_owned_pipeline_outputs(PipelineBuildTask *p_task) {
+	for (uint32_t i = 0; i < p_task->slots.size(); i++) {
+		if (p_task->slots[i].existing_per_hg_shader.is_null() &&
+				i < p_task->new_per_hg_shaders.size() &&
+				p_task->new_per_hg_shaders[i].is_valid()) {
+			RD::get_singleton()->free_rid(p_task->new_per_hg_shaders[i]);
+			p_task->new_per_hg_shaders[i] = RID();
+		}
+	}
+	if (p_task->new_pipeline.is_valid()) {
+		RD::get_singleton()->free_rid(p_task->new_pipeline);
+		p_task->new_pipeline = RID();
+	}
+}
 
 void SceneShaderRaytracing::_strip_texture_globals(String &r_globals, const String &p_tex_name) {
 	const String decl_marker = " m_" + p_tex_name + ";";
@@ -530,6 +546,10 @@ uint32_t SceneShaderRaytracing::_register_slot(uint32_t /*p_shader_id*/, RID p_m
 	if (!p_is_procedural && entry.fragment_code.is_empty() && entry.vertex_code.is_empty()) {
 		return 0;
 	}
+	if (!p_is_procedural && entry.uses_light_shader) {
+		WARN_PRINT_ONCE("RT: ShaderMaterial light() functions are not run in the path tracer yet; using the MaterialData fallback for those surfaces.");
+		return 0;
+	}
 	if (p_is_procedural && entry.intersection_code.is_empty()) {
 		return 0;
 	}
@@ -581,6 +601,9 @@ bool SceneShaderRaytracing::_preprocess_shader(RID p_material, bool p_is_procedu
 	}
 
 	r_entry.is_procedural = p_is_procedural;
+	r_entry.uses_light_shader = !p_is_procedural &&
+			((gen_code.code.has("light") && !String(gen_code.code["light"]).is_empty()) ||
+					code.find("void light") >= 0);
 	r_entry.uses_alpha_clip = detected_alpha_clip;
 	r_entry.vertex_code = gen_code.code.has("vertex") ? gen_code.code["vertex"] : String();
 	r_entry.fragment_code = gen_code.code.has("fragment") ? gen_code.code["fragment"] : String();
@@ -1040,23 +1063,13 @@ void SceneShaderRaytracing::_build_pipeline_worker(PipelineBuildTask *p_task) {
 	};
 
 	uint32_t n = (uint32_t)p_task->slots.size();
+	p_task->new_per_hg_binaries.resize(n);
 	p_task->new_per_hg_shaders.resize(n);
 	p_task->new_ready_mask.resize(n);
-
-	LocalVector<RID> created_here;
-	auto cleanup_created = [&]() {
-		for (const RID &r : created_here) {
-			if (r.is_valid()) {
-				RD::get_singleton()->free_rid(r);
-			}
-		}
-		created_here.clear();
-		for (uint32_t i = 0; i < n; i++) {
-			if (p_task->slots[i].existing_per_hg_shader.is_null()) {
-				p_task->new_per_hg_shaders[i] = RID();
-			}
-		}
-	};
+	for (uint32_t i = 0; i < n; i++) {
+		p_task->new_per_hg_shaders[i] = RID();
+		p_task->new_ready_mask[i] = false;
+	}
 
 	if (n > 0) {
 		p_task->new_per_hg_shaders[0] = RID();
@@ -1066,8 +1079,8 @@ void SceneShaderRaytracing::_build_pipeline_worker(PipelineBuildTask *p_task) {
 	String error;
 	for (uint32_t i = 1; i < n; i++) {
 		if (check_abort()) {
-			cleanup_created();
 			p_task->failed = true;
+			p_task->error = "pipeline rebuild aborted";
 			finish();
 			return;
 		}
@@ -1158,25 +1171,60 @@ void SceneShaderRaytracing::_build_pipeline_worker(PipelineBuildTask *p_task) {
 			continue;
 		}
 
-		RID rid = RD::get_singleton()->shader_create_from_bytecode(binary);
+		p_task->new_per_hg_binaries[i] = binary;
+		p_task->new_ready_mask[i] = true;
+	}
+
+	if (check_abort()) {
+		p_task->failed = true;
+		p_task->error = "pipeline rebuild aborted";
+		finish();
+		return;
+	}
+	finish();
+}
+
+void SceneShaderRaytracing::_finalize_pipeline_build(PipelineBuildTask *p_task) {
+	HashMap<uint32_t, PipelineBundle>::Iterator bit = pipeline_bundles.find(p_task->rt_flags);
+	if (bit == pipeline_bundles.end()) {
+		_free_task_owned_pipeline_outputs(p_task);
+		return;
+	}
+	PipelineBundle &bundle = bit->value;
+	_bundle_resize_for_slots(bundle);
+
+	if (p_task->failed) {
+		WARN_PRINT(vformat("RT: pipeline rebuild failed for variant 0x%x: %s",
+				p_task->rt_flags, p_task->error));
+		_free_task_owned_pipeline_outputs(p_task);
+		return;
+	}
+
+	uint32_t n = (uint32_t)p_task->slots.size();
+
+	for (uint32_t i = 1; i < n; i++) {
+		const PipelineBuildTask::SlotInput &si = p_task->slots[i];
+		if (si.existing_per_hg_shader.is_valid()) {
+			p_task->new_per_hg_shaders[i] = si.existing_per_hg_shader;
+			p_task->new_ready_mask[i] = true;
+			continue;
+		}
+		if (!si.needs_compile || !p_task->new_ready_mask[i]) {
+			continue;
+		}
+		if (i >= p_task->new_per_hg_binaries.size() || p_task->new_per_hg_binaries[i].is_empty()) {
+			p_task->new_ready_mask[i] = false;
+			continue;
+		}
+
+		RID rid = RD::get_singleton()->shader_create_from_bytecode(p_task->new_per_hg_binaries[i]);
 		if (!rid.is_valid()) {
-			p_task->new_per_hg_shaders[i] = RID();
 			p_task->new_ready_mask[i] = false;
 			continue;
 		}
 		p_task->new_per_hg_shaders[i] = rid;
-		p_task->new_ready_mask[i] = true;
-		created_here.push_back(rid);
 	}
 
-	if (check_abort()) {
-		cleanup_created();
-		p_task->failed = true;
-		finish();
-		return;
-	}
-
-	// raytracing_pipeline_create may run off render thread (RD uses internal sync).
 	RD::PipelineShader base_ps = { p_task->base_shader, p_task->spec_constants };
 	RD::HitGroup hg0_default;
 	hg0_default.closest_hit_shader = base_ps;
@@ -1210,42 +1258,41 @@ void SceneShaderRaytracing::_build_pipeline_worker(PipelineBuildTask *p_task) {
 			{ hit_groups.ptr(), (uint64_t)hit_groups.size() },
 			RT_MAX_RECURSION_DEPTH);
 	if (new_pipeline.is_null()) {
-		cleanup_created();
-		p_task->failed = true;
-		p_task->error = "raytracing_pipeline_create returned null";
-		finish();
+		WARN_PRINT(vformat("RT: pipeline rebuild failed for variant 0x%x: raytracing_pipeline_create returned null", p_task->rt_flags));
+		_free_task_owned_pipeline_outputs(p_task);
 		return;
 	}
 	p_task->new_pipeline = new_pipeline;
-	finish();
-}
 
-void SceneShaderRaytracing::_finalize_pipeline_build(PipelineBuildTask *p_task) {
-	HashMap<uint32_t, PipelineBundle>::Iterator bit = pipeline_bundles.find(p_task->rt_flags);
-	if (bit == pipeline_bundles.end()) {
-		for (uint32_t i = 0; i < p_task->slots.size(); i++) {
-			if (p_task->slots[i].existing_per_hg_shader.is_null() &&
-					i < p_task->new_per_hg_shaders.size() &&
-					p_task->new_per_hg_shaders[i].is_valid()) {
-				RD::get_singleton()->free_rid(p_task->new_per_hg_shaders[i]);
-			}
-		}
-		if (p_task->new_pipeline.is_valid()) {
-			RD::get_singleton()->free_rid(p_task->new_pipeline);
-		}
+	static constexpr uint32_t HIT_SBT_CAPACITY = 4096;
+	uint32_t sbt_size = MAX(n, HIT_SBT_CAPACITY);
+
+	RID new_sbt = RD::get_singleton()->hit_sbt_create(p_task->new_pipeline, sbt_size);
+	if (new_sbt.is_null()) {
+		WARN_PRINT(vformat("RT: hit_sbt_create failed for variant 0x%x.", p_task->rt_flags));
+		_free_task_owned_pipeline_outputs(p_task);
 		return;
 	}
-	PipelineBundle &bundle = bit->value;
-	_bundle_resize_for_slots(bundle);
+	RD::get_singleton()->set_resource_name(new_sbt, String("RT Hit SBT [flags=") + itos(p_task->rt_flags) + "]");
 
-	if (p_task->failed) {
-		WARN_PRINT(vformat("RT: pipeline rebuild failed for variant 0x%x: %s",
-				p_task->rt_flags, p_task->error));
+	RD::HitShaderBindingTableRange sbt_range = RD::get_singleton()->hit_sbt_range_alloc(new_sbt, sbt_size);
+	if (!sbt_range) {
+		WARN_PRINT(vformat("RT: hit_sbt_range_alloc failed for variant 0x%x.", p_task->rt_flags));
+		RD::get_singleton()->free_rid(new_sbt);
+		_free_task_owned_pipeline_outputs(p_task);
 		return;
 	}
 
-	// Install worker outputs into bundle arrays.
-	uint32_t n = (uint32_t)p_task->slots.size();
+	// Slots i >= n map to sentinel HG n.
+	LocalVector<uint32_t> indices;
+	indices.resize(sbt_size);
+	for (uint32_t i = 0; i < sbt_size; i++) {
+		indices[i] = (i < n) ? i : n;
+	}
+	RD::get_singleton()->hit_sbt_range_update(new_sbt, sbt_range, 0, indices);
+
+	// Install worker outputs into bundle arrays only after the pipeline and SBT
+	// are valid; otherwise failure cleanup would leave stale RIDs in the bundle.
 	for (uint32_t i = 1; i < n; i++) {
 		const PipelineBuildTask::SlotInput &si = p_task->slots[i];
 		if (i >= bundle.per_hg_shaders.size()) {
@@ -1261,33 +1308,6 @@ void SceneShaderRaytracing::_finalize_pipeline_build(PipelineBuildTask *p_task) 
 			bundle.per_hg_states[i] = HGState::Failed;
 		}
 	}
-
-	static constexpr uint32_t HIT_SBT_CAPACITY = 4096;
-	uint32_t sbt_size = MAX(n, HIT_SBT_CAPACITY);
-
-	RID new_sbt = RD::get_singleton()->hit_sbt_create(p_task->new_pipeline, sbt_size);
-	if (new_sbt.is_null()) {
-		WARN_PRINT(vformat("RT: hit_sbt_create failed for variant 0x%x.", p_task->rt_flags));
-		RD::get_singleton()->free_rid(p_task->new_pipeline);
-		return;
-	}
-	RD::get_singleton()->set_resource_name(new_sbt, String("RT Hit SBT [flags=") + itos(p_task->rt_flags) + "]");
-
-	RD::HitShaderBindingTableRange sbt_range = RD::get_singleton()->hit_sbt_range_alloc(new_sbt, sbt_size);
-	if (!sbt_range) {
-		WARN_PRINT(vformat("RT: hit_sbt_range_alloc failed for variant 0x%x.", p_task->rt_flags));
-		RD::get_singleton()->free_rid(new_sbt);
-		RD::get_singleton()->free_rid(p_task->new_pipeline);
-		return;
-	}
-
-	// Slots i >= n map to sentinel HG n.
-	LocalVector<uint32_t> indices;
-	indices.resize(sbt_size);
-	for (uint32_t i = 0; i < sbt_size; i++) {
-		indices[i] = (i < n) ? i : n;
-	}
-	RD::get_singleton()->hit_sbt_range_update(new_sbt, sbt_range, 0, indices);
 
 	if (bundle.pipeline.is_valid()) {
 		RD::get_singleton()->free_rid(bundle.pipeline);
@@ -1409,9 +1429,7 @@ void SceneShaderRaytracing::_join_lane_for_shutdown() {
 		if (current->worker_id != WorkerThreadPool::INVALID_TASK_ID && WorkerThreadPool::get_singleton()) {
 			WorkerThreadPool::get_singleton()->wait_for_task_completion(current->worker_id);
 		}
-		if (current->new_pipeline.is_valid()) {
-			RD::get_singleton()->free_rid(current->new_pipeline);
-		}
+		_free_task_owned_pipeline_outputs(current);
 		memdelete(current);
 	}
 	for (PipelineBuildTask *t : queued) {

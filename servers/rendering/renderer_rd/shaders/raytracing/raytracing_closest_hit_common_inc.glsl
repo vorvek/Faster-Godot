@@ -533,6 +533,12 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		ps.radiance += ps.throughput * direct_light;
 	}
 
+	if (uint(get_rt_param(RT_PARAM_MODE)) == RT_MODE_HYBRID && total_bounces >= 1u) {
+		ps.packed_bounces_flags = set_path_terminated(ps.packed_bounces_flags);
+		path_pack(payload, ps);
+		return;
+	}
+
 	// =================================================================
 	// BRDF importance sampling for next bounce
 	// =================================================================

@@ -1430,6 +1430,7 @@ public:
 	// cheaper than blas_build for skinned/animated meshes.
 	Error blas_update(RID p_blas);
 	Error tlas_build(RID p_tlas, Span<AccelerationStructureInstance> p_instances);
+	bool acceleration_structure_is_valid(RID p_acceleration_structure) const;
 
 private:
 	/**********************************/

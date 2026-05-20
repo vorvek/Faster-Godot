@@ -718,6 +718,10 @@ Error RenderingDevice::_hit_sbt_buffer_update(HitShaderBindingTable *p_hit_sbt, 
 	return OK;
 }
 
+bool RenderingDevice::acceleration_structure_is_valid(RID p_acceleration_structure) const {
+	return acceleration_structure_owner.owns(p_acceleration_structure);
+}
+
 void RenderingDevice::_hit_sbt_add_dirty_range(HitShaderBindingTable *p_hit_sbt, uint32_t p_offset, uint32_t p_count) {
 	p_hit_sbt->first_dirty_index = MIN(p_hit_sbt->first_dirty_index, p_offset);
 	p_hit_sbt->last_dirty_index = MAX(p_hit_sbt->last_dirty_index, p_offset + p_count);

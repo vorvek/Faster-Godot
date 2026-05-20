@@ -763,7 +763,10 @@ enum PathtracingParamIndex {
 	PT_PARAM_SAMPLE_COUNT = 1,
 	PT_PARAM_MAX_BOUNCES = 2,
 	PT_PARAM_DENOISER = 3,
-	// Indices 4-13 reserved for future use.
+	PT_PARAM_ENERGY = 4,
+	PT_PARAM_TEMPORAL_ACCUMULATION = 5,
+	PT_PARAM_MODE = 6,
+	// Indices 7-13 reserved for future use.
 	PT_PARAM_LIGHT_COUNT = 14,
 	PT_PARAM_FRAME_INDEX = 15,
 };

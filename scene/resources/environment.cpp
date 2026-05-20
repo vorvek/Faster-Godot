@@ -728,9 +728,9 @@ void Environment::_update_pathtracing() {
 	params.write[RSE::PT_PARAM_SAMPLE_COUNT] = (float)pathtracing_samples_per_pixel;
 	params.write[RSE::PT_PARAM_MAX_BOUNCES] = (float)pathtracing_max_bounces;
 	params.write[RSE::PT_PARAM_DENOISER] = (float)(int)pathtracing_denoiser;
-	params.write[4] = rtgi_energy;
-	params.write[5] = rtgi_temporal_accumulation ? 1.0f : 0.0f;
-	params.write[6] = (float)(int)rtgi_mode;
+	params.write[RSE::PT_PARAM_ENERGY] = rtgi_energy;
+	params.write[RSE::PT_PARAM_TEMPORAL_ACCUMULATION] = rtgi_temporal_accumulation ? 1.0f : 0.0f;
+	params.write[RSE::PT_PARAM_MODE] = (float)(int)rtgi_mode;
 	RS::get_singleton()->environment_set_pathtracing_params(environment, params);
 }
 

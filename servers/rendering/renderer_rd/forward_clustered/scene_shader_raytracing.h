@@ -98,6 +98,7 @@ public:
 	static constexpr int RT_PARAM_SAMPLE_COUNT = RSE::PT_PARAM_SAMPLE_COUNT;
 	static constexpr int RT_PARAM_MAX_BOUNCES = RSE::PT_PARAM_MAX_BOUNCES;
 	static constexpr int RT_PARAM_DENOISER = RSE::PT_PARAM_DENOISER;
+	static constexpr int RT_PARAM_MODE = RSE::PT_PARAM_MODE;
 	static constexpr int RT_PARAM_LIGHT_COUNT = RSE::PT_PARAM_LIGHT_COUNT;
 	static constexpr int RT_PARAM_FRAME_INDEX = RSE::PT_PARAM_FRAME_INDEX;
 
@@ -362,6 +363,7 @@ public:
 		HashMap<StringName, ShaderLanguage::ShaderNode::Uniform> uniforms;
 		Vector<TextureUniformInfo> texture_uniforms; // Sampler2D packed as bindless indices after UBO
 		bool uses_alpha_clip = false; // Writes ALPHA_SCISSOR_THRESHOLD; needs per-HG any-hit
+		bool uses_light_shader = false; // Custom light() is raster-only; RT falls back to MaterialData.
 		bool is_procedural = false; // Uses intersection shader instead of triangle geometry
 	};
 
@@ -462,6 +464,7 @@ private:
 	void _build_pipeline_worker(PipelineBuildTask *p_task);
 	static void _build_pipeline_worker_static(void *p_userdata);
 	void _finalize_pipeline_build(PipelineBuildTask *p_task);
+	void _free_task_owned_pipeline_outputs(PipelineBuildTask *p_task);
 	void _drain_lane_inline_main_thread();
 	void _join_lane_for_shutdown();
 	PipelineBuildTask *_make_pipeline_build_task(uint32_t p_rt_flags, PipelineBundle &p_bundle);

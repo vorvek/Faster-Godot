@@ -707,6 +707,9 @@ public:
 	static constexpr PathtracingParamIndex PT_PARAM_SAMPLE_COUNT = RSE::PT_PARAM_SAMPLE_COUNT;
 	static constexpr PathtracingParamIndex PT_PARAM_MAX_BOUNCES = RSE::PT_PARAM_MAX_BOUNCES;
 	static constexpr PathtracingParamIndex PT_PARAM_DENOISER = RSE::PT_PARAM_DENOISER;
+	static constexpr PathtracingParamIndex PT_PARAM_ENERGY = RSE::PT_PARAM_ENERGY;
+	static constexpr PathtracingParamIndex PT_PARAM_TEMPORAL_ACCUMULATION = RSE::PT_PARAM_TEMPORAL_ACCUMULATION;
+	static constexpr PathtracingParamIndex PT_PARAM_MODE = RSE::PT_PARAM_MODE;
 	static constexpr PathtracingParamIndex PT_PARAM_LIGHT_COUNT = RSE::PT_PARAM_LIGHT_COUNT;
 	static constexpr PathtracingParamIndex PT_PARAM_FRAME_INDEX = RSE::PT_PARAM_FRAME_INDEX;
 

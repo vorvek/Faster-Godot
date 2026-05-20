@@ -44,6 +44,20 @@
 
 using namespace RendererSceneRenderImplementation;
 
+static bool _rt_acceleration_structure_is_alive(RID p_rid) {
+	return p_rid.is_valid() && RD::get_singleton()->acceleration_structure_is_valid(p_rid);
+}
+
+static void _rt_free_acceleration_structure_if_alive(RID &r_rid) {
+	if (!r_rid.is_valid()) {
+		return;
+	}
+	if (RD::get_singleton()->acceleration_structure_is_valid(r_rid)) {
+		RD::get_singleton()->free_rid(r_rid);
+	}
+	r_rid = RID();
+}
+
 // ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
@@ -124,7 +138,7 @@ void RenderRaytracing::_free_viewport_state_internal(RTViewportState *p_state) {
 		RD::get_singleton()->free_rid(p_state->uniform_set);
 	}
 	if (p_state->tlas.is_valid()) {
-		RD::get_singleton()->free_rid(p_state->tlas);
+		_rt_free_acceleration_structure_if_alive(p_state->tlas);
 	}
 	if (p_state->geometry_buffer.is_valid()) {
 		RD::get_singleton()->free_rid(p_state->geometry_buffer);
@@ -260,9 +274,7 @@ void RenderRaytracing::cleanup_caches() {
 	for (KeyValue<uint64_t, RTDeformedCacheEntry> &kv : deformed_surface_cache) {
 		RTDeformedCacheEntry &e = kv.value;
 		if (e.ptr) {
-			if (e.ptr->blas.is_valid()) {
-				RD::get_singleton()->free_rid(e.ptr->blas);
-			}
+			_rt_free_acceleration_structure_if_alive(e.ptr->blas);
 			memdelete(e.ptr);
 			e.ptr = nullptr;
 		}
@@ -279,10 +291,7 @@ void RenderRaytracing::cleanup_caches() {
 			rd->free_rid(e.merge_uniform_set);
 			e.merge_uniform_set = RID();
 		}
-		if (e.blas.is_valid()) {
-			rd->free_rid(e.blas);
-			e.blas = RID();
-		}
+		_rt_free_acceleration_structure_if_alive(e.blas);
 		if (e.merged_vtx_buffer.is_valid()) {
 			rd->free_rid(e.merged_vtx_buffer);
 			e.merged_vtx_buffer = RID();
@@ -411,9 +420,7 @@ void RenderRaytracing::prepare_frame() {
 			RTDeformedCacheEntry &e = kv.value;
 			if (e.last_used_frame != 0 && current_frame - e.last_used_frame > DEFORMED_CACHE_TTL) {
 				if (e.ptr) {
-					if (e.ptr->blas.is_valid()) {
-						RD::get_singleton()->free_rid(e.ptr->blas);
-					}
+					_rt_free_acceleration_structure_if_alive(e.ptr->blas);
 					memdelete(e.ptr);
 					e.ptr = nullptr;
 				}
@@ -438,10 +445,7 @@ void RenderRaytracing::prepare_frame() {
 					rd->free_rid(e.merge_uniform_set);
 					e.merge_uniform_set = RID();
 				}
-				if (e.blas.is_valid()) {
-					rd->free_rid(e.blas);
-					e.blas = RID();
-				}
+				_rt_free_acceleration_structure_if_alive(e.blas);
 				if (e.merged_vtx_buffer.is_valid()) {
 					rd->free_rid(e.merged_vtx_buffer);
 					e.merged_vtx_buffer = RID();
@@ -508,6 +512,9 @@ RTSurfaceData *RenderRaytracing::process_surface(
 
 	// Cache lookup
 	RTCacheEntry *entry = get_surface_cache_entry(cache_key);
+	if (entry->ptr && entry->ptr->blas.is_valid() && !_rt_acceleration_structure_is_alive(entry->ptr->blas)) {
+		entry->ptr->blas = RID();
+	}
 
 	uint32_t current_frame = RSG::rasterizer->get_frame_number();
 	bool needs_refresh = !entry->ptr ||
@@ -527,9 +534,7 @@ RTSurfaceData *RenderRaytracing::process_surface(
 	if (!entry->ptr) {
 		entry->ptr = memnew(RTSurfaceData);
 	} else if (entry->ptr->blas.is_valid()) {
-		// Free old BLAS before creating new one
-		RD::get_singleton()->free_rid(entry->ptr->blas);
-		entry->ptr->blas = RID();
+		_rt_free_acceleration_structure_if_alive(entry->ptr->blas);
 	}
 
 	RTSurfaceData *surf_data = entry->ptr;
@@ -570,6 +575,10 @@ RTSurfaceData *RenderRaytracing::process_deformed_surface(
 	uint64_t buffer_id = p_source.current_vb.get_id();
 
 	RTDeformedCacheEntry &entry = deformed_surface_cache[p_source.cache_key];
+	if (entry.ptr && entry.ptr->blas.is_valid() && !_rt_acceleration_structure_is_alive(entry.ptr->blas)) {
+		entry.ptr->blas = RID();
+		entry.blas_built_once = false;
+	}
 
 	bool needs_refresh = !entry.ptr ||
 			entry.cached_key_version != p_source.cache_version ||
@@ -618,8 +627,7 @@ RTSurfaceData *RenderRaytracing::process_deformed_surface(
 	if (!entry.ptr) {
 		entry.ptr = memnew(RTSurfaceData);
 	} else if (entry.ptr->blas.is_valid()) {
-		RD::get_singleton()->free_rid(entry.ptr->blas);
-		entry.ptr->blas = RID();
+		_rt_free_acceleration_structure_if_alive(entry.ptr->blas);
 		entry.blas_built_once = false;
 	}
 
@@ -1165,8 +1173,7 @@ void RenderRaytracing::update_procedural_blas(RTProceduralState *p_state, LocalV
 	// Grow-only: only recreate the buffer when capacity is exceeded or count changed.
 	if (required_bytes > p_state->gpu_buffer_capacity || aabb_count != p_state->aabb_count) {
 		if (p_state->blas.is_valid()) {
-			RD::get_singleton()->free_rid(p_state->blas);
-			p_state->blas = RID();
+			_rt_free_acceleration_structure_if_alive(p_state->blas);
 		}
 		if (p_state->gpu_buffer.is_valid()) {
 			RD::get_singleton()->free_rid(p_state->gpu_buffer);
@@ -1315,6 +1322,9 @@ RTMaterialData *RenderRaytracing::process_material(RID p_material_rid, uint16_t 
 	// Textures
 	// Albedo is a color texture - needs sRGB->linear conversion
 	RID albedo_rd = get_material_texture("texture_albedo", true);
+	if (!albedo_rd.is_valid()) {
+		albedo_rd = get_material_texture("main_texture", true);
+	}
 	if (albedo_rd.is_valid()) {
 		mat.albedo_texture_idx = bindless_block->add_texture(albedo_rd);
 	}
@@ -1368,6 +1378,9 @@ RTMaterialData *RenderRaytracing::process_material(RID p_material_rid, uint16_t 
 		mat_data->is_custom_shader = true;
 		uint32_t shader_id = material_storage->material_get_shader_id(p_material_rid);
 		mat_data->rt_sbt_offset = SceneShaderRaytracing::get_singleton()->register_custom_shader(shader_id, p_material_rid);
+		if (mat_data->rt_sbt_offset == 0) {
+			mat_data->is_custom_shader = false;
+		}
 
 		const SceneShaderRaytracing::CustomShaderEntry *cse =
 				SceneShaderRaytracing::get_singleton()->get_custom_shader_entry(mat_data->rt_sbt_offset);
@@ -1577,21 +1590,28 @@ RTMaterialData *RenderRaytracing::process_material(RID p_material_rid, uint16_t 
 
 void RenderRaytracing::build_acceleration_structures(RTViewportState *p_state, const LocalVector<RID> &p_dirty_blas_list, const LocalVector<RID> &p_dirty_blas_update_list) {
 	for (const RID &blas_rid : p_dirty_blas_list) {
-		if (blas_rid.is_valid()) {
+		if (_rt_acceleration_structure_is_alive(blas_rid)) {
 			RD::get_singleton()->blas_build(blas_rid);
 		}
 	}
 
 	for (const RID &blas_rid : p_dirty_blas_update_list) {
-		if (blas_rid.is_valid()) {
+		if (_rt_acceleration_structure_is_alive(blas_rid)) {
 			RD::get_singleton()->blas_update(blas_rid);
 		}
 	}
 
-	uint32_t needed = MAX(blass.size(), (uint32_t)1);
+	uint32_t valid_instance_count = 0;
+	for (const RID &blas_rid : blass) {
+		if (_rt_acceleration_structure_is_alive(blas_rid)) {
+			valid_instance_count++;
+		}
+	}
+
+	uint32_t needed = MAX(valid_instance_count, (uint32_t)1);
 	if (!p_state->tlas.is_valid() || needed > p_state->tlas_max_instances) {
 		if (p_state->tlas.is_valid()) {
-			RD::get_singleton()->free_rid(p_state->tlas);
+			_rt_free_acceleration_structure_if_alive(p_state->tlas);
 		}
 		p_state->tlas_max_instances = needed * 2;
 		p_state->tlas = RD::get_singleton()->tlas_create(p_state->tlas_max_instances, RD::ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT);
@@ -1599,9 +1619,13 @@ void RenderRaytracing::build_acceleration_structures(RTViewportState *p_state, c
 	}
 
 	LocalVector<RD::AccelerationStructureInstance> instances;
-	instances.resize(blass.size());
+	instances.resize(valid_instance_count);
+	uint32_t dst_idx = 0;
 	for (uint32_t i = 0; i < blass.size(); i++) {
-		RD::AccelerationStructureInstance &inst = instances[i];
+		if (!_rt_acceleration_structure_is_alive(blass[i])) {
+			continue;
+		}
+		RD::AccelerationStructureInstance &inst = instances[dst_idx++];
 		inst.id = i;
 		inst.transform = blas_transforms[i];
 		inst.blas = blass[i];
@@ -1700,8 +1724,7 @@ bool RenderRaytracing::_build_merged_mm_blas(
 	if (structure_changed) {
 		RD *rd = RD::get_singleton();
 		if (entry.blas.is_valid()) {
-			rd->free_rid(entry.blas);
-			entry.blas = RID();
+			_rt_free_acceleration_structure_if_alive(entry.blas);
 		}
 		if (entry.merge_uniform_set.is_valid()) {
 			rd->free_rid(entry.merge_uniform_set);

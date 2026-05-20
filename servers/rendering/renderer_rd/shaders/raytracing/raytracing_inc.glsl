@@ -19,9 +19,15 @@
 #define RT_PARAM_SAMPLE_COUNT 1 // rt_params[0].y - Samples per pixel
 #define RT_PARAM_MAX_BOUNCES 2 // rt_params[0].z - Maximum ray bounces
 #define RT_PARAM_DENOISER 3 // rt_params[0].w - Denoiser selection (0=none, 1=DLSS RR)
-// Indices 4-13 reserved for future use
+#define RT_PARAM_ENERGY 4 // rt_params[1].x - RTGI energy multiplier
+#define RT_PARAM_TEMPORAL_ACCUMULATION 5 // rt_params[1].y - Temporal accumulation enabled
+#define RT_PARAM_MODE 6 // rt_params[1].z - 0=Hybrid RTGI, 1=Path Traced
+// Indices 7-13 reserved for future use
 #define RT_PARAM_LIGHT_COUNT 14 // rt_params[3].z - Number of active lights in light buffer
 #define RT_PARAM_FRAME_INDEX 15 // rt_params[3].w - Frame counter for temporal variation
+
+#define RT_MODE_HYBRID 0u
+#define RT_MODE_PATH_TRACED 1u
 
 // ============================================================================
 // PATHTRACING PAYLOAD (32 bytes, fp16/unorm-packed)
