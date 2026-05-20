@@ -47,7 +47,7 @@ TAA::~TAA() {
 	taa_shader.version_free(shader_version);
 }
 
-void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_prev_velocity, RID p_history, Size2 p_resolution, float p_z_near, float p_z_far) {
+void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_prev_velocity, RID p_history, Size2 p_resolution, float p_z_near, float p_z_far, bool p_raytracing_denoise) {
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
@@ -69,6 +69,7 @@ void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_pr
 	push_constant.resolution_height = p_resolution.height;
 	push_constant.disocclusion_threshold = 2.5f; // If velocity changes by less than this amount of texels we can retain the accumulation buffer.
 	push_constant.variance_dynamic = CLAMP(base_variance * variance_scale, base_variance_min, base_variance_max); // Variance dynamically scales based on resolution
+	push_constant.raytracing_denoise = p_raytracing_denoise ? 1.0f : 0.0f;
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
@@ -86,7 +87,7 @@ void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_pr
 	RD::get_singleton()->compute_list_end();
 }
 
-void TAA::process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far) {
+void TAA::process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far, bool p_raytracing_denoise) {
 	CopyEffects *copy_effects = CopyEffects::get_singleton();
 
 	uint32_t view_count = p_render_buffers->get_view_count();
@@ -117,7 +118,7 @@ void TAA::process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_f
 		if (!just_allocated) {
 			RID depth_texture = p_render_buffers->get_depth_texture(v);
 			RID taa_temp = p_render_buffers->get_texture_slice(SNAME("taa"), SNAME("temp"), v, 0);
-			resolve(internal_texture, taa_temp, depth_texture, velocity_buffer, taa_prev_velocity, taa_history, Size2(internal_size.x, internal_size.y), p_z_near, p_z_far);
+			resolve(internal_texture, taa_temp, depth_texture, velocity_buffer, taa_prev_velocity, taa_history, Size2(internal_size.x, internal_size.y), p_z_near, p_z_far, p_raytracing_denoise);
 			copy_effects->copy_to_rect(taa_temp, internal_texture, Rect2(0, 0, internal_size.x, internal_size.y));
 		}
 

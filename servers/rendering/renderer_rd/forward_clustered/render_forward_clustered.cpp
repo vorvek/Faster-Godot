@@ -1873,6 +1873,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	if (!is_reflection_probe && p_render_data->environment.is_valid() && RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_enabled(p_render_data->environment)) {
 		scene_features.rt = _setup_rt();
 	}
+	const float *rt_env_params = scene_features.rt && p_render_data->environment.is_valid()
+			? RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment)
+			: nullptr;
+	const bool rt_internal_denoiser = rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] == RSE::PT_DENOISER_INTERNAL;
+	const bool rt_temporal_accumulation = rt_env_params && rt_env_params[RSE::PT_PARAM_TEMPORAL_ACCUMULATION] != 0.0f;
 
 	static const int texture_multisamples[RSE::VIEWPORT_MSAA_MAX] = { 1, 2, 4, 8 };
 
@@ -1936,7 +1941,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RENDER_TIMESTAMP("Setup 3D Scene");
 
 	bool using_debug_mvs = get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_MOTION_VECTORS;
-	bool using_taa = rb->get_use_taa();
+	bool using_taa = rb->get_use_taa() || (!is_reflection_probe && scene_features.rt && rt_internal_denoiser && rt_temporal_accumulation);
 
 	enum {
 		SCALE_NONE,
@@ -2855,7 +2860,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		} else if (using_taa) {
 			RD::get_singleton()->draw_command_begin_label("TAA");
 			RENDER_TIMESTAMP("TAA");
-			taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far);
+			taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, scene_features.rt && rt_internal_denoiser);
 			RD::get_singleton()->draw_command_end_label();
 		}
 	}

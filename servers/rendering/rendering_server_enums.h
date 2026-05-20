@@ -754,6 +754,7 @@ enum EnvironmentFogMode {
 enum PathtracingDenoiser {
 	PT_DENOISER_NONE = 0,
 	PT_DENOISER_DLSS_RAY_RECONSTRUCTION = 1,
+	PT_DENOISER_INTERNAL = 2,
 };
 
 // Pathtracing parameter indices for the float[16] params buffer.

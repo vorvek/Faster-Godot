@@ -54,6 +54,7 @@ layout(push_constant, std430) uniform Params {
 	vec2 resolution;
 	float disocclusion_threshold; // 0.1 / max(params.resolution.x, params.resolution.y)
 	float variance_dynamic;
+	float raytracing_denoise;
 }
 params;
 
@@ -83,6 +84,12 @@ vec3 reinhard(vec3 hdr) {
 }
 vec3 reinhard_inverse(vec3 sdr) {
 	return sdr / (1.0 - sdr);
+}
+
+const vec3 lumCoeff = vec3(0.299f, 0.587f, 0.114f);
+
+float luminance(vec3 color) {
+	return max(dot(color, lumCoeff), 0.0001f);
 }
 
 float get_depth(ivec2 thread_id) {
@@ -260,6 +267,37 @@ vec3 clip_aabb(vec3 aabb_min, vec3 aabb_max, vec3 p, vec3 q) {
 	return p + r;
 }
 
+vec3 rt_firefly_clamp_3x3(uvec2 group_pos, vec3 center) {
+	vec3 n1 = load_color(group_pos + kOffsets3x3[0]);
+	vec3 n2 = load_color(group_pos + kOffsets3x3[1]);
+	vec3 n3 = load_color(group_pos + kOffsets3x3[2]);
+	vec3 n4 = load_color(group_pos + kOffsets3x3[3]);
+	vec3 n6 = load_color(group_pos + kOffsets3x3[5]);
+	vec3 n7 = load_color(group_pos + kOffsets3x3[6]);
+	vec3 n8 = load_color(group_pos + kOffsets3x3[7]);
+	vec3 n9 = load_color(group_pos + kOffsets3x3[8]);
+
+	float l1 = luminance(n1);
+	float l2 = luminance(n2);
+	float l3 = luminance(n3);
+	float l4 = luminance(n4);
+	float l6 = luminance(n6);
+	float l7 = luminance(n7);
+	float l8 = luminance(n8);
+	float l9 = luminance(n9);
+	float mean = (l1 + l2 + l3 + l4 + l6 + l7 + l8 + l9) * 0.125;
+	float mean2 = (l1 * l1 + l2 * l2 + l3 * l3 + l4 * l4 + l6 * l6 + l7 * l7 + l8 * l8 + l9 * l9) * 0.125;
+	float deviation = sqrt(max(mean2 - mean * mean, 0.0));
+	float limit = max(mean + deviation * 3.0, mean * 3.0 + 0.05);
+	float center_luma = luminance(center);
+
+	if (center_luma > limit) {
+		return center * (limit / center_luma);
+	}
+
+	return center;
+}
+
 // Clip history to the neighbourhood of the current sample
 vec3 clip_history_3x3(uvec2 group_pos, vec3 color_history, vec2 velocity_closest) {
 	// Sample a 3x3 neighbourhood
@@ -272,6 +310,10 @@ vec3 clip_history_3x3(uvec2 group_pos, vec3 color_history, vec2 velocity_closest
 	vec3 s7 = load_color(group_pos + kOffsets3x3[6]);
 	vec3 s8 = load_color(group_pos + kOffsets3x3[7]);
 	vec3 s9 = load_color(group_pos + kOffsets3x3[8]);
+
+	if (params.raytracing_denoise > 0.5) {
+		s5 = rt_firefly_clamp_3x3(group_pos, s5);
+	}
 
 	// Compute min and max (with an adaptive box size, which greatly reduces ghosting)
 	vec3 color_avg = (s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9) * RPC_9;
@@ -295,12 +337,6 @@ vec3 clip_history_3x3(uvec2 group_pos, vec3 color_history, vec2 velocity_closest
 									TAA
 ------------------------------------------------------------------------------*/
 
-const vec3 lumCoeff = vec3(0.299f, 0.587f, 0.114f);
-
-float luminance(vec3 color) {
-	return max(dot(color, lumCoeff), 0.0001f);
-}
-
 // This is "velocity disocclusion" as described by https://www.elopezr.com/temporal-aa-and-the-quest-for-the-holy-trail/.
 // We use texel space, so our scale and threshold differ.
 float get_factor_disocclusion(vec2 uv_reprojected, vec2 velocity) {
@@ -320,6 +356,9 @@ vec3 temporal_antialiasing(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_
 
 	// Get input color
 	vec3 color_input = load_color(pos_group);
+	if (params.raytracing_denoise > 0.5) {
+		color_input = rt_firefly_clamp_3x3(pos_group, color_input);
+	}
 
 	// Get history color (catmull-rom reduces a lot of the blurring that you get under motion)
 	vec3 color_history = sample_catmull_rom_9(tex_history, uv_reprojected, params.resolution).rgb;

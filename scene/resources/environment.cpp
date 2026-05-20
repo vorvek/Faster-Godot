@@ -722,12 +722,28 @@ Environment::PathtracingDebugMode Environment::get_rtgi_debug_mode() const {
 void Environment::_update_pathtracing() {
 	RS::get_singleton()->environment_set_pathtracing(environment, pathtracing_enabled);
 
+	RSE::PathtracingDenoiser denoiser = pathtracing_denoiser;
+	switch (rtgi_denoiser) {
+		case RTGI_DENOISER_AUTO:
+		case RTGI_DENOISER_INTERNAL:
+		case RTGI_DENOISER_AMD:
+		case RTGI_DENOISER_INTEL:
+			denoiser = RSE::PT_DENOISER_INTERNAL;
+			break;
+		case RTGI_DENOISER_NVIDIA:
+			denoiser = RSE::PT_DENOISER_DLSS_RAY_RECONSTRUCTION;
+			break;
+		case RTGI_DENOISER_OFF:
+			denoiser = RSE::PT_DENOISER_NONE;
+			break;
+	}
+
 	PackedFloat32Array params;
 	params.resize(16);
 	params.write[RSE::PT_PARAM_VIS_MODE] = (float)pathtracing_debug_mode;
 	params.write[RSE::PT_PARAM_SAMPLE_COUNT] = (float)pathtracing_samples_per_pixel;
 	params.write[RSE::PT_PARAM_MAX_BOUNCES] = (float)pathtracing_max_bounces;
-	params.write[RSE::PT_PARAM_DENOISER] = (float)(int)pathtracing_denoiser;
+	params.write[RSE::PT_PARAM_DENOISER] = (float)(int)denoiser;
 	params.write[RSE::PT_PARAM_ENERGY] = rtgi_energy;
 	params.write[RSE::PT_PARAM_TEMPORAL_ACCUMULATION] = rtgi_temporal_accumulation ? 1.0f : 0.0f;
 	params.write[RSE::PT_PARAM_MODE] = (float)(int)rtgi_mode;
