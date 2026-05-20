@@ -2690,7 +2690,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		if (using_rt_temporal_denoise) {
 			RD::get_singleton()->draw_command_begin_label("RT Denoise");
 			RENDER_TIMESTAMP("RT Denoise");
-			taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, true, rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id());
+			const float rt_history_weight = rt_env_params ? rt_env_params[RSE::PT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT] : 0.94f;
+			taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, true, rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight);
 			RD::get_singleton()->draw_command_end_label();
 		} else if (using_taa) {
 			RD::get_singleton()->draw_command_begin_label("RT TAA");

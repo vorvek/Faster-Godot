@@ -26,7 +26,8 @@
 #define RT_PARAM_BACKGROUND_R 8 // rt_params[2].x - Linear fallback background color
 #define RT_PARAM_BACKGROUND_G 9 // rt_params[2].y
 #define RT_PARAM_BACKGROUND_B 10 // rt_params[2].z
-// Indices 11-13 reserved for future use
+#define RT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT 11 // rt_params[2].w - RTGI temporal accumulation history weight
+// Indices 12-13 reserved for future use
 #define RT_PARAM_LIGHT_COUNT 14 // rt_params[3].z - Number of active lights in light buffer
 #define RT_PARAM_FRAME_INDEX 15 // rt_params[3].w - Frame counter for temporal variation
 

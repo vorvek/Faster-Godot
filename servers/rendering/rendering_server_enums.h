@@ -767,7 +767,8 @@ enum PathtracingParamIndex {
 	PT_PARAM_ENERGY = 4,
 	PT_PARAM_TEMPORAL_ACCUMULATION = 5,
 	PT_PARAM_MODE = 6,
-	// Indices 7-13 reserved for future use.
+	PT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT = 11,
+	// Indices 7-10 are renderer-internal RT background params. Indices 12-13 are reserved.
 	PT_PARAM_LIGHT_COUNT = 14,
 	PT_PARAM_FRAME_INDEX = 15,
 };

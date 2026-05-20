@@ -103,6 +103,7 @@ public:
 	static constexpr int RT_PARAM_BACKGROUND_G = 9;
 	static constexpr int RT_PARAM_BACKGROUND_B = 10;
 	static constexpr int RT_PARAM_MODE = RSE::PT_PARAM_MODE;
+	static constexpr int RT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT = RSE::PT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT;
 	static constexpr int RT_PARAM_LIGHT_COUNT = RSE::PT_PARAM_LIGHT_COUNT;
 	static constexpr int RT_PARAM_FRAME_INDEX = RSE::PT_PARAM_FRAME_INDEX;
 

@@ -710,6 +710,7 @@ public:
 	static constexpr PathtracingParamIndex PT_PARAM_ENERGY = RSE::PT_PARAM_ENERGY;
 	static constexpr PathtracingParamIndex PT_PARAM_TEMPORAL_ACCUMULATION = RSE::PT_PARAM_TEMPORAL_ACCUMULATION;
 	static constexpr PathtracingParamIndex PT_PARAM_MODE = RSE::PT_PARAM_MODE;
+	static constexpr PathtracingParamIndex PT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT = RSE::PT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT;
 	static constexpr PathtracingParamIndex PT_PARAM_LIGHT_COUNT = RSE::PT_PARAM_LIGHT_COUNT;
 	static constexpr PathtracingParamIndex PT_PARAM_FRAME_INDEX = RSE::PT_PARAM_FRAME_INDEX;
 

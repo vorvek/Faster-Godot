@@ -712,6 +712,15 @@ bool Environment::is_rtgi_temporal_accumulation_enabled() const {
 	return rtgi_temporal_accumulation;
 }
 
+void Environment::set_rtgi_temporal_accumulation_weight(float p_weight) {
+	rtgi_temporal_accumulation_weight = CLAMP(p_weight, 0.0f, 0.99f);
+	_update_pathtracing();
+}
+
+float Environment::get_rtgi_temporal_accumulation_weight() const {
+	return rtgi_temporal_accumulation_weight;
+}
+
 void Environment::set_rtgi_denoiser(RTGIDenoiser p_denoiser) {
 	rtgi_denoiser = p_denoiser;
 	switch (p_denoiser) {
@@ -755,6 +764,7 @@ void Environment::_update_pathtracing() {
 	params.write[RSE::PT_PARAM_ENERGY] = rtgi_energy;
 	params.write[RSE::PT_PARAM_TEMPORAL_ACCUMULATION] = rtgi_temporal_accumulation ? 1.0f : 0.0f;
 	params.write[RSE::PT_PARAM_MODE] = (float)(int)rtgi_mode;
+	params.write[RSE::PT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT] = rtgi_temporal_accumulation_weight;
 	RS::get_singleton()->environment_set_pathtracing_params(environment, params);
 }
 
@@ -1610,6 +1620,8 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_rtgi_energy"), &Environment::get_rtgi_energy);
 	ClassDB::bind_method(D_METHOD("set_rtgi_temporal_accumulation", "enabled"), &Environment::set_rtgi_temporal_accumulation);
 	ClassDB::bind_method(D_METHOD("is_rtgi_temporal_accumulation_enabled"), &Environment::is_rtgi_temporal_accumulation_enabled);
+	ClassDB::bind_method(D_METHOD("set_rtgi_temporal_accumulation_weight", "weight"), &Environment::set_rtgi_temporal_accumulation_weight);
+	ClassDB::bind_method(D_METHOD("get_rtgi_temporal_accumulation_weight"), &Environment::get_rtgi_temporal_accumulation_weight);
 	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser", "denoiser"), &Environment::set_rtgi_denoiser);
 	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser"), &Environment::get_rtgi_denoiser);
 	ClassDB::bind_method(D_METHOD("set_rtgi_debug_mode", "mode"), &Environment::set_rtgi_debug_mode);
@@ -1622,6 +1634,7 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_max_bounces", PROPERTY_HINT_RANGE, "1,8,1"), "set_rtgi_max_bounces", "get_rtgi_max_bounces");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_energy", PROPERTY_HINT_RANGE, "0,16,0.01,or_greater"), "set_rtgi_energy", "get_rtgi_energy");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_temporal_accumulation"), "set_rtgi_temporal_accumulation", "is_rtgi_temporal_accumulation_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_temporal_accumulation_weight", PROPERTY_HINT_RANGE, "0,0.99,0.001"), "set_rtgi_temporal_accumulation_weight", "get_rtgi_temporal_accumulation_weight");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "Auto,Internal,NVIDIA,AMD,Intel Arc,Off"), "set_rtgi_denoiser", "get_rtgi_denoiser");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_debug_mode", PROPERTY_HINT_ENUM, "Disabled,Mirror Reflection,Geometry Normals,Final Normals,Normal Map,Tangent,Bitangent,UV,Albedo,ORM,Diffuse Albedo,Specular Albedo,Normal+Roughness,Specular Hit Dist,Metalness,Roughness,View Normals,Diffuse+Specular,Fresnel F0,Front/Back Face,Depth,Emissive,BRDF Rejection"), "set_rtgi_debug_mode", "get_rtgi_debug_mode");
 

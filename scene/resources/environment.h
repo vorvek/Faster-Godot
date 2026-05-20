@@ -213,6 +213,7 @@ private:
 	RTGIMode rtgi_mode = RTGI_MODE_PATH_TRACED;
 	float rtgi_energy = 1.0;
 	bool rtgi_temporal_accumulation = true;
+	float rtgi_temporal_accumulation_weight = 0.94f;
 	RTGIDenoiser rtgi_denoiser = RTGI_DENOISER_AUTO;
 	void _update_pathtracing();
 
@@ -427,6 +428,8 @@ public:
 	float get_rtgi_energy() const;
 	void set_rtgi_temporal_accumulation(bool p_enabled);
 	bool is_rtgi_temporal_accumulation_enabled() const;
+	void set_rtgi_temporal_accumulation_weight(float p_weight);
+	float get_rtgi_temporal_accumulation_weight() const;
 	void set_rtgi_denoiser(RTGIDenoiser p_denoiser);
 	RTGIDenoiser get_rtgi_denoiser() const;
 	void set_rtgi_debug_mode(PathtracingDebugMode p_mode);

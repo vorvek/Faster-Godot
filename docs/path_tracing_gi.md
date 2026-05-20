@@ -21,6 +21,7 @@ The feature is exposed on `Environment`, so it appears through the same
 - `rtgi_max_bounces`
 - `rtgi_energy`
 - `rtgi_temporal_accumulation`
+- `rtgi_temporal_accumulation_weight`
 - `rtgi_denoiser`
   - `Auto`
   - `Internal`
@@ -63,6 +64,12 @@ The feature is exposed on `Environment`, so it appears through the same
   - Enables accumulation of RT lighting across frames. It improves convergence
     at low sample counts but depends on valid motion, depth, and RT history
     masks. Newly visible or newly RT-ready geometry rejects stale history.
+- `rtgi_temporal_accumulation_weight`
+  - Controls how much previous-frame RT lighting contributes to temporal
+    accumulation. Higher values reduce light speckles and improve stability in
+    static views, but can increase light ghosting or wobbling while the camera
+    tracks through the scene. The default is `0.94`, which is intentionally
+    shorter than the old forced `0.97` RT denoiser history weight.
 - `rtgi_denoiser`
   - `Auto`: uses the best shipped path for this build. In this fork that means
     the internal temporal RT denoiser unless a vendor backend is explicitly
@@ -118,6 +125,8 @@ the existing non-ray-traced path instead of destructively changing scene data.
 
 - `scene/resources/environment.*`
   - Adds RTGI properties, inspector bindings, enum values, and defaults.
+  - Exposes per-environment RTGI temporal accumulation weight so scenes can tune
+    the noise-versus-motion tradeoff without changing global TAA settings.
 - `servers/rendering/storage/environment_storage.*`
   - Stores RTGI state in rendering-server environment data.
 - `servers/rendering/rendering_server*`
