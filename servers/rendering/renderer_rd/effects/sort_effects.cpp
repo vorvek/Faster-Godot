@@ -53,7 +53,7 @@ SortEffects::~SortEffects() {
 }
 
 void SortEffects::sort_buffer(RID p_uniform_set, int p_size) {
-	PushConstant push_constant;
+	PushConstant push_constant = {};
 	push_constant.total_elements = p_size;
 
 	bool done = true;

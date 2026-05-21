@@ -47,6 +47,7 @@ trail_bind_poses;
 
 #define PARAMS_FLAG_ORDER_BY_LIFETIME 1
 #define PARAMS_FLAG_COPY_MODE_2D 2
+#define PARTICLE_SORT_KEY_INVALID 3.402823466e+38
 
 layout(push_constant, std430) uniform Params {
 	vec3 sort_direction;
@@ -69,6 +70,47 @@ layout(push_constant, std430) uniform Params {
 }
 params;
 
+float sanitize_sort_key(float p_key) {
+	if (isnan(p_key) || isinf(p_key)) {
+		return PARTICLE_SORT_KEY_INVALID;
+	}
+	return p_key;
+}
+
+uint sanitize_sort_index(float p_index, uint p_count) {
+	if (p_count == 0 || isnan(p_index) || isinf(p_index) || p_index < 0.0 || p_index >= float(p_count)) {
+		return 0;
+	}
+	return uint(p_index);
+}
+
+#ifdef USE_SORT_BUFFER
+
+uint select_sorted_particle_index(uint p_sorted_index, uint p_count) {
+	if (p_count == 0) {
+		return 0;
+	}
+
+	for (uint current_index = 0; current_index < p_count; current_index++) {
+		vec2 current = sort_buffer.data[current_index];
+		uint rank = 0;
+		for (uint i = 0; i < p_count; i++) {
+			vec2 other = sort_buffer.data[i];
+			if (other.x < current.x || (other.x == current.x && other.y < current.y)) {
+				rank++;
+			}
+		}
+
+		if (rank == p_sorted_index) {
+			return sanitize_sort_index(current.y, p_count);
+		}
+	}
+
+	return min(p_sorted_index, p_count - 1);
+}
+
+#endif // USE_SORT_BUFFER
+
 #define TRANSFORM_ALIGN_DISABLED 0
 #define TRANSFORM_ALIGN_Z_BILLBOARD 1
 #define TRANSFORM_ALIGN_Y_TO_VELOCITY 2
@@ -86,7 +128,11 @@ void main() {
 	if (params.trail_size > 1) {
 		src_particle = src_particle * params.trail_size + params.trail_size / 2; //use trail center for sorting
 	}
-	sort_buffer.data[particle].x = dot(params.sort_direction, particles.data[src_particle].xform[3].xyz);
+	float sort_key = dot(params.sort_direction, particles.data[src_particle].xform[3].xyz);
+	if (!bool(particles.data[src_particle].flags & PARTICLE_FLAG_ACTIVE) && !bool(particles.data[src_particle].flags & PARTICLE_FLAG_TRAILED)) {
+		sort_key = PARTICLE_SORT_KEY_INVALID;
+	}
+	sort_buffer.data[particle].x = sanitize_sort_key(sort_key);
 	sort_buffer.data[particle].y = float(particle);
 #endif
 
@@ -101,9 +147,11 @@ void main() {
 #ifdef USE_SORT_BUFFER
 
 	if (params.trail_size > 1) {
-		particle = uint(sort_buffer.data[particle / params.trail_size].y) + (particle % params.trail_size);
+		uint base_particle_count = params.total_particles / params.trail_size;
+		uint base_particle = select_sorted_particle_index(particle / params.trail_size, base_particle_count);
+		particle = base_particle * params.trail_size + (particle % params.trail_size);
 	} else {
-		particle = uint(sort_buffer.data[particle].y); //use index from sort buffer
+		particle = select_sorted_particle_index(particle, params.total_particles); //use index from sort buffer
 	}
 #else
 	if (bool(params.flags & PARAMS_FLAG_ORDER_BY_LIFETIME)) {

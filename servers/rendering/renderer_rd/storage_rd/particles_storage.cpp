@@ -47,10 +47,6 @@ ParticlesStorage::ParticlesStorage() {
 
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
 
-	/* Effects */
-
-	sort_effects = memnew(SortEffects);
-
 	/* Particles */
 
 	{
@@ -198,11 +194,6 @@ ParticlesStorage::~ParticlesStorage() {
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
 	material_storage->material_free(particles_shader.default_material);
 	material_storage->shader_free(particles_shader.default_shader);
-
-	if (sort_effects) {
-		memdelete(sort_effects);
-		sort_effects = nullptr;
-	}
 
 	singleton = nullptr;
 }
@@ -1228,13 +1219,16 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 		return; //particles have not processed yet
 	}
 
-	bool do_sort = particles->draw_order == RS::PARTICLES_DRAW_ORDER_VIEW_DEPTH;
+	// Keep view-depth GPUParticles to the two-dispatch copy path. The shared SortEffects path can device-lost
+	// when this work lands in an RTGI frame on Vulkan. Cap the O(n^2) in-shader selection path.
+	constexpr int PARTICLES_VIEW_DEPTH_SELECT_SORT_MAX = 1024;
+	bool do_sort = particles->draw_order == RS::PARTICLES_DRAW_ORDER_VIEW_DEPTH && particles->amount <= PARTICLES_VIEW_DEPTH_SELECT_SORT_MAX;
 
 	//copy to sort buffer
 	if (do_sort && particles->particles_sort_buffer == RID()) {
 		uint32_t size = particles->amount;
 		if (size & 1) {
-			size++; //make multiple of 16
+			size++;
 		}
 		size *= sizeof(float) * 2;
 		particles->particles_sort_buffer = RD::get_singleton()->storage_buffer_create(size);
@@ -1254,7 +1248,7 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 		}
 	}
 
-	ParticlesShader::CopyPushConstant copy_push_constant;
+	ParticlesShader::CopyPushConstant copy_push_constant = {};
 
 	if (particles->trails_enabled && particles->trail_bind_poses.size() > 1) {
 		int fixed_fps = 60.0;
@@ -1308,28 +1302,38 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 		RD::get_singleton()->compute_list_dispatch_threads(compute_list, particles->amount, 1, 1);
 
 		RD::get_singleton()->compute_list_end();
-		sort_effects->sort_buffer(particles->particles_sort_uniform_set, particles->amount);
-	}
 
-	if (particles->trails_enabled && particles->trail_bind_poses.size() > 1) {
-		copy_push_constant.total_particles *= particles->trail_bind_poses.size();
-	}
+		if (particles->trails_enabled && particles->trail_bind_poses.size() > 1) {
+			copy_push_constant.total_particles *= particles->trail_bind_poses.size();
+		}
 
-	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
-	uint32_t copy_mode = do_sort ? ParticlesShader::COPY_MODE_FILL_INSTANCES_WITH_SORT_BUFFER : ParticlesShader::COPY_MODE_FILL_INSTANCES;
-	copy_push_constant.copy_mode_2d = particles->mode == RS::PARTICLES_MODE_2D ? 1 : 0;
-	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, particles_shader.copy_pipelines[particles->userdata_count][copy_mode].get_rid());
-	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, particles->particles_copy_uniform_set, 0);
-	if (do_sort) {
+		compute_list = RD::get_singleton()->compute_list_begin();
+		copy_push_constant.copy_mode_2d = particles->mode == RS::PARTICLES_MODE_2D ? 1 : 0;
+		RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, particles_shader.copy_pipelines[particles->userdata_count][ParticlesShader::COPY_MODE_FILL_INSTANCES_WITH_SORT_BUFFER].get_rid());
+		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, particles->particles_copy_uniform_set, 0);
 		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, particles->particles_sort_uniform_set, 1);
+		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, particles->trail_bind_pose_uniform_set, 2);
+		RD::get_singleton()->compute_list_set_push_constant(compute_list, &copy_push_constant, sizeof(ParticlesShader::CopyPushConstant));
+
+		RD::get_singleton()->compute_list_dispatch_threads(compute_list, copy_push_constant.total_particles, 1, 1);
+
+		RD::get_singleton()->compute_list_end();
+	} else {
+		if (particles->trails_enabled && particles->trail_bind_poses.size() > 1) {
+			copy_push_constant.total_particles *= particles->trail_bind_poses.size();
+		}
+
+		RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+		copy_push_constant.copy_mode_2d = particles->mode == RS::PARTICLES_MODE_2D ? 1 : 0;
+		RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, particles_shader.copy_pipelines[particles->userdata_count][ParticlesShader::COPY_MODE_FILL_INSTANCES].get_rid());
+		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, particles->particles_copy_uniform_set, 0);
+		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, particles->trail_bind_pose_uniform_set, 2);
+		RD::get_singleton()->compute_list_set_push_constant(compute_list, &copy_push_constant, sizeof(ParticlesShader::CopyPushConstant));
+
+		RD::get_singleton()->compute_list_dispatch_threads(compute_list, copy_push_constant.total_particles, 1, 1);
+
+		RD::get_singleton()->compute_list_end();
 	}
-	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, particles->trail_bind_pose_uniform_set, 2);
-
-	RD::get_singleton()->compute_list_set_push_constant(compute_list, &copy_push_constant, sizeof(ParticlesShader::CopyPushConstant));
-
-	RD::get_singleton()->compute_list_dispatch_threads(compute_list, copy_push_constant.total_particles, 1, 1);
-
-	RD::get_singleton()->compute_list_end();
 }
 
 void ParticlesStorage::_particles_update_buffers(Particles *particles) {
@@ -1605,7 +1609,7 @@ void ParticlesStorage::update_particles() {
 		// Copy particles to instance buffer.
 		if (particles->draw_order != RS::PARTICLES_DRAW_ORDER_VIEW_DEPTH && particles->transform_align != RS::PARTICLES_TRANSFORM_ALIGN_Z_BILLBOARD && particles->transform_align != RS::PARTICLES_TRANSFORM_ALIGN_Z_BILLBOARD_Y_TO_VELOCITY) {
 			//does not need view dependent operation, do copy here
-			ParticlesShader::CopyPushConstant copy_push_constant;
+			ParticlesShader::CopyPushConstant copy_push_constant = {};
 
 			// Affect 2D only.
 			if (particles->use_local_coords) {
