@@ -576,8 +576,6 @@ void CSGShape3D::update_shape() {
 	CSGBrush *n = _get_brush();
 	ERR_FAIL_NULL_MSG(n, "Cannot get CSGBrush.");
 
-	AHashMap<Vector3, Vector3> vec_map;
-
 	Vector<int> face_count;
 	face_count.resize(n->materials.size() + 1);
 	face_count.fill(0);
@@ -585,11 +583,7 @@ void CSGShape3D::update_shape() {
 	Vector<ShapeUpdateSurface> surfaces;
 	surfaces.resize(face_count.size());
 
-	if (autosmooth) {
-		_build_surfaces_smoothed(n, surfaces, face_count);
-	} else {
-		_build_surfaces_default(n, surfaces, face_count);
-	}
+	_build_surfaces_default(n, surfaces, face_count);
 
 	root_mesh.instantiate();
 	//create surfaces
@@ -638,155 +632,6 @@ void CSGShape3D::update_shape() {
 #ifndef PHYSICS_3D_DISABLED
 	_update_collision_faces();
 #endif // PHYSICS_3D_DISABLED
-}
-
-void CSGShape3D::_build_surfaces_smoothed(CSGBrush *p_brush, Vector<CSGShape3D::ShapeUpdateSurface> &r_surfaces, Vector<int> &r_face_count) {
-	Vector<Vector3> smooth_faces;
-	LocalVector<Vector3> smooth_vertex;
-	smooth_faces.resize(p_brush->faces.size());
-	smooth_vertex.resize(p_brush->faces.size() * 3);
-
-	Vector3 *smooth_faces_ptrw = smooth_faces.ptrw();
-	int *face_count_ptrw = r_face_count.ptrw();
-
-	for (int i = 0; i < p_brush->faces.size(); i++) {
-		int mat = p_brush->faces[i].material;
-		ERR_CONTINUE(mat < -1 || mat >= r_face_count.size());
-		int idx = mat == -1 ? r_face_count.size() - 1 : mat;
-
-		Plane p(p_brush->faces[i].vertices[0], p_brush->faces[i].vertices[1], p_brush->faces[i].vertices[2]);
-
-		smooth_faces_ptrw[i] = p.normal;
-		// Not sure if resize populates the LocalVector.
-		smooth_vertex[i * 3 + 0] = Vector3(p.normal);
-		smooth_vertex[i * 3 + 1] = Vector3(p.normal);
-		smooth_vertex[i * 3 + 2] = Vector3(p.normal);
-		// We could use a AHashMap Vector3, int to store the number of connections of each vertex position and end the loop earlier. But I'm not sure if the performance gains outweigh the cost.
-		face_count_ptrw[idx]++;
-	}
-
-	const Vector3 *smooth_faces_ptr = smooth_faces.ptr();
-	const int smooth_faces_size = smooth_faces.size();
-
-	// We could add a `use_groups` property later to only apply autosmooth on smooth faces or respect smoothing groups in some way.
-	if (smoothing_angle > 0.1) {
-		float smooth_angle_rad = Math::cos(Math::deg_to_rad(smoothing_angle));
-		for (int i = 0; i < smooth_faces_size; i++) {
-			for (int k = 0; k < 3; k++) {
-				int curr_vert = i * 3 + k;
-				Vector3 vert_a = p_brush->faces[i].vertices[k];
-				for (int j = i + 1; j < smooth_faces_size; j++) {
-					// Compare the angles of faces instead of vertices.
-					if (smooth_faces_ptr[i].dot(smooth_faces_ptr[j]) > smooth_angle_rad) {
-						for (int h = 0; h < 3; h++) {
-							Vector3 vert_b = p_brush->faces[j].vertices[h];
-							if (vert_a == vert_b) {
-								int curr_j = j * 3 + h;
-								smooth_vertex[curr_vert] += smooth_faces_ptr[j];
-								smooth_vertex[curr_j] += smooth_faces_ptr[i];
-								break;
-							}
-						}
-					}
-				}
-				smooth_vertex[curr_vert].normalize();
-			}
-		}
-	} else {
-		for (int i = 0; i < smooth_faces_size; i++) {
-			bool face_is_smooth = p_brush->faces[i].smooth;
-			if (face_is_smooth) {
-				for (int k = 0; k < 3; k++) {
-					Vector3 vert_a = p_brush->faces[i].vertices[k];
-					int curr_vert = i * 3 + k;
-					// Skip the other vertices of the face as they will never occupy the same position.
-					for (int j = i + 1; j < smooth_faces_size; j++) {
-						// Preparing for when and if we replace Vector of bool for Vector of int smoothing groups. for now, face_is_smooth is always true.
-						if (face_is_smooth == p_brush->faces[j].smooth) {
-							for (int h = 0; h < 3; h++) {
-								Vector3 vert_b = p_brush->faces[j].vertices[h];
-								if (vert_a == vert_b) {
-									int curr_j = j * 3 + h;
-									smooth_vertex[curr_vert] += smooth_faces_ptr[j];
-									smooth_vertex[curr_j] += smooth_faces_ptr[i];
-									// Skip the other 2 vertices as only one vertex of each face can connect with one vertex of other face.
-									break;
-								}
-							}
-						}
-					}
-					smooth_vertex[curr_vert].normalize();
-				}
-			}
-		}
-	}
-
-	//create arrays
-	for (int i = 0; i < r_surfaces.size(); i++) {
-		r_surfaces.write[i].vertices.resize(r_face_count[i] * 3);
-		r_surfaces.write[i].normals.resize(r_face_count[i] * 3);
-		r_surfaces.write[i].uvs.resize(r_face_count[i] * 3);
-		if (calculate_tangents) {
-			r_surfaces.write[i].tans.resize(r_face_count[i] * 3 * 4);
-		}
-		r_surfaces.write[i].last_added = 0;
-
-		if (i != r_surfaces.size() - 1) {
-			r_surfaces.write[i].material = p_brush->materials[i];
-		}
-
-		r_surfaces.write[i].verticesw = r_surfaces.write[i].vertices.ptrw();
-		r_surfaces.write[i].normalsw = r_surfaces.write[i].normals.ptrw();
-		r_surfaces.write[i].uvsw = r_surfaces.write[i].uvs.ptrw();
-		if (calculate_tangents) {
-			r_surfaces.write[i].tansw = r_surfaces.write[i].tans.ptrw();
-		}
-	}
-
-	//fill arrays
-	{
-		for (int i = 0; i < p_brush->faces.size(); i++) {
-			int order[3] = { 0, 1, 2 };
-
-			if (p_brush->faces[i].invert) {
-				SWAP(order[1], order[2]);
-			}
-
-			int mat = p_brush->faces[i].material;
-			ERR_CONTINUE(mat < -1 || mat >= r_face_count.size());
-			int idx = mat == -1 ? r_face_count.size() - 1 : mat;
-
-			int last = r_surfaces[idx].last_added;
-
-			int face_pos_i = i * 3;
-
-			for (int j = 0; j < 3; j++) {
-				Vector3 v = p_brush->faces[i].vertices[j];
-
-				Vector3 normal = smooth_vertex[face_pos_i + j];
-
-				if (p_brush->faces[i].invert) {
-					normal = -normal;
-				}
-
-				int k = last + order[j];
-				r_surfaces[idx].verticesw[k] = v;
-				r_surfaces[idx].uvsw[k] = p_brush->faces[i].uvs[j];
-				r_surfaces[idx].normalsw[k] = normal;
-
-				if (calculate_tangents) {
-					// zero out our tangents for now
-					k *= 4;
-					r_surfaces[idx].tansw[k++] = 0.0;
-					r_surfaces[idx].tansw[k++] = 0.0;
-					r_surfaces[idx].tansw[k++] = 0.0;
-					r_surfaces[idx].tansw[k++] = 0.0;
-				}
-			}
-
-			r_surfaces.write[idx].last_added += 3;
-		}
-	}
 }
 
 void CSGShape3D::_build_surfaces_default(CSGBrush *p_brush, Vector<CSGShape3D::ShapeUpdateSurface> &r_surfaces, Vector<int> &r_face_count) {
