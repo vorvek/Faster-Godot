@@ -110,4 +110,10 @@ jobs:
           else
             gh release create faster-godot-4.6.3b --repo "${{ github.repository }}" --target "$GITHUB_SHA" --title "faster-godot-4.6.3b" --notes "See CHANGES_FROM_OFFICIAL.md in this commit for the full changelist."
           fi
+
+          gh release view faster-godot-4.6.3b --repo "${{ github.repository }}" --json assets --jq '.assets[].name' | while IFS= read -r asset; do
+            [ -n "$asset" ] || continue
+            gh release delete-asset faster-godot-4.6.3b "$asset" --repo "${{ github.repository }}" --yes
+          done
+
           gh release upload faster-godot-4.6.3b release-assets/* --repo "${{ github.repository }}" --clobber
