@@ -327,9 +327,10 @@ private:
 		SCENE_FEATURE_DEPTH_RECONSTRUCT = (1 << 6),
 	};
 
-	// Features that are fully disabled when raytracing is active.
+	// Raster indirect/screen-space features disabled while hardware RTGI is active.
+	// Depth prepass remains available to Hybrid because Forward+ still owns primary raster.
 	constexpr static uint32_t RT_DISABLED_FEATURES =
-			SCENE_FEATURE_SDFGI | SCENE_FEATURE_SSIL | SCENE_FEATURE_SSR | SCENE_FEATURE_SSAO | SCENE_FEATURE_VOXELGI | SCENE_FEATURE_DEPTH_PREPASS;
+			SCENE_FEATURE_SDFGI | SCENE_FEATURE_SSIL | SCENE_FEATURE_SSR | SCENE_FEATURE_SSAO | SCENE_FEATURE_VOXELGI;
 
 	struct SceneFeatures {
 		uint32_t raw = 0;

@@ -2177,6 +2177,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RID rt_uniform_set;
 	RID rt_pipeline;
 	const bool rt_requested = scene_features.rt;
+	const bool rt_setup_deferred = scene_features.rt && !rt_replaces_opaque;
 	auto invalidate_rt_temporal_history = [&]() {
 		if (!rb_data.is_valid()) {
 			return;
@@ -2204,7 +2205,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->texture_clear(rb_data->rt_get_prev_history_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 		}
 	};
-	if (scene_features.rt && rb_data.is_valid() && raytracing && raytracing->get_shader()) {
+	auto setup_rt_state = [&]() -> bool {
+		if (!scene_features.rt || !rb_data.is_valid() || !raytracing || !raytracing->get_shader()) {
+			return false;
+		}
+
+		rt_uniform_set = RID();
+		rt_pipeline = RID();
+
 		const float *env_params = (p_render_data && p_render_data->environment.is_valid())
 				? RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment)
 				: nullptr;
@@ -2230,14 +2238,20 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		if (rt_uniform_set.is_valid()) {
 			rt_pipeline = raytracing->get_shader()->get_raytracing_pipeline(rt_flags);
 		}
-	} else if (rb_data.is_valid() && rb_data->dlss_rr_has_buffers()) {
-		// RT disabled: free DLSS RR buffers so DLSS falls back to SR.
-		rb_data->dlss_rr_free_buffers();
-		invalidate_rt_temporal_history();
+
+		return rt_uniform_set.is_valid() && rt_pipeline.is_valid();
+	};
+
+	if (!rt_setup_deferred && scene_features.rt) {
+		setup_rt_state();
 	} else if (!scene_features.rt) {
+		if (rb_data.is_valid() && rb_data->dlss_rr_has_buffers()) {
+			// RT disabled: free DLSS RR buffers so DLSS falls back to SR.
+			rb_data->dlss_rr_free_buffers();
+		}
 		invalidate_rt_temporal_history();
 	}
-	if (rt_requested && (!rt_pipeline.is_valid() || !rt_uniform_set.is_valid())) {
+	if (!rt_setup_deferred && rt_requested && (!rt_pipeline.is_valid() || !rt_uniform_set.is_valid())) {
 		ERR_PRINT_ONCE_ED("Failed to initialize raytracing pipeline or uniform set. Falling back to raster opaque rendering for this frame.");
 		scene_features.rt = false;
 		rt_replaces_opaque = false;
@@ -2267,7 +2281,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		depth_prepass_uniform_buffer_index = _setup_environment(p_render_data, is_reflection_probe, screen_size, screen_size, p_default_bg_color, false);
 		_update_render_base_uniform_set();
 	}
-
 	// Path Traced mode skips OPAQUE (TLAS is built from rt_instances). Hybrid
 	// RTGI still renders the normal raster opaque path and composites RTGI later.
 	_fill_render_list(RENDER_LIST_OPAQUE, p_render_data, PASS_MODE_COLOR, using_sdfgi, using_sdfgi || using_voxelgi, using_motion_pass, false, rt_replaces_opaque);
@@ -2628,6 +2641,20 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 				RD::get_singleton()->draw_command_end_label();
 			}
+		}
+	}
+
+	if (rt_setup_deferred && scene_features.rt) {
+		if (!setup_rt_state()) {
+			ERR_PRINT_ONCE_ED("Failed to initialize Hybrid RTGI pipeline or uniform set. Rendering raster output without RTGI for this frame.");
+			scene_features.rt = false;
+			scene_features.raw &= ~uint32_t(SCENE_FEATURE_DEPTH_RECONSTRUCT);
+			using_rt_temporal_denoise = false;
+			using_taa = using_viewport_taa;
+			if (rb_data.is_valid() && rb_data->dlss_rr_has_buffers()) {
+				rb_data->dlss_rr_free_buffers();
+			}
+			invalidate_rt_temporal_history();
 		}
 	}
 
