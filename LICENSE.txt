@@ -1,3 +1,19 @@
+Faster-Godot notice
+===================
+
+Faster-Godot is an independent fork based on Godot Engine. It is not part of,
+affiliated with, endorsed by, or supported by the Godot Engine project, the
+godotengine GitHub organization, or the Godot Foundation.
+
+The Faster-Godot codebase, including Faster-Godot modifications and the Godot
+Engine code it is based on, is distributed under the MIT/Expat license terms
+below unless a more specific file-level license in COPYRIGHT.txt applies. The
+software is provided as-is, without warranty.
+
+MIT/Expat license text
+======================
+
+Copyright (c) 2026-present Faster-Godot contributors.
 Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md).
 Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.
 

@@ -20,6 +20,7 @@ desktop Forward+ profile. The detailed notes are split by change area:
 | Occlusion culling and Embree update | [docs/occlusion_culling.md](docs/occlusion_culling.md) |
 | Windows high-polling mouse input | [docs/windows_high_polling_mouse_input.md](docs/windows_high_polling_mouse_input.md) |
 | Binary and memory surface reduction | [docs/binary_and_memory_surface.md](docs/binary_and_memory_surface.md) |
+| Independent fork identity and legal notices | [README.md](README.md), [LICENSE.txt](LICENSE.txt), [COPYRIGHT.txt](COPYRIGHT.txt) |
 
 ## RTGI Vendor Denoiser Reference Status
 
@@ -50,26 +51,27 @@ Scene shape at the sampled alive-state workload:
 | Test CPU | AMD Ryzen 9 9950X3D |
 | Test memory | 48 GB DDR5-6000 |
 | Test GPU | NVIDIA GeForce RTX 4080 SUPER |
-| Active character bodies | 26 |
-| Spawned skinned enemy bodies | 24 |
-| Runtime character logic | Basic AI, target raycasts, movement, attack attempts, scripted death |
+| Animated character-body workload | 26 |
+| Additional skinned actors spawned for stress | 24 |
+| Runtime character logic | Scripted updates, target queries/raycasts, movement, animation, and hit/removal transitions |
 | Skeleton3D nodes in scene | 26 |
 | MeshInstance3D nodes in scene | 672 |
 | Light nodes | 1 omni |
 | Rendered objects in sampled frames | ~1.3K |
 | Rendered primitives in sampled frames | ~2.87M |
 | Draw calls in benchmark table | ~1.1K |
-| Death particle systems validated after sample window | 24 |
+| Particle systems validated after sample window | 24 |
 
 | Metric | Official 4.6.3 Vulkan | Faster-Godot Vulkan | Delta |
 | --- | ---: | ---: | ---: |
 | FPS average | 448.46 FPS | 548.98 FPS | +22.413% |
 | Process time average | 3.46 ms | 3.14 ms | -9.255% |
-| Draw calls average | 1113.62 | 1110.72 | -2.90 |
 | VRAM monitor | 313.896 MiB | 318.469 MiB | +4.573 MiB |
 
 This snapshot uses a heavier animated 3D stress path than the previous
 single-actor smoke comparison, so it is the preferred current desktop
-performance baseline. Linux rendered benchmark data is not included yet.
+performance baseline. Draw-call counts are recorded only as scene context, not
+as a batching improvement claim. Linux rendered benchmark data is not included
+yet.
 
 Maintained by Jon Tamayo - https://x.com/vorvek

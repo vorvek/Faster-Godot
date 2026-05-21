@@ -16,10 +16,22 @@ This is not a general-purpose replacement for official Godot. It deliberately
 trades broad platform compatibility for lower binary size, less renderer and
 module surface area, and tighter hot paths for desktop Forward+ games.
 
+## Project Status
+
+Faster-Godot is an independent fork based on Godot Engine. It is not part of,
+affiliated with, endorsed by, or supported by the Godot Engine project, the
+`godotengine` GitHub organization, or the Godot Foundation.
+
+The fork is provided as-is, without warranty. It keeps Godot's MIT/Expat license
+terms, but it intentionally diverges from official Godot in platform support,
+module selection, renderer support, CPU requirements, and runtime behavior.
+Use official Godot when broad compatibility or upstream support matters more
+than this fork's narrower desktop performance profile.
+
 ## Where The Speed Comes From
 
-The current speed work is concentrated in these areas. The benchmarked gains so
-far came mostly from the renderer-profile and hot-path changes:
+The current speed work is concentrated in these areas. The measured gains so far
+came mostly from the narrower renderer profile and CPU-side hot-path changes:
 
 - Forward+ only: Mobile and compatibility renderer paths are removed from the
   fork build, including mobile tonemapping variants and Forward Mobile shader
@@ -28,9 +40,8 @@ far came mostly from the renderer-profile and hot-path changes:
   desktop CPUs instead of the official broad SSE4.2 baseline, with zstd BMI2
   paths dispatched at runtime on CPUs that expose BMI2.
 - Render culling hot paths: Visibility range checks avoid square roots when no
-  fade value is needed, light culling avoids full AABB projection when only the
-  minimum plane distance matters, and clustered volume draws batch consecutive
-  same-geometry elements.
+  fade value is needed, and light culling avoids full AABB projection when only
+  the minimum plane distance matters.
 - Occlusion raycast backend: Embree is updated to 4.4.1 and the viewport
   occlusion path stays enabled for fixed-camera rooms, corridors, and dense
   static scenes.
@@ -61,22 +72,22 @@ far came mostly from the renderer-profile and hot-path changes:
 Faster-Godot is enabled by default through the `faster_godot=yes` SCons option.
 Use `faster_godot=no` to build closer to official Godot behavior from this tree.
 
-Windows release template:
+Windows optimized release template:
 
 ```powershell
-scons platform=windows target=template_release arch=x86_64 use_mingw=yes tests=no optimize=speed lto=none debug_symbols=no -j16
+scons platform=windows target=template_release arch=x86_64 faster_godot=yes production=yes tests=no optimize=speed lto=full debug_symbols=no -j31
 ```
 
-Windows stripped release editor:
+Windows optimized release editor:
 
 ```powershell
-scons platform=windows target=editor arch=x86_64 use_mingw=yes production=yes tests=no optimize=speed lto=none debug_symbols=no -j16
+scons platform=windows target=editor arch=x86_64 faster_godot=yes production=yes tests=no optimize=speed lto=full debug_symbols=no -j31
 ```
 
-Linux release template:
+Linux optimized release template:
 
 ```bash
-scons platform=linuxbsd target=template_release arch=x86_64 tests=no optimize=speed lto=none debug_symbols=no -j16
+scons platform=linuxbsd target=template_release arch=x86_64 faster_godot=yes production=yes tests=no optimize=speed lto=full debug_symbols=no -j31
 ```
 
 The forked binaries receive the `.faster_godot` suffix.
@@ -89,10 +100,14 @@ code scope, pros, and cons.
 
 ## License
 
-Faster-Godot keeps Godot's original MIT license. See [LICENSE.txt](LICENSE.txt).
+Faster-Godot keeps Godot's original MIT/Expat license terms. See
+[LICENSE.txt](LICENSE.txt) and [COPYRIGHT.txt](COPYRIGHT.txt). The Faster-Godot
+name and fork maintenance do not imply endorsement by the Godot Engine project
+or organization.
 
 ## Attribution
 
-Based on Godot Engine 4.6.3-stable.
+Based on Godot Engine 4.6.3-stable. Godot Engine and its upstream files remain
+copyright their respective contributors.
 
 Fork maintained by Jon Tamayo - https://x.com/vorvek

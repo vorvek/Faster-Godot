@@ -1,11 +1,22 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Comment:
- Exhaustive licensing information for files in the Godot Engine repository
+ Faster-Godot fork notice
+ ========================
+ .
+ Faster-Godot is an independent fork based on Godot Engine. It is not part of,
+ affiliated with, endorsed by, or supported by the Godot Engine project, the
+ godotengine GitHub organization, or the Godot Foundation.
+ .
+ The Faster-Godot modifications are distributed under the same MIT/Expat terms
+ used by Godot Engine and are provided as-is, without warranty.
+ .
+ Exhaustive licensing information for files in the Faster-Godot repository
  =========================================================================
  .
- This file aims at documenting the copyright and license for every source
- file in the Godot Engine repository, and especially outline the files
- whose license differs from the MIT/Expat license used by Godot Engine.
+ This file aims at documenting the copyright and license for every source file
+ in the Faster-Godot repository, including the Godot Engine code it is based on,
+ and especially outlines files whose license differs from the MIT/Expat license
+ used by Faster-Godot and Godot Engine.
  .
  It is written as a machine-readable format following the debian/copyright
  specification. Globbing patterns (e.g. "Files: *") mean that they affect
@@ -29,19 +40,20 @@ Comment:
    License: Zlib
  The exact copyright for each file in that library *may* differ, and some
  files or code snippets might be distributed under other compatible licenses
- (e.g. a public domain dedication), but as far as Godot Engine is concerned
- the library is considered as a whole under the Zlib license.
+ (e.g. a public domain dedication), but as far as Faster-Godot is concerned the
+ library is considered as a whole under the Zlib license.
  .
  Note: When linking dynamically against thirdparty libraries instead of
- building them into the Godot binary, you may remove the corresponding
+ building them into the Faster-Godot binary, you may remove the corresponding
  license details from this file.
-Upstream-Name: Godot Engine
-Upstream-Contact: Rémi Verschelde <contact@godotengine.org>
-Source: https://github.com/godotengine/godot
+Upstream-Name: Faster-Godot
+Upstream-Contact: Jon Tamayo <https://x.com/vorvek>
+Source: https://github.com/vorvek/Faster-Godot
 
 Files: *
-Comment: Godot Engine
-Copyright: 2014-present, Godot Engine contributors
+Comment: Faster-Godot fork based on Godot Engine
+Copyright: 2026-present, Faster-Godot contributors
+ 2014-present, Godot Engine contributors
  2007-2014, Juan Linietsky, Ariel Manzur
 License: Expat
 
