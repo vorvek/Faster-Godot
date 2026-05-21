@@ -14,8 +14,6 @@ used by this platform.
 
 ## Artwork license
 
-[`logo.svg`](export/logo.svg) is derived from the [Linux logo](https://isc.tamu.edu/~lewing/linux/):
-
-> Permission to use and/or modify this image is granted provided you acknowledge me
-> <lewing@isc.tamu.edu> and [The GIMP](https://isc.tamu.edu/~lewing/gimp/)
-> if someone asks.
+[`logo.svg`](export/logo.svg) and [`run_icon.svg`](export/run_icon.svg) use the
+Faster-Godot FG gear mark and are distributed under the same MIT/Expat license
+terms as this fork. See [`COPYRIGHT.txt`](/COPYRIGHT.txt).

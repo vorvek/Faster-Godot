@@ -1,61 +1,70 @@
-name: 🏁 Windows Builds
+name: Windows Release Builds
 on:
   workflow_call:
   workflow_dispatch:
 
-# Global Settings
 env:
   SCONS_FLAGS: >-
-    dev_mode=yes
-    module_text_server_fb_enabled=yes
+    production=yes
+    tests=no
+    optimize=speed
+    lto=auto
     debug_symbols=no
-    "angle_libs=${{ github.workspace }}/"
-    "accesskit_sdk_path=${{ github.workspace }}/accesskit-c-0.21.2/"
+    module_text_server_fb_enabled=yes
   SCONS_CACHE_MSVC_CONFIG: true
   PYTHONIOENCODING: utf8
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
 
 jobs:
   build-windows:
-    # Windows 10 with latest image
     runs-on: windows-latest
     name: ${{ matrix.name }}
-    timeout-minutes: 120
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: Editor (target=editor)
+          - name: Windows x86_64 editor
             cache-name: windows-editor
+            artifact-name: faster-godot-4.6.3b-windows-x86_64-editor
             target: editor
-            scons-flags: >-
-              windows_subsystem=console
-              vsproj=yes
-              vsproj_gen_only=no
-            bin: ./bin/godot.windows.editor.x86_64.exe
-            compiler: msvc
+            scons-flags: windows_subsystem=gui
+            test-bin: ./bin/faster-godot.windows.editor.x86_64.faster_godot.console.exe
+            artifact-glob: ./bin/faster-godot.windows.editor.x86_64.faster_godot*.exe
+            gui-bin: ./bin/faster-godot.windows.editor.x86_64.faster_godot.exe
+            build-mono: false
+            make-installer: true
 
-          - name: Editor w/ clang-cl (target=editor, use_llvm=yes)
-            cache-name: windows-editor-clang
+          - name: Windows x86_64 .NET editor
+            cache-name: windows-editor-mono
+            artifact-name: faster-godot-4.6.3b-windows-x86_64-editor-dotnet
             target: editor
-            scons-flags: >-
-              windows_subsystem=console
-              use_llvm=yes
-            bin: ./bin/godot.windows.editor.x86_64.llvm.exe
-            compiler: clang
+            scons-flags: windows_subsystem=gui module_mono_enabled=yes
+            test-bin: ./bin/faster-godot.windows.editor.x86_64.faster_godot.mono.console.exe
+            artifact-glob: ./bin/faster-godot.windows.editor.x86_64.faster_godot.mono*.exe
+            build-mono: true
+            make-installer: false
 
-          - name: Template (target=template_release)
+          - name: Windows x86_64 release template
             cache-name: windows-template
+            artifact-name: faster-godot-4.6.3b-windows-x86_64-template-release
             target: template_release
-            bin: ./bin/godot.windows.template_release.x86_64.console.exe
-            compiler: msvc
+            scons-flags: windows_subsystem=gui
+            test-bin: ./bin/faster-godot.windows.template_release.x86_64.faster_godot.console.exe
+            artifact-glob: ./bin/faster-godot.windows.template_release.x86_64.faster_godot*.exe
+            build-mono: false
+            make-installer: false
 
-          - name: Template w/ GCC (target=template_release, use_mingw=yes)
-            cache-name: windows-template-gcc
-            # MinGW takes MUCH longer to compile; save time by only targeting Template.
+          - name: Windows x86_64 .NET release template
+            cache-name: windows-template-mono
+            artifact-name: faster-godot-4.6.3b-windows-x86_64-template-release-dotnet
             target: template_release
-            scons-flags: use_mingw=yes
-            bin: ./bin/godot.windows.template_release.x86_64.console.exe
-            compiler: gcc
+            scons-flags: windows_subsystem=gui module_mono_enabled=yes
+            test-bin: ./bin/faster-godot.windows.template_release.x86_64.faster_godot.mono.console.exe
+            artifact-glob: ./bin/faster-godot.windows.template_release.x86_64.faster_godot.mono*.exe
+            build-mono: false
+            make-installer: false
 
     steps:
       - name: Checkout
@@ -63,7 +72,7 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Restore Godot build cache
+      - name: Restore Faster-Godot build cache
         uses: ./.github/actions/godot-cache-restore
         with:
           cache-name: ${{ matrix.cache-name }}
@@ -72,27 +81,11 @@ jobs:
       - name: Setup Python and SCons
         uses: ./.github/actions/godot-deps
 
-      - name: Download pre-built ANGLE static libraries
-        uses: dsaltares/fetch-gh-release-asset@1.1.2
+      - name: Setup .NET SDK
+        if: matrix.build-mono
+        uses: actions/setup-dotnet@v5
         with:
-          repo: godotengine/godot-angle-static
-          version: tags/chromium/6601.2
-          file: godot-angle-static-x86_64-${{ matrix.compiler == 'gcc' && 'gcc' || 'msvc' }}-release.zip
-          target: angle/angle.zip
-
-      - name: Extract pre-built ANGLE static libraries
-        run: Expand-Archive -Force angle/angle.zip ${{ github.workspace }}/
-
-      - name: Download pre-built AccessKit
-        uses: dsaltares/fetch-gh-release-asset@1.1.2
-        with:
-          repo: godotengine/godot-accesskit-c-static
-          version: tags/0.21.2
-          file: accesskit-c-0.21.2.zip
-          target: accesskit-c-0.21.2/accesskit_c.zip
-
-      - name: Extract pre-built AccessKit
-        run: unzip -o accesskit-c-0.21.2/accesskit_c.zip
+          dotnet-version: 8.0.100
 
       - name: Compilation
         uses: ./.github/actions/godot-build
@@ -101,25 +94,48 @@ jobs:
           platform: windows
           target: ${{ matrix.target }}
 
-      - name: Save Godot build cache
+      - name: Generate C# glue
+        if: matrix.build-mono
+        run: |
+          ${{ matrix.test-bin }} --headless --generate-mono-glue ./modules/mono/glue
+
+      - name: Build .NET assemblies
+        if: matrix.build-mono
+        run: |
+          dotnet --info
+          python ./modules/mono/build_scripts/build_assemblies.py --godot-output-dir=./bin --godot-platform=windows --werror --no-deprecated
+
+      - name: Save Faster-Godot build cache
         uses: ./.github/actions/godot-cache-save
         with:
           cache-name: ${{ matrix.cache-name }}
         continue-on-error: true
 
-      - name: Prepare artifact
-        if: matrix.compiler == 'msvc'
+      - name: Smoke CLI
         run: |
-          Remove-Item bin/* -Include *.exp,*.lib,*.pdb -Force
+          ${{ matrix.test-bin }} --version
+          ${{ matrix.test-bin }} --help
+
+      - name: Prepare release artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item -Path "${{ matrix.artifact-glob }}" -Destination release -Force
+          if (Test-Path bin/GodotSharp) {
+            Copy-Item -Path bin/GodotSharp -Destination release/GodotSharp -Recurse -Force
+          }
+
+      - name: Build installer
+        if: matrix.make-installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          Copy-Item -Path "${{ matrix.gui-bin }}" -Destination misc/dist/windows/faster-godot.exe -Force
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" misc/dist/windows/faster-godot.iss
+          Copy-Item -Path misc/dist/windows/faster-godot-setup-x86_64.exe -Destination release -Force
 
       - name: Upload artifact
-        if: matrix.compiler == 'msvc'
         uses: ./.github/actions/upload-artifact
         with:
-          name: ${{ matrix.cache-name }}
-
-      - name: Unit tests
-        run: |
-          ${{ matrix.bin }} --version
-          ${{ matrix.bin }} --help
-          ${{ matrix.bin }} --test --force-colors
+          name: ${{ matrix.artifact-name }}
+          path: release/**

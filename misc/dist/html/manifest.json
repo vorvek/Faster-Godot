@@ -1,7 +1,7 @@
 {
-  "name": "Godot Engine Web Editor",
-  "short_name": "Godot",
-  "description": "Multi-platform 2D and 3D game engine with a feature-rich editor (Web edition)",
+  "name": "Faster-Godot Web Editor",
+  "short_name": "Faster-Godot",
+  "description": "Performance-first Godot-based desktop game engine fork with a feature-rich editor (Web edition)",
   "lang": "en",
   "start_url": "./godot.editor.html",
   "display": "standalone",

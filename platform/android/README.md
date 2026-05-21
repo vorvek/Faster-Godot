@@ -12,10 +12,6 @@ using [Gradle](https://gradle.org/) as a build system.
 
 ## Artwork license
 
-[`logo.svg`](export/logo.svg) and [`run_icon.svg`](export/run_icon.svg) are licensed under
-[Creative Commons Attribution 3.0 Unported](https://developer.android.com/distribute/marketing-tools/brand-guidelines#android_robot)
-per the Android logo usage guidelines:
-
-> The Android robot is reproduced or modified from work created and shared by
-> Google and used according to terms described in the Creative Commons 3.0
-> Attribution License.
+[`logo.svg`](export/logo.svg) and [`run_icon.svg`](export/run_icon.svg) use the
+Faster-Godot FG gear mark and are distributed under the same MIT/Expat license
+terms as this fork. See [`COPYRIGHT.txt`](/COPYRIGHT.txt).

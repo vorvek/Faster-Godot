@@ -4562,11 +4562,11 @@ void WaylandThread::set_icon(const Ref<Image> &p_icon) {
 	xdg_toplevel_icon_v1_add_buffer(xdg_icon, icon_buffer, icon_size.width);
 
 	if (Engine::get_singleton()->is_editor_hint() || Engine::get_singleton()->is_project_manager_hint()) {
-		// Setting a name allows the godot icon to be overridden by a system theme.
+		// Setting a name allows the Faster-Godot icon to be overridden by a system theme.
 		// We only want the project manager and editor to get themed,
 		// Games will get icons with the protocol and themed icons with .desktop entries.
-		// NOTE: should be synced with the icon name in misc/dist/linuxbsd/Godot.desktop
-		xdg_toplevel_icon_v1_set_name(xdg_icon, "godot");
+		// NOTE: should be synced with the icon name in misc/dist/linux/org.vorvek.FasterGodot.desktop.
+		xdg_toplevel_icon_v1_set_name(xdg_icon, "faster-godot");
 	}
 
 	for (KeyValue<DisplayServer::WindowID, WindowState> &pair : windows) {

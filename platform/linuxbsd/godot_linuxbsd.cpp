@@ -102,15 +102,15 @@ int main(int argc, char *argv[]) {
 	if (!(cpuid_sse42_supported && cpuid_popcnt_supported && cpuid_avx_supported && cpuid_fma_supported && cpuid_f16c_supported && cpuid_avx2_supported && os_avx_state_supported)) {
 		printf("A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, and AVX OS state support is required.\n");
 
-		int ret = system("zenity --warning --title \"Godot Engine\" --text \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, and AVX OS state support is required.\" 2> /dev/null");
+		int ret = system("zenity --warning --title \"Faster-Godot\" --text \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, and AVX OS state support is required.\" 2> /dev/null");
 		if (ret != 0) {
-			ret = system("kdialog --title \"Godot Engine\" --sorry \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, and AVX OS state support is required.\" 2> /dev/null");
+			ret = system("kdialog --title \"Faster-Godot\" --sorry \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, and AVX OS state support is required.\" 2> /dev/null");
 		}
 		if (ret != 0) {
-			ret = system("Xdialog --title \"Godot Engine\" --msgbox \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, and AVX OS state support is required.\" 0 0 2> /dev/null");
+			ret = system("Xdialog --title \"Faster-Godot\" --msgbox \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, and AVX OS state support is required.\" 0 0 2> /dev/null");
 		}
 		if (ret != 0) {
-			ret = system("xmessage -center -title \"Godot Engine\" \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, and AVX OS state support is required.\" 2> /dev/null");
+			ret = system("xmessage -center -title \"Faster-Godot\" \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, and AVX OS state support is required.\" 2> /dev/null");
 		}
 		abort();
 	}
@@ -118,15 +118,15 @@ int main(int argc, char *argv[]) {
 	if (!(cpuinfo[2] & (1 << 20))) {
 		printf("A CPU with SSE4.2 instruction set support is required.\n");
 
-		int ret = system("zenity --warning --title \"Godot Engine\" --text \"A CPU with SSE4.2 instruction set support is required.\" 2> /dev/null");
+		int ret = system("zenity --warning --title \"Faster-Godot\" --text \"A CPU with SSE4.2 instruction set support is required.\" 2> /dev/null");
 		if (ret != 0) {
-			ret = system("kdialog --title \"Godot Engine\" --sorry \"A CPU with SSE4.2 instruction set support is required.\" 2> /dev/null");
+			ret = system("kdialog --title \"Faster-Godot\" --sorry \"A CPU with SSE4.2 instruction set support is required.\" 2> /dev/null");
 		}
 		if (ret != 0) {
-			ret = system("Xdialog --title \"Godot Engine\" --msgbox \"A CPU with SSE4.2 instruction set support is required.\" 0 0 2> /dev/null");
+			ret = system("Xdialog --title \"Faster-Godot\" --msgbox \"A CPU with SSE4.2 instruction set support is required.\" 0 0 2> /dev/null");
 		}
 		if (ret != 0) {
-			ret = system("xmessage -center -title \"Godot Engine\" \"A CPU with SSE4.2 instruction set support is required.\" 2> /dev/null");
+			ret = system("xmessage -center -title \"Faster-Godot\" \"A CPU with SSE4.2 instruction set support is required.\" 2> /dev/null");
 		}
 		abort();
 	}

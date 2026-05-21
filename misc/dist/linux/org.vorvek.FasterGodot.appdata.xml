@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2026-present Faster-Godot contributors -->
+<component type="desktop">
+  <id>org.vorvek.FasterGodot</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Faster-Godot</name>
+  <summary>Performance-first Godot-based desktop game engine fork with a feature-rich editor</summary>
+  <launchable type="desktop-id">org.vorvek.FasterGodot.desktop</launchable>
+  <description>
+    <p>
+      Faster-Godot is an independent fork based on Godot Engine. It narrows the
+      runtime profile around Windows and Linux x86_64 Forward+ Vulkan games.
+    </p>
+    <p>
+      Faster-Godot is not part of, affiliated with, endorsed by, or supported by
+      the Godot Engine project, the godotengine GitHub organization, or the
+      Godot Foundation. It is provided as-is under MIT/Expat license terms.
+    </p>
+  </description>
+  <url type="homepage">https://github.com/vorvek/Faster-Godot</url>
+  <url type="bugtracker">https://github.com/vorvek/Faster-Godot/issues</url>
+  <url type="faq">https://github.com/vorvek/Faster-Godot</url>
+  <url type="help">https://docs.godotengine.org</url>
+  <developer_name>Faster-Godot contributors</developer_name>
+</component>

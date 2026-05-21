@@ -59,11 +59,68 @@ License: Expat
 
 Files: icon.png
  icon.svg
+ fast-godot.svg
+ icon_outlined.png
+ icon_outlined.svg
  logo.png
  logo.svg
-Comment: Godot Engine logo
-Copyright: 2017, Andrea Calabró
-License: CC-BY-4.0
+ logo_outlined.png
+ logo_outlined.svg
+ editor/icons/DefaultProjectIcon.svg
+ editor/icons/Godot.svg
+ editor/icons/GodotFile.svg
+ editor/icons/GodotMonochrome.svg
+ editor/icons/Logo.svg
+ editor/icons/TitleBarLogo.svg
+ misc/dist/html/logo.svg
+ misc/dist/icon_console.svg
+ misc/dist/document_icons/project.svg
+ misc/dist/document_icons/project_small.svg
+ misc/dist/document_icons/project_extra_small.svg
+ misc/dist/linux/icons/hicolor/scalable/apps/faster-godot.svg
+ misc/dist/linux/icons/hicolor/scalable/mimetypes/x-faster-godot-project.svg
+ misc/dist/linux/icons/hicolor/scalable/mimetypes/x-faster-godot-resource.svg
+ misc/dist/linux/icons/hicolor/scalable/mimetypes/x-faster-godot-scene.svg
+ misc/dist/linux/icons/hicolor/scalable/mimetypes/x-faster-godot-shader.svg
+ main/app_icon.png
+ main/splash.png
+ misc/dist/apple_embedded_xcode/godot_apple_embedded/Images.xcassets/SplashImage.imageset/splash@2x.png
+ misc/dist/apple_embedded_xcode/godot_apple_embedded/Images.xcassets/SplashImage.imageset/splash@3x.png
+ misc/dist/macos/FasterGodot.icon/Assets/layer_0.svg
+ misc/dist/macos/FasterGodot.icon/Assets/layer_1.svg
+ misc/dist/macos/FasterGodot.icon/Assets/layer_2.svg
+ misc/dist/macos_template.app/Contents/Resources/icon.icns
+ misc/dist/macos_tools.app/Contents/Resources/FasterGodot.icns
+ misc/dist/macos_tools.app/Contents/Resources/Project.icns
+ platform/android/export/logo.svg
+ platform/android/export/run_icon.svg
+ platform/android/java/app/src/instrumented/assets/icon.svg
+ platform/android/java/lib/src/main/res/mipmap*/icon*.webp
+ platform/android/java/editor/src/horizonos/assets/vr_splash.png
+ platform/android/java/editor/src/picoos/assets/vr_splash.png
+ platform/ios/export/logo.svg
+ platform/ios/export/run_icon.svg
+ platform/linuxbsd/export/logo.svg
+ platform/linuxbsd/export/run_icon.svg
+ platform/macos/export/logo.svg
+ platform/macos/export/run_icon.svg
+ platform/visionos/export/logo.svg
+ platform/visionos/export/run_icon.svg
+ platform/web/export/logo.svg
+ platform/web/export/run_icon.svg
+ platform/windows/export/logo.svg
+ platform/windows/export/run_icon.svg
+ platform/windows/godot.ico
+ platform/windows/godot_console.ico
+ tests/data/images/icon.bmp
+ tests/data/images/icon.exr
+ tests/data/images/icon.jpg
+ tests/data/images/icon.png
+ tests/data/images/icon.tga
+ tests/data/images/icon.webp
+Comment: Faster-Godot FG gear logo, editor logo, application icon, splash image, platform export logo, and default project/document icon
+Copyright: 2026-present, Faster-Godot contributors
+License: Expat
 
 Files: core/math/convex_hull.cpp
  core/math/convex_hull.h
@@ -73,9 +130,9 @@ Copyright: 2011, Ole Kniemeyer, MAXON, www.maxon.net
  2007-2014, Juan Linietsky, Ariel Manzur
 License: Expat and Zlib
 
-Files: misc/dist/linux/org.godotengine.Godot.appdata.xml
+Files: misc/dist/linux/org.vorvek.FasterGodot.appdata.xml
 Comment: Linux AppStream Metadata File
-Copyright: 2017-2022, Rémi Verschelde
+Copyright: 2026-present, Faster-Godot contributors
 License: CC0-1.0
 
 Files: modules/betsy/alpha_stitch.glsl

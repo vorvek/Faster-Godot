@@ -1314,7 +1314,7 @@ void ProjectManager::_titlebar_resized() {
 }
 
 void ProjectManager::_open_donate_page() {
-	OS::get_singleton()->shell_open("https://fund.godotengine.org/?ref=project_manager");
+	OS::get_singleton()->shell_open("https://godotengine.org/donate/");
 }
 
 // Object methods.
@@ -1442,7 +1442,7 @@ ProjectManager::ProjectManager() {
 
 		title_bar_logo = memnew(Button);
 		title_bar_logo->set_flat(true);
-		title_bar_logo->set_tooltip_text(TTR("About Godot"));
+		title_bar_logo->set_tooltip_text(TTR("About Faster-Godot"));
 		left_hbox->add_child(title_bar_logo);
 		title_bar_logo->connect(SceneStringName(pressed), callable_mp(this, &ProjectManager::_show_about));
 

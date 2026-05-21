@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="fast-godot.svg" alt="Faster-Godot FG gear logo" width="160">
+</p>
+
 # Faster-Godot
 
 Faster-Godot is a performance-first fork of Godot 4.6.3-stable for desktop
@@ -27,6 +31,10 @@ terms, but it intentionally diverges from official Godot in platform support,
 module selection, renderer support, CPU requirements, and runtime behavior.
 Use official Godot when broad compatibility or upstream support matters more
 than this fork's narrower desktop performance profile.
+
+Faster-Godot uses its own FG gear mark for editor, application, splash, platform
+export, and default new-project icons. The Godot logo is not used for this
+fork's shipped branding or generated project icon.
 
 ## Where The Speed Comes From
 
@@ -90,7 +98,8 @@ Linux optimized release template:
 scons platform=linuxbsd target=template_release arch=x86_64 faster_godot=yes production=yes tests=no optimize=speed lto=full debug_symbols=no -j31
 ```
 
-The forked binaries receive the `.faster_godot` suffix.
+The forked binaries use the `faster-godot` basename and receive the
+`.faster_godot` suffix.
 
 ## Changes From Official Godot
 

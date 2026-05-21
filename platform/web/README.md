@@ -17,6 +17,6 @@ this platform such as the html shell (web page).
 
 ## Artwork license
 
-[`logo.svg`](export/logo.svg) and [`run_icon.svg`](export/run_icon.svg) are licensed under
-[Creative Commons Attribution 3.0 Unported](https://www.w3.org/html/logo/faq.html#how-licenced)
-per the HTML5 logo usage guidelines.
+[`logo.svg`](export/logo.svg) and [`run_icon.svg`](export/run_icon.svg) use the
+Faster-Godot FG gear mark and are distributed under the same MIT/Expat license
+terms as this fork. See [`COPYRIGHT.txt`](/COPYRIGHT.txt).

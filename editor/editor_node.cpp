@@ -3811,26 +3811,26 @@ void EditorNode::_menu_option_confirm(int p_option, bool p_confirmed) {
 			OS::get_singleton()->shell_open("https://forum.godotengine.org/");
 		} break;
 		case HELP_REPORT_A_BUG: {
-			OS::get_singleton()->shell_open("https://github.com/godotengine/godot/issues");
+			OS::get_singleton()->shell_open("https://github.com/vorvek/Faster-Godot/issues");
 		} break;
 		case HELP_COPY_SYSTEM_INFO: {
 			String info = _get_system_info();
 			DisplayServer::get_singleton()->clipboard_set(info);
 		} break;
 		case HELP_SUGGEST_A_FEATURE: {
-			OS::get_singleton()->shell_open("https://github.com/godotengine/godot-proposals#readme");
+			OS::get_singleton()->shell_open("https://github.com/vorvek/Faster-Godot/issues");
 		} break;
 		case HELP_SEND_DOCS_FEEDBACK: {
 			OS::get_singleton()->shell_open("https://github.com/godotengine/godot-docs/issues");
 		} break;
 		case HELP_COMMUNITY: {
-			OS::get_singleton()->shell_open("https://godotengine.org/community");
+			OS::get_singleton()->shell_open("https://github.com/vorvek/Faster-Godot");
 		} break;
 		case HELP_ABOUT: {
 			about->popup_centered(Size2(780, 500) * EDSCALE);
 		} break;
 		case HELP_SUPPORT_GODOT_DEVELOPMENT: {
-			OS::get_singleton()->shell_open("https://fund.godotengine.org/?ref=help_menu");
+			OS::get_singleton()->shell_open("https://godotengine.org/donate/");
 		} break;
 	}
 }
@@ -7520,7 +7520,7 @@ bool EditorNode::call_build() {
 
 	for (int i = 0; i < build_callback_count && builds_successful; i++) {
 		if (!build_callbacks[i]()) {
-			ERR_PRINT("A Godot Engine build callback failed.");
+			ERR_PRINT("A Faster-Godot build callback failed.");
 			builds_successful = false;
 		}
 	}
@@ -8785,8 +8785,8 @@ EditorNode::EditorNode() {
 	ED_SHORTCUT_AND_COMMAND("editor/report_a_bug", TTRC("Report a Bug"));
 	ED_SHORTCUT_AND_COMMAND("editor/suggest_a_feature", TTRC("Suggest a Feature"));
 	ED_SHORTCUT_AND_COMMAND("editor/send_docs_feedback", TTRC("Send Docs Feedback"));
-	ED_SHORTCUT_AND_COMMAND("editor/about", TTRC("About Godot..."));
-	ED_SHORTCUT_AND_COMMAND("editor/support_development", TTRC("Support Godot Development"));
+	ED_SHORTCUT_AND_COMMAND("editor/about", TTRC("About Faster-Godot..."));
+	ED_SHORTCUT_AND_COMMAND("editor/support_development", TTRC("Support Upstream Godot"));
 
 	// Use the Ctrl modifier so F2 can be used to rename nodes in the scene tree dock.
 	ED_SHORTCUT_AND_COMMAND("editor/editor_2d", TTRC("Open 2D Workspace"), KeyModifierMask::CTRL | Key::F1);

@@ -7,13 +7,13 @@
 	<key>CFBundleExecutable</key>
 	<string>Godot</string>
 	<key>CFBundleName</key>
-	<string>Godot</string>
+	<string>Faster-Godot</string>
 	<key>CFBundleIconFile</key>
-	<string>GodotLG.icns</string>
+	<string>FasterGodot.icns</string>
 	<key>CFBundleIconName</key>
-	<string>GodotLG</string>
+	<string>FasterGodot</string>
 	<key>CFBundleIdentifier</key>
-	<string>org.godotengine.godot</string>
+	<string>org.vorvek.fastergodot</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundlePackageType</key>
@@ -21,7 +21,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>4.6.3</string>
 	<key>CFBundleSignature</key>
-	<string>GODO</string>
+	<string>FGDT</string>
 	<key>CFBundleVersion</key>
 	<string>4.6.3</string>
 	<key>NSMicrophoneUsageDescription</key>
@@ -33,7 +33,7 @@
 	<key>NSCameraUseContinuityCameraDeviceType</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>© 2007-present Juan Linietsky, Ariel Manzur &amp; Godot Engine contributors</string>
+	<string>© 2026-present Faster-Godot contributors; based on Godot Engine © 2007-present Juan Linietsky, Ariel Manzur &amp; Godot Engine contributors</string>
 	<key>CFBundleSupportedPlatforms</key>
 	<array>
 		<string>MacOSX</string>
@@ -63,11 +63,11 @@
 			<string>Editor</string>
 			<key>LSItemContentTypes</key>
 			<array>
-				<string>public.tscn</string>
+				<string>org.vorvek.fastergodot.scene</string>
 			</array>
 			<key>NSExportableTypes</key>
 			<array>
-				<string>public.tscn</string>
+				<string>org.vorvek.fastergodot.scene</string>
 			</array>
 		</dict>
 		<dict>
@@ -75,11 +75,11 @@
 			<string>Editor</string>
 			<key>LSItemContentTypes</key>
 			<array>
-				<string>public.godot</string>
+				<string>org.vorvek.fastergodot.project</string>
 			</array>
 			<key>NSExportableTypes</key>
 			<array>
-				<string>public.godot</string>
+				<string>org.vorvek.fastergodot.project</string>
 			</array>
 		</dict>
 	</array>
@@ -87,11 +87,11 @@
 	<array>
 		<dict>
 			<key>UTTypeIdentifier</key>
-			<string>public.tscn</string>
+			<string>org.vorvek.fastergodot.scene</string>
 			<key>UTTypeReferenceURL</key>
 			<string></string>
 			<key>UTTypeDescription</key>
-			<string>Godot Engine scene</string>
+			<string>Faster-Godot scene</string>
 			<key>UTTypeIconFile</key>
 			<string>Scene.icns</string>
 			<key>UTTypeConformsTo</key>
@@ -107,7 +107,7 @@
 					<string>escn</string>
 				</array>
 				<key>public.mime-type</key>
-				<string>application/x-godot-scene</string>
+				<string>application/x-faster-godot-scene</string>
 			</dict>
 		</dict>
 		<dict>
@@ -135,11 +135,11 @@
 		</dict>
 		<dict>
 			<key>UTTypeIdentifier</key>
-			<string>public.res</string>
+			<string>org.vorvek.fastergodot.resource</string>
 			<key>UTTypeReferenceURL</key>
 			<string></string>
 			<key>UTTypeDescription</key>
-			<string>Godot Engine resource</string>
+			<string>Faster-Godot resource</string>
 			<key>UTTypeIconFile</key>
 			<string>Resource.icns</string>
 			<key>UTTypeConformsTo</key>
@@ -154,16 +154,16 @@
 					<string>tres</string>
 				</array>
 				<key>public.mime-type</key>
-				<string>application/x-godot-resource</string>
+				<string>application/x-faster-godot-resource</string>
 			</dict>
 		</dict>
 		<dict>
 			<key>UTTypeIdentifier</key>
-			<string>public.gdshader</string>
+			<string>org.vorvek.fastergodot.shader</string>
 			<key>UTTypeReferenceURL</key>
 			<string></string>
 			<key>UTTypeDescription</key>
-			<string>Godot Engine shader</string>
+			<string>Faster-Godot shader</string>
 			<key>UTTypeIconFile</key>
 			<string>Shader.icns</string>
 			<key>UTTypeConformsTo</key>
@@ -177,16 +177,16 @@
 					<string>gdshader</string>
 				</array>
 				<key>public.mime-type</key>
-				<string>application/x-godot-shader</string>
+				<string>application/x-faster-godot-shader</string>
 			</dict>
 		</dict>
 		<dict>
 			<key>UTTypeIdentifier</key>
-			<string>public.godot</string>
+			<string>org.vorvek.fastergodot.project</string>
 			<key>UTTypeReferenceURL</key>
 			<string></string>
 			<key>UTTypeDescription</key>
-			<string>Godot Engine project</string>
+			<string>Faster-Godot project</string>
 			<key>UTTypeIconFile</key>
 			<string>Project.icns</string>
 			<key>UTTypeConformsTo</key>
@@ -200,7 +200,7 @@
 					<string>godot</string>
 				</array>
 				<key>public.mime-type</key>
-				<string>application/x-godot-project</string>
+				<string>application/x-faster-godot-project</string>
 			</dict>
 		</dict>
 	</array>

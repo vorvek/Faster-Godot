@@ -1,7 +1,7 @@
-#compdef godot
+#compdef faster-godot
 
-# zsh completion for the Godot editor
-# To use it, install this file as `_godot` in a directory specified in your
+# zsh completion for the Faster-Godot editor
+# To use it, install this file as `_faster-godot` in a directory specified in your
 # `fpath` environment variable then restart your shell.
 #
 # Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md).

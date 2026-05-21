@@ -5645,13 +5645,13 @@ void DisplayServerX11::_update_context(WindowData &wd) {
 		CharString name_str;
 		switch (context) {
 			case CONTEXT_EDITOR:
-				name_str = "Godot_Editor";
+				name_str = "Faster_Godot_Editor";
 				break;
 			case CONTEXT_PROJECTMAN:
-				name_str = "Godot_ProjectList";
+				name_str = "Faster_Godot_ProjectList";
 				break;
 			case CONTEXT_ENGINE:
-				name_str = "Godot_Engine";
+				name_str = "Faster_Godot_Engine";
 				break;
 		}
 
@@ -5659,12 +5659,12 @@ void DisplayServerX11::_update_context(WindowData &wd) {
 		if (context == CONTEXT_ENGINE) {
 			String config_name = GLOBAL_GET("application/config/name");
 			if (config_name.length() == 0) {
-				class_str = "Godot_Engine";
+				class_str = "Faster-Godot";
 			} else {
 				class_str = config_name.utf8();
 			}
 		} else {
-			class_str = "Godot";
+			class_str = "Faster-Godot";
 		}
 
 		classHint->res_class = class_str.ptrw();

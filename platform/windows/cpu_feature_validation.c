@@ -104,9 +104,9 @@ extern int WINAPI ShimMainCRTStartup() {
 #endif
 	} else {
 #ifdef FASTER_GODOT
-		MessageBoxW(NULL, L"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, and AVX OS state support is required.", L"Godot Engine", MB_OK | MB_ICONEXCLAMATION | MB_TASKMODAL);
+		MessageBoxW(NULL, L"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, and AVX OS state support is required.", L"Faster-Godot", MB_OK | MB_ICONEXCLAMATION | MB_TASKMODAL);
 #else
-		MessageBoxW(NULL, L"A CPU with SSE4.2 instruction set support is required.", L"Godot Engine", MB_OK | MB_ICONEXCLAMATION | MB_TASKMODAL);
+		MessageBoxW(NULL, L"A CPU with SSE4.2 instruction set support is required.", L"Faster-Godot", MB_OK | MB_ICONEXCLAMATION | MB_TASKMODAL);
 #endif
 		return -1;
 	}
