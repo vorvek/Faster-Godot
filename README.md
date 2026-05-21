@@ -1,6 +1,6 @@
 # Faster-Godot
 
-Faster-Godot is a performance-first fork of Godot 4.6.2-stable for desktop
+Faster-Godot is a performance-first fork of Godot 4.6.3-stable for desktop
 games that can commit to a narrower runtime contract:
 
 - Windows and Linux only.
@@ -91,6 +91,6 @@ Faster-Godot keeps Godot's original MIT license. See [LICENSE.txt](LICENSE.txt).
 
 ## Attribution
 
-Based on Godot Engine 4.6.2-stable.
+Based on Godot Engine 4.6.3-stable.
 
 Fork maintained by Jon Tamayo - https://x.com/vorvek

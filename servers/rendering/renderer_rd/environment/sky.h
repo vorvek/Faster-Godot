@@ -158,8 +158,8 @@ public:
 
 			float z_far; // 4 - 340
 			uint32_t directional_light_count; // 4 - 344
-			uint32_t pad1; // 4 - 348
-			uint32_t pad2; // 4 - 352
+			uint32_t fog_use_legacy_blending; // 4 - 348
+			uint32_t pad1; // 4 - 352
 		};
 
 		UBO ubo;
@@ -262,6 +262,7 @@ public:
 		float uv_border_size = 0.0; // Border size in UV space.
 
 		RS::SkyMode mode = RS::SKY_MODE_AUTOMATIC;
+		RS::SkyMode internal_mode = RS::SKY_MODE_INCREMENTAL; // When using SKY_MODE_AUTOMATIC, this is the mode used internally.
 
 		ReflectionData reflection;
 		bool dirty = false;

@@ -1832,7 +1832,7 @@ bool EditorNode::is_resource_internal_to_scene(Ref<Resource> p_resource) {
 	return inside_scene || p_resource->get_path().is_empty();
 }
 
-void EditorNode::gather_resources(const Variant &p_variant, List<Ref<Resource>> &r_list, bool p_subresources, bool p_allow_external) {
+void EditorNode::gather_resources(const Variant &p_variant, List<Ref<Resource>> &r_list, HashSet<Object *> &r_scanned_objects, bool p_subresources, bool p_allow_external) {
 	Variant::Type type = p_variant.get_type();
 	if (type == Variant::OBJECT && p_variant.get_validated_object() == nullptr) {
 		return;
@@ -1854,7 +1854,7 @@ void EditorNode::gather_resources(const Variant &p_variant, List<Ref<Resource>> 
 				}
 			}
 			if (Object::cast_to<Node>(v) == nullptr) {
-				gather_resources(v, r_list, p_subresources, p_allow_external);
+				gather_resources(v, r_list, r_scanned_objects, p_subresources, p_allow_external);
 			}
 		}
 		return;
@@ -1880,27 +1880,35 @@ void EditorNode::gather_resources(const Variant &p_variant, List<Ref<Resource>> 
 				}
 			}
 			if (Object::cast_to<Node>(kv.key) == nullptr) {
-				gather_resources(kv.key, r_list, p_subresources, p_allow_external);
+				gather_resources(kv.key, r_list, r_scanned_objects, p_subresources, p_allow_external);
 			}
 			if (Object::cast_to<Node>(kv.value) == nullptr) {
-				gather_resources(kv.value, r_list, p_subresources, p_allow_external);
+				gather_resources(kv.value, r_list, r_scanned_objects, p_subresources, p_allow_external);
 			}
 		}
 		return;
 	}
 
+	// Variant::Object
+
+	Object *object = p_variant;
+	if (r_scanned_objects.has(object)) {
+		return;
+	}
+	r_scanned_objects.insert(object);
+
 	List<PropertyInfo> pinfo;
-	p_variant.get_property_list(&pinfo);
+	object->get_property_list(&pinfo);
 
 	for (const PropertyInfo &E : pinfo) {
 		if (!(E.usage & PROPERTY_USAGE_EDITOR)) {
 			continue;
 		}
 
-		Variant property_value = p_variant.get(E.name);
+		Variant property_value = object->get(E.name);
 		Variant::Type property_type = property_value.get_type();
 		if (property_type == Variant::ARRAY || property_type == Variant::DICTIONARY) {
-			gather_resources(property_value, r_list, p_subresources, p_allow_external);
+			gather_resources(property_value, r_list, r_scanned_objects, p_subresources, p_allow_external);
 			continue;
 		}
 		Ref<Resource> res = property_value;
@@ -1916,7 +1924,7 @@ void EditorNode::gather_resources(const Variant &p_variant, List<Ref<Resource>> 
 		}
 		r_list.push_back(res);
 		if (p_subresources) {
-			gather_resources(res, r_list, p_subresources, p_allow_external);
+			gather_resources(res, r_list, r_scanned_objects, p_subresources, p_allow_external);
 		}
 	}
 }
@@ -1927,7 +1935,8 @@ void EditorNode::update_resource_count(Node *p_node, bool p_remove) {
 	}
 
 	List<Ref<Resource>> res_list;
-	gather_resources(p_node, res_list, true);
+	HashSet<Object *> scanned_objects;
+	gather_resources(p_node, res_list, scanned_objects, true);
 
 	for (Ref<Resource> &R : res_list) {
 		List<Node *>::Element *E = resource_count[R].find(p_node);
@@ -1956,7 +1965,8 @@ List<Node *> EditorNode::get_resource_node_list(Ref<Resource> p_res) {
 void EditorNode::update_node_reference(const Variant &p_value, Node *p_node, bool p_remove) {
 	List<Ref<Resource>> list;
 	Ref<Resource> res = p_value;
-	gather_resources(p_value, list, true); //Gather all Resources and their SubResources to remove p_node from their lists.
+	HashSet<Object *> scanned_objects;
+	gather_resources(p_value, list, scanned_objects, true); //Gather all Resources and their SubResources to remove p_node from their lists.
 
 	if (res.is_valid() && is_resource_internal_to_scene(res)) {
 		// Avoid external Resources from being added in.
@@ -2787,17 +2797,18 @@ void EditorNode::_dialog_action(String p_file) {
 		case LAYOUT_DELETE: {
 			Ref<ConfigFile> config;
 			config.instantiate();
-			Error err = config->load(EditorSettings::get_singleton()->get_editor_layouts_config());
 
+			Error err = config->load(EditorSettings::get_singleton()->get_editor_layouts_config());
 			if (err != OK || !config->has_section(p_file)) {
 				show_warning(TTR("Layout name not found!"));
 				return;
 			}
 
-			// Erase key values.
-			Vector<String> keys = config->get_section_keys(p_file);
-			for (const String &key : keys) {
-				config->set_value(p_file, key, Variant());
+			for (const String &section : config->get_sections()) {
+				// Erase sections related to the layout.
+				if (section == p_file || section.begins_with(p_file + "/")) {
+					config->erase_section(section);
+				}
 			}
 
 			config->save(EditorSettings::get_singleton()->get_editor_layouts_config());
@@ -6180,8 +6191,8 @@ void EditorNode::_load_editor_layout() {
 			favorites->set_collapsed(false);
 		}
 
-		if (overridden_default_layout >= 0) {
-			_layout_menu_option(overridden_default_layout);
+		if (overridden_default_layout) {
+			_layout_menu_option(LAYOUT_DEFAULT);
 		} else {
 			ep.step(TTR("Loading docks..."), 1, true);
 			// Initialize some default values.
@@ -6463,36 +6474,32 @@ void EditorNode::cleanup() {
 
 void EditorNode::_update_layouts_menu() {
 	editor_layouts->clear();
-	overridden_default_layout = -1;
+	overridden_default_layout = false;
 
 	editor_layouts->reset_size();
 	editor_layouts->add_shortcut(ED_SHORTCUT("layout/save", TTRC("Save Layout...")), LAYOUT_SAVE);
 	editor_layouts->add_shortcut(ED_SHORTCUT("layout/delete", TTRC("Delete Layout...")), LAYOUT_DELETE);
 	editor_layouts->add_separator();
-	editor_layouts->add_shortcut(ED_SHORTCUT("layout/default", TTRC("Default")), LAYOUT_DEFAULT);
 
 	Ref<ConfigFile> config;
 	config.instantiate();
 	Error err = config->load(EditorSettings::get_singleton()->get_editor_layouts_config());
+	if (err == OK && config->has_section("Default")) {
+		overridden_default_layout = true;
+	}
+
+	editor_layouts->add_shortcut(ED_SHORTCUT("layout/default", overridden_default_layout ? TTRC("Default (Overridden)") : TTRC("Default")), LAYOUT_DEFAULT);
+
 	if (err != OK) {
 		return; // No config.
 	}
 
 	Vector<String> layouts = config->get_sections();
-	const String default_layout_name = TTR("Default");
-
 	for (const String &layout : layouts) {
-		if (layout.contains_char('/')) {
-			continue;
+		if (layout != "Default" && !layout.contains_char('/')) {
+			editor_layouts->add_item(layout);
+			editor_layouts->set_item_auto_translate_mode(-1, AUTO_TRANSLATE_MODE_DISABLED);
 		}
-
-		if (layout == default_layout_name) {
-			editor_layouts->remove_item(editor_layouts->get_item_index(LAYOUT_DEFAULT));
-			overridden_default_layout = editor_layouts->get_item_count();
-		}
-
-		editor_layouts->add_item(layout);
-		editor_layouts->set_item_auto_translate_mode(-1, AUTO_TRANSLATE_MODE_DISABLED);
 	}
 }
 
@@ -6500,32 +6507,40 @@ void EditorNode::_layout_menu_option(int p_id) {
 	switch (p_id) {
 		case LAYOUT_SAVE: {
 			current_menu_option = p_id;
-			layout_dialog->set_title(TTR("Save Layout"));
-			layout_dialog->set_ok_button_text(TTR("Save"));
-			layout_dialog->set_name_line_enabled(true);
+			layout_dialog->set_save_mode_enabled(true);
 			layout_dialog->popup_centered();
 		} break;
+
 		case LAYOUT_DELETE: {
 			current_menu_option = p_id;
-			layout_dialog->set_title(TTR("Delete Layout"));
-			layout_dialog->set_ok_button_text(TTR("Delete"));
-			layout_dialog->set_name_line_enabled(false);
+			layout_dialog->set_save_mode_enabled(false);
 			layout_dialog->popup_centered();
 		} break;
+
 		case LAYOUT_DEFAULT: {
+			// Check if the default layout was overridden, and if so, select that instead.
+			Ref<ConfigFile> config;
+			config.instantiate();
+			Error err = config->load(EditorSettings::get_singleton()->get_editor_layouts_config());
+			if (err == OK && config->has_section("Default")) {
+				editor_dock_manager->load_docks_from_config(config, "Default");
+				_save_editor_layout();
+
+				return;
+			}
+
 			editor_dock_manager->load_docks_from_config(default_layout, "docks");
 			_save_editor_layout();
 		} break;
+
 		default: {
 			Ref<ConfigFile> config;
 			config.instantiate();
 			Error err = config->load(EditorSettings::get_singleton()->get_editor_layouts_config());
-			if (err != OK) {
-				return; // No config.
+			if (err == OK) {
+				editor_dock_manager->load_docks_from_config(config, editor_layouts->get_item_text(p_id));
+				_save_editor_layout();
 			}
-
-			editor_dock_manager->load_docks_from_config(config, editor_layouts->get_item_text(p_id));
-			_save_editor_layout();
 		}
 	}
 }
@@ -7347,6 +7362,7 @@ void EditorNode::reload_instances_with_path_in_edited_scenes() {
 
 			// Replace the original node with the instantiated version.
 			original_node->replace_by(instantiated_node, false);
+			instantiated_node->set_unique_scene_id(original_node->get_unique_scene_id());
 
 			// Mark the old node for deletion.
 			original_node->queue_free();

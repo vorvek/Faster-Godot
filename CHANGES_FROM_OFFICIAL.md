@@ -1,6 +1,6 @@
 # Changes From Official Godot
 
-Faster-Godot starts from Godot 4.6.2-stable and narrows the engine around a
+Faster-Godot starts from Godot 4.6.3-stable and narrows the engine around a
 desktop Forward+ profile. The detailed notes are split by change area:
 
 | Area | Detail |

@@ -101,8 +101,8 @@ public:
 	}
 
 	uint32_t geometry_instance_get_pair_mask() override { return 0; }
-	uint32_t get_max_lights_total() override { return 0; }
-	uint32_t get_max_lights_per_mesh() override { return 0; }
+	virtual uint32_t get_max_lights_total() override { return 0; }
+	virtual uint32_t get_max_lights_per_mesh() override { return 0; }
 
 	/* PIPELINES */
 

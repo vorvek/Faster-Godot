@@ -335,9 +335,9 @@ void EditorResourcePicker::_update_menu_items() {
 
 			if (!unique_enabled) {
 				if (EditorNode::get_singleton()->is_resource_internal_to_scene(edited_resource) && EditorNode::get_singleton()->get_resource_count(edited_resource) == 1) {
-					edit_menu->set_item_tooltip(-1, String(TTRC("This Resource is already unique.")) + "\n" + drag_and_drop_text);
+					edit_menu->set_item_tooltip(-1, TTR("This Resource is already unique.") + "\n" + drag_and_drop_text);
 				} else if (_has_parent_resource().is_valid()) {
-					edit_menu->set_item_tooltip(-1, String(TTRC("In order to duplicate it, make its parent Resource unique.")) + "\n" + drag_and_drop_text);
+					edit_menu->set_item_tooltip(-1, TTR("In order to duplicate it, make its parent Resource unique.") + "\n" + drag_and_drop_text);
 				}
 			} else {
 				edit_menu->set_item_tooltip(-1, drag_and_drop_text);
@@ -390,11 +390,11 @@ void EditorResourcePicker::_update_menu_items() {
 		edit_menu->add_separator();
 
 		if (edited_resource.is_valid()) {
-			edit_menu->add_item(TTR("Copy"), OBJ_MENU_COPY);
+			edit_menu->add_item(TTRC("Copy"), OBJ_MENU_COPY);
 		}
 
 		if (paste_valid) {
-			edit_menu->add_item(TTR("Paste"), OBJ_MENU_PASTE);
+			edit_menu->add_item(TTRC("Paste"), OBJ_MENU_PASTE);
 			edit_menu->add_item(TTRC("Paste as Unique"), OBJ_MENU_PASTE_AS_UNIQUE);
 		}
 	}
@@ -1432,7 +1432,8 @@ bool EditorResourcePicker::_is_uniqueness_enabled(bool p_check_recursive) {
 
 	if (p_check_recursive && parent_counter <= 1) {
 		List<Ref<Resource>> nested_resources;
-		en->gather_resources(edited_resource, nested_resources, true, true);
+		HashSet<Object *> scanned_objects;
+		en->gather_resources(edited_resource, nested_resources, scanned_objects, true, true);
 
 		for (Ref<Resource> R : nested_resources) {
 			// Take into account Nested External Resources.
