@@ -157,6 +157,7 @@ void SceneTree::node_removed(Node *p_node) {
 	emit_signal(node_removed_name, p_node);
 	if (nodes_removed_on_group_call_lock) {
 		nodes_removed_on_group_call.insert(p_node);
+		nodes_removed_on_group_call_dirty = true;
 	}
 }
 
@@ -396,7 +397,7 @@ void SceneTree::call_group_flagsp(uint32_t p_call_flags, const StringName &p_gro
 
 	if (p_call_flags & GROUP_CALL_REVERSE) {
 		for (int i = gr_node_count - 1; i >= 0; i--) {
-			if (nodes_removed_on_group_call_lock && nodes_removed_on_group_call.has(gr_nodes[i])) {
+			if (nodes_removed_on_group_call_dirty && nodes_removed_on_group_call.has(gr_nodes[i])) {
 				continue;
 			}
 
@@ -414,7 +415,7 @@ void SceneTree::call_group_flagsp(uint32_t p_call_flags, const StringName &p_gro
 
 	} else {
 		for (int i = 0; i < gr_node_count; i++) {
-			if (nodes_removed_on_group_call_lock && nodes_removed_on_group_call.has(gr_nodes[i])) {
+			if (nodes_removed_on_group_call_dirty && nodes_removed_on_group_call.has(gr_nodes[i])) {
 				continue;
 			}
 
@@ -436,6 +437,7 @@ void SceneTree::call_group_flagsp(uint32_t p_call_flags, const StringName &p_gro
 		nodes_removed_on_group_call_lock--;
 		if (nodes_removed_on_group_call_lock == 0) {
 			nodes_removed_on_group_call.clear();
+			nodes_removed_on_group_call_dirty = false;
 		}
 	}
 }
@@ -468,7 +470,7 @@ void SceneTree::notify_group_flags(uint32_t p_call_flags, const StringName &p_gr
 
 	if (p_call_flags & GROUP_CALL_REVERSE) {
 		for (int i = gr_node_count - 1; i >= 0; i--) {
-			if (nodes_removed_on_group_call.has(gr_nodes[i])) {
+			if (nodes_removed_on_group_call_dirty && nodes_removed_on_group_call.has(gr_nodes[i])) {
 				continue;
 			}
 
@@ -481,7 +483,7 @@ void SceneTree::notify_group_flags(uint32_t p_call_flags, const StringName &p_gr
 
 	} else {
 		for (int i = 0; i < gr_node_count; i++) {
-			if (nodes_removed_on_group_call.has(gr_nodes[i])) {
+			if (nodes_removed_on_group_call_dirty && nodes_removed_on_group_call.has(gr_nodes[i])) {
 				continue;
 			}
 
@@ -498,6 +500,7 @@ void SceneTree::notify_group_flags(uint32_t p_call_flags, const StringName &p_gr
 		nodes_removed_on_group_call_lock--;
 		if (nodes_removed_on_group_call_lock == 0) {
 			nodes_removed_on_group_call.clear();
+			nodes_removed_on_group_call_dirty = false;
 		}
 	}
 }
@@ -530,7 +533,7 @@ void SceneTree::set_group_flags(uint32_t p_call_flags, const StringName &p_group
 
 	if (p_call_flags & GROUP_CALL_REVERSE) {
 		for (int i = gr_node_count - 1; i >= 0; i--) {
-			if (nodes_removed_on_group_call.has(gr_nodes[i])) {
+			if (nodes_removed_on_group_call_dirty && nodes_removed_on_group_call.has(gr_nodes[i])) {
 				continue;
 			}
 
@@ -543,7 +546,7 @@ void SceneTree::set_group_flags(uint32_t p_call_flags, const StringName &p_group
 
 	} else {
 		for (int i = 0; i < gr_node_count; i++) {
-			if (nodes_removed_on_group_call.has(gr_nodes[i])) {
+			if (nodes_removed_on_group_call_dirty && nodes_removed_on_group_call.has(gr_nodes[i])) {
 				continue;
 			}
 
@@ -560,6 +563,7 @@ void SceneTree::set_group_flags(uint32_t p_call_flags, const StringName &p_group
 		nodes_removed_on_group_call_lock--;
 		if (nodes_removed_on_group_call_lock == 0) {
 			nodes_removed_on_group_call.clear();
+			nodes_removed_on_group_call_dirty = false;
 		}
 	}
 }
@@ -1179,7 +1183,7 @@ void SceneTree::_process_group(ProcessGroup *p_group, bool p_physics) {
 
 	for (uint32_t i = 0; i < node_count; i++) {
 		Node *n = nodes_ptr[i];
-		if (nodes_removed_on_group_call.has(n)) {
+		if (nodes_removed_on_group_call_dirty && nodes_removed_on_group_call.has(n)) {
 			// Node may have been removed during process, skip it.
 			// Keep in mind removals can only happen on the main thread.
 			continue;
@@ -1330,6 +1334,7 @@ void SceneTree::_process(bool p_physics) {
 	nodes_removed_on_group_call_lock--;
 	if (nodes_removed_on_group_call_lock == 0) {
 		nodes_removed_on_group_call.clear();
+		nodes_removed_on_group_call_dirty = false;
 	}
 }
 
@@ -1438,7 +1443,7 @@ void SceneTree::_call_input_pause(const StringName &p_group, CallInputType p_cal
 		}
 
 		Node *n = gr_nodes[i];
-		if (nodes_removed_on_group_call.has(n)) {
+		if (nodes_removed_on_group_call_dirty && nodes_removed_on_group_call.has(n)) {
 			continue;
 		}
 
@@ -1480,7 +1485,7 @@ void SceneTree::_call_input_pause(const StringName &p_group, CallInputType p_cal
 			break;
 		}
 		Node *n = ObjectDB::get_instance<Node>(id);
-		if (n) {
+		if (n && (!nodes_removed_on_group_call_dirty || !nodes_removed_on_group_call.has(n))) {
 			n->_call_shortcut_input(p_input);
 		}
 	}
@@ -1490,6 +1495,7 @@ void SceneTree::_call_input_pause(const StringName &p_group, CallInputType p_cal
 		nodes_removed_on_group_call_lock--;
 		if (nodes_removed_on_group_call_lock == 0) {
 			nodes_removed_on_group_call.clear();
+			nodes_removed_on_group_call_dirty = false;
 		}
 	}
 }

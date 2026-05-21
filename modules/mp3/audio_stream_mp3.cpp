@@ -37,60 +37,135 @@
 
 #include "thirdparty/dr_libs/dr_bridge.h"
 
+int AudioStreamPlaybackMP3::_read_frames(AudioFrame *p_buffer, int p_frames) {
+	if (p_frames <= 0) {
+		return 0;
+	}
+
+	const uint32_t channels = MAX((uint32_t)1, (uint32_t)mp3d.channels);
+	const int frames_to_read = MIN(p_frames, DECODE_CHUNK_FRAMES);
+	const uint32_t sample_count = (uint32_t)frames_to_read * channels;
+	ERR_FAIL_COND_V(decode_buffer.size() < sample_count, 0);
+
+	const drmp3_uint64 frames_read = drmp3_read_pcm_frames_f32(&mp3d, frames_to_read, decode_buffer.ptr());
+	for (drmp3_uint64 i = 0; i < frames_read; i++) {
+		const float *frame = decode_buffer.ptr() + (i * channels);
+		p_buffer[i] = AudioFrame(frame[0], frame[channels - 1]);
+	}
+
+	return (int)frames_read;
+}
+
+bool AudioStreamPlaybackMP3::_seek_internal(double p_time, uint64_t p_loop_frame_limit) {
+	if (!active || mp3_stream->frame_count == 0) {
+		frames_mixed = 0;
+		return false;
+	}
+
+	if (!Math::is_finite(p_time) || p_time < 0.0) {
+		p_time = 0.0;
+	}
+
+	const double seek_frame_d = double(mp3_stream->sample_rate) * p_time;
+	uint64_t seek_frame = 0;
+	if (Math::is_finite(seek_frame_d) && seek_frame_d >= 0.0 && seek_frame_d < double(mp3_stream->frame_count)) {
+		seek_frame = (uint64_t)seek_frame_d;
+	}
+	if (seek_frame >= mp3_stream->frame_count) {
+		seek_frame = 0;
+	}
+	if (p_loop_frame_limit > 0 && seek_frame >= p_loop_frame_limit) {
+		seek_frame = 0;
+	}
+
+	const uint64_t previous_frames_mixed = frames_mixed;
+	if (!drmp3_seek_to_pcm_frame(&mp3d, seek_frame)) {
+		frames_mixed = previous_frames_mixed;
+		return false;
+	}
+
+	frames_mixed = seek_frame;
+	return true;
+}
+
 int AudioStreamPlaybackMP3::_mix_internal(AudioFrame *p_buffer, int p_frames) {
 	if (!active) {
 		return 0;
 	}
 
 	int todo = p_frames;
+	int out_offset = 0;
 
 	int frames_mixed_this_step = p_frames;
 
-	int beat_length_frames = -1;
+	uint64_t beat_length_frames = 0;
 	bool use_loop = looping_override ? looping : mp3_stream->loop;
+	bool retried_loop_without_output = false;
 
 	bool beat_loop = use_loop && mp3_stream->get_bpm() > 0 && mp3_stream->get_beat_count() > 0;
 	if (beat_loop) {
-		beat_length_frames = mp3_stream->get_beat_count() * mp3_stream->sample_rate * 60 / mp3_stream->get_bpm();
+		const double beat_length_frame_count = double(mp3_stream->get_beat_count()) * double(mp3_stream->sample_rate) * 60.0 / mp3_stream->get_bpm();
+		if (beat_length_frame_count < 1.0 || beat_length_frame_count >= double(UINT64_MAX)) {
+			beat_loop = false;
+		} else {
+			beat_length_frames = (uint64_t)beat_length_frame_count;
+		}
 	}
 
 	while (todo && active) {
-		drmp3d_sample_t buf_frame[2];
-
-		int samples_mixed = drmp3_read_pcm_frames_f32(&mp3d, 1, buf_frame);
-
-		if (samples_mixed) {
-			p_buffer[p_frames - todo] = AudioFrame(buf_frame[0], buf_frame[mp3d.channels - 1]);
-			if (loop_fade_remaining < FADE_SIZE) {
-				p_buffer[p_frames - todo] += loop_fade[loop_fade_remaining] * (float(FADE_SIZE - loop_fade_remaining) / float(FADE_SIZE));
-				loop_fade_remaining++;
+		int frames_to_read = MIN(todo, DECODE_CHUNK_FRAMES);
+		if (beat_loop) {
+			if (frames_mixed < beat_length_frames) {
+				const uint64_t frames_until_loop = beat_length_frames - frames_mixed;
+				frames_to_read = MIN(frames_to_read, (int)MIN(frames_until_loop, (uint64_t)INT_MAX));
+			} else {
+				frames_to_read = 1;
 			}
-			--todo;
-			++frames_mixed;
+		}
 
-			if (beat_loop && (int)frames_mixed >= beat_length_frames) {
-				for (int i = 0; i < FADE_SIZE; i++) {
-					samples_mixed = drmp3_read_pcm_frames_f32(&mp3d, 1, buf_frame);
-					loop_fade[i] = AudioFrame(buf_frame[0], buf_frame[mp3d.channels - 1]);
-					if (!samples_mixed) {
-						break;
-					}
+		const int frames_read = _read_frames(p_buffer + out_offset, frames_to_read);
+
+		if (frames_read > 0) {
+			for (int i = 0; i < frames_read; i++) {
+				AudioFrame &frame = p_buffer[out_offset + i];
+				if (loop_fade_remaining < FADE_SIZE) {
+					frame += loop_fade[loop_fade_remaining] * (float(FADE_SIZE - loop_fade_remaining) / float(FADE_SIZE));
+					loop_fade_remaining++;
+				}
+			}
+			todo -= frames_read;
+			out_offset += frames_read;
+			frames_mixed += frames_read;
+			retried_loop_without_output = false;
+
+			if (beat_loop && frames_mixed >= beat_length_frames) {
+				const int fade_frames = _read_frames(loop_fade, FADE_SIZE);
+				for (int i = fade_frames; i < FADE_SIZE; i++) {
+					loop_fade[i] = AudioFrame(0, 0);
 				}
 				loop_fade_remaining = 0;
-				seek(mp3_stream->loop_offset);
-				loops++;
+				if (_seek_internal(mp3_stream->loop_offset, beat_length_frames)) {
+					loops++;
+				} else {
+					frames_mixed_this_step = out_offset;
+					for (int i = out_offset; i < p_frames; i++) {
+						p_buffer[i] = AudioFrame(0, 0);
+					}
+					active = false;
+					todo = 0;
+				}
 			}
 		}
 
 		else {
 			//EOF
-			if (use_loop) {
-				seek(mp3_stream->loop_offset);
+			if (use_loop && !retried_loop_without_output && _seek_internal(mp3_stream->loop_offset, beat_loop ? beat_length_frames : 0)) {
 				loops++;
+				retried_loop_without_output = true;
 			} else {
 				frames_mixed_this_step = p_frames - todo;
 				//fill remainder with silence
-				for (int i = p_frames - todo; i < p_frames; i++) {
+				for (int i = out_offset; i < p_frames; i++) {
 					p_buffer[i] = AudioFrame(0, 0);
 				}
 				active = false;
@@ -107,8 +182,12 @@ float AudioStreamPlaybackMP3::get_stream_sampling_rate() {
 
 void AudioStreamPlaybackMP3::start(double p_from_pos) {
 	active = true;
-	seek(p_from_pos);
+	loop_fade_remaining = FADE_SIZE;
 	loops = 0;
+	if (!_seek_internal(p_from_pos)) {
+		active = false;
+		return;
+	}
 	begin_resample();
 }
 
@@ -133,12 +212,10 @@ void AudioStreamPlaybackMP3::seek(double p_time) {
 		return;
 	}
 
-	if (p_time >= mp3_stream->get_length()) {
-		p_time = 0;
+	loop_fade_remaining = FADE_SIZE;
+	if (!_seek_internal(p_time)) {
+		active = false;
 	}
-
-	frames_mixed = uint32_t(mp3_stream->sample_rate * p_time);
-	drmp3_seek_to_pcm_frame(&mp3d, (uint64_t)frames_mixed);
 }
 
 void AudioStreamPlaybackMP3::tag_used_streams() {
@@ -200,11 +277,12 @@ Ref<AudioStreamPlayback> AudioStreamMP3::instantiate_playback() {
 
 	int success = drmp3_init_memory(&mp3s->mp3d, data.ptr(), data_len, (drmp3_allocation_callbacks *)&dr_alloc_calls);
 
+	ERR_FAIL_COND_V(!success, Ref<AudioStreamPlaybackMP3>());
+
 	mp3s->frames_mixed = 0;
 	mp3s->active = false;
 	mp3s->loops = 0;
-
-	ERR_FAIL_COND_V(!success, Ref<AudioStreamPlaybackMP3>());
+	mp3s->decode_buffer.resize_uninitialized(AudioStreamPlaybackMP3::DECODE_CHUNK_FRAMES * MAX((uint32_t)1, (uint32_t)mp3s->mp3d.channels));
 
 	return mp3s;
 }
@@ -229,7 +307,8 @@ void AudioStreamMP3::set_data(const Vector<uint8_t> &p_data) {
 
 	channels = mp3d->channels;
 	sample_rate = mp3d->sampleRate;
-	length = float(drmp3_get_pcm_frame_count(mp3d)) / (mp3d->sampleRate);
+	frame_count = drmp3_get_pcm_frame_count(mp3d);
+	length = float(frame_count) / (mp3d->sampleRate);
 
 	drmp3_uninit(mp3d);
 	memdelete(mp3d);
@@ -251,6 +330,9 @@ bool AudioStreamMP3::has_loop() const {
 }
 
 void AudioStreamMP3::set_loop_offset(double p_seconds) {
+	if (!Math::is_finite(p_seconds) || p_seconds < 0.0) {
+		p_seconds = 0.0;
+	}
 	loop_offset = p_seconds;
 }
 

@@ -1049,14 +1049,13 @@ _FORCE_INLINE_ static uint32_t _indices_to_primitives(RSE::PrimitiveType p_primi
 	static const uint32_t subtractor[RSE::PRIMITIVE_MAX] = { 0, 0, 1, 0, 2 };
 	return (p_indices - subtractor[p_primitive]) / divisor[p_primitive];
 }
-void RenderForwardClustered::_age_out_motion_vectors(const RenderDataRD *p_render_data) {
+void RenderForwardClustered::_age_out_motion_vectors(const RenderDataRD *p_render_data, bool p_include_rt_instances) {
 	if (!p_render_data) {
 		return;
 	}
 	const uint64_t frame = RSG::rasterizer->get_frame_number();
 
-	// Process RT-only instances
-	if (p_render_data->rt_instances) {
+	if (p_include_rt_instances && p_render_data->rt_instances) {
 		for (uint32_t i = 0; i < (uint32_t)p_render_data->rt_instances->size(); i++) {
 			GeometryInstanceForwardClustered *inst =
 					static_cast<GeometryInstanceForwardClustered *>((*p_render_data->rt_instances)[i]);
@@ -1066,7 +1065,6 @@ void RenderForwardClustered::_age_out_motion_vectors(const RenderDataRD *p_rende
 		}
 	}
 
-	// Process raster instances
 	if (p_render_data->instances) {
 		for (uint32_t i = 0; i < (uint32_t)p_render_data->instances->size(); i++) {
 			GeometryInstanceForwardClustered *inst =
@@ -2059,8 +2057,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	Vector<Color> depth_pass_clear;
 	bool using_separate_specular = false;
 	bool reverse_cull = p_render_data->scene_data->cam_transform.basis.determinant() < 0;
-	// Rasterized motion vectors are only needed when the raster output consumes
-	// them. Path Traced mode writes the main velocity buffer from RT instead.
 	bool using_motion_pass = rb_data.is_valid() && (using_upscaling || using_viewport_taa) && !rt_replaces_opaque;
 
 	if (is_reflection_probe) {
@@ -2162,13 +2158,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// May have changed due to the above (light buffer enlarged, as an example).
 	_update_render_base_uniform_set();
 
-	// Age out stale transform_status on all instances that may appear in raster or
-	// RT cull lists. Must run before _fill_render_list and build_tlas so that both
-	// consumers see a consistent transform_status this frame.
-	_age_out_motion_vectors(p_render_data);
-	// RT builds its TLAS before _fill_render_list() below, so refresh dirty
-	// surface caches here as well to include newly spawned/material-changed meshes.
-	_update_dirty_geometry_instances();
+	// Age out stale transform_status before list consumers read it. RT-only
+	// instances only matter when a TLAS may be built this frame.
+	_age_out_motion_vectors(p_render_data, scene_features.rt);
+	if (scene_features.rt) {
+		// RT builds its TLAS before _fill_render_list() below, so refresh dirty
+		// surface caches here as well to include newly spawned/material-changed meshes.
+		_update_dirty_geometry_instances();
+	}
 
 	// RT pipeline flags (packed with sample count / max bounces). Compute and
 	// validate RT before render-list population so a pipeline/uniform failure can
@@ -2684,24 +2681,21 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// TODO: Materials larger than 512 bytes are currently not taken into account. This can be very bad. (they produce a warning whenever they are used)
 		//       Better to avoid >512 bytes per material anyway, but this could cause GPU hangs in case that path is taken.
 		//       So either we support that properly (keep a running tally of which ones are referenced), or we drop support for these.
+		const uint32_t rt_dependency_count =
+				1 + raytracing->get_material_ubo_dependencies().size() +
+				raytracing->get_geometry_buffer_dependencies().size() +
+				raytracing->get_deformed_buffer_dependencies().size();
+		raytracing->begin_unique_buffer_dependencies(rt_dependency_count);
 		RID mat_ubo_pool = raytracing->get_mat_ubo_pool_buffer();
-		if (mat_ubo_pool.is_valid()) {
-			RD::get_singleton()->raytracing_list_add_buffer_dependency(raytracing_list, mat_ubo_pool, /*p_writable=*/false);
-		}
+		raytracing->add_unique_buffer_dependency(raytracing_list, mat_ubo_pool);
 		for (const RID &material_ubo : raytracing->get_material_ubo_dependencies()) {
-			if (material_ubo.is_valid()) {
-				RD::get_singleton()->raytracing_list_add_buffer_dependency(raytracing_list, material_ubo, /*p_writable=*/false);
-			}
+			raytracing->add_unique_buffer_dependency(raytracing_list, material_ubo);
 		}
 		for (const RID &geometry_buffer : raytracing->get_geometry_buffer_dependencies()) {
-			if (geometry_buffer.is_valid()) {
-				RD::get_singleton()->raytracing_list_add_buffer_dependency(raytracing_list, geometry_buffer, /*p_writable=*/false);
-			}
+			raytracing->add_unique_buffer_dependency(raytracing_list, geometry_buffer);
 		}
 		for (const RID &deformed_buffer : raytracing->get_deformed_buffer_dependencies()) {
-			if (deformed_buffer.is_valid()) {
-				RD::get_singleton()->raytracing_list_add_buffer_dependency(raytracing_list, deformed_buffer, /*p_writable=*/false);
-			}
+			raytracing->add_unique_buffer_dependency(raytracing_list, deformed_buffer);
 		}
 
 		// Raytracing dispatches at internal (pre-upscale) size because the RT
@@ -2923,7 +2917,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 
 	// Transparent objects are always raster overlays.
-	if (true) {
+	if (!render_list[RENDER_LIST_ALPHA].elements.is_empty()) {
 		RENDER_TIMESTAMP("Render 3D Transparent Pass");
 
 		RD::get_singleton()->draw_command_begin_label("Render 3D Transparent Pass");

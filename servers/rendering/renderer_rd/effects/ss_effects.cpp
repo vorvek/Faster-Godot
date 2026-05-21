@@ -1096,6 +1096,10 @@ void SSEffects::ssao_allocate_buffers(Ref<RenderSceneBuffersRD> p_render_buffers
 	if (p_ssao_buffers.half_size != ssao_half_size) {
 		p_render_buffers->clear_context(RB_SCOPE_SSAO);
 	}
+	const bool use_importance_map = ssao_quality == RS::ENV_SSAO_QUALITY_ULTRA;
+	if (!use_importance_map && p_render_buffers->has_texture(RB_SCOPE_SSAO, RB_IMPORTANCE_MAP)) {
+		p_render_buffers->clear_context(RB_SCOPE_SSAO);
+	}
 
 	p_ssao_buffers.half_size = ssao_half_size;
 	if (ssao_half_size) {
@@ -1119,8 +1123,10 @@ void SSEffects::ssao_allocate_buffers(Ref<RenderSceneBuffersRD> p_render_buffers
 
 	p_render_buffers->create_texture(RB_SCOPE_SSAO, RB_DEINTERLEAVED, RD::DATA_FORMAT_R8G8_UNORM, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, full_size, 4 * view_count);
 	p_render_buffers->create_texture(RB_SCOPE_SSAO, RB_DEINTERLEAVED_PONG, RD::DATA_FORMAT_R8G8_UNORM, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, full_size, 4 * view_count);
-	p_render_buffers->create_texture(RB_SCOPE_SSAO, RB_IMPORTANCE_MAP, RD::DATA_FORMAT_R8_UNORM, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, half_size);
-	p_render_buffers->create_texture(RB_SCOPE_SSAO, RB_IMPORTANCE_PONG, RD::DATA_FORMAT_R8_UNORM, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, half_size);
+	if (use_importance_map) {
+		p_render_buffers->create_texture(RB_SCOPE_SSAO, RB_IMPORTANCE_MAP, RD::DATA_FORMAT_R8_UNORM, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, half_size);
+		p_render_buffers->create_texture(RB_SCOPE_SSAO, RB_IMPORTANCE_PONG, RD::DATA_FORMAT_R8_UNORM, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, half_size);
+	}
 	p_render_buffers->create_texture(RB_SCOPE_SSAO, RB_FINAL, RD::DATA_FORMAT_R8_UNORM, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1);
 }
 
@@ -1133,8 +1139,13 @@ void SSEffects::generate_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, SSAORe
 	// Obtain our (cached) buffer slices for the view we are rendering.
 	RID ao_deinterleaved = p_render_buffers->get_texture_slice(RB_SCOPE_SSAO, RB_DEINTERLEAVED, p_view * 4, 0, 4, 1);
 	RID ao_pong = p_render_buffers->get_texture_slice(RB_SCOPE_SSAO, RB_DEINTERLEAVED_PONG, p_view * 4, 0, 4, 1);
-	RID importance_map = p_render_buffers->get_texture_slice(RB_SCOPE_SSAO, RB_IMPORTANCE_MAP, p_view, 0);
-	RID importance_pong = p_render_buffers->get_texture_slice(RB_SCOPE_SSAO, RB_IMPORTANCE_PONG, p_view, 0);
+	const bool use_importance_map = ssao_quality == RS::ENV_SSAO_QUALITY_ULTRA;
+	RID importance_map;
+	RID importance_pong;
+	if (use_importance_map) {
+		importance_map = p_render_buffers->get_texture_slice(RB_SCOPE_SSAO, RB_IMPORTANCE_MAP, p_view, 0);
+		importance_pong = p_render_buffers->get_texture_slice(RB_SCOPE_SSAO, RB_IMPORTANCE_PONG, p_view, 0);
+	}
 	RID ao_final = p_render_buffers->get_texture_slice(RB_SCOPE_SSAO, RB_FINAL, p_view, 0);
 
 	RID ao_deinterleaved_slices[4];
@@ -1228,7 +1239,7 @@ void SSEffects::generate_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, SSAORe
 		}
 
 		RID importance_map_uniform_set;
-		{
+		if (use_importance_map) {
 			RD::Uniform u_pong;
 			u_pong.uniform_type = RD::UNIFORM_TYPE_IMAGE;
 			u_pong.binding = 0;
@@ -1249,7 +1260,7 @@ void SSEffects::generate_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, SSAORe
 			importance_map_uniform_set = uniform_set_cache->get_cache(shader_adaptive, 1, u_pong, u_importance_map, u_load_counter);
 		}
 
-		if (ssao_quality == RS::ENV_SSAO_QUALITY_ULTRA) {
+		if (use_importance_map) {
 			RD::get_singleton()->draw_command_begin_label("Generate Importance Map");
 			ssao.importance_map_push_constant.half_screen_pixel_size[0] = 1.0 / p_ssao_buffers.buffer_width;
 			ssao.importance_map_push_constant.half_screen_pixel_size[1] = 1.0 / p_ssao_buffers.buffer_height;
@@ -1415,8 +1426,10 @@ void SSEffects::generate_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, SSAORe
 	RD::get_singleton()->draw_command_end_label(); //SSAO
 	RD::get_singleton()->compute_list_end();
 
-	int zero[1] = { 0 };
-	RD::get_singleton()->buffer_update(ssao.importance_map_load_counter, 0, sizeof(uint32_t), &zero);
+	if (use_importance_map) {
+		int zero[1] = { 0 };
+		RD::get_singleton()->buffer_update(ssao.importance_map_load_counter, 0, sizeof(uint32_t), &zero);
+	}
 }
 
 /* Screen Space Reflection */

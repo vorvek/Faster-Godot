@@ -2451,6 +2451,22 @@ void MeshStorage::skeleton_bone_set_transform(RID p_skeleton, int p_bone, const 
 	_skeleton_make_dirty(skeleton);
 }
 
+void MeshStorage::skeleton_set_bone_data_3d(RID p_skeleton, const Vector<float> &p_bone_data) {
+	Skeleton *skeleton = skeleton_owner.get_or_null(p_skeleton);
+
+	ERR_FAIL_NULL(skeleton);
+	ERR_FAIL_COND(skeleton->use_2d);
+	ERR_FAIL_COND(p_bone_data.size() != skeleton->size * 12);
+	ERR_FAIL_COND(p_bone_data.size() > (int)skeleton->data.size());
+
+	if (p_bone_data.is_empty()) {
+		return;
+	}
+
+	memcpy(skeleton->data.ptr(), p_bone_data.ptr(), p_bone_data.size() * sizeof(float));
+	_skeleton_make_dirty(skeleton);
+}
+
 Transform3D MeshStorage::skeleton_bone_get_transform(RID p_skeleton, int p_bone) const {
 	Skeleton *skeleton = skeleton_owner.get_or_null(p_skeleton);
 

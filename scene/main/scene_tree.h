@@ -184,6 +184,7 @@ private:
 	// Safety for when a node is deleted while a group is being called.
 
 	int nodes_removed_on_group_call_lock = 0;
+	bool nodes_removed_on_group_call_dirty = false;
 	HashSet<Node *> nodes_removed_on_group_call; // Skip erased nodes.
 
 	List<ObjectID> delete_queue;

@@ -348,6 +348,11 @@ struct RTViewportState {
 	RID params_buffer;
 
 	RID uniform_set;
+	uint64_t uniform_set_signature = 0;
+	RID uniform_set_shader;
+	bool uniform_set_signature_valid = false;
+	uint64_t light_buffer_signature = 0;
+	bool light_buffer_signature_valid = false;
 
 	uint32_t frame_counter = 0;
 	uint64_t radiance_history_signature = 0;
@@ -409,6 +414,7 @@ class RenderRaytracing {
 	LocalVector<RID> material_ubo_dependencies;
 	LocalVector<RID> geometry_buffer_dependencies;
 	LocalVector<RID> deformed_buffer_dependencies;
+	HashSet<RID> buffer_dependency_dedupe_scratch;
 	LocalVector<int32_t> motion_indices; ///< Per-instance: index into motion_transforms[], or -1.
 	LocalVector<RT_InstanceMotionData> motion_transforms; ///< Compact: only moving instances.
 	LocalVector<RID> blass;
@@ -503,6 +509,8 @@ public:
 	const LocalVector<RID> &get_material_ubo_dependencies() const { return material_ubo_dependencies; }
 	const LocalVector<RID> &get_geometry_buffer_dependencies() const { return geometry_buffer_dependencies; }
 	const LocalVector<RID> &get_deformed_buffer_dependencies() const { return deformed_buffer_dependencies; }
+	void begin_unique_buffer_dependencies(uint32_t p_expected_dependencies);
+	void add_unique_buffer_dependency(RD::RaytracingListID p_raytracing_list, RID p_buffer);
 
 	~RenderRaytracing();
 };

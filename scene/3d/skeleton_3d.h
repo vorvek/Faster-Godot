@@ -49,6 +49,8 @@ class SkinReference : public RefCounted {
 	uint64_t skeleton_version = 0;
 	Vector<uint32_t> skin_bone_indices;
 	uint32_t *skin_bone_indices_ptrs = nullptr;
+	Vector<float> skin_bone_transform_data[2];
+	uint32_t skin_bone_transform_data_write_index = 0;
 
 protected:
 	static void _bind_methods();

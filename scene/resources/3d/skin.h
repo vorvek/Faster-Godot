@@ -80,6 +80,10 @@ public:
 		return binds_ptr[p_index].pose;
 	}
 
+	inline const Transform3D &get_bind_pose_unchecked(int p_index) const {
+		return binds_ptr[p_index].pose;
+	}
+
 	void clear_binds();
 
 	Skin();

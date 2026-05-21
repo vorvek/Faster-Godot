@@ -472,6 +472,35 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 	bool can_use_effects = target_size.x >= 8 && target_size.y >= 8; // FIXME I think this should check internal size, we do all our post processing at this size...
 	can_use_effects &= _debug_draw_can_use_effects(debug_draw);
 	bool can_use_storage = _render_buffers_can_be_storage();
+	const RID environment = p_render_data->environment;
+	const bool environment_valid = environment.is_valid();
+	const bool glow_enabled = can_use_effects && environment_valid && environment_get_glow_enabled(environment);
+	Vector<float> glow_levels;
+	float glow_strength = 1.0f;
+	float glow_bloom = 0.0f;
+	float glow_hdr_luminance_cap = 12.0f;
+	float glow_hdr_bleed_threshold = 1.0f;
+	float glow_hdr_bleed_scale = 2.0f;
+	float glow_intensity = 0.0f;
+	float glow_mix = 0.0f;
+	float glow_map_strength = 0.0f;
+	RSE::EnvironmentGlowBlendMode glow_blend_mode = RSE::ENV_GLOW_BLEND_MODE_SCREEN;
+	RID glow_map;
+	if (glow_enabled) {
+		glow_levels = environment_get_glow_levels(environment);
+		glow_strength = environment_get_glow_strength(environment);
+		glow_bloom = environment_get_glow_bloom(environment);
+		glow_hdr_luminance_cap = environment_get_glow_hdr_luminance_cap(environment);
+		glow_hdr_bleed_threshold = environment_get_glow_hdr_bleed_threshold(environment);
+		glow_hdr_bleed_scale = environment_get_glow_hdr_bleed_scale(environment);
+		glow_intensity = environment_get_glow_intensity(environment);
+		glow_mix = environment_get_glow_mix(environment);
+		glow_blend_mode = environment_get_glow_blend_mode(environment);
+		glow_map = environment_get_glow_map(environment);
+		if (glow_map.is_valid()) {
+			glow_map_strength = environment_get_glow_map_strength(environment);
+		}
+	}
 
 	RSE::ViewportScaling3DMode scale_mode = rb->get_scaling_3d_mode();
 	bool use_upscaled_texture = rb->has_upscaled_texture() && (scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_FSR2 || scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL);
@@ -618,13 +647,12 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 		RD::get_singleton()->draw_command_end_label();
 	}
 
-	if (can_use_effects && p_render_data->environment.is_valid() && environment_get_glow_enabled(p_render_data->environment)) {
+	if (glow_enabled) {
 		RENDER_TIMESTAMP("Glow");
 
 		rb->allocate_blur_textures();
 
 		int mipmaps = int(rb->get_texture_format(RB_SCOPE_BUFFERS, RB_TEX_BLUR_1).mipmaps);
-		Vector<float> glow_levels = environment_get_glow_levels(p_render_data->environment);
 		bool use_debanding = rb->get_use_debanding() && !texture_storage->render_target_is_using_hdr(render_target);
 
 		int max_glow_index = -1;
@@ -645,17 +673,17 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 			if (RSG::camera_attributes->camera_attributes_uses_auto_exposure(p_render_data->camera_attributes)) {
 				luminance_texture = luminance->get_current_luminance_buffer(rb); // this will return and empty RID if we don't have an auto exposure buffer
 			}
-		for (uint32_t l = 0; l < rb->get_view_count(); l++) {
-			Size2i vp_size = rb->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_BLUR_1, 0);
-			RID source = use_upscaled_texture ? rb->get_upscaled_texture(l) : rb->get_internal_texture(l);
-			RID dest = rb->get_texture_slice(RB_SCOPE_BUFFERS, RB_TEX_BLUR_1, l, 0);
-				copy_effects->gaussian_glow(source, dest, vp_size, environment_get_glow_strength(p_render_data->environment), true, environment_get_glow_hdr_luminance_cap(p_render_data->environment), environment_get_exposure(p_render_data->environment), environment_get_glow_bloom(p_render_data->environment), environment_get_glow_hdr_bleed_threshold(p_render_data->environment), environment_get_glow_hdr_bleed_scale(p_render_data->environment), luminance_texture, auto_exposure_scale);
+			for (uint32_t l = 0; l < rb->get_view_count(); l++) {
+				Size2i vp_size = rb->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_BLUR_1, 0);
+				RID source = use_upscaled_texture ? rb->get_upscaled_texture(l) : rb->get_internal_texture(l);
+				RID dest = rb->get_texture_slice(RB_SCOPE_BUFFERS, RB_TEX_BLUR_1, l, 0);
+				copy_effects->gaussian_glow(source, dest, vp_size, glow_strength, true, glow_hdr_luminance_cap, environment_get_exposure(environment), glow_bloom, glow_hdr_bleed_threshold, glow_hdr_bleed_scale, luminance_texture, auto_exposure_scale);
 
 				for (int i = 1; i < (max_glow_index + 1); i++) {
 					source = dest;
 					vp_size = rb->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_BLUR_1, i);
 					dest = rb->get_texture_slice(RB_SCOPE_BUFFERS, RB_TEX_BLUR_1, l, i);
-					copy_effects->gaussian_glow(source, dest, vp_size, environment_get_glow_strength(p_render_data->environment));
+					copy_effects->gaussian_glow(source, dest, vp_size, glow_strength);
 				}
 			}
 			RD::get_singleton()->draw_command_end_label();
@@ -664,8 +692,8 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 			// allows us to gather our levels at low resolutions and ultimately save a lot of texture read bandwidth.
 			// The tradeoff is that we need to use single-pass blur to minimize the number of render passes.
 
-			RID source;
-			RID dest;
+				RID source;
+				RID dest;
 
 			for (uint32_t l = 0; l < rb->get_view_count(); l++) {
 				RD::get_singleton()->draw_command_begin_label("Gaussian Glow downsample");
@@ -675,7 +703,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 			source = rb->get_internal_texture(l);
 				dest = rb->get_texture_slice(RB_SCOPE_BUFFERS, RB_TEX_BLUR_1, l, 1); // Level 1 is quarter res.
 
-				copy_effects->gaussian_glow_downsample_raster(source, dest, luminance_multiplier, source_size, environment_get_glow_strength(p_render_data->environment), true, environment_get_glow_hdr_luminance_cap(p_render_data->environment), environment_get_exposure(p_render_data->environment), environment_get_glow_bloom(p_render_data->environment), environment_get_glow_hdr_bleed_threshold(p_render_data->environment), environment_get_glow_hdr_bleed_scale(p_render_data->environment));
+				copy_effects->gaussian_glow_downsample_raster(source, dest, luminance_multiplier, source_size, glow_strength, true, glow_hdr_luminance_cap, environment_get_exposure(environment), glow_bloom, glow_hdr_bleed_threshold, glow_hdr_bleed_scale);
 
 				Size2i vp_size;
 				for (int i = 1; i < (max_glow_index + 1); i++) {
@@ -683,7 +711,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 					vp_size = rb->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_BLUR_1, i);
 					dest = rb->get_texture_slice(RB_SCOPE_BUFFERS, RB_TEX_BLUR_1, l, i + 1);
 
-					copy_effects->gaussian_glow_downsample_raster(source, dest, luminance_multiplier, vp_size, environment_get_glow_strength(p_render_data->environment));
+					copy_effects->gaussian_glow_downsample_raster(source, dest, luminance_multiplier, vp_size, glow_strength);
 				}
 				RD::get_singleton()->draw_command_end_label();
 				RD::get_singleton()->draw_command_begin_label("Gaussian Glow upsample");
@@ -729,12 +757,12 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 			tonemap.exposure_texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
 		}
 
-		if (can_use_effects && p_render_data->environment.is_valid() && environment_get_glow_enabled(p_render_data->environment)) {
+		if (glow_enabled) {
 			tonemap.use_glow = true;
-			tonemap.glow_mode = environment_get_glow_blend_mode(p_render_data->environment);
-			tonemap.glow_intensity = tonemap.glow_mode == RSE::ENV_GLOW_BLEND_MODE_MIX ? environment_get_glow_mix(p_render_data->environment) : environment_get_glow_intensity(p_render_data->environment);
+			tonemap.glow_mode = glow_blend_mode;
+			tonemap.glow_intensity = tonemap.glow_mode == RSE::ENV_GLOW_BLEND_MODE_MIX ? glow_mix : glow_intensity;
 			for (int i = 0; i < RSE::MAX_GLOW_LEVELS; i++) {
-				tonemap.glow_levels[i] = environment_get_glow_levels(p_render_data->environment)[i];
+				tonemap.glow_levels[i] = glow_levels[i];
 			}
 
 			Size2i msize = rb->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_BLUR_1, 0);
@@ -748,9 +776,9 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 				tonemap.glow_texture = rb->get_texture_slice(RB_SCOPE_BUFFERS, RB_TEX_BLUR_0, 0, 2, rb->get_view_count());
 			}
 
-			if (environment_get_glow_map(p_render_data->environment).is_valid()) {
-				tonemap.glow_map_strength = environment_get_glow_map_strength(p_render_data->environment);
-				tonemap.glow_map = texture_storage->texture_get_rd_texture(environment_get_glow_map(p_render_data->environment));
+			if (glow_map.is_valid()) {
+				tonemap.glow_map_strength = glow_map_strength;
+				tonemap.glow_map = texture_storage->texture_get_rd_texture(glow_map);
 			} else {
 				tonemap.glow_map_strength = 0.0f;
 				tonemap.glow_map = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE);

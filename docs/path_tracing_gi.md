@@ -187,16 +187,50 @@ patterns under Godot's MIT-compatible licensing. yuphin/Lumen was not vendored;
 it remains only an algorithm reference because it is a standalone Vulkan
 renderer rather than a drop-in Godot renderer module.
 
-Vendor denoisers are not hard dependencies. `Auto` prefers the internal
-temporal/spatial denoiser path first; NVIDIA, AMD, and Intel integrations are
-kept as optional plugin or compile-time integration points.
+## NRD Reference Audit
 
-The NVIDIA RTGI option maps to the DLSS Ray Reconstruction path where available
-and still emits the DLSS RR G-buffer/debug textures. This fork does not ship a
-Streamline/DLSS reconstruction pass, so the renderer also routes NVIDIA RTGI
-through the same temporal RT denoising resolve used by the internal denoiser.
-That avoids the previous behavior where selecting NVIDIA produced auxiliary
-buffers but left the final RTGI image effectively undenoised.
+NVIDIA NRD v4.17.4 was reviewed as a denoiser design reference, not vendored.
+NRD describes REBLUR, RELAX, and SIGMA as source/dispatched denoisers that depend
+on per-pixel guides such as motion vectors, normal/roughness, viewZ, noisy
+diffuse/specular radiance with hit distance, material demodulation, and explicit
+application-side resource allocation for permanent/transient texture pools. Its
+headers also carry NVIDIA proprietary license text, so importing the SDK is a
+separate vendor-dependency decision rather than part of this general performance
+pass.
+
+Current RTGI buffer coverage compared with NRD:
+
+- Present for every RTGI denoised frame: RT depth output, RT velocity, and
+  history validity and history identity masks.
+- Present when the NVIDIA/DLSS RR buffer-output variant is selected: DLSS RR
+  diffuse/specular albedo buffers, normal/roughness, and specular hit-distance
+  debug/output buffers.
+- Present through the main renderer rather than an NRD-specific input: raster
+  depth, raster velocity, and Forward+ normal/roughness buffers used by TAA and
+  compositor paths.
+- Missing for direct NRD REBLUR/RELAX import: canonical `IN_VIEWZ` linear view-Z
+  texture ownership, NRD-packed diffuse/specular radiance-plus-hit-distance
+  inputs, normalized diffuse hit distance, material-demodulated radiance
+  contracts, NRD permanent/transient pool management, NRD dispatch/pipeline
+  integration, and NRD-specific common/denoiser settings.
+- Missing for SIGMA import: dedicated penumbra/translucency shadow inputs and
+  a shadow denoiser dispatch path.
+
+The internal temporal RT denoiser remains the shipped path. Future NRD work
+should first split RT output into explicit guide/signal textures that match
+NRD's resource model, then add a compile-time optional backend that consumes
+those guides without making NRD a required runtime dependency.
+
+Vendor denoisers are not hard dependencies. `Auto` prefers the internal
+temporal RT denoiser path first; NVIDIA, AMD, and Intel integrations are kept
+as optional plugin or compile-time integration points.
+
+The NVIDIA RTGI option maps to the DLSS RR buffer-output shader variant and
+emits the DLSS RR G-buffer/debug textures. This fork does not ship a
+Streamline/DLSS reconstruction pass, so the final image still routes through
+the same temporal RT denoising resolve used by the internal denoiser. That
+avoids the previous behavior where selecting NVIDIA produced auxiliary buffers
+but left the final RTGI image effectively undenoised.
 
 ## Validation
 
@@ -214,8 +248,8 @@ Validated so far:
   - The NVIDIA RTGI denoiser selection now participates in the temporal RT
     denoising resolve while preserving DLSS RR auxiliary buffers for debug and
     future backend integration.
-  - Internal screenshot capture of the Euphorica test scene with the lantern
-    OmniLight shadows off and on. The captured sequences stayed lit, did not
+  - Internal runtime capture of a representative dark 3D validation scene with
+    local-light shadows off and on. The captured sequences stayed lit, did not
     produce the previous all-black frames, and did not log shader push-constant
     or RT pipeline setup errors.
 

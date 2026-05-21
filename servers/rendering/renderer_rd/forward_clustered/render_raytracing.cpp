@@ -77,6 +77,10 @@ static uint64_t _rt_history_mix_rid(uint64_t p_hash, RID p_rid) {
 	return _rt_history_mix(p_hash, p_rid.is_valid() ? p_rid.get_id() : 0);
 }
 
+static uint64_t _rt_signature_mix_rid(uint64_t p_hash, RID p_rid) {
+	return _rt_history_mix_rid(p_hash, p_rid);
+}
+
 static uint64_t _rt_history_mix_float(uint64_t p_hash, float p_value) {
 	uint32_t bits = 0;
 	memcpy(&bits, &p_value, sizeof(bits));
@@ -112,6 +116,21 @@ static uint64_t _rt_radiance_signature(uint32_t p_rt_flags, RID p_environment, R
 		signature = _rt_history_mix(signature, ld.flags);
 		signature = _rt_history_mix(signature, ld.cull_mask);
 		signature = _rt_history_mix(signature, ld.shadow_caster_mask);
+	}
+	return signature;
+}
+
+static uint64_t _rt_light_buffer_signature(const RT_LightData *p_light_data, uint32_t p_light_count) {
+	uint64_t signature = _rt_history_mix(0x72746c6967687473ULL, p_light_count);
+	for (uint32_t i = 0; i < p_light_count; i++) {
+		const RT_LightData &ld = p_light_data[i];
+		const unsigned char *bytes = reinterpret_cast<const unsigned char *>(&ld);
+		for (uint32_t offset = 0; offset < sizeof(RT_LightData); offset += sizeof(uint32_t)) {
+			uint32_t word = 0;
+			const uint32_t copy_bytes = MIN((uint32_t)sizeof(uint32_t), (uint32_t)sizeof(RT_LightData) - offset);
+			memcpy(&word, bytes + offset, copy_bytes);
+			signature = _rt_history_mix(signature, word);
+		}
 	}
 	return signature;
 }
@@ -3683,17 +3702,27 @@ uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, RT_L
 	return rt_light_count;
 }
 
+void RenderRaytracing::begin_unique_buffer_dependencies(uint32_t p_expected_dependencies) {
+	buffer_dependency_dedupe_scratch.clear();
+	if (buffer_dependency_dedupe_scratch.get_capacity() < p_expected_dependencies) {
+		buffer_dependency_dedupe_scratch.reserve(p_expected_dependencies);
+	}
+}
+
+void RenderRaytracing::add_unique_buffer_dependency(RD::RaytracingListID p_raytracing_list, RID p_buffer) {
+	if (!p_buffer.is_valid() || buffer_dependency_dedupe_scratch.has(p_buffer)) {
+		return;
+	}
+	buffer_dependency_dedupe_scratch.insert(p_buffer);
+	RD::get_singleton()->raytracing_list_add_buffer_dependency(p_raytracing_list, p_buffer, /*p_writable=*/false);
+}
+
 // ---------------------------------------------------------------------------
 // Uniform set update
 // ---------------------------------------------------------------------------
 
 RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderDataRD *p_render_data, uint32_t p_rt_flags) {
 	ERR_FAIL_NULL_V(p_state, RID());
-
-	if (p_state->uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(p_state->uniform_set)) {
-		RD::get_singleton()->free_rid(p_state->uniform_set);
-		p_state->uniform_set = RID();
-	}
 
 	// BindlessBlock handles its own uniform set cleanup via clear()
 
@@ -3707,16 +3736,25 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 	if (rb_data.is_null()) {
 		return RID();
 	}
+	rb_data->rt_ensure_textures();
 
 	// SET 0 indices must match raytracing_common_inc.glsl / scene_raytracing_raygen.glsl / samplers includes.
 	Vector<RD::Uniform> uniforms;
+	uint64_t uniform_signature = _rt_history_mix(0x7274756e69666f72ULL, p_rt_flags);
+	RID default_storage_buffer = RendererRD::MeshStorage::get_singleton()->get_default_rd_storage_buffer();
+	auto signature_add = [&](RID p_rid) {
+		uniform_signature = _rt_signature_mix_rid(uniform_signature, p_rid);
+	};
+	auto add_uniform_id = [&](RD::Uniform &r_uniform, RID p_rid) {
+		r_uniform.append_id(p_rid);
+		signature_add(p_rid);
+	};
 
 	{
 		RD::Uniform u;
 		u.binding = 0;
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		rb_data->rt_ensure_textures();
-		u.append_id(rb_data->rt_get_texture());
+		add_uniform_id(u, rb_data->rt_get_texture());
 		uniforms.push_back(u);
 	}
 
@@ -3725,7 +3763,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		u.binding = 1;
 		u.uniform_type = RD::UNIFORM_TYPE_ACCELERATION_STRUCTURE;
 		ERR_FAIL_COND_V(p_state->tlas == RID(), RID());
-		u.append_id(p_state->tlas);
+		add_uniform_id(u, p_state->tlas);
 		uniforms.push_back(u);
 	}
 
@@ -3733,7 +3771,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		RD::Uniform u;
 		u.binding = 2;
 		u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
-		u.append_id(owner->scene_state.uniform_buffers[0]);
+		add_uniform_id(u, owner->scene_state.uniform_buffers[0]);
 		uniforms.push_back(u);
 	}
 
@@ -3742,10 +3780,10 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		u.binding = 3;
 		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 		if (p_state->geometry_buffer.is_valid()) {
-			u.append_id(p_state->geometry_buffer);
+			add_uniform_id(u, p_state->geometry_buffer);
 		} else {
 			// Use a default buffer if no geometry
-			u.append_id(RendererRD::MeshStorage::get_singleton()->get_default_rd_storage_buffer());
+			add_uniform_id(u, default_storage_buffer);
 		}
 		uniforms.push_back(u);
 	}
@@ -3756,9 +3794,9 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		u.binding = 4;
 		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 		if (p_state->motion_index_buffer.is_valid()) {
-			u.append_id(p_state->motion_index_buffer);
+			add_uniform_id(u, p_state->motion_index_buffer);
 		} else {
-			u.append_id(RendererRD::MeshStorage::get_singleton()->get_default_rd_storage_buffer());
+			add_uniform_id(u, default_storage_buffer);
 		}
 		uniforms.push_back(u);
 	}
@@ -3769,9 +3807,9 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		u.binding = 32;
 		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 		if (p_state->motion_transform_buffer.is_valid()) {
-			u.append_id(p_state->motion_transform_buffer);
+			add_uniform_id(u, p_state->motion_transform_buffer);
 		} else {
-			u.append_id(RendererRD::MeshStorage::get_singleton()->get_default_rd_storage_buffer());
+			add_uniform_id(u, default_storage_buffer);
 		}
 		uniforms.push_back(u);
 	}
@@ -3782,9 +3820,9 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		u.binding = 5;
 		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 		if (p_state->material_buffer.is_valid()) {
-			u.append_id(p_state->material_buffer);
+			add_uniform_id(u, p_state->material_buffer);
 		} else {
-			u.append_id(RendererRD::MeshStorage::get_singleton()->get_default_rd_storage_buffer());
+			add_uniform_id(u, default_storage_buffer);
 		}
 		uniforms.push_back(u);
 	}
@@ -3887,8 +3925,14 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			if (!p_state->light_buffer.is_valid()) {
 				p_state->light_buffer = RD::get_singleton()->storage_buffer_create(buf_size);
 				RD::get_singleton()->set_resource_name(p_state->light_buffer, "RT Light Buffer");
+				p_state->light_buffer_signature_valid = false;
 			}
-			RD::get_singleton()->buffer_update(p_state->light_buffer, 0, buf_size, rt_light_data);
+			uint64_t light_signature = _rt_light_buffer_signature(rt_light_data, rt_light_count);
+			if (!p_state->light_buffer_signature_valid || p_state->light_buffer_signature != light_signature) {
+				RD::get_singleton()->buffer_update(p_state->light_buffer, 0, buf_size, rt_light_data);
+				p_state->light_buffer_signature = light_signature;
+				p_state->light_buffer_signature_valid = true;
+			}
 		}
 
 		if (!p_state->params_buffer.is_valid()) {
@@ -3900,7 +3944,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		RD::Uniform u;
 		u.binding = 6;
 		u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
-		u.append_id(p_state->params_buffer);
+		add_uniform_id(u, p_state->params_buffer);
 		uniforms.push_back(u);
 	}
 
@@ -3925,7 +3969,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		RD::Uniform u;
 		u.binding = 7;
 		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-		u.append_id(radiance_texture);
+		add_uniform_id(u, radiance_texture);
 		uniforms.push_back(u);
 	}
 
@@ -3934,8 +3978,8 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		RD::Uniform u;
 		u.binding = 8;
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER;
-		u.append_id(RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(
-				RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED));
+		add_uniform_id(u, RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(
+								  RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED));
 		uniforms.push_back(u);
 	}
 
@@ -3947,7 +3991,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			RD::Uniform u;
 			u.binding = 9;
 			u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-			u.append_id(rb_data->dlss_rr_get_diffuse_albedo());
+			add_uniform_id(u, rb_data->dlss_rr_get_diffuse_albedo());
 			uniforms.push_back(u);
 		}
 
@@ -3956,7 +4000,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			RD::Uniform u;
 			u.binding = 10;
 			u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-			u.append_id(rb_data->dlss_rr_get_specular_albedo());
+			add_uniform_id(u, rb_data->dlss_rr_get_specular_albedo());
 			uniforms.push_back(u);
 		}
 
@@ -3965,7 +4009,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			RD::Uniform u;
 			u.binding = 11;
 			u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-			u.append_id(rb_data->dlss_rr_get_normal_roughness());
+			add_uniform_id(u, rb_data->dlss_rr_get_normal_roughness());
 			uniforms.push_back(u);
 		}
 
@@ -3974,7 +4018,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			RD::Uniform u;
 			u.binding = 12;
 			u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-			u.append_id(rb_data->dlss_rr_get_specular_hit_dist());
+			add_uniform_id(u, rb_data->dlss_rr_get_specular_hit_dist());
 			uniforms.push_back(u);
 		}
 	}
@@ -3985,9 +4029,9 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		u.binding = 13;
 		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 		if (p_state->light_buffer.is_valid()) {
-			u.append_id(p_state->light_buffer);
+			add_uniform_id(u, p_state->light_buffer);
 		} else {
-			u.append_id(RendererRD::MeshStorage::get_singleton()->get_default_rd_storage_buffer());
+			add_uniform_id(u, default_storage_buffer);
 		}
 		uniforms.push_back(u);
 	}
@@ -3999,9 +4043,9 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 		RID buf = RendererRD::MaterialStorage::get_singleton()->global_shader_uniforms_get_storage_buffer();
 		if (buf.is_valid()) {
-			u.append_id(buf);
+			add_uniform_id(u, buf);
 		} else {
-			u.append_id(RendererRD::MeshStorage::get_singleton()->get_default_rd_storage_buffer());
+			add_uniform_id(u, default_storage_buffer);
 		}
 		uniforms.push_back(u);
 	}
@@ -4011,12 +4055,18 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		RD::Uniform u;
 		u.binding = 15;
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		u.append_id(rb_data->rt_get_depth_texture());
+		add_uniform_id(u, rb_data->rt_get_depth_texture());
 		uniforms.push_back(u);
 	}
 
 	// Bindings 16-27: Material samplers (12 filter/repeat combinations for custom shaders).
 	RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default().append_uniforms(uniforms, 16);
+	const RendererRD::MaterialStorage::Samplers &default_samplers = RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default();
+	for (uint32_t filter = 0; filter < RSE::CANVAS_ITEM_TEXTURE_FILTER_MAX; filter++) {
+		for (uint32_t repeat = 0; repeat < RSE::CANVAS_ITEM_TEXTURE_REPEAT_MAX; repeat++) {
+			signature_add(default_samplers.rids[filter][repeat]);
+		}
+	}
 
 	// Binding 28: Velocity output (RG16F). Past the 16-27 sampler range.
 	{
@@ -4030,10 +4080,10 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		u.binding = 28;
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
 		if (hybrid_mode) {
-			u.append_id(rb_data->rt_get_velocity_texture());
+			add_uniform_id(u, rb_data->rt_get_velocity_texture());
 		} else {
 			rb->ensure_velocity();
-			u.append_id(rb->get_velocity_buffer(false));
+			add_uniform_id(u, rb->get_velocity_buffer(false));
 		}
 		uniforms.push_back(u);
 	}
@@ -4043,7 +4093,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		RD::Uniform u;
 		u.binding = 29;
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		u.append_id(rb_data->rt_get_history_validity());
+		add_uniform_id(u, rb_data->rt_get_history_validity());
 		uniforms.push_back(u);
 	}
 
@@ -4052,12 +4102,27 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		RD::Uniform u;
 		u.binding = 30;
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		u.append_id(rb_data->rt_get_history_id());
+		add_uniform_id(u, rb_data->rt_get_history_id());
 		uniforms.push_back(u);
 	}
 
 	// Use the pipeline-side shader so UniformSetFormat matches at bind time.
 	RID shader_rd = shader ? shader->get_pipeline_shader_rd(p_rt_flags) : RID();
+	signature_add(shader_rd);
+
+	if (shader_rd.is_valid() && p_state->uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(p_state->uniform_set) && p_state->uniform_set_signature_valid && p_state->uniform_set_signature == uniform_signature && p_state->uniform_set_shader == shader_rd) {
+		if (bindless_block && bindless_block->is_initialized()) {
+			bindless_block->finalize(shader_rd, 1);
+			bindless_uniform_set = bindless_block->get_uniform_set();
+		}
+		return p_state->uniform_set;
+	}
+
+	if (p_state->uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(p_state->uniform_set)) {
+		RD::get_singleton()->free_rid(p_state->uniform_set);
+	}
+	p_state->uniform_set = RID();
+	p_state->uniform_set_signature_valid = false;
 
 	if (shader_rd.is_valid()) {
 		p_state->uniform_set = RD::get_singleton()->uniform_set_create(
@@ -4065,6 +4130,9 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 				shader_rd,
 				RenderForwardClustered::SCENE_UNIFORM_SET);
 		RD::get_singleton()->set_resource_name(p_state->uniform_set, "RT Uniform Set");
+		p_state->uniform_set_signature = uniform_signature;
+		p_state->uniform_set_shader = shader_rd;
+		p_state->uniform_set_signature_valid = p_state->uniform_set.is_valid();
 
 		// === SET 1: Bindless textures ===
 		if (bindless_block && bindless_block->is_initialized()) {

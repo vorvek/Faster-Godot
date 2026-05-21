@@ -31,6 +31,6 @@ used by the target profile.
 
 - Disabled modules are not available unless the fork profile is turned off or
   the module list is changed.
-- Multiplayer, WebRTC/WebSocket, OpenXR, mobile VR, and Godot Physics are not
-  part of the default Faster-Godot runtime.
+- Multiplayer, WebRTC/WebSocket, OpenXR, WebXR, mobile VR, and Godot Physics
+  are not part of the default Faster-Godot runtime.
 - Broad official Godot compatibility is intentionally reduced.

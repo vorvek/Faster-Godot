@@ -318,7 +318,7 @@ bool AnimationPlayer::_blend_pre_process(double p_delta, int p_track_count, cons
 		playback.started = false;
 	}
 
-	String prev_animation_name = playback.current.animation_name;
+	StringName prev_animation_name = playback.current.animation_name;
 	_blend_playback_data(p_delta, started);
 
 	if (prev_animation_name != playback.current.animation_name) {
@@ -347,9 +347,9 @@ void AnimationPlayer::_blend_post_process() {
 						return;
 					}
 				}
-				String old = playback.assigned;
+				StringName old = playback.assigned;
 				play(playback_queue.front()->get());
-				String new_name = playback.assigned;
+				StringName new_name = playback.assigned;
 				playback_queue.pop_front();
 				if (end_notify) {
 					emit_signal(SceneStringName(animation_changed), old, new_name);
@@ -458,7 +458,8 @@ void AnimationPlayer::play_section(const StringName &p_name, double p_start_time
 		name = playback.assigned;
 	}
 
-	ERR_FAIL_COND_MSG(!animation_set.has(name), vformat("Animation not found: %s.", name));
+	AnimationData *animation_data = animation_set.getptr(name);
+	ERR_FAIL_NULL_MSG(animation_data, vformat("Animation not found: %s.", name));
 	ERR_FAIL_COND_MSG(p_start_time >= 0 && p_end_time >= 0 && Math::is_equal_approx(p_start_time, p_end_time), "Start time and end time must not equal to each other.");
 	ERR_FAIL_COND_MSG(p_start_time >= 0 && p_end_time >= 0 && Animation::is_greater_approx(p_start_time, p_end_time), vformat("Start time %f is greater than end time %f.", p_start_time, p_end_time));
 
@@ -473,18 +474,18 @@ void AnimationPlayer::play_section(const StringName &p_name, double p_start_time
 
 		if (Animation::is_greater_or_equal_approx(p_custom_blend, 0)) {
 			blend_time = p_custom_blend;
-		} else if (blend_times.has(bk)) {
-			blend_time = blend_times[bk];
+		} else if (const double *blend_time_ptr = blend_times.getptr(bk)) {
+			blend_time = *blend_time_ptr;
 		} else {
 			bk.from = "*";
-			if (blend_times.has(bk)) {
-				blend_time = blend_times[bk];
+			if (const double *blend_time_ptr = blend_times.getptr(bk)) {
+				blend_time = *blend_time_ptr;
 			} else {
 				bk.from = c.current.animation_name;
 				bk.to = "*";
 
-				if (blend_times.has(bk)) {
-					blend_time = blend_times[bk];
+				if (const double *blend_time_ptr = blend_times.getptr(bk)) {
+					blend_time = *blend_time_ptr;
 				}
 			}
 		}
@@ -505,11 +506,13 @@ void AnimationPlayer::play_section(const StringName &p_name, double p_start_time
 
 	if (get_current_animation() != p_name) {
 		_clear_playing_caches();
+		animation_data = animation_set.getptr(name);
+		ERR_FAIL_NULL_MSG(animation_data, vformat("Animation not found: %s.", name));
 	}
 
 	c.current.is_enabled = true;
 	c.current.animation_name = name;
-	c.current.animation_length = animation_set[name].animation->get_length();
+	c.current.animation_length = animation_data->animation->get_length();
 	c.current.speed_scale = p_custom_scale;
 	c.current.start_time = p_start_time;
 	c.current.end_time = p_end_time;
@@ -550,7 +553,7 @@ void AnimationPlayer::play_section(const StringName &p_name, double p_start_time
 	}
 
 	StringName next = animation_get_next(p_name);
-	if (next != StringName() && animation_set.has(next)) {
+	if (next != StringName() && animation_set.getptr(next)) {
 		queue(next);
 	}
 }
@@ -627,11 +630,12 @@ void AnimationPlayer::set_assigned_animation(const StringName &p_animation) {
 		float speed = playback.current.speed_scale;
 		play(p_animation, -1.0, speed, std::signbit(speed));
 	} else {
-		ERR_FAIL_COND_MSG(!animation_set.has(p_animation), vformat("Animation not found: %s.", p_animation.operator String()));
+		AnimationData *animation_data = animation_set.getptr(p_animation);
+		ERR_FAIL_NULL_MSG(animation_data, vformat("Animation not found: %s.", p_animation.operator String()));
 		playback.current.pos = 0;
 		playback.current.is_enabled = true;
 		playback.current.animation_name = p_animation;
-		playback.current.animation_length = animation_set[p_animation].animation->get_length();
+		playback.current.animation_length = animation_data->animation->get_length();
 		playback.current.start_time = -1;
 		playback.current.end_time = -1;
 		playback.assigned = p_animation;
@@ -678,10 +682,11 @@ void AnimationPlayer::seek_internal(double p_time, bool p_update, bool p_update_
 	playback.current.pos = p_time;
 	if (!playback.current.is_enabled) {
 		if (!playback.assigned.is_empty()) {
-			ERR_FAIL_COND_MSG(!animation_set.has(playback.assigned), vformat("Animation not found: %s.", playback.assigned));
+			AnimationData *animation_data = animation_set.getptr(playback.assigned);
+			ERR_FAIL_NULL_MSG(animation_data, vformat("Animation not found: %s.", playback.assigned));
 			playback.current.is_enabled = true;
 			playback.current.animation_name = playback.assigned;
-			playback.current.animation_length = animation_set[playback.assigned].animation->get_length();
+			playback.current.animation_length = animation_data->animation->get_length();
 		}
 		if (!playback.current.is_enabled) {
 			return; // There is no animation.
@@ -797,8 +802,10 @@ bool AnimationPlayer::is_movie_quit_on_finish_enabled() const {
 
 void AnimationPlayer::_animation_changed(const StringName &p_name) {
 	AnimationMixer::_animation_changed(p_name);
-	if (playback.current.is_enabled && playback.current.animation_name == p_name && animation_set.has(p_name)) {
-		playback.current.animation_length = animation_set[p_name].animation->get_length();
+	if (playback.current.is_enabled && playback.current.animation_name == p_name) {
+		if (const AnimationData *animation_data = animation_set.getptr(p_name)) {
+			playback.current.animation_length = animation_data->animation->get_length();
+		}
 	}
 }
 
@@ -814,7 +821,7 @@ void AnimationPlayer::_stop_internal(bool p_reset, bool p_keep_state) {
 			seek_internal(start, true, true, true);
 		}
 		c.current.is_enabled = false;
-		c.current.animation_name = String();
+		c.current.animation_name = StringName();
 		c.current.speed_scale = 1;
 		emit_signal(SNAME("current_animation_changed"), "");
 	}
@@ -829,10 +836,8 @@ void AnimationPlayer::animation_set_next(const StringName &p_animation, const St
 }
 
 StringName AnimationPlayer::animation_get_next(const StringName &p_animation) const {
-	if (!animation_next_set.has(p_animation)) {
-		return StringName();
-	}
-	return animation_next_set[p_animation];
+	const StringName *next_animation = animation_next_set.getptr(p_animation);
+	return next_animation ? *next_animation : StringName();
 }
 
 void AnimationPlayer::set_default_blend_time(double p_default) {
@@ -863,11 +868,8 @@ double AnimationPlayer::get_blend_time(const StringName &p_animation1, const Str
 	bk.from = p_animation1;
 	bk.to = p_animation2;
 
-	if (blend_times.has(bk)) {
-		return blend_times[bk];
-	} else {
-		return 0;
-	}
+	const double *blend_time = blend_times.getptr(bk);
+	return blend_time ? *blend_time : 0;
 }
 
 void AnimationPlayer::set_auto_capture(bool p_auto_capture) {

@@ -397,11 +397,37 @@ void Skeleton3D::_notification(int p_what) {
 					E->skeleton_version = version;
 				}
 
+				Vector<float> &skin_bone_transform_data = E->skin_bone_transform_data[E->skin_bone_transform_data_write_index];
+				const int32_t skin_bone_transform_float_count = bind_count * 12;
+				if (skin_bone_transform_data.size() != skin_bone_transform_float_count) {
+					skin_bone_transform_data.resize_initialized(skin_bone_transform_float_count);
+				}
+				float *skin_bone_transform_data_ptr = skin_bone_transform_data.ptrw();
+
 				for (uint32_t i = 0; i < bind_count; i++) {
 					uint32_t bone_index = E->skin_bone_indices_ptrs[i];
-					ERR_CONTINUE(bone_index >= (uint32_t)len);
-					rs->skeleton_bone_set_transform(skeleton, i, bonesptr[bone_index].global_pose * skin->get_bind_pose(i));
+					float *bone_transform_ptr = skin_bone_transform_data_ptr + i * 12;
+					if (bone_index >= (uint32_t)len) {
+						memset(bone_transform_ptr, 0, 12 * sizeof(float));
+						ERR_CONTINUE(bone_index >= (uint32_t)len);
+					}
+					const Transform3D skin_transform = bonesptr[bone_index].global_pose * skin->get_bind_pose_unchecked(i);
+					bone_transform_ptr[0] = skin_transform.basis.rows[0][0];
+					bone_transform_ptr[1] = skin_transform.basis.rows[0][1];
+					bone_transform_ptr[2] = skin_transform.basis.rows[0][2];
+					bone_transform_ptr[3] = skin_transform.origin.x;
+					bone_transform_ptr[4] = skin_transform.basis.rows[1][0];
+					bone_transform_ptr[5] = skin_transform.basis.rows[1][1];
+					bone_transform_ptr[6] = skin_transform.basis.rows[1][2];
+					bone_transform_ptr[7] = skin_transform.origin.y;
+					bone_transform_ptr[8] = skin_transform.basis.rows[2][0];
+					bone_transform_ptr[9] = skin_transform.basis.rows[2][1];
+					bone_transform_ptr[10] = skin_transform.basis.rows[2][2];
+					bone_transform_ptr[11] = skin_transform.origin.z;
 				}
+
+				rs->skeleton_set_bone_data_3d(skeleton, skin_bone_transform_data);
+				E->skin_bone_transform_data_write_index ^= 1;
 			}
 
 			if (!modifiers.is_empty()) {

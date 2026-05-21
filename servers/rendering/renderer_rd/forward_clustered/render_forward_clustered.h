@@ -527,7 +527,7 @@ private:
 
 	void _fill_instance_data(RenderListType p_render_list, int *p_render_info = nullptr, uint32_t p_offset = 0, int32_t p_max_elements = -1, bool p_update_buffer = true);
 	void _fill_render_list(RenderListType p_render_list, const RenderDataRD *p_render_data, PassMode p_pass_mode, bool p_using_sdfgi = false, bool p_using_opaque_gi = false, bool p_using_motion_pass = false, bool p_append = false, bool p_alpha_only = false);
-	void _age_out_motion_vectors(const RenderDataRD *p_render_data);
+	void _age_out_motion_vectors(const RenderDataRD *p_render_data, bool p_include_rt_instances);
 
 	HashMap<Size2i, RID> sdfgi_framebuffer_size_cache;
 

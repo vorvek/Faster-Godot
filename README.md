@@ -9,6 +9,8 @@ games that can commit to a narrower runtime contract:
 - Forward+ rendering only.
 - Vulkan as the active rendering backend.
 - Jolt as the 3D physics backend.
+- No XR/VR runtime. OpenXR, WebXR, and mobile VR are stripped from the Faster
+  profile.
 
 This is not a general-purpose replacement for official Godot. It deliberately
 trades broad platform compatibility for lower binary size, less renderer and
@@ -50,7 +52,7 @@ far came mostly from the renderer-profile and hot-path changes:
   processing is capped per frame to avoid high-polling mice flooding
   `PeekMessage()` and tanking CanvasItem-heavy scenes.
 - Smaller runtime surface: Unused modules and backends are disabled by default,
-  including mobile/XR/networking modules outside this fork's target profile.
+  including XR/VR and networking modules outside this fork's target profile.
 - Jolt-only physics: Godot Physics 2D/3D modules are disabled in the fork
   profile; Jolt is the default 3D physics server.
 

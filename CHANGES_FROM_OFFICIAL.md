@@ -13,24 +13,63 @@ desktop Forward+ profile. The detailed notes are split by change area:
 | Hardware RTGI, path tracing, denoiser history, and particle stability | [docs/path_tracing_gi.md](docs/path_tracing_gi.md) |
 | TAA quality controls | [docs/taa_quality_controls.md](docs/taa_quality_controls.md) |
 | Editor frame-rate limits while testing | [docs/editor_frame_rate_limits.md](docs/editor_frame_rate_limits.md) |
-| Forward+ rendering hot-path tuning | [docs/rendering_hot_path_tuning.md](docs/rendering_hot_path_tuning.md) |
+| Forward+/RTGI rendering hot-path tuning | [docs/rendering_hot_path_tuning.md](docs/rendering_hot_path_tuning.md) |
+| Audio hot-path tuning | [docs/audio_hot_path_tuning.md](docs/audio_hot_path_tuning.md) |
+| Animation and skinning hot-path tuning | [docs/animation_player_hot_path_tuning.md](docs/animation_player_hot_path_tuning.md) |
+| SceneTree hot-path tuning | [docs/scene_tree_hot_path_tuning.md](docs/scene_tree_hot_path_tuning.md) |
 | Occlusion culling and Embree update | [docs/occlusion_culling.md](docs/occlusion_culling.md) |
 | Windows high-polling mouse input | [docs/windows_high_polling_mouse_input.md](docs/windows_high_polling_mouse_input.md) |
 | Binary and memory surface reduction | [docs/binary_and_memory_surface.md](docs/binary_and_memory_surface.md) |
 
+## RTGI Vendor Denoiser Reference Status
+
+The RTGI implementation was compared against NVIDIA's Godot path tracing branch,
+Streamline/DLSS Ray Reconstruction routing, and NVIDIA NRD. This fork keeps the
+internal temporal RT denoiser as the shipped path. Streamline/DLSS and NRD SDK
+imports are deferred vendor-dependency projects because they add separate source,
+license, build, and packaging obligations.
+
+The local renderer emits RT depth, RT velocity, and history validity/identity
+masks for RTGI denoising. When the NVIDIA/DLSS RR buffer-output variant is
+selected, it also emits DLSS RR diffuse/specular albedo, normal/roughness, and
+specular hit distance. Direct NRD integration would still need explicit
+NRD-style viewZ ownership, packed diffuse/specular radiance-plus-hit-distance
+inputs, material-demodulated signal contracts, permanent/transient pool
+management, and NRD dispatch integration.
+
 ## Current Benchmark Snapshot
 
-Rendered Vulkan Forward+ benchmark, Windows release template, three-run average:
+Windows Vulkan Forward+ validation stress scene, 1920x1080 viewport, RTGI
+disabled at runtime, VSync disabled, uncapped frame rate, five-run average
+against official 4.6.3:
 
-| Metric | Official 4.6.2 Vulkan | Faster-Godot Vulkan | Delta |
+Scene shape at the sampled alive-state workload:
+
+| Context | Value |
+| --- | ---: |
+| Test CPU | AMD Ryzen 9 9950X3D |
+| Test memory | 48 GB DDR5-6000 |
+| Test GPU | NVIDIA GeForce RTX 4080 SUPER |
+| Active character bodies | 26 |
+| Spawned skinned enemy bodies | 24 |
+| Runtime character logic | Basic AI, target raycasts, movement, attack attempts, scripted death |
+| Skeleton3D nodes in scene | 26 |
+| MeshInstance3D nodes in scene | 672 |
+| Light nodes | 1 omni |
+| Rendered objects in sampled frames | ~1.3K |
+| Rendered primitives in sampled frames | ~2.87M |
+| Draw calls in benchmark table | ~1.1K |
+| Death particle systems validated after sample window | 24 |
+
+| Metric | Official 4.6.3 Vulkan | Faster-Godot Vulkan | Delta |
 | --- | ---: | ---: | ---: |
-| FPS average | 564.37 FPS | 573.88 FPS | +1.7% |
-| Frame time average | 1.77 ms | 1.74 ms | -1.7% |
-| VRAM monitor | 184.50 MiB | 183.23 MiB | -0.7% |
+| FPS average | 448.46 FPS | 548.98 FPS | +22.413% |
+| Process time average | 3.46 ms | 3.14 ms | -9.255% |
+| Draw calls average | 1113.62 | 1110.72 | -2.90 |
+| VRAM monitor | 313.896 MiB | 318.469 MiB | +4.573 MiB |
 
-The benchmark scene used fixed-camera 3D gameplay with Vulkan Forward+ on both
-official Godot and Faster-Godot. The Windows high-polling mouse fix is included
-in the Faster-Godot binary used for this benchmark. Linux builds were validated
-by headless boot; Linux rendered benchmark data is not included yet.
+This snapshot uses a heavier animated 3D stress path than the previous
+single-actor smoke comparison, so it is the preferred current desktop
+performance baseline. Linux rendered benchmark data is not included yet.
 
 Maintained by Jon Tamayo - https://x.com/vorvek

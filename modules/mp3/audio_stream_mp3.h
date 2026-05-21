@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "core/templates/local_vector.h"
 #include "servers/audio/audio_stream.h"
 
 #include "thirdparty/dr_libs/dr_mp3.h"
@@ -40,7 +41,8 @@ class AudioStreamPlaybackMP3 : public AudioStreamPlaybackResampled {
 	GDCLASS(AudioStreamPlaybackMP3, AudioStreamPlaybackResampled);
 
 	enum {
-		FADE_SIZE = 256
+		FADE_SIZE = 256,
+		DECODE_CHUNK_FRAMES = 1024
 	};
 	AudioFrame loop_fade[FADE_SIZE];
 	int loop_fade_remaining = FADE_SIZE;
@@ -48,7 +50,8 @@ class AudioStreamPlaybackMP3 : public AudioStreamPlaybackResampled {
 	bool looping_override = false;
 	bool looping = false;
 	drmp3 mp3d = {};
-	uint32_t frames_mixed = 0;
+	LocalVector<float> decode_buffer;
+	uint64_t frames_mixed = 0;
 	bool active = false;
 	int loops = 0;
 
@@ -60,6 +63,8 @@ class AudioStreamPlaybackMP3 : public AudioStreamPlaybackResampled {
 	Ref<AudioSamplePlayback> sample_playback;
 
 protected:
+	int _read_frames(AudioFrame *p_buffer, int p_frames);
+	bool _seek_internal(double p_time, uint64_t p_loop_frame_limit = 0);
 	virtual int _mix_internal(AudioFrame *p_buffer, int p_frames) override;
 	virtual float get_stream_sampling_rate() override;
 
@@ -99,6 +104,7 @@ class AudioStreamMP3 : public AudioStream {
 
 	float sample_rate = 1.0;
 	int channels = 1;
+	uint64_t frame_count = 0;
 	float length = 0.0;
 	bool loop = false;
 	float loop_offset = 0.0;
