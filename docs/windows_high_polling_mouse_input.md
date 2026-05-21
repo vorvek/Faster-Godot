@@ -36,8 +36,6 @@ this fork update.
 ## Cons
 
 - The upstream PR is not merged yet and still asks for broader device testing.
-- The local automated benchmark does not simulate an 8,000 Hz mouse; this needs
-  hands-on validation with the actual device and polling rate.
 - Per-frame event budgets trade worst-case input queue draining for frame-time
   stability. If a tool needs every non-accumulated mouse event in visible mouse
   mode, this area should be revalidated.
