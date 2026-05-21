@@ -3,7 +3,7 @@ name: Release 4.6.2 Faster
 on:
   push:
     branches:
-      - codex/release-4.6.2-faster-actions
+      - vorvek/release-4.6.2-faster-actions
   workflow_dispatch:
 
 env:
