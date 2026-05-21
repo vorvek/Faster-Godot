@@ -8,7 +8,7 @@ on:
 
 env:
   RELEASE_VERSION: 4.6.2-faster
-  SOURCE_REF: 95ce70427143991547420d57381d723a450087ec
+  SOURCE_REF: 95ce7042714df8fb2145766fef100538b204ed0a
   BUILD_NAME: faster
   SCONS_BASE: arch=x86_64 production=yes tests=no optimize=speed lto=none debug_symbols=no verbose=no warnings=no werror=no progress=no
   DOTNET_NOLOGO: true
