@@ -71,10 +71,13 @@ The feature is exposed on `Environment`, so it appears through the same
     masks. Newly visible or newly RT-ready geometry rejects stale history.
 - `rtgi_temporal_accumulation_weight`
   - Controls how much previous-frame RT lighting contributes to temporal
-    accumulation. Higher values reduce light speckles and improve stability in
-    static views, but can increase light ghosting or wobbling while the camera
-    tracks through the scene. The default is `0.94`, which is intentionally
-    shorter than the old forced `0.97` RT denoiser history weight.
+    accumulation. The value is treated as a 60 FPS reference and normalized by
+    frame time so high-refresh captures do not shorten the denoiser history in
+    wall-clock time. Higher values reduce light speckles and improve stability
+    in static views, but can increase light ghosting or wobbling while the
+    camera tracks through the scene. The default is `0.94`, which is
+    intentionally shorter than the old forced `0.97` RT denoiser history
+    weight.
   - At low internal viewport resolutions, the RT denoiser uses a confidence
     weighted 2x2 history footprint instead of a single nearest history texel.
     This reduces whole-pixel reprojection wobble in tracking-camera shots while

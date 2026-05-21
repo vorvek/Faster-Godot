@@ -2732,7 +2732,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		if (using_rt_temporal_denoise) {
 			RD::get_singleton()->draw_command_begin_label("RT Denoise");
 			RENDER_TIMESTAMP("RT Denoise");
-			const float rt_history_weight = rt_env_params ? rt_env_params[RSE::PT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT] : 0.94f;
+			float rt_history_weight = rt_env_params ? rt_env_params[RSE::PT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT] : 0.94f;
+			if (time_step > 0.0) {
+				// Treat the RTGI history setting as a 60 FPS baseline so temporal
+				// accumulation has the same wall-clock decay at high refresh rates.
+				rt_history_weight = Math::pow(CLAMP(rt_history_weight, 0.0f, 0.99f), (float)time_step * 60.0f);
+			}
 			if (rt_replaces_opaque) {
 				taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, true, rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight);
 			} else {

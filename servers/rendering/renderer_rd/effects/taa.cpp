@@ -81,7 +81,7 @@ void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_pr
 	push_constant.sharpness = CLAMP(GLOBAL_GET_CACHED(float, "rendering/anti_aliasing/quality/taa_sharpness"), 0.0f, 1.0f);
 	push_constant.rt_history_filter_strength = 0.0f;
 	if (p_raytracing_denoise) {
-		push_constant.history_weight = CLAMP(p_raytracing_history_weight, 0.0f, 0.99f);
+		push_constant.history_weight = CLAMP(p_raytracing_history_weight, 0.0f, 0.999f);
 		push_constant.sharpness = 0.0f;
 		const float low_resolution_baseline = 720.0f;
 		const float low_resolution_range = 360.0f;
