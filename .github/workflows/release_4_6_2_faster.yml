@@ -8,7 +8,6 @@ on:
 
 env:
   RELEASE_VERSION: 4.6.2-faster
-  RELEASE_TAG: 4.6.2-faster
   SOURCE_REF: 2f1a68ebdce6d7a273cbb3d8bc10af5e39c1e2ab
   BUILD_NAME: faster
   SCONS_BASE: arch=x86_64 production=yes tests=no optimize=speed lto=none debug_symbols=no verbose=no warnings=no werror=no progress=no
@@ -17,9 +16,29 @@ env:
 
 jobs:
   linux:
-    name: Linux x86_64
+    name: Linux ${{ matrix.label }}
     runs-on: ubuntu-22.04
-    timeout-minutes: 360
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: standard editor
+            id: linux-standard-editor
+            mono: false
+            package: editor
+          - label: standard templates
+            id: linux-standard-templates
+            mono: false
+            package: templates
+          - label: .NET editor
+            id: linux-mono-editor
+            mono: true
+            package: editor
+          - label: .NET templates
+            id: linux-mono-templates
+            mono: true
+            package: templates
 
     steps:
       - name: Checkout release source
@@ -69,72 +88,84 @@ jobs:
           scons --version
 
       - name: Setup .NET
+        if: matrix.mono
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.100
 
-      - name: Build standard Linux editor and templates
+      - name: Build Linux asset
         shell: bash
         run: |
           set -euxo pipefail
-          scons platform=linuxbsd target=editor $SCONS_BASE
-          scons platform=linuxbsd target=template_debug $SCONS_BASE
-          scons platform=linuxbsd target=template_release $SCONS_BASE
-          strip bin/godot.linuxbsd.editor.x86_64.faster_godot
-          strip bin/godot.linuxbsd.template_debug.x86_64.faster_godot
-          strip bin/godot.linuxbsd.template_release.x86_64.faster_godot
-          chmod +x bin/godot.linuxbsd.*.x86_64.faster_godot
+          mono_arg=()
+          mono_suffix=""
+          template_dir="standard"
+          if [[ "${{ matrix.mono }}" == "true" ]]; then
+            mono_arg=(module_mono_enabled=yes)
+            mono_suffix=".mono"
+            template_dir="mono"
+          fi
 
-      - name: Build .NET Linux editor and templates
-        shell: bash
-        run: |
-          set -euxo pipefail
-          scons platform=linuxbsd target=editor module_mono_enabled=yes $SCONS_BASE
-          bin/godot.linuxbsd.editor.x86_64.faster_godot.mono --headless --generate-mono-glue ./modules/mono/glue
-          ./modules/mono/build_scripts/build_assemblies.py --godot-output-dir=./bin --godot-platform=linuxbsd --no-deprecated --werror
-          scons platform=linuxbsd target=template_debug module_mono_enabled=yes $SCONS_BASE
-          scons platform=linuxbsd target=template_release module_mono_enabled=yes $SCONS_BASE
-          strip bin/godot.linuxbsd.editor.x86_64.faster_godot.mono
-          strip bin/godot.linuxbsd.template_debug.x86_64.faster_godot.mono
-          strip bin/godot.linuxbsd.template_release.x86_64.faster_godot.mono
-          chmod +x bin/godot.linuxbsd.*.x86_64.faster_godot.mono
+          mkdir -p release/templates/${template_dir}
 
-      - name: Package Linux assets
-        shell: bash
-        run: |
-          set -euxo pipefail
-          mkdir -p release/linux release/templates/standard release/templates/mono
+          if [[ "${{ matrix.package }}" == "editor" ]]; then
+            scons platform=linuxbsd target=editor "${mono_arg[@]}" $SCONS_BASE
+            editor_bin="bin/godot.linuxbsd.editor.x86_64.faster_godot${mono_suffix}"
+            if [[ "${{ matrix.mono }}" == "true" ]]; then
+              "${editor_bin}" --headless --generate-mono-glue ./modules/mono/glue
+              ./modules/mono/build_scripts/build_assemblies.py --godot-output-dir=./bin --godot-platform=linuxbsd --no-deprecated --werror
+              package_dir="release/Faster-Godot_v${RELEASE_VERSION}_mono_linux_x86_64"
+              mkdir -p "${package_dir}"
+              strip "${editor_bin}"
+              cp "${editor_bin}" "${package_dir}/Faster-Godot_v${RELEASE_VERSION}_mono_linux.x86_64"
+              cp -R bin/GodotSharp "${package_dir}/GodotSharp"
+              (cd release && zip -9 -r "Faster-Godot_v${RELEASE_VERSION}_mono_linux_x86_64.zip" "Faster-Godot_v${RELEASE_VERSION}_mono_linux_x86_64")
+            else
+              strip "${editor_bin}"
+              cp "${editor_bin}" "release/Faster-Godot_v${RELEASE_VERSION}_linux.x86_64"
+              (cd release && zip -9 "Faster-Godot_v${RELEASE_VERSION}_linux.x86_64.zip" "Faster-Godot_v${RELEASE_VERSION}_linux.x86_64")
+            fi
+          else
+            scons platform=linuxbsd target=template_debug "${mono_arg[@]}" $SCONS_BASE
+            scons platform=linuxbsd target=template_release "${mono_arg[@]}" $SCONS_BASE
+            strip "bin/godot.linuxbsd.template_debug.x86_64.faster_godot${mono_suffix}"
+            strip "bin/godot.linuxbsd.template_release.x86_64.faster_godot${mono_suffix}"
+            cp "bin/godot.linuxbsd.template_debug.x86_64.faster_godot${mono_suffix}" "release/templates/${template_dir}/linux_debug.x86_64"
+            cp "bin/godot.linuxbsd.template_release.x86_64.faster_godot${mono_suffix}" "release/templates/${template_dir}/linux_release.x86_64"
+            chmod +x "release/templates/${template_dir}/linux_debug.x86_64" "release/templates/${template_dir}/linux_release.x86_64"
+          fi
 
-          cp bin/godot.linuxbsd.editor.x86_64.faster_godot \
-            release/linux/Faster-Godot_v${RELEASE_VERSION}_linux.x86_64
-          (cd release/linux && zip -9 "../Faster-Godot_v${RELEASE_VERSION}_linux.x86_64.zip" \
-            "Faster-Godot_v${RELEASE_VERSION}_linux.x86_64")
-
-          mkdir -p "release/linux/Faster-Godot_v${RELEASE_VERSION}_mono_linux_x86_64"
-          cp bin/godot.linuxbsd.editor.x86_64.faster_godot.mono \
-            "release/linux/Faster-Godot_v${RELEASE_VERSION}_mono_linux_x86_64/Faster-Godot_v${RELEASE_VERSION}_mono_linux.x86_64"
-          cp -R bin/GodotSharp "release/linux/Faster-Godot_v${RELEASE_VERSION}_mono_linux_x86_64/GodotSharp"
-          (cd release/linux && zip -9 -r "../Faster-Godot_v${RELEASE_VERSION}_mono_linux_x86_64.zip" \
-            "Faster-Godot_v${RELEASE_VERSION}_mono_linux_x86_64")
-
-          cp bin/godot.linuxbsd.template_debug.x86_64.faster_godot release/templates/standard/linux_debug.x86_64
-          cp bin/godot.linuxbsd.template_release.x86_64.faster_godot release/templates/standard/linux_release.x86_64
-          cp bin/godot.linuxbsd.template_debug.x86_64.faster_godot.mono release/templates/mono/linux_debug.x86_64
-          cp bin/godot.linuxbsd.template_release.x86_64.faster_godot.mono release/templates/mono/linux_release.x86_64
-
-      - name: Upload Linux packages
+      - name: Upload Linux asset
         uses: actions/upload-artifact@v4
         with:
-          name: release-linux
-          path: |
-            release/*.zip
-            release/templates/**
+          name: release-${{ matrix.id }}
+          path: release/
           retention-days: 14
 
   windows:
-    name: Windows x86_64
+    name: Windows ${{ matrix.label }}
     runs-on: windows-latest
-    timeout-minutes: 360
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: standard editor
+            id: windows-standard-editor
+            mono: false
+            package: editor
+          - label: standard templates
+            id: windows-standard-templates
+            mono: false
+            package: templates
+          - label: .NET editor
+            id: windows-mono-editor
+            mono: true
+            package: editor
+          - label: .NET templates
+            id: windows-mono-templates
+            mono: true
+            package: templates
 
     steps:
       - name: Checkout release source
@@ -155,95 +186,101 @@ jobs:
           scons --version
 
       - name: Setup .NET
+        if: matrix.mono
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.100
 
-      - name: Build standard Windows editor and templates
+      - name: Build Windows asset
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $sconsBase = $env:SCONS_BASE -split ' '
-          scons platform=windows target=editor @sconsBase
-          scons platform=windows target=template_debug @sconsBase
-          scons platform=windows target=template_release @sconsBase
+          $monoArg = @()
+          $monoSuffix = ""
+          $templateDir = "standard"
+          if ("${{ matrix.mono }}" -eq "true") {
+            $monoArg = @("module_mono_enabled=yes")
+            $monoSuffix = ".mono"
+            $templateDir = "mono"
+          }
+
+          New-Item -ItemType Directory -Force "release\templates\$templateDir" | Out-Null
+
+          if ("${{ matrix.package }}" -eq "editor") {
+            scons platform=windows target=editor @monoArg @sconsBase
+            if ("${{ matrix.mono }}" -eq "true") {
+              $editorBin = "bin\godot.windows.editor.x86_64.faster_godot.mono.exe"
+              $editorConsole = "bin\godot.windows.editor.x86_64.faster_godot.mono.console.exe"
+              & $editorConsole --headless --generate-mono-glue .\modules\mono\glue
+              python .\modules\mono\build_scripts\build_assemblies.py --godot-output-dir=.\bin --godot-platform=windows --no-deprecated --werror
+              $packageDir = "release\Faster-Godot_v${env:RELEASE_VERSION}_mono_win64"
+              New-Item -ItemType Directory -Force $packageDir | Out-Null
+              Copy-Item $editorBin "$packageDir\Faster-Godot_v${env:RELEASE_VERSION}_mono_win64.exe"
+              Copy-Item $editorConsole "$packageDir\Faster-Godot_v${env:RELEASE_VERSION}_mono_win64_console.exe"
+              Copy-Item bin\GodotSharp "$packageDir\GodotSharp" -Recurse
+              Compress-Archive -Path "$packageDir\*" -DestinationPath "release\Faster-Godot_v${env:RELEASE_VERSION}_mono_win64.zip" -CompressionLevel Optimal -Force
+            } else {
+              $packageDir = "release\Faster-Godot_v${env:RELEASE_VERSION}_win64"
+              New-Item -ItemType Directory -Force $packageDir | Out-Null
+              Copy-Item bin\godot.windows.editor.x86_64.faster_godot.exe "$packageDir\Faster-Godot_v${env:RELEASE_VERSION}_win64.exe"
+              Copy-Item bin\godot.windows.editor.x86_64.faster_godot.console.exe "$packageDir\Faster-Godot_v${env:RELEASE_VERSION}_win64_console.exe"
+              Compress-Archive -Path "$packageDir\*" -DestinationPath "release\Faster-Godot_v${env:RELEASE_VERSION}_win64.exe.zip" -CompressionLevel Optimal -Force
+            }
+          } else {
+            scons platform=windows target=template_debug @monoArg @sconsBase
+            scons platform=windows target=template_release @monoArg @sconsBase
+            Copy-Item "bin\godot.windows.template_debug.x86_64.faster_godot$monoSuffix.exe" "release\templates\$templateDir\windows_debug_x86_64.exe"
+            Copy-Item "bin\godot.windows.template_debug.x86_64.faster_godot$monoSuffix.console.exe" "release\templates\$templateDir\windows_debug_x86_64.console.exe"
+            Copy-Item "bin\godot.windows.template_release.x86_64.faster_godot$monoSuffix.exe" "release\templates\$templateDir\windows_release_x86_64.exe"
+            Copy-Item "bin\godot.windows.template_release.x86_64.faster_godot$monoSuffix.console.exe" "release\templates\$templateDir\windows_release_x86_64.console.exe"
+          }
+
           Remove-Item bin\*.exp, bin\*.lib, bin\*.pdb -ErrorAction SilentlyContinue
 
-      - name: Build .NET Windows editor and templates
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $sconsBase = $env:SCONS_BASE -split ' '
-          scons platform=windows target=editor module_mono_enabled=yes @sconsBase
-          bin\godot.windows.editor.x86_64.faster_godot.mono.console.exe --headless --generate-mono-glue .\modules\mono\glue
-          python .\modules\mono\build_scripts\build_assemblies.py --godot-output-dir=.\bin --godot-platform=windows --no-deprecated --werror
-          scons platform=windows target=template_debug module_mono_enabled=yes @sconsBase
-          scons platform=windows target=template_release module_mono_enabled=yes @sconsBase
-          Remove-Item bin\*.exp, bin\*.lib, bin\*.pdb -ErrorAction SilentlyContinue
-
-      - name: Package Windows assets
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          New-Item -ItemType Directory -Force release\windows, release\templates\standard, release\templates\mono | Out-Null
-
-          New-Item -ItemType Directory -Force "release\windows\Faster-Godot_v${env:RELEASE_VERSION}_win64" | Out-Null
-          Copy-Item bin\godot.windows.editor.x86_64.faster_godot.exe "release\windows\Faster-Godot_v${env:RELEASE_VERSION}_win64\Faster-Godot_v${env:RELEASE_VERSION}_win64.exe"
-          Copy-Item bin\godot.windows.editor.x86_64.faster_godot.console.exe "release\windows\Faster-Godot_v${env:RELEASE_VERSION}_win64\Faster-Godot_v${env:RELEASE_VERSION}_win64_console.exe"
-          Compress-Archive -Path "release\windows\Faster-Godot_v${env:RELEASE_VERSION}_win64\*" -DestinationPath "release\Faster-Godot_v${env:RELEASE_VERSION}_win64.exe.zip" -CompressionLevel Optimal -Force
-
-          New-Item -ItemType Directory -Force "release\windows\Faster-Godot_v${env:RELEASE_VERSION}_mono_win64" | Out-Null
-          Copy-Item bin\godot.windows.editor.x86_64.faster_godot.mono.exe "release\windows\Faster-Godot_v${env:RELEASE_VERSION}_mono_win64\Faster-Godot_v${env:RELEASE_VERSION}_mono_win64.exe"
-          Copy-Item bin\godot.windows.editor.x86_64.faster_godot.mono.console.exe "release\windows\Faster-Godot_v${env:RELEASE_VERSION}_mono_win64\Faster-Godot_v${env:RELEASE_VERSION}_mono_win64_console.exe"
-          Copy-Item bin\GodotSharp "release\windows\Faster-Godot_v${env:RELEASE_VERSION}_mono_win64\GodotSharp" -Recurse
-          Compress-Archive -Path "release\windows\Faster-Godot_v${env:RELEASE_VERSION}_mono_win64\*" -DestinationPath "release\Faster-Godot_v${env:RELEASE_VERSION}_mono_win64.zip" -CompressionLevel Optimal -Force
-
-          Copy-Item bin\godot.windows.template_debug.x86_64.faster_godot.exe release\templates\standard\windows_debug_x86_64.exe
-          Copy-Item bin\godot.windows.template_debug.x86_64.faster_godot.console.exe release\templates\standard\windows_debug_x86_64.console.exe
-          Copy-Item bin\godot.windows.template_release.x86_64.faster_godot.exe release\templates\standard\windows_release_x86_64.exe
-          Copy-Item bin\godot.windows.template_release.x86_64.faster_godot.console.exe release\templates\standard\windows_release_x86_64.console.exe
-          Copy-Item bin\godot.windows.template_debug.x86_64.faster_godot.mono.exe release\templates\mono\windows_debug_x86_64.exe
-          Copy-Item bin\godot.windows.template_debug.x86_64.faster_godot.mono.console.exe release\templates\mono\windows_debug_x86_64.console.exe
-          Copy-Item bin\godot.windows.template_release.x86_64.faster_godot.mono.exe release\templates\mono\windows_release_x86_64.exe
-          Copy-Item bin\godot.windows.template_release.x86_64.faster_godot.mono.console.exe release\templates\mono\windows_release_x86_64.console.exe
-
-      - name: Upload Windows packages
+      - name: Upload Windows asset
         uses: actions/upload-artifact@v4
         with:
-          name: release-windows
-          path: |
-            release/*.zip
-            release/templates/**
+          name: release-${{ matrix.id }}
+          path: release/
           retention-days: 14
 
-  package-templates:
-    name: Export template packages
+  package:
+    name: Package release assets
     runs-on: ubuntu-22.04
     needs: [linux, windows]
     timeout-minutes: 30
 
     steps:
-      - name: Download platform assets
+      - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: release-*
           path: downloaded
           merge-multiple: true
 
-      - name: Build template packages
+      - name: Build final release asset set
         shell: bash
         run: |
           set -euxo pipefail
           mkdir -p release standard mono
-          cp -R downloaded/templates/standard/. standard/
-          cp -R downloaded/templates/mono/. mono/
+          find downloaded -type f -name '*.zip' -not -path '*/templates/*' -exec cp {} release/ \;
+          find downloaded -type f -path '*/templates/standard/*' -exec cp {} standard/ \;
+          find downloaded -type f -path '*/templates/mono/*' -exec cp {} mono/ \;
+          test -f standard/linux_debug.x86_64
+          test -f standard/linux_release.x86_64
+          test -f standard/windows_debug_x86_64.exe
+          test -f standard/windows_release_x86_64.exe
+          test -f mono/linux_debug.x86_64
+          test -f mono/linux_release.x86_64
+          test -f mono/windows_debug_x86_64.exe
+          test -f mono/windows_release_x86_64.exe
           echo "4.6.2.stable" > standard/version.txt
           echo "4.6.2.stable.mono" > mono/version.txt
           chmod +x standard/linux_debug.x86_64 standard/linux_release.x86_64
           chmod +x mono/linux_debug.x86_64 mono/linux_release.x86_64
           (cd standard && zip -9 -r "../release/Faster-Godot_v${RELEASE_VERSION}_export_templates.tpz" .)
           (cd mono && zip -9 -r "../release/Faster-Godot_v${RELEASE_VERSION}_mono_export_templates.tpz" .)
-          cp downloaded/*.zip release/
           sha256sum release/* > release/SHA256SUMS.txt
 
       - name: Upload release assets
