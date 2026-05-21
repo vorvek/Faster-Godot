@@ -1,4 +1,5 @@
 name: 🔗 GHA
+# Faster-Godot release and validation pipeline.
 on:
   push:
   pull_request:
