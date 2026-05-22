@@ -69,6 +69,16 @@ static void _rt_free_acceleration_structure_if_alive(RID &r_rid) {
 	r_rid = RID();
 }
 
+static void _rt_free_uniform_set_if_alive(RID &r_rid) {
+	if (!r_rid.is_valid()) {
+		return;
+	}
+	if (RD::get_singleton()->uniform_set_is_valid(r_rid)) {
+		RD::get_singleton()->free_rid(r_rid);
+	}
+	r_rid = RID();
+}
+
 static uint64_t _rt_history_mix(uint64_t p_hash, uint64_t p_value) {
 	return p_hash ^ (p_value + 0x9e3779b97f4a7c15ULL + (p_hash << 6) + (p_hash >> 2));
 }
@@ -267,9 +277,7 @@ void RenderRaytracing::_free_viewport_state_internal(RTViewportState *p_state) {
 	if (!p_state) {
 		return;
 	}
-	if (p_state->uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(p_state->uniform_set)) {
-		RD::get_singleton()->free_rid(p_state->uniform_set);
-	}
+	_rt_free_uniform_set_if_alive(p_state->uniform_set);
 	if (p_state->tlas.is_valid()) {
 		_rt_free_acceleration_structure_if_alive(p_state->tlas);
 	}
@@ -414,10 +422,7 @@ void RenderRaytracing::cleanup_caches() {
 		// Uniform set must be freed before its bound buffers.
 		// RD auto-frees a uniform set when any of its bound resources is freed,
 		// so freeing the buffer first would leave a stale RID here.
-		if (e.merge_uniform_set.is_valid()) {
-			rd->free_rid(e.merge_uniform_set);
-			e.merge_uniform_set = RID();
-		}
+		_rt_free_uniform_set_if_alive(e.merge_uniform_set);
 		_rt_free_acceleration_structure_if_alive(e.blas);
 		if (e.merged_vtx_buffer.is_valid()) {
 			rd->free_rid(e.merged_vtx_buffer);
@@ -588,10 +593,7 @@ void RenderRaytracing::prepare_frame() {
 		for (KeyValue<uint64_t, RTMergedMMEntry> &kv : merged_mm_cache) {
 			RTMergedMMEntry &e = kv.value;
 			if (e.last_used_frame != 0 && current_frame - e.last_used_frame > MM_BLAS_CACHE_TTL) {
-				if (e.merge_uniform_set.is_valid()) {
-					rd->free_rid(e.merge_uniform_set);
-					e.merge_uniform_set = RID();
-				}
+				_rt_free_uniform_set_if_alive(e.merge_uniform_set);
 				_rt_free_acceleration_structure_if_alive(e.blas);
 				if (e.merged_vtx_buffer.is_valid()) {
 					rd->free_rid(e.merged_vtx_buffer);
@@ -2328,8 +2330,7 @@ bool RenderRaytracing::_build_merged_mm_blas(
 	// descriptor set since the shader layout differs (binding 4 only exists
 	// for MODE_INDEXED).
 	if (entry.merge_uniform_set.is_valid() && entry.indexed != indexed) {
-		RD::get_singleton()->free_rid(entry.merge_uniform_set);
-		entry.merge_uniform_set = RID();
+		_rt_free_uniform_set_if_alive(entry.merge_uniform_set);
 	}
 	entry.indexed = indexed;
 
@@ -2338,10 +2339,7 @@ bool RenderRaytracing::_build_merged_mm_blas(
 		if (entry.blas.is_valid()) {
 			_rt_free_acceleration_structure_if_alive(entry.blas);
 		}
-		if (entry.merge_uniform_set.is_valid()) {
-			rd->free_rid(entry.merge_uniform_set);
-			entry.merge_uniform_set = RID();
-		}
+		_rt_free_uniform_set_if_alive(entry.merge_uniform_set);
 		entry.blas_built_once = false;
 		entry.last_mm_count = p_mm_count;
 		entry.last_surface_counter = p_surface_counter;
@@ -2390,13 +2388,10 @@ bool RenderRaytracing::_build_merged_mm_blas(
 
 	// --- Grow / allocate merged vertex buffer ---
 	if (!entry.merged_vtx_buffer.is_valid() || entry.vtx_capacity_bytes < merged_vtx_bytes) {
+		_rt_free_uniform_set_if_alive(entry.merge_uniform_set);
 		if (entry.merged_vtx_buffer.is_valid()) {
 			rd->free_rid(entry.merged_vtx_buffer);
 			entry.merged_vtx_buffer = RID();
-		}
-		if (entry.merge_uniform_set.is_valid()) {
-			rd->free_rid(entry.merge_uniform_set);
-			entry.merge_uniform_set = RID();
 		}
 		entry.vtx_capacity_bytes = merged_vtx_bytes;
 		entry.merged_vtx_buffer = rd->vertex_buffer_create(merged_vtx_bytes, {}, gpu_buf_flags);
@@ -2407,13 +2402,10 @@ bool RenderRaytracing::_build_merged_mm_blas(
 
 	// --- Grow / allocate merged attribute buffer ---
 	if (!entry.merged_attr_buffer.is_valid() || entry.attr_capacity_bytes < merged_attr_bytes) {
+		_rt_free_uniform_set_if_alive(entry.merge_uniform_set);
 		if (entry.merged_attr_buffer.is_valid()) {
 			rd->free_rid(entry.merged_attr_buffer);
 			entry.merged_attr_buffer = RID();
-		}
-		if (entry.merge_uniform_set.is_valid()) {
-			rd->free_rid(entry.merge_uniform_set);
-			entry.merge_uniform_set = RID();
 		}
 		entry.attr_capacity_bytes = merged_attr_bytes;
 		entry.merged_attr_buffer = rd->storage_buffer_create(merged_attr_bytes, {}, 0, gpu_buf_flags);
@@ -2425,13 +2417,10 @@ bool RenderRaytracing::_build_merged_mm_blas(
 	if (indexed) {
 		uint32_t needed_idx = total_indices;
 		if (!entry.replicated_idx_buffer.is_valid() || entry.idx_capacity < needed_idx) {
+			_rt_free_uniform_set_if_alive(entry.merge_uniform_set);
 			if (entry.replicated_idx_buffer.is_valid()) {
 				rd->free_rid(entry.replicated_idx_buffer);
 				entry.replicated_idx_buffer = RID();
-			}
-			if (entry.merge_uniform_set.is_valid()) {
-				rd->free_rid(entry.merge_uniform_set);
-				entry.merge_uniform_set = RID();
 			}
 			entry.idx_capacity = needed_idx;
 			entry.replicated_idx_buffer = rd->index_buffer_create(
@@ -2455,8 +2444,7 @@ bool RenderRaytracing::_build_merged_mm_blas(
 					entry.last_src_attr_buffer != src_attr_buf ||
 					entry.last_src_vtx_buffer != mesh_storage->mesh_surface_get_vertex_buffer(p_mesh_surface) ||
 					entry.last_src_index_buffer != index_buffer)) {
-		rd->free_rid(entry.merge_uniform_set);
-		entry.merge_uniform_set = RID();
+		_rt_free_uniform_set_if_alive(entry.merge_uniform_set);
 	}
 
 	RID vtx_buf = mesh_storage->mesh_surface_get_vertex_buffer(p_mesh_surface);
@@ -4118,9 +4106,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		return p_state->uniform_set;
 	}
 
-	if (p_state->uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(p_state->uniform_set)) {
-		RD::get_singleton()->free_rid(p_state->uniform_set);
-	}
+	_rt_free_uniform_set_if_alive(p_state->uniform_set);
 	p_state->uniform_set = RID();
 	p_state->uniform_set_signature_valid = false;
 

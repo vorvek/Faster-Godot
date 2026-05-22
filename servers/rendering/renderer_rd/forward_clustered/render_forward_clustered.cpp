@@ -2339,7 +2339,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// Resolve depth prepass feature now that depth_framebuffer is known.
 	{
 		bool force_depth_pre_pass = scene_state.used_opaque_stencil;
-		if ((force_depth_pre_pass || bool(GLOBAL_GET_CACHED(bool, "rendering/driver/depth_prepass/enable"))) && depth_framebuffer.is_valid()) {
+		if (!rt_replaces_opaque &&
+				(force_depth_pre_pass || bool(GLOBAL_GET_CACHED(bool, "rendering/driver/depth_prepass/enable"))) &&
+				depth_framebuffer.is_valid()) {
 			scene_features.set(SCENE_FEATURE_DEPTH_PREPASS);
 		}
 	}
