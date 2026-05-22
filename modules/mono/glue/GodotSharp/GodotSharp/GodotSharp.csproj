@@ -144,6 +144,7 @@
     <Compile Include="Core\Vector4I.cs" />
     <Compile Include="GlobalUsings.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Condition=" '$(GodotNoDeprecated)' != '' " Include="Compat.NoDeprecated.cs" />
   </ItemGroup>
 
   <!-- Compat Sources -->
