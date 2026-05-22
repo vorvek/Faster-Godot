@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FluidEffect2DViscosityDFSPH" inherits="Resource" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<members>
+		<member name="fluid_viscosity_coefficient" type="float" setter="set_fluid_viscosity_coefficient" getter="get_fluid_viscosity_coefficient" default="1.0">
+		</member>
+	</members>
+</class>

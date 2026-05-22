@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FluidEffect2DElasticity" inherits="Resource" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<members>
+		<member name="nonlinear_strain" type="bool" setter="set_nonlinear_strain" getter="get_nonlinear_strain" default="true">
+		</member>
+		<member name="poisson_ratio" type="float" setter="set_poisson_ratio" getter="get_poisson_ratio" default="0.3">
+		</member>
+		<member name="young_modulus" type="float" setter="set_young_modulus" getter="get_young_modulus" default="100.0">
+		</member>
+	</members>
+</class>

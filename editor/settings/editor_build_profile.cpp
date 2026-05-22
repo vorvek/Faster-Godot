@@ -61,9 +61,8 @@ const char *EditorBuildProfile::build_option_identifiers[BUILD_OPTION_MAX] = {
 	"metal",
 	"opengl3",
 	"disable_physics_2d",
-	"module_godot_physics_2d_enabled",
+	"module_rapier_2d_enabled",
 	"disable_physics_3d",
-	"module_godot_physics_3d_enabled",
 	"module_jolt_physics_enabled",
 	"module_text_server_fb_enabled",
 	"module_text_server_adv_enabled",
@@ -89,9 +88,8 @@ const bool EditorBuildProfile::build_option_disabled_by_default[BUILD_OPTION_MAX
 	false, // METAL
 	false, // OPENGL
 	false, // PHYSICS_2D
-	false, // PHYSICS_GODOT_2D
+	false, // PHYSICS_RAPIER_2D
 	false, // PHYSICS_3D
-	false, // PHYSICS_GODOT_3D
 	false, // PHYSICS_JOLT
 	true, // TEXT_SERVER_FALLBACK
 	false, // TEXT_SERVER_ADVANCED
@@ -117,9 +115,8 @@ const bool EditorBuildProfile::build_option_disable_values[BUILD_OPTION_MAX] = {
 	false, // METAL
 	false, // OPENGL
 	true, // PHYSICS_2D
-	false, // PHYSICS_GODOT_2D
+	false, // PHYSICS_RAPIER_2D
 	true, // PHYSICS_3D
-	false, // PHYSICS_GODOT_3D
 	false, // PHYSICS_JOLT
 	false, // TEXT_SERVER_FALLBACK
 	false, // TEXT_SERVER_ADVANCED
@@ -145,9 +142,8 @@ const bool EditorBuildProfile::build_option_explicit_use[BUILD_OPTION_MAX] = {
 	false, // METAL
 	false, // OPENGL
 	false, // PHYSICS_2D
-	false, // PHYSICS_GODOT_2D
+	false, // PHYSICS_RAPIER_2D
 	false, // PHYSICS_3D
-	false, // PHYSICS_GODOT_3D
 	false, // PHYSICS_JOLT
 	false, // TEXT_SERVER_FALLBACK
 	false, // TEXT_SERVER_ADVANCED
@@ -172,9 +168,8 @@ const EditorBuildProfile::BuildOptionCategory EditorBuildProfile::build_option_c
 	BUILD_OPTION_CATEGORY_GRAPHICS, // METAL
 	BUILD_OPTION_CATEGORY_GRAPHICS, // OPENGL
 	BUILD_OPTION_CATEGORY_PHYSICS, // PHYSICS_2D
-	BUILD_OPTION_CATEGORY_PHYSICS, // PHYSICS_GODOT_2D
+	BUILD_OPTION_CATEGORY_PHYSICS, // PHYSICS_RAPIER_2D
 	BUILD_OPTION_CATEGORY_PHYSICS, // PHYSICS_3D
-	BUILD_OPTION_CATEGORY_PHYSICS, // PHYSICS_GODOT_3D
 	BUILD_OPTION_CATEGORY_PHYSICS, // PHYSICS_JOLT
 	BUILD_OPTION_CATEGORY_TEXT_SERVER, // TEXT_SERVER_FALLBACK
 	BUILD_OPTION_CATEGORY_TEXT_SERVER, // TEXT_SERVER_ADVANCED
@@ -207,11 +202,8 @@ const HashMap<EditorBuildProfile::BuildOption, LocalVector<EditorBuildProfile::B
 			BUILD_OPTION_FORWARD_RENDERER,
 			BUILD_OPTION_MOBILE_RENDERER,
 	} },
-	{ BUILD_OPTION_PHYSICS_GODOT_2D, {
+	{ BUILD_OPTION_PHYSICS_RAPIER_2D, {
 			BUILD_OPTION_PHYSICS_2D,
-	} },
-	{ BUILD_OPTION_PHYSICS_GODOT_3D, {
-			BUILD_OPTION_PHYSICS_3D,
 	} },
 	{ BUILD_OPTION_PHYSICS_JOLT, {
 			BUILD_OPTION_PHYSICS_3D,
@@ -388,9 +380,8 @@ String EditorBuildProfile::get_build_option_name(BuildOption p_build_option) {
 		TTRC("Metal"),
 		TTRC("OpenGL"),
 		TTRC("Physics Server (2D)"),
-		TTRC("Godot Physics (2D)"),
+		TTRC("Rapier Physics (2D)"),
 		TTRC("Physics Server (3D)"),
-		TTRC("Godot Physics (3D)"),
 		TTRC("Jolt Physics"),
 		TTRC("Text Server: Fallback"),
 		TTRC("Text Server: Advanced"),
@@ -420,10 +411,9 @@ String EditorBuildProfile::get_build_option_description(BuildOption p_build_opti
 		TTRC("Metal backend of RenderingDevice (Apple arm64 only)."),
 		TTRC("OpenGL backend (if disabled, the RenderingDevice backend is required)."),
 		TTRC("Physics Server and capabilities for 2D."),
-		TTRC("Godot Physics backend (2D)."),
+		TTRC("Rapier Physics backend (2D)."),
 		TTRC("Physics Server and capabilities for 3D."),
-		TTRC("Godot Physics backend (3D)."),
-		TTRC("Jolt Physics backend (3D only)."),
+		TTRC("Jolt Physics backend (3D)."),
 		TTRC("Fallback implementation of Text Server\nSupports basic text layouts."),
 		TTRC("Text Server implementation powered by ICU and HarfBuzz libraries.\nSupports complex text layouts, BiDi, and contextual OpenType font features."),
 		TTRC("TrueType, OpenType, Type 1, and WOFF1 font format support using FreeType library (if disabled, WOFF2 support is also disabled)."),
@@ -591,9 +581,8 @@ void EditorBuildProfile::_bind_methods() {
 	BIND_ENUM_CONSTANT(BUILD_OPTION_METAL);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_OPENGL);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_PHYSICS_2D);
-	BIND_ENUM_CONSTANT(BUILD_OPTION_PHYSICS_GODOT_2D);
+	BIND_ENUM_CONSTANT(BUILD_OPTION_PHYSICS_RAPIER_2D);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_PHYSICS_3D);
-	BIND_ENUM_CONSTANT(BUILD_OPTION_PHYSICS_GODOT_3D);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_PHYSICS_JOLT);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_TEXT_SERVER_FALLBACK);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_TEXT_SERVER_ADVANCED);
@@ -661,10 +650,10 @@ EditorBuildProfile::EditorBuildProfile() {
 	};
 	build_option_settings.insert(BUILD_OPTION_OPENGL, settings_opengl);
 
-	HashMap<String, LocalVector<Variant>> settings_phy_godot_3d = {
-		{ "physics/3d/physics_engine", { "DEFAULT", "GodotPhysics3D" } },
+	HashMap<String, LocalVector<Variant>> settings_rapier_2d = {
+		{ "physics/2d/physics_engine", { "DEFAULT", "Rapier2D" } },
 	};
-	build_option_settings.insert(BUILD_OPTION_PHYSICS_GODOT_3D, settings_phy_godot_3d);
+	build_option_settings.insert(BUILD_OPTION_PHYSICS_RAPIER_2D, settings_rapier_2d);
 
 	HashMap<String, LocalVector<Variant>> settings_jolt = {
 		{ "physics/3d/physics_engine", { "Jolt Physics" } },

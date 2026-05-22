@@ -136,9 +136,8 @@
 /modules/websocket/editor/                    @godotengine/network @godotengine/editor
 
 ## Physics
-/modules/godot_physics_2d/                    @godotengine/physics
-/modules/godot_physics_3d/                    @godotengine/physics
 /modules/jolt_physics/                        @godotengine/physics @godotengine/jolt-physics
+/modules/rapier_2d/                           @godotengine/physics
 
 ## Rendering
 /modules/glslang/                             @godotengine/rendering
@@ -280,6 +279,7 @@
 
 /thirdparty/                                  @godotengine/buildsystem
 /thirdparty/jolt_physics/                     @godotengine/buildsystem @godotengine/jolt-physics
+/thirdparty/rapier_2d/                        @godotengine/buildsystem @godotengine/physics
 
 # Buildsystem (After everything to catch all)
 

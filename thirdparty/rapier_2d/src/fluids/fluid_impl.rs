@@ -1,0 +1,262 @@
+use godot::classes::Engine;
+use godot::classes::Time;
+use godot::prelude::*;
+
+use super::types::Fluid;
+use crate::servers::RapierPhysicsServer;
+use crate::types::PackedVectorArray;
+pub struct FluidImpl {}
+impl FluidImpl {
+    pub fn set_points(fluid: &mut Fluid, points: PackedVectorArray) {
+        fluid.points = points;
+        let old_times = fluid.create_times.len();
+        fluid.create_times.resize(fluid.points.len());
+        let ticks = Time::singleton().get_ticks_msec();
+        for i in old_times..fluid.points.len() {
+            fluid.create_times[i] = ticks as f32;
+        }
+        // Only apply world transform and update the physics server when the node
+        // is inside the scene tree and we're not in the editor preview. This
+        // prevents calls to `get_global_transform()` (which asserts) during
+        // scene instantiation or editor previews.
+        if Engine::singleton().is_editor_hint() || !fluid.to_gd().is_inside_tree() {
+            return;
+        }
+        let gl_transform = fluid.to_gd().get_global_transform();
+        let mut rapier_points = fluid.points.clone();
+        for i in 0..rapier_points.len() {
+            rapier_points[i] = gl_transform * (rapier_points[i]);
+        }
+        let rid = fluid.rid;
+        let guard = fluid.base_mut();
+        RapierPhysicsServer::fluid_set_points(rid, rapier_points);
+        drop(guard);
+    }
+
+    pub fn set_density(fluid: &mut Fluid, density: real) {
+        if fluid.density != density {
+            fluid.density = density;
+            let rid = fluid.rid;
+            let density = fluid.density;
+            let guard = fluid.base_mut();
+            RapierPhysicsServer::fluid_set_density(rid, density);
+            drop(guard);
+        }
+    }
+
+    pub fn set_lifetime(fluid: &mut Fluid, lifetime: real) {
+        if fluid.lifetime != lifetime {
+            fluid.lifetime = lifetime;
+            fluid
+                .to_gd()
+                .set_process(fluid.debug_draw || fluid.lifetime > 0.0);
+        }
+    }
+
+    pub fn set_debug_draw(fluid: &mut Fluid, debug_draw: bool) {
+        if fluid.debug_draw != debug_draw {
+            fluid.debug_draw = debug_draw;
+        }
+        let mut fluid_gd = fluid.to_gd();
+        fluid_gd.set_notify_transform(fluid.debug_draw);
+        fluid_gd.set_process(fluid.debug_draw || fluid.lifetime > 0.0);
+    }
+
+    pub fn get_accelerations(fluid: &Fluid) -> PackedVectorArray {
+        let rid = fluid.rid;
+        let guard = fluid.base();
+        let accelerations = RapierPhysicsServer::fluid_get_accelerations(rid);
+        drop(guard);
+        accelerations
+    }
+
+    pub fn get_remaining_times(fluid: &Fluid) -> PackedFloat32Array {
+        let ticks = Time::singleton().get_ticks_msec() as f32;
+        let mut remaining_times = PackedFloat32Array::default();
+        remaining_times.resize(fluid.create_times.len());
+        let div_1000 = 1.0 / 1000.0;
+        for i in 0..fluid.create_times.len() {
+            remaining_times[i] = (ticks - fluid.create_times[i]) * div_1000;
+        }
+        remaining_times
+    }
+
+    pub fn get_velocities(fluid: &Fluid) -> PackedVectorArray {
+        let rid = fluid.rid;
+        let guard = fluid.base();
+        let velocities = RapierPhysicsServer::fluid_get_velocities(rid);
+        drop(guard);
+        velocities
+    }
+
+    pub fn get_points(fluid: &Fluid) -> PackedVectorArray {
+        // If we're in the editor or not inside the tree yet, return the local-space cached points
+        if Engine::singleton().is_editor_hint() || !fluid.to_gd().is_inside_tree() {
+            return fluid.points.clone();
+        }
+        // Runtime: query the backend for current simulated positions (world-space), then transform
+        // them into local space for drawing/debugging/inspector.
+        let rid = fluid.rid;
+        let guard = fluid.base();
+        let mut new_points = RapierPhysicsServer::fluid_get_points(rid);
+        drop(guard);
+        let gl_transform = fluid.to_gd().get_global_transform().affine_inverse();
+        for i in 0..new_points.len() {
+            new_points[i] = gl_transform * new_points[i];
+        }
+        new_points
+    }
+
+    pub fn add_points_and_velocities(
+        fluid: &mut Fluid,
+        points: PackedVectorArray,
+        velocities: PackedVectorArray,
+    ) {
+        if points.len() != velocities.len() {
+            godot_error!("points and velocities must be the same length");
+            return;
+        }
+        fluid.points.extend_array(&points);
+        let old_times = fluid.create_times.len();
+        let ticks = Time::singleton().get_ticks_msec();
+        for _i in old_times..fluid.points.len() {
+            fluid.create_times.push(ticks as f32);
+        }
+        if Engine::singleton().is_editor_hint() || !fluid.to_gd().is_inside_tree() {
+            return;
+        }
+        let gl_transform = fluid.to_gd().get_global_transform();
+        let mut rapier_points = points.clone();
+        for i in 0..points.len() {
+            rapier_points[i] = gl_transform * (points[i]);
+        }
+        let rid = fluid.rid;
+        let guard = fluid.base_mut();
+        RapierPhysicsServer::fluid_add_points_and_velocities(rid, rapier_points, velocities);
+        drop(guard);
+    }
+
+    pub fn set_points_and_velocities(
+        fluid: &mut Fluid,
+        points: PackedVectorArray,
+        velocities: PackedVectorArray,
+    ) {
+        if points.len() != velocities.len() {
+            godot_error!("points and velocities must be the same length");
+            return;
+        }
+        fluid.points = points;
+        let old_times = fluid.create_times.len();
+        fluid.create_times.resize(fluid.points.len());
+        let ticks = Time::singleton().get_ticks_msec();
+        for i in old_times..fluid.points.len() {
+            fluid.create_times[i] = ticks as f32;
+        }
+        if Engine::singleton().is_editor_hint() || !fluid.to_gd().is_inside_tree() {
+            return;
+        }
+        let gl_transform = fluid.to_gd().get_global_transform();
+        let mut rapier_points = fluid.points.clone();
+        for i in 0..rapier_points.len() {
+            rapier_points[i] = gl_transform * (rapier_points[i]);
+        }
+        let rid = fluid.rid;
+        let guard = fluid.base_mut();
+        RapierPhysicsServer::fluid_set_points_and_velocities(rid, rapier_points, velocities);
+        drop(guard);
+    }
+
+    pub fn delete_points(fluid: &mut Fluid, indices: PackedInt32Array) {
+        let rid = fluid.rid;
+        let guard = fluid.base_mut();
+        RapierPhysicsServer::fluid_delete_points(rid, indices.clone());
+        drop(guard);
+        let mut indices = indices.to_vec();
+        indices.sort_unstable();
+        indices.dedup();
+        indices.reverse();
+        for index in indices {
+            let idx = index as usize;
+            // Check against both arrays to prevent panic from desynchronization
+            if index >= 0 && idx < fluid.points.len() && idx < fluid.create_times.len() {
+                fluid.points.remove(idx);
+                fluid.create_times.remove(idx);
+            }
+        }
+    }
+
+    pub fn set_effects(fluid: &mut Fluid, effects: Array<Option<Gd<Resource>>>) {
+        fluid.effects = effects;
+        let rid = fluid.rid;
+        let effects = fluid.effects.clone();
+        let guard = fluid.base_mut();
+        RapierPhysicsServer::fluid_set_effects(rid, effects);
+        drop(guard);
+    }
+
+    pub fn delete_old_particles(fluid: &mut Fluid) {
+        if fluid.lifetime <= 0.0 {
+            return;
+        }
+        let ticks = Time::singleton().get_ticks_msec() as f32;
+        let mut to_remove = PackedInt32Array::default();
+        for i in 0..fluid.create_times.len() {
+            if ticks - fluid.create_times[i] > fluid.lifetime * 1000.0 {
+                to_remove.push(i as i32);
+            }
+        }
+        if !to_remove.is_empty() {
+            FluidImpl::delete_points(fluid, to_remove);
+        }
+    }
+
+    pub fn set_collision_mask(fluid: &mut Fluid, mask: u32) {
+        if fluid.collision_mask != mask {
+            fluid.collision_mask = mask;
+            let rid = fluid.rid;
+            let layer = fluid.collision_layer;
+            let guard = fluid.base_mut();
+            RapierPhysicsServer::fluid_set_collision_masks(rid, mask, layer);
+            drop(guard);
+        }
+    }
+
+    pub fn get_collision_mask(fluid: &Fluid) -> u32 {
+        fluid.collision_mask
+    }
+
+    pub fn set_collision_layer(fluid: &mut Fluid, layer: u32) {
+        if fluid.collision_layer != layer {
+            fluid.collision_layer = layer;
+            let rid = fluid.rid;
+            let mask = fluid.collision_mask;
+            let guard = fluid.base_mut();
+            RapierPhysicsServer::fluid_set_collision_masks(rid, mask, layer);
+            drop(guard);
+        }
+    }
+
+    pub fn get_collision_layer(fluid: &Fluid) -> u32 {
+        fluid.collision_layer
+    }
+
+    pub fn get_particles_in_aabb(fluid: &Fluid, aabb: crate::types::Rect) -> PackedInt32Array {
+        let rid = fluid.rid;
+        let guard = fluid.base();
+        let indices = RapierPhysicsServer::fluid_get_particles_in_aabb(rid, aabb);
+        drop(guard);
+        indices
+    }
+
+    pub fn get_particles_in_ball(
+        fluid: &Fluid,
+        center: crate::types::Vector,
+        radius: real,
+    ) -> PackedInt32Array {
+        let rid = fluid.rid;
+        let guard = fluid.base();
+        let indices = RapierPhysicsServer::fluid_get_particles_in_ball(rid, center, radius);
+        drop(guard);
+        indices
+    }
+}

@@ -873,6 +873,43 @@ Files extracted from upstream source:
 - `AUTHORS.md` and `LICENCE.md`
 
 
+## rapier_2d
+
+- Upstream: https://github.com/appsinacup/godot-rapier-physics
+- Version: v0.8.32 (3f3d8e4f39495182c0bf1650538dfdee7f9e5b6c, 2026)
+- License: MIT, Apache 2.0, MPL 2.0, and other Rust crate licenses listed in `rapier_2d/RUST_CRATE_LICENSES.md`
+
+Files extracted from upstream source:
+
+- `.cargo/`
+- `src/`
+- `vendor/`
+- `vendor_git/rapier`
+- `vendor_git/salva`
+- `ARCHITECTURE.md`
+- `CHANGELOG.md`
+- `CONTRIBUTING.md`
+- `Cargo.lock`
+- `Cargo.toml`
+- `LICENSE`
+- `extension_api.faster_godot_4_6_3.json`
+- `RELEASE_NOTICES.md`
+- `RUST_CRATE_LICENSES.md`
+- `rust-toolchain.toml`
+- `rustfmt.toml`
+- `THIRDPARTY.txt`
+
+Build notes:
+
+- SCons builds a static library from the vendored Rust source using Rust `nightly-2025-12-12` and features `simd-nightly,serde-serialize,parallel,experimental-threads,register-docs,single-dim2,api-custom-json`.
+- `extension_api.faster_godot_4_6_3.json` is generated from the reduced Faster-Godot API and is used by godot-rust's `api-custom-json` mode.
+- Cargo runs with `--locked --offline`; crates.io packages are in `vendor/`, and git dependencies are pinned in `vendor_git/`.
+- `vendor_git/rapier` is `dimforge/rapier` commit `a14c947143e5f597ac4c040e26015766bd9befb9`.
+- `vendor_git/salva` is `ughuuu/salva` commit `b30c622534ac6c0c1010f88192b8834e95262e69`.
+- Vendored godot-rust is patched to build against this fork's reduced Godot 4.6 extension API without build-time libclang.
+- `RUST_CRATE_LICENSES.md` is generated from the full `Cargo.lock`; `RELEASE_NOTICES.md` lists the notice and source materials that must accompany binary releases using this module.
+
+
 ## recastnavigation
 
 - Upstream: https://github.com/recastnavigation/recastnavigation

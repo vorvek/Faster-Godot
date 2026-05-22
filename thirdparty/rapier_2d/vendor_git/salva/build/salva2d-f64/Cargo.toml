@@ -1,0 +1,63 @@
+[package]
+name = "salva2d-f64"
+version = "0.9.0"
+authors = [ "Sébastien Crozet <developer@crozet.re>" ]
+description = "2-dimensional particle-based fluid dynamics in Rust."
+documentation = "https://salva.rs/docs"
+homepage = "https://salva.rs"
+repository = "https://github.com/dimforge/salva"
+readme = "README.md"
+categories = [ "science", "game-development", "mathematics", "simulation", "wasm"]
+keywords = [ "physics", "dynamics", "particles", "fluids", "SPH" ]
+license = "Apache-2.0"
+edition = "2021"
+
+[badges]
+maintenance = { status = "actively-developed" }
+
+[features]
+default = [ "dim2", "f64" ]
+dim2 = [ ]
+f64 = [ ]
+parallel = [ "rayon" ]
+sampling = [ "rapier" ]
+rapier = [ "parry", "rapier2d-f64" ]
+rapier-testbed = [ "rapier", "rapier_testbed2d", "graphics" ]
+rapier-harness = [ "rapier-testbed" ]
+parry = [ "parry2d-f64" ]
+wasm-bindgen = [ "rapier2d-f64/wasm-bindgen" ]
+graphics = [ "bevy", "bevy_egui" ]
+
+[lints]
+rust.unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(feature, values("dim3", "f32"))',
+] }
+
+[lib]
+name = "salva2d_f64"
+path = "../../src/lib.rs"
+required-features = [ "dim2", "f64" ]
+
+[dependencies]
+approx = "0.5"
+num-traits = "0.2"
+fnv = "1.0"
+itertools = "0.13"
+generational-arena = "0.2"
+rayon = { version = "1.8", optional = true }
+
+nalgebra = { version = "0.34", features = ["convert-glam030"] }
+parry2d-f64 = { version = "0", optional = true }
+rapier2d-f64 = { version = "0", optional = true }
+# TODO update it to f64
+rapier_testbed2d = { version = "0", optional = true }
+
+bevy_egui = { version = "0.26", features = ["immutable_ctx"], optional = true }
+bitflags = "2"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+bevy = { version = "0.13.2", default-features = false, features = ["bevy_winit", "bevy_render", "x11"], optional = true }
+
+# Dependencies for WASM only.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+bevy = { version = "0.13", default-features = false, features = ["bevy_winit", "bevy_render"], optional = true }

@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="RapierMath2D" inherits="Object" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="acos" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="acosh" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="asin" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="asinh" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="atan" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="atanh" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="cos" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="cosh" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="log" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="sin" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="sinh" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="sqrt" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="tan" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="tanh" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="x" type="float" />
+			<description>
+			</description>
+		</method>
+	</methods>
+</class>

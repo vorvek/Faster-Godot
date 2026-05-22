@@ -1216,6 +1216,10 @@
 		<member name="filesystem/import/fbx2gltf/enabled.web" type="bool" setter="" getter="" default="false">
 			Override for [member filesystem/import/fbx2gltf/enabled] on the Web where FBX2glTF can't easily be accessed from Godot.
 		</member>
+		<member name="faster_godot/physics_2d/load_builtin_rapier" type="bool" setter="" getter="" default="true">
+			If [code]true[/code], Faster-Godot loads its built-in Rapier 2D physics backend during startup. Set to [code]false[/code] before startup when a project intentionally supplies its own Rapier 2D GDExtension.
+			[b]Note:[/b] Changing this setting requires restarting the application.
+		</member>
 		<member name="gui/common/default_scroll_deadzone" type="int" setter="" getter="" default="0">
 			Default value for [member ScrollContainer.scroll_deadzone], which will be used for all [ScrollContainer]s unless overridden.
 		</member>
@@ -2527,10 +2531,10 @@
 			During each physics tick, Godot will multiply the linear velocity of RigidBodies by [code]1.0 - combined_damp / physics_ticks_per_second[/code], where [code]combined_damp[/code] is the sum of the linear damp of the body and this value, or the area's value the body is in, assuming the body defaults to combine damp values. See [enum RigidBody2D.DampMode].
 			[b]Warning:[/b] Godot's damping calculations are simulation tick rate dependent. Changing [member physics/common/physics_ticks_per_second] may significantly change the outcomes and feel of your simulation. This is true for the entire range of damping values greater than 0. To get back to a similar feel, you also need to change your damp values. This needed change is not proportional and differs from case to case.
 		</member>
-		<member name="physics/2d/physics_engine" type="String" setter="" getter="" default="&quot;DEFAULT&quot;" keywords="godotphysics">
+		<member name="physics/2d/physics_engine" type="String" setter="" getter="" default="&quot;DEFAULT&quot;" keywords="rapier">
 			Sets which physics engine to use for 2D physics.
-			[b]DEFAULT[/b] is currently equivalent to [b]GodotPhysics2D[/b], but may change in future releases. Select an explicit implementation if you want to ensure that your project stays on the same engine.
-			[b]GodotPhysics2D[/b] is Godot's internal 2D physics engine.
+			[b]DEFAULT[/b] is currently equivalent to [b]Rapier2D[/b] in Faster-Godot. Select an explicit implementation if you want to ensure that your project stays on the same engine.
+			[b]Rapier2D[/b] is the built-in Rapier-backed 2D physics engine.
 			[b]Dummy[/b] is a 2D physics server that does nothing and returns only dummy values, effectively disabling all 2D physics functionality.
 			Third-party extensions and modules can add other physics engines to select with this setting.
 		</member>
@@ -2608,11 +2612,10 @@
 			During each physics tick, Godot will multiply the linear velocity of RigidBodies by [code]1.0 - combined_damp / physics_ticks_per_second[/code]. By default, bodies combine damp factors: [code]combined_damp[/code] is the sum of the damp value of the body and this value or the area's value the body is in. See [enum RigidBody3D.DampMode].
 			[b]Warning:[/b] Godot's damping calculations are simulation tick rate dependent. Changing [member physics/common/physics_ticks_per_second] may significantly change the outcomes and feel of your simulation. This is true for the entire range of damping values greater than 0. To get back to a similar feel, you also need to change your damp values. This needed change is not proportional and differs from case to case.
 		</member>
-		<member name="physics/3d/physics_engine" type="String" setter="" getter="" default="&quot;DEFAULT&quot;" keywords="godotphysics, jolt">
+		<member name="physics/3d/physics_engine" type="String" setter="" getter="" default="&quot;DEFAULT&quot;" keywords="jolt">
 			Sets which physics engine to use for 3D physics.
-			[b]DEFAULT[/b] is currently equivalent to [b]GodotPhysics3D[/b], but may change in future releases. Select an explicit implementation if you want to ensure that your project stays on the same engine.
-			[b]GodotPhysics3D[/b] is Godot's internal 3D physics engine.
-			[b]Jolt Physics[/b] is an alternative physics engine that is generally faster and more reliable than [b]GodotPhysics3D[/b]. Jolt Physics is the default for projects created starting in Godot 4.6.
+			[b]DEFAULT[/b] is currently equivalent to [b]Jolt Physics[/b] in Faster-Godot. Select an explicit implementation if you want to ensure that your project stays on the same engine.
+			[b]Jolt Physics[/b] is the built-in 3D physics engine.
 			[b]Dummy[/b] is a 3D physics server that does nothing and returns only dummy values, effectively disabling all 3D physics functionality.
 			Third-party extensions and modules can add other physics engines to select with this setting.
 		</member>

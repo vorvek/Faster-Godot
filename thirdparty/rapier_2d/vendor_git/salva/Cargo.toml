@@ -1,0 +1,46 @@
+[workspace]
+members = ["build/salva2d", "build/salva2d-f64", "build/salva3d", "build/salva3d-f64"]
+default-members = ["build/salva2d", "build/salva2d-f64", "build/salva3d", "build/salva3d-f64"]
+resolver = "2"
+
+[workspace.lints]
+rust.unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(feature, values("dim2", "dim3", "nphysics", "ncollide"))',
+] }
+
+[profile.release]
+#lto = true
+#codegen-units = 1
+
+[profile.dev]
+# Use slightly better optimization by default, as examples otherwise seem laggy.
+opt-level = 1
+
+[patch.crates-io]
+salva2d = { path = "./build/salva2d" }
+salva2d-f64 = { path = "./build/salva2d-f64" }
+salva3d = { path = "./build/salva3d" }
+salva3d-f64 = { path = "./build/salva3d-f64" }
+
+#parry2d = { git = "https://github.com/sebcrozet/parry" }
+#parry3d = { git = "https://github.com/sebcrozet/parry" }
+
+#rapier2d = { git = "https://github.com/dimforge/rapier", branch = "split_geom" }
+#rapier3d = { git = "https://github.com/dimforge/rapier", branch = "split_geom"  }
+#rapier_testbed2d = { git = "https://github.com/dimforge/rapier", branch = "split_geom"  }
+#rapier_testbed3d = { git = "https://github.com/dimforge/rapier", branch = "split_geom"  }
+
+# rapier2d = { git = "https://github.com/dimforge/rapier", rev = "cf77b5bf574f8363794f979510deec5c08e58401" }
+# rapier3d = { git = "https://github.com/dimforge/rapier", rev = "cf77b5bf574f8363794f979510deec5c08e58401" }
+# rapier_testbed2d = { git = "https://github.com/dimforge/rapier", rev = "cf77b5bf574f8363794f979510deec5c08e58401" }
+# rapier_testbed3d = { git = "https://github.com/dimforge/rapier", rev = "cf77b5bf574f8363794f979510deec5c08e58401" }
+
+# rapier2d = { git = "https://github.com/dimforge/rapier", rev = "3b0d256" }
+# rapier3d = { git = "https://github.com/dimforge/rapier", rev = "3b0d256" }
+# rapier_testbed2d = { git = "https://github.com/dimforge/rapier", rev = "3b0d256" }
+# rapier_testbed3d = { git = "https://github.com/dimforge/rapier", rev = "3b0d256" }
+
+# rapier2d = { path = "../rapier/crates/rapier2d" }
+# rapier3d = { path = "../rapier/crates/rapier3d" }
+# rapier_testbed2d = { path = "../rapier/crates/rapier_testbed2d" }
+# rapier_testbed3d = { path = "../rapier/crates/rapier_testbed3d" }

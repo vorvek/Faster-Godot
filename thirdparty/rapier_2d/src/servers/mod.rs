@@ -1,0 +1,85 @@
+use godot::classes::ProjectSettings;
+use godot::prelude::*;
+
+use crate::servers::rapier_project_settings::RapierProjectSettings;
+const PLUGIN_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub mod rapier_math;
+#[cfg(feature = "dim2")]
+pub mod rapier_physics_server_2d;
+#[cfg(feature = "dim3")]
+pub mod rapier_physics_server_3d;
+pub mod rapier_physics_server_extra;
+pub mod rapier_physics_server_impl;
+pub mod rapier_physics_singleton;
+pub mod rapier_project_settings;
+#[cfg(feature = "dim2")]
+pub type RapierPhysicsServer = rapier_physics_server_2d::RapierPhysicsServer2D;
+#[cfg(feature = "dim3")]
+pub type RapierPhysicsServer = rapier_physics_server_3d::RapierPhysicsServer3D;
+#[cfg(feature = "dim2")]
+pub fn register_server() {
+    use godot::classes::PhysicsServer2DManager;
+    let mut manager = PhysicsServer2DManager::singleton();
+    let create_server = Callable::from_fn("create_rapier_2d_server", |_args| {
+        crate::servers::rapier_physics_server_2d::RapierPhysicsServer2D::new_alloc()
+    });
+    manager.register_server("Rapier2D", &create_server);
+}
+#[cfg(feature = "dim3")]
+pub fn register_server() {
+    use godot::classes::PhysicsServer3DManager;
+    let mut manager = PhysicsServer3DManager::singleton();
+    let create_server = Callable::from_fn("create_rapier_3d_server", |_args| {
+        crate::servers::rapier_physics_server_3d::RapierPhysicsServer3D::new_alloc()
+    });
+    manager.register_server("Rapier3D", &create_server);
+}
+#[cfg(feature = "dim2")]
+fn print_version() {
+    let project_settings = ProjectSettings::singleton();
+    let physics_engine: String = project_settings
+        .get_setting("physics/2d/physics_engine")
+        .try_to()
+        .unwrap_or_default();
+    if physics_engine == "DEFAULT" {
+        godot_print_rich!(
+            "[color=green]PHYSICS ENGINE 2D: Rapier2D v{} (default)[/color]",
+            PLUGIN_VERSION
+        );
+    } else if physics_engine != "Rapier2D" {
+        godot_print_rich!(
+            "[color=red]PHYSICS ENGINE 2D: {}[/color]. Go to [b]Advanced Settings -> Physics -> 2D[/b] to change it to [b]Rapier2D[/b].",
+            physics_engine
+        );
+    } else {
+        godot_print_rich!(
+            "[color=green]PHYSICS ENGINE 2D: {} v{}[/color]",
+            physics_engine,
+            PLUGIN_VERSION
+        );
+    }
+}
+#[cfg(feature = "dim3")]
+fn print_version() {
+    let project_settings = ProjectSettings::singleton();
+    let physics_engine: String = project_settings
+        .get_setting("physics/3d/physics_engine")
+        .try_to()
+        .unwrap_or_default();
+    if physics_engine != "Rapier3D" {
+        godot_print_rich!(
+            "[color=red]PHYSICS ENGINE 3D: {}[/color]. Go to [b]Advanced Settings -> Physics -> 3D[/b] to change it to [b]Rapier3D[/b].",
+            physics_engine
+        );
+    } else {
+        godot_print_rich!(
+            "[color=green]PHYSICS ENGINE 3D: {} v{}[/color]",
+            physics_engine,
+            PLUGIN_VERSION
+        );
+    }
+}
+pub fn register_scene() {
+    RapierProjectSettings::register_settings();
+    print_version();
+}

@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="RapierPhysicsServer2D" inherits="PhysicsServer2DExtension" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="body_get_extra_param" qualifiers="static">
+			<return type="Variant" />
+			<param index="0" name="body" type="RID" />
+			<param index="1" name="param" type="int" />
+			<description>
+			</description>
+		</method>
+		<method name="body_set_extra_param" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="body" type="RID" />
+			<param index="1" name="param" type="int" />
+			<param index="2" name="value" type="Variant" />
+			<description>
+			</description>
+		</method>
+		<method name="export_binary" qualifiers="static">
+			<return type="PackedByteArray" />
+			<param index="0" name="physics_object" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="export_json" qualifiers="static">
+			<return type="String" />
+			<param index="0" name="physics_object" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="fluid_add_points_and_velocities" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="fluid_rid" type="RID" />
+			<param index="1" name="points" type="PackedVector2Array" />
+			<param index="2" name="velocities" type="PackedVector2Array" />
+			<description>
+			</description>
+		</method>
+		<method name="fluid_create" qualifiers="static">
+			<return type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="fluid_delete_points" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="fluid_rid" type="RID" />
+			<param index="1" name="indices" type="PackedInt32Array" />
+			<description>
+			</description>
+		</method>
+		<method name="fluid_get_accelerations" qualifiers="static">
+			<return type="PackedVector2Array" />
+			<param index="0" name="fluid_rid" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="fluid_get_collision_layer" qualifiers="static">
+			<return type="int" />
+			<param index="0" name="fluid_rid" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="fluid_get_collision_mask" qualifiers="static">
+			<return type="int" />
+			<param index="0" name="fluid_rid" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="fluid_get_particles_in_aabb" qualifiers="static">
+			<return type="PackedInt32Array" />
+			<param index="0" name="fluid_rid" type="RID" />
+			<param index="1" name="aabb" type="Rect2" />
+			<description>
+			</description>
+		</method>
+		<method name="fluid_get_points" qualifiers="static">
+			<return type="PackedVector2Array" />
+			<param index="0" name="fluid_rid" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="fluid_get_velocities" qualifiers="static">
+			<return type="PackedVector2Array" />
+			<param index="0" name="fluid_rid" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="fluid_set_collision_masks" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="fluid_rid" type="RID" />
+			<param index="1" name="mask" type="int" />
+			<param index="2" name="layer" type="int" />
+			<description>
+			</description>
+		</method>
+		<method name="fluid_set_density" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="fluid_rid" type="RID" />
+			<param index="1" name="density" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="fluid_set_effects" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="fluid_rid" type="RID" />
+			<param index="1" name="effects" type="Resource[]" />
+			<description>
+			</description>
+		</method>
+		<method name="fluid_set_points" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="fluid_rid" type="RID" />
+			<param index="1" name="points" type="PackedVector2Array" />
+			<description>
+			</description>
+		</method>
+		<method name="fluid_set_points_and_velocities" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="fluid_rid" type="RID" />
+			<param index="1" name="points" type="PackedVector2Array" />
+			<param index="2" name="velocities" type="PackedVector2Array" />
+			<description>
+			</description>
+		</method>
+		<method name="fluid_set_space" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="fluid_rid" type="RID" />
+			<param index="1" name="space_rid" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="get_global_id" qualifiers="static">
+			<return type="int" />
+			<description>
+			</description>
+		</method>
+		<method name="get_rapier_id" qualifiers="static">
+			<return type="int" />
+			<param index="0" name="rid" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="static">
+			<return type="Dictionary" />
+			<description>
+			</description>
+		</method>
+		<method name="import_binary" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="physics_object" type="RID" />
+			<param index="1" name="data" type="PackedByteArray" />
+			<description>
+			</description>
+		</method>
+		<method name="set_global_id" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="id" type="int" />
+			<description>
+			</description>
+		</method>
+		<method name="space_flush_queries" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="space_get_active_bodies" qualifiers="static">
+			<return type="RID[]" />
+			<param index="0" name="space" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="space_get_bodies_transform" qualifiers="static">
+			<return type="Transform2D[]" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="bodies" type="RID[]" />
+			<description>
+			</description>
+		</method>
+		<method name="space_step" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="space" type="RID" />
+			<param index="1" name="delta" type="float" />
+			<description>
+			</description>
+		</method>
+	</methods>
+</class>

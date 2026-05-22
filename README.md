@@ -73,8 +73,9 @@ came mostly from the narrower renderer profile and CPU-side hot-path changes:
   `PeekMessage()` and tanking CanvasItem-heavy scenes.
 - Smaller runtime surface: Unused modules and backends are disabled by default,
   including XR/VR and networking modules outside this fork's target profile.
-- Jolt-only physics: Godot Physics 2D/3D modules are disabled in the fork
-  profile; Jolt is the default 3D physics server.
+- Rapier/Jolt physics: Godot Physics 2D/3D modules are removed from the fork;
+  Rapier is the default 2D physics server and Jolt is the default 3D physics
+  server.
 
 ## Build
 
@@ -112,10 +113,10 @@ code scope, pros, and cons.
 
 ## License
 
-Faster-Godot keeps Godot's original MIT/Expat license terms. See
-[LICENSE.txt](LICENSE.txt) and [COPYRIGHT.txt](COPYRIGHT.txt). The Faster-Godot
-name and fork maintenance do not imply endorsement by the Godot Engine project
-or organization.
+Faster-Godot fork code keeps Godot's original MIT/Expat license terms. Bundled
+third-party components retain their own licenses listed in [COPYRIGHT.txt](COPYRIGHT.txt)
+and [thirdparty/README.md](thirdparty/README.md). The Faster-Godot name and fork
+maintenance do not imply endorsement by the Godot Engine project or organization.
 
 ## Attribution
 

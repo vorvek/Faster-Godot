@@ -25,7 +25,7 @@ jobs:
         include:
           - name: Linux x86_64 editor
             cache-name: linux-editor
-            artifact-name: faster-godot-4.6.3b-linux-x86_64-editor
+            artifact-name: faster-godot-4.6.3c-linux-x86_64-editor
             target: editor
             scons-flags: ""
             bin: ./bin/faster-godot.linuxbsd.editor.x86_64.faster_godot
@@ -34,7 +34,7 @@ jobs:
 
           - name: Linux x86_64 .NET editor
             cache-name: linux-editor-mono
-            artifact-name: faster-godot-4.6.3b-linux-x86_64-editor-dotnet
+            artifact-name: faster-godot-4.6.3c-linux-x86_64-editor-dotnet
             target: editor
             scons-flags: module_mono_enabled=yes
             bin: ./bin/faster-godot.linuxbsd.editor.x86_64.faster_godot.mono
@@ -43,7 +43,7 @@ jobs:
 
           - name: Linux x86_64 release template
             cache-name: linux-template
-            artifact-name: faster-godot-4.6.3b-linux-x86_64-template-release
+            artifact-name: faster-godot-4.6.3c-linux-x86_64-template-release
             target: template_release
             scons-flags: ""
             bin: ./bin/faster-godot.linuxbsd.template_release.x86_64.faster_godot
@@ -52,7 +52,7 @@ jobs:
 
           - name: Linux x86_64 .NET release template
             cache-name: linux-template-mono
-            artifact-name: faster-godot-4.6.3b-linux-x86_64-template-release-dotnet
+            artifact-name: faster-godot-4.6.3c-linux-x86_64-template-release-dotnet
             target: template_release
             scons-flags: module_mono_enabled=yes
             bin: ./bin/faster-godot.linuxbsd.template_release.x86_64.faster_godot.mono

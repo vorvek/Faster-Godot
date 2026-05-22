@@ -691,8 +691,6 @@ env["accesskit"] = False
 faster_godot_disabled_modules = [
     "camera",
     "enet",
-    "godot_physics_2d",
-    "godot_physics_3d",
     "jsonrpc",
     "mobile_vr",
     "multiplayer",
@@ -709,6 +707,8 @@ for module in faster_godot_disabled_modules:
         env[opt] = False
 if "module_jolt_physics_enabled" in env and "module_jolt_physics_enabled" not in ARGUMENTS:
     env["module_jolt_physics_enabled"] = True
+if "module_rapier_2d_enabled" in env and "module_rapier_2d_enabled" not in ARGUMENTS:
+    env["module_rapier_2d_enabled"] = True
 env.Append(CPPDEFINES=["FASTER_GODOT", "FASTER_GODOT_FORWARD_PLUS_ONLY"])
 env.extra_suffix += ".faster_godot"
 

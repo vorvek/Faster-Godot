@@ -1,0 +1,91 @@
+[package]
+name = "rapier2d-f64"
+version.workspace = true
+authors.workspace = true
+description = "2-dimensional physics engine in Rust."
+documentation = "https://docs.rs/rapier2d"
+homepage.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+categories.workspace = true
+keywords = ["physics", "dynamics", "rigid", "real-time", "impulse_joints"]
+license.workspace = true
+rust-version.workspace = true
+edition.workspace = true
+
+[badges]
+maintenance = { status = "actively-developed" }
+
+[lints]
+clippy = { needless_lifetimes = "allow" }
+rust.unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(feature, values("dim3", "f32", "std", "simd-is-enabled", "simd-stable", "simd-nightly"))',
+] }
+
+[features]
+default = ["dim2", "f64", "std"]
+dim2 = []
+f64 = []
+std = [
+    "parry2d-f64/std",
+    "nalgebra/std",
+    "simba/std",
+    "num-traits/std",
+    "approx/std",
+    "thiserror/std",
+    "serde?/std",
+]
+parallel = ["dep:rayon", "std"]
+# SoA SIMD not supported yet on f64
+#simd-stable = ["simba/wide", "simd-is-enabled"]
+#simd-nightly = ["simba/portable_simd", "simd-is-enabled"]
+## Do not enable this feature directly. It is automatically
+## enabled with the "simd-stable" or "simd-nightly" feature.
+#simd-is-enabled = []
+serde-serialize = [
+    "nalgebra/serde-serialize",
+    "parry2d-f64/serde-serialize",
+    "dep:serde",
+    "std",
+]
+enhanced-determinism = ["simba/libm_force", "parry2d-f64/enhanced-determinism"]
+debug-render = []
+profiler = ["dep:web-time"] # Enables the internal profiler.
+
+# Feature used for debugging only.
+debug-disable-legitimate-fe-exceptions = []
+
+# Feature used for development and debugging only.
+# Do not enable this unless you are working on the engine internals.
+dev-remove-slow-accessors = []
+
+[package.metadata.docs.rs]
+features = ["parallel", "simd-stable", "serde-serialize", "debug-render"]
+
+[lib]
+name = "rapier2d_f64"
+path = "../../src/lib.rs"
+required-features = ["dim2", "f64"]
+doctest = false # All doctests are written assuming the 3D version.
+
+[dependencies]
+nalgebra.workspace = true
+glamx.workspace = true
+parry2d-f64.workspace = true
+simba.workspace = true
+num-traits.workspace = true
+approx.workspace = true
+bitflags.workspace = true
+log.workspace = true
+thiserror.workspace = true
+profiling.workspace = true
+static_assertions.workspace = true
+web-time = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+bincode.workspace = true
+serde_json.workspace = true
+serde = { version = "1", features = ["derive"] }
+oorandom.workspace = true

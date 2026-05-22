@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="Fluid2D" inherits="Node2D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="add_points_and_velocities">
+			<return type="void" />
+			<param index="0" name="points" type="PackedVector2Array" />
+			<param index="1" name="velocities" type="PackedVector2Array" />
+			<description>
+			</description>
+		</method>
+		<method name="create_circle_points" qualifiers="const">
+			<return type="PackedVector2Array" />
+			<param index="0" name="radius" type="int" />
+			<description>
+			</description>
+		</method>
+		<method name="create_rectangle_points" qualifiers="const">
+			<return type="PackedVector2Array" />
+			<param index="0" name="width" type="int" />
+			<param index="1" name="height" type="int" />
+			<description>
+			</description>
+		</method>
+		<method name="delete_points">
+			<return type="void" />
+			<param index="0" name="indices" type="PackedInt32Array" />
+			<description>
+			</description>
+		</method>
+		<method name="get_accelerations" qualifiers="const">
+			<return type="PackedVector2Array" />
+			<description>
+			</description>
+		</method>
+		<method name="get_particles_in_aabb" qualifiers="const">
+			<return type="PackedInt32Array" />
+			<param index="0" name="aabb" type="Rect2" />
+			<description>
+			</description>
+		</method>
+		<method name="get_remaining_times" qualifiers="const">
+			<return type="PackedFloat32Array" />
+			<description>
+			</description>
+		</method>
+		<method name="get_velocities" qualifiers="const">
+			<return type="PackedVector2Array" />
+			<description>
+			</description>
+		</method>
+		<method name="set_points_and_velocities">
+			<return type="void" />
+			<param index="0" name="points" type="PackedVector2Array" />
+			<param index="1" name="velocities" type="PackedVector2Array" />
+			<description>
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="collision_layer" type="int" setter="set_collision_layer" getter="get_collision_layer" default="1">
+		</member>
+		<member name="collision_mask" type="int" setter="set_collision_mask" getter="get_collision_mask" default="1">
+		</member>
+		<member name="debug_draw" type="bool" setter="set_debug_draw" getter="get_debug_draw" default="false">
+		</member>
+		<member name="density" type="float" setter="set_density" getter="get_density" default="1.0">
+		</member>
+		<member name="effects" type="Resource[]" setter="set_effects" getter="get_effects" default="[]">
+		</member>
+		<member name="lifetime" type="float" setter="set_lifetime" getter="get_lifetime" default="0.0">
+		</member>
+		<member name="points" type="PackedVector2Array" setter="set_points" getter="get_points" default="PackedVector2Array()">
+		</member>
+		<member name="radius" type="float" setter="" getter="get_radius">
+		</member>
+		<member name="rid" type="RID" setter="" getter="get_rid">
+		</member>
+	</members>
+</class>

@@ -1,0 +1,163 @@
+#!/usr/bin/env python
+import os
+import shutil
+import subprocess
+
+from misc.utility.scons_hints import *
+
+Import("env")
+Import("env_modules")
+
+
+RAPIER_VERSION = "v0.8.32"
+RAPIER_SOURCE_DIR = "#thirdparty/rapier_2d"
+RAPIER_API_JSON = "#thirdparty/rapier_2d/extension_api.faster_godot_4_6_3.json"
+RAPIER_FEATURES = [
+    "simd-nightly",
+    "serde-serialize",
+    "parallel",
+    "experimental-threads",
+    "register-docs",
+    "single-dim2",
+    "api-custom-json",
+]
+
+
+def get_rust_target():
+    platform = env["platform"]
+    arch = env["arch"]
+
+    if platform == "linuxbsd":
+        arch_map = {
+            "arm64": "aarch64-unknown-linux-gnu",
+            "x86_64": "x86_64-unknown-linux-gnu",
+        }
+        if arch not in arch_map:
+            raise RuntimeError(f"Unsupported Linux architecture for Rapier 2D: {arch}")
+        return arch_map[arch]
+
+    if platform == "macos":
+        arch_map = {
+            "arm64": "aarch64-apple-darwin",
+            "x86_64": "x86_64-apple-darwin",
+        }
+        if arch not in arch_map:
+            raise RuntimeError(f"Unsupported macOS architecture for Rapier 2D: {arch}")
+        return arch_map[arch]
+
+    if platform == "windows":
+        arch_map = {
+            "arm64": "aarch64-pc-windows-msvc",
+            "x86_64": "x86_64-pc-windows-msvc",
+        }
+        if arch not in arch_map:
+            raise RuntimeError(f"Unsupported Windows architecture for Rapier 2D: {arch}")
+        return arch_map[arch]
+
+    raise RuntimeError(f"Unsupported platform for Rapier 2D: {platform}")
+
+
+def get_cargo_static_library_name():
+    if env["platform"] == "windows":
+        return "godot_rapier.lib"
+    return "libgodot_rapier.a"
+
+
+def collect_rapier_sources():
+    source_dir = env.Dir(RAPIER_SOURCE_DIR).abspath
+    files = []
+    excluded_dirs = {".git", "target"}
+    for root, dirnames, filenames in os.walk(source_dir):
+        dirnames[:] = [dirname for dirname in dirnames if dirname not in excluded_dirs]
+        for filename in filenames:
+            files.append(env.File(os.path.join(root, filename)))
+    return files
+
+
+def build_static_library(target, source, env):
+    cargo = env.get("RAPIER_2D_CARGO", "cargo")
+    source_dir = env["RAPIER_2D_SOURCE_DIR"]
+    cargo_target_dir = env["RAPIER_2D_CARGO_TARGET_DIR"]
+    rust_target = env["RAPIER_2D_RUST_TARGET"]
+    static_library_name = env["RAPIER_2D_STATIC_LIBRARY_NAME"]
+    output = str(target[0])
+
+    env_allowlist = [
+        "COMSPEC",
+        "HOME",
+        "INCLUDE",
+        "LIB",
+        "LIBPATH",
+        "PATH",
+        "PATHEXT",
+        "RUSTUP_HOME",
+        "SYSTEMDRIVE",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "UNIVERSALCRTSDKDIR",
+        "USERPROFILE",
+        "VCINSTALLDIR",
+        "VCTOOLSINSTALLDIR",
+        "VSINSTALLDIR",
+        "WINDIR",
+        "WINDOWSSDKDIR",
+        "WINDOWSSDKVERSION",
+    ]
+    build_env = {}
+    for key in env_allowlist:
+        if key in os.environ:
+            build_env[key] = os.environ[key]
+    for key, value in env.get("ENV", {}).items():
+        if key.upper() in env_allowlist:
+            build_env[key] = value
+    build_env["CARGO_HOME"] = env["RAPIER_2D_CARGO_HOME"]
+    build_env["GODOT4_GDEXTENSION_JSON"] = env["RAPIER_2D_API_JSON"]
+    build_env["CARGO_INCREMENTAL"] = "0"
+    build_env["CARGO_NET_OFFLINE"] = "true"
+    build_env["CARGO_TARGET_DIR"] = cargo_target_dir
+
+    command = [
+        cargo,
+        "build",
+        "--target",
+        rust_target,
+        "--profile",
+        "release",
+        "--features",
+        ",".join(RAPIER_FEATURES),
+        "--no-default-features",
+        "--locked",
+        "--offline",
+    ]
+    subprocess.run(command, cwd=source_dir, env=build_env, check=True)
+
+    built_library = os.path.join(cargo_target_dir, rust_target, "release", static_library_name)
+    if not os.path.isfile(built_library):
+        raise RuntimeError(f"Rapier 2D cargo build did not produce {built_library}")
+
+    os.makedirs(os.path.dirname(output), exist_ok=True)
+    shutil.copy2(built_library, output)
+
+
+def make_static_library_node(rust_target):
+    static_library_name = get_cargo_static_library_name()
+    target = env.File(f"#bin/rapier_2d_static/{RAPIER_VERSION}/{rust_target}/{static_library_name}")
+    env["RAPIER_2D_API_JSON"] = env.File(RAPIER_API_JSON).abspath
+    env["RAPIER_2D_CARGO_HOME"] = env.Dir(f"#bin/rapier_2d_cargo_home/{RAPIER_VERSION}").abspath
+    env["RAPIER_2D_CARGO_TARGET_DIR"] = env.Dir(f"#bin/rapier_2d_cargo_target/{RAPIER_VERSION}").abspath
+    env["RAPIER_2D_RUST_TARGET"] = rust_target
+    env["RAPIER_2D_SOURCE_DIR"] = env.Dir(RAPIER_SOURCE_DIR).abspath
+    env["RAPIER_2D_STATIC_LIBRARY_NAME"] = static_library_name
+    return env.Command(
+        target=target,
+        source=collect_rapier_sources(),
+        action=Action(build_static_library, "Building Rapier 2D static library: $TARGET"),
+    )[0]
+
+
+lib_file = make_static_library_node(get_rust_target())
+env.Append(LIBS=[lib_file])
+
+env_rapier_2d = env_modules.Clone()
+env_rapier_2d.add_source_files(env.modules_sources, "*.cpp")

@@ -32,15 +32,15 @@ jobs:
 
       - name: Build source tarball
         run: |
-          misc/scripts/make_tarball.sh -v 4.6.3b
+          misc/scripts/make_tarball.sh -v 4.6.3c
           mkdir -p release
-          mv ../faster-godot-4.6.3b-source.tar.gz release/
+          mv ../faster-godot-4.6.3c-source.tar.gz release/
 
       - name: Upload artifact
         uses: ./.github/actions/upload-artifact
         with:
-          name: faster-godot-4.6.3b-source
-          path: release/faster-godot-4.6.3b-source.tar.gz
+          name: faster-godot-4.6.3c-source
+          path: release/faster-godot-4.6.3c-source.tar.gz
 
   linux-build:
     name: 🐧 Linux
@@ -102,19 +102,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh api "repos/${{ github.repository }}/git/ref/tags/faster-godot-4.6.3b" >/dev/null 2>&1; then
-            gh api -X PATCH "repos/${{ github.repository }}/git/refs/tags/faster-godot-4.6.3b" -f sha="$GITHUB_SHA" -F force=true >/dev/null
+          if gh api "repos/${{ github.repository }}/git/ref/tags/faster-godot-4.6.3c" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/${{ github.repository }}/git/refs/tags/faster-godot-4.6.3c" -f sha="$GITHUB_SHA" -F force=true >/dev/null
           fi
 
-          if gh release view faster-godot-4.6.3b --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release edit faster-godot-4.6.3b --repo "${{ github.repository }}" --target "$GITHUB_SHA" --latest
+          if gh release view faster-godot-4.6.3c --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release edit faster-godot-4.6.3c --repo "${{ github.repository }}" --target "$GITHUB_SHA" --latest
           else
-            gh release create faster-godot-4.6.3b --repo "${{ github.repository }}" --target "$GITHUB_SHA" --title "faster-godot-4.6.3b" --notes "See CHANGES_FROM_OFFICIAL.md in this commit for the full changelist."
+            gh release create faster-godot-4.6.3c --repo "${{ github.repository }}" --target "$GITHUB_SHA" --title "faster-godot-4.6.3c" --notes "See CHANGES_FROM_OFFICIAL.md in this commit for the full changelist."
           fi
 
-          gh release view faster-godot-4.6.3b --repo "${{ github.repository }}" --json assets --jq '.assets[].name' | while IFS= read -r asset; do
+          gh release view faster-godot-4.6.3c --repo "${{ github.repository }}" --json assets --jq '.assets[].name' | while IFS= read -r asset; do
             [ -n "$asset" ] || continue
-            gh release delete-asset faster-godot-4.6.3b "$asset" --repo "${{ github.repository }}" --yes
+            gh release delete-asset faster-godot-4.6.3c "$asset" --repo "${{ github.repository }}" --yes
           done
 
-          gh release upload faster-godot-4.6.3b release-assets/* --repo "${{ github.repository }}" --clobber
+          gh release upload faster-godot-4.6.3c release-assets/* --repo "${{ github.repository }}" --clobber

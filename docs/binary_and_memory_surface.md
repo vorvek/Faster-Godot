@@ -9,10 +9,10 @@ used by the target profile.
 
 - `SConstruct`
   - Disables these modules by default in the fork profile:
-    `camera`, `enet`, `godot_physics_2d`, `godot_physics_3d`, `jsonrpc`,
-    `mobile_vr`, `multiplayer`, `objectdb_profiler`, `openxr`, `upnp`,
-    `webrtc`, `websocket`, and `webxr`.
+    `camera`, `enet`, `jsonrpc`, `mobile_vr`, `multiplayer`,
+    `objectdb_profiler`, `openxr`, `upnp`, `webrtc`, `websocket`, and `webxr`.
   - Disables XR and non-target rendering backends.
+  - Keeps one physics backend per dimension: Rapier for 2D and Jolt for 3D.
 - `servers/rendering/rendering_server.cpp`
   - Skips several mobile and OpenGL compatibility project-setting defaults in
     the Forward+ only profile.
@@ -32,5 +32,5 @@ used by the target profile.
 - Disabled modules are not available unless the fork profile is turned off or
   the module list is changed.
 - Multiplayer, WebRTC/WebSocket, OpenXR, WebXR, mobile VR, and Godot Physics
-  are not part of the default Faster-Godot runtime.
+  implementation modules are not part of the default Faster-Godot runtime.
 - Broad official Godot compatibility is intentionally reduced.

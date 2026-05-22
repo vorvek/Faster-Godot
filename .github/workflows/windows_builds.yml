@@ -27,7 +27,7 @@ jobs:
         include:
           - name: Windows x86_64 editor
             cache-name: windows-editor
-            artifact-name: faster-godot-4.6.3b-windows-x86_64-editor
+            artifact-name: faster-godot-4.6.3c-windows-x86_64-editor
             target: editor
             scons-flags: windows_subsystem=gui
             test-bin: ./bin/faster-godot.windows.editor.x86_64.faster_godot.console.exe
@@ -38,7 +38,7 @@ jobs:
 
           - name: Windows x86_64 .NET editor
             cache-name: windows-editor-mono
-            artifact-name: faster-godot-4.6.3b-windows-x86_64-editor-dotnet
+            artifact-name: faster-godot-4.6.3c-windows-x86_64-editor-dotnet
             target: editor
             scons-flags: windows_subsystem=gui module_mono_enabled=yes
             test-bin: ./bin/faster-godot.windows.editor.x86_64.faster_godot.mono.console.exe
@@ -48,7 +48,7 @@ jobs:
 
           - name: Windows x86_64 release template
             cache-name: windows-template
-            artifact-name: faster-godot-4.6.3b-windows-x86_64-template-release
+            artifact-name: faster-godot-4.6.3c-windows-x86_64-template-release
             target: template_release
             scons-flags: windows_subsystem=gui
             test-bin: ./bin/faster-godot.windows.template_release.x86_64.faster_godot.console.exe
@@ -58,7 +58,7 @@ jobs:
 
           - name: Windows x86_64 .NET release template
             cache-name: windows-template-mono
-            artifact-name: faster-godot-4.6.3b-windows-x86_64-template-release-dotnet
+            artifact-name: faster-godot-4.6.3c-windows-x86_64-template-release-dotnet
             target: template_release
             scons-flags: windows_subsystem=gui module_mono_enabled=yes
             test-bin: ./bin/faster-godot.windows.template_release.x86_64.faster_godot.mono.console.exe
