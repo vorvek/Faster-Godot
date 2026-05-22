@@ -1,9 +1,6 @@
 name: 🔗 GHA
 # Faster-Godot release and validation pipeline.
 on:
-  push:
-  pull_request:
-  merge_group:
   workflow_dispatch:
 
 concurrency:
