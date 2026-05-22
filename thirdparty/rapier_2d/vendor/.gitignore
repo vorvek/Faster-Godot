@@ -1,0 +1,3 @@
+# This directory is vendored Rust source. Keep upstream crate files even when
+# their names match top-level build-output ignore patterns.
+!**

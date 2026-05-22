@@ -167,7 +167,10 @@ public:
 		return _ptr;
 	}
 
+	GODOT_MSVC_WARNING_PUSH
+	GODOT_MSVC_WARNING_IGNORE(4723) // False positive: no division is performed here.
 	_FORCE_INLINE_ Size size() const { return !_ptr ? 0 : *_get_size(); }
+	GODOT_MSVC_WARNING_POP
 	_FORCE_INLINE_ USize capacity() const { return !_ptr ? 0 : *_get_capacity(); }
 	_FORCE_INLINE_ USize refcount() const { return !_ptr ? 0 : *_get_refcount(); }
 

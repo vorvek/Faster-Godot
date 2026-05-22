@@ -12,6 +12,7 @@ games that can commit to a narrower runtime contract:
 - AVX2, FMA, F16C, and POPCNT required.
 - Forward+ rendering only.
 - Vulkan as the active rendering backend.
+- Rapier as the 2D physics backend.
 - Jolt as the 3D physics backend.
 - No XR/VR runtime. OpenXR, WebXR, and mobile VR are stripped from the Faster
   profile.
@@ -75,7 +76,8 @@ came mostly from the narrower renderer profile and CPU-side hot-path changes:
   including XR/VR and networking modules outside this fork's target profile.
 - Rapier/Jolt physics: Godot Physics 2D/3D modules are removed from the fork;
   Rapier is the default 2D physics server and Jolt is the default 3D physics
-  server.
+  server. See [docs/rapier_2d_physics.md](docs/rapier_2d_physics.md) for the
+  Rapier source, license, and Rust build requirements.
 
 ## Build
 
@@ -83,6 +85,19 @@ Faster-Godot is always built with the fork profile. The old `faster_godot`
 SCons argument is ignored if passed; this tree assumes Windows or Linux,
 `arch=x86_64`, `precision=single`, Forward+, Vulkan, and an
 AVX2/FMA/F16C/POPCNT-capable CPU.
+
+Default builds also include the built-in Rapier 2D physics server. Keep Cargo
+on `PATH` and install the pinned Rust toolchain from
+`thirdparty/rapier_2d/rust-toolchain.toml`:
+
+```bash
+rustup toolchain install nightly-2025-12-12
+```
+
+Rapier's Rust dependencies are vendored in `thirdparty/rapier_2d/vendor` and
+`thirdparty/rapier_2d/vendor_git`; SCons runs Cargo with `--locked --offline`.
+Use `module_rapier_2d_enabled=no` only for builds that deliberately omit real
+2D physics from this fork.
 
 Windows optimized release template:
 
@@ -94,6 +109,15 @@ Windows optimized release editor:
 
 ```powershell
 scons platform=windows target=editor arch=x86_64 production=yes tests=no optimize=speed lto=full debug_symbols=no
+```
+
+.NET release editor builds use the same editor command with
+`module_mono_enabled=yes`, followed by the Mono glue and assembly steps:
+
+```powershell
+scons platform=windows target=editor arch=x86_64 production=yes tests=no optimize=speed lto=full debug_symbols=no module_mono_enabled=yes
+.\bin\faster-godot.windows.editor.x86_64.faster_godot.mono.console.exe --headless --generate-mono-glue .\modules\mono\glue
+python .\modules\mono\build_scripts\build_assemblies.py --godot-output-dir=.\bin --godot-platform=windows --werror --no-deprecated
 ```
 
 Linux optimized release template:

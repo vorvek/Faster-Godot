@@ -11,6 +11,8 @@ from the fork.
 - `modules/rapier_2d`
   - Embeds [appsinacup/godot-rapier-physics](https://github.com/appsinacup/godot-rapier-physics)
     2D as a built-in module.
+  - Documents source, license, build, and runtime details in
+    [rapier_2d_physics.md](rapier_2d_physics.md).
   - Builds and links a static Rapier library from vendored Rust source in
     `thirdparty/rapier_2d`.
   - Uses offline Cargo builds with crates.io dependencies in

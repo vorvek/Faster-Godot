@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.Build.NoTargets/2.0.1">
+<Project Sdk="Microsoft.Build.NoTargets/2.0.1">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -14,6 +14,7 @@
     <PackageType>MSBuildSdk</PackageType>
     <PackageTags>MSBuildSdk</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <Copyright>Copyright (c) Godot Engine contributors</Copyright>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 
@@ -23,6 +24,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="..\..\..\..\..\README.md" Pack="true" PackagePath="/" />
+
     <!-- Package Sdk\Sdk.props and Sdk\Sdk.targets file -->
     <None Include="Sdk\Sdk.props" Pack="true" PackagePath="Sdk" />
     <None Include="Sdk\Sdk.targets" Pack="true" PackagePath="Sdk" />

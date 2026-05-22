@@ -32,6 +32,8 @@
 
 #include "editor/settings/editor_settings.h"
 
+#include <limits>
+
 ChainIK3DGizmoPlugin::SelectionMaterials ChainIK3DGizmoPlugin::selection_materials;
 
 ChainIK3DGizmoPlugin::ChainIK3DGizmoPlugin() {
@@ -144,7 +146,7 @@ void ChainIK3DGizmoPlugin::get_joints_mesh(Skeleton3D *p_skeleton, ChainIK3D *p_
 		int current_bone = -1;
 		int prev_bone = -1;
 		int joint_end = p_ik->get_joint_count(i) - 1;
-		float prev_length = INFINITY;
+		float prev_length = std::numeric_limits<float>::infinity();
 		bool is_extended = p_ik->is_end_bone_extended(i) && p_ik->get_end_bone_length(i) > 0;
 		Transform3D anc_global_pose = p_ik->get_chain_root_global_rest(i);
 		for (int j = 0; j <= joint_end; j++) {

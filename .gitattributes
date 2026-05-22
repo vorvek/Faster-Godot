@@ -5,6 +5,8 @@ thirdparty/* linguist-vendored
 
 # Normalize EOL for all files that Git considers text files
 * text=auto eol=lf
+thirdparty/rapier_2d/vendor/** -text -eol
+thirdparty/rapier_2d/vendor_git/** -text -eol
 # Except for Windows-only / Visual Studio files
 *.bat eol=crlf
 *.sln eol=crlf

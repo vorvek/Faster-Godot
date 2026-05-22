@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <ProjectGuid>{AEBF0036-DA76-4341-B651-A3F2856AB2FA}</ProjectGuid>
@@ -24,6 +24,7 @@
     <RepositoryUrl>https://github.com/godotengine/godot/tree/master/modules/mono/glue/GodotSharp/GodotSharp</RepositoryUrl>
     <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <Copyright>Copyright (c) Godot Engine contributors</Copyright>
 
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -32,6 +33,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="..\..\..\..\..\README.md" Pack="true" PackagePath="/" />
+
     <!-- SdkPackageVersions.props for easy access -->
     <None Include="$(GodotSdkPackageVersionsFilePath)">
       <Link>SdkPackageVersions.props</Link>
