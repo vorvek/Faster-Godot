@@ -3260,14 +3260,16 @@ int String::rfindn(const char *p_str, int p_from) const {
 
 bool String::ends_with(const String &p_string) const {
 	const int l = p_string.length();
-	if (l > length()) {
-		return false;
-	}
-	if (l == 0) {
-		return true;
+	if (l <= 0) {
+		return l == 0;
 	}
 
-	return memcmp(ptr() + (length() - l), p_string.ptr(), l * sizeof(char32_t)) == 0;
+	const int len = length();
+	if (l > len) {
+		return false;
+	}
+
+	return memcmp(ptr() + (len - l), p_string.ptr(), (size_t)l * sizeof(char32_t)) == 0;
 }
 
 bool String::ends_with(const char *p_string) const {
@@ -3297,14 +3299,15 @@ bool String::ends_with(const char *p_string) const {
 
 bool String::begins_with(const String &p_string) const {
 	const int l = p_string.length();
+	if (l <= 0) {
+		return l == 0;
+	}
+
 	if (l > length()) {
 		return false;
 	}
-	if (l == 0) {
-		return true;
-	}
 
-	return memcmp(ptr(), p_string.ptr(), l * sizeof(char32_t)) == 0;
+	return memcmp(ptr(), p_string.ptr(), (size_t)l * sizeof(char32_t)) == 0;
 }
 
 bool String::begins_with(const char *p_string) const {

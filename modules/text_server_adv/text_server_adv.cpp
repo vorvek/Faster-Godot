@@ -499,7 +499,7 @@ bool TextServerAdvanced::_save_support_data(const String &p_filename) const {
 
 	PackedByteArray icu_data_static;
 	icu_data_static.resize(U_ICUDATA_SIZE);
-	memcpy(icu_data_static.ptrw(), U_ICUDATA_ENTRY_POINT, U_ICUDATA_SIZE);
+	memcpy(icu_data_static.ptrw(), U_ICUDATA_ENTRY_POINT.bytes, U_ICUDATA_SIZE);
 	f->store_buffer(icu_data_static);
 
 	return true;
@@ -514,7 +514,7 @@ PackedByteArray TextServerAdvanced::_get_support_data() const {
 
 	PackedByteArray icu_data_static;
 	icu_data_static.resize(U_ICUDATA_SIZE);
-	memcpy(icu_data_static.ptrw(), U_ICUDATA_ENTRY_POINT, U_ICUDATA_SIZE);
+	memcpy(icu_data_static.ptrw(), U_ICUDATA_ENTRY_POINT.bytes, U_ICUDATA_SIZE);
 
 	return icu_data_static;
 #else

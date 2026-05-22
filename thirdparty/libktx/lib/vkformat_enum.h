@@ -1,4 +1,8 @@
 // clang-format off: CI is complicated if formatting checks on generated files are enforced.
+#if defined(KTX_USE_INTERNAL_VK_FORMAT_ENUM)
+#define VkFormat KtxVkFormat
+#endif
+
 #if !defined(_VKFORMAT_ENUM_H_) && !defined(VULKAN_CORE_H_)
 #define _VKFORMAT_ENUM_H_
 

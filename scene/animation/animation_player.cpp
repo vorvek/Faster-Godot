@@ -478,14 +478,14 @@ void AnimationPlayer::play_section(const StringName &p_name, double p_start_time
 			blend_time = *blend_time_ptr;
 		} else {
 			bk.from = "*";
-			if (const double *blend_time_ptr = blend_times.getptr(bk)) {
-				blend_time = *blend_time_ptr;
+			if (const double *wildcard_from_blend_time_ptr = blend_times.getptr(bk)) {
+				blend_time = *wildcard_from_blend_time_ptr;
 			} else {
 				bk.from = c.current.animation_name;
 				bk.to = "*";
 
-				if (const double *blend_time_ptr = blend_times.getptr(bk)) {
-					blend_time = *blend_time_ptr;
+				if (const double *wildcard_to_blend_time_ptr = blend_times.getptr(bk)) {
+					blend_time = *wildcard_to_blend_time_ptr;
 				}
 			}
 		}

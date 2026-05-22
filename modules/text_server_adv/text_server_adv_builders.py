@@ -15,7 +15,12 @@ def make_icu_data(target, source, env):
 #include <unicode/uversion.h>
 
 extern "C" U_EXPORT const size_t U_ICUDATA_SIZE = {len(buffer)};
-extern "C" U_EXPORT const unsigned char U_ICUDATA_ENTRY_POINT[] = {{
+struct ICU_data_header {{
+	alignas(UDataInfo) unsigned char bytes[{len(buffer)}];
+}};
+extern "C" U_EXPORT const ICU_data_header U_ICUDATA_ENTRY_POINT = {{
+	{{
 	{methods.format_buffer(buffer, 1)}
+	}}
 }};
 """)

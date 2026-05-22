@@ -207,6 +207,14 @@ def configure(env: "SConsEnvironment"):
         if not env["use_llvm"]:
             env["RANLIB"] = "gcc-ranlib"
             env["AR"] = "gcc-ar"
+            # GCC LTO emits noisy range-analysis false positives after cross-TU inlining in templates and thirdparty code.
+            env.AppendUnique(
+                LINKFLAGS=[
+                    "-Wno-alloc-size-larger-than",
+                    "-Wno-stringop-overflow",
+                    "-Wno-stringop-overread",
+                ]
+            )
 
     env.Append(CCFLAGS=["-pipe"])
 

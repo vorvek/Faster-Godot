@@ -643,7 +643,12 @@ U_NAMESPACE_END
  *----------------------------------------------------------------------*/
 #if !defined(ICU_DATA_DIR_WINDOWS)
 // When using the Windows system data, we expect only a single data file.
-extern "C" const DataHeader U_DATA_API U_ICUDATA_ENTRY_POINT;
+struct ICU_data_header;
+extern "C" const ICU_data_header U_DATA_API U_ICUDATA_ENTRY_POINT;
+
+static const DataHeader *getCommonICUDataHeader() {
+    return UDataMemory_normalizeDataPointer(&U_ICUDATA_ENTRY_POINT);
+}
 #endif
 
 /*
@@ -696,7 +701,7 @@ openCommonData(const char *path,          /*  Path from OpenChoice?          */
 // When using the Windows system data, we expect only a single data file.
             int32_t i;
             for(i = 0; i < commonDataIndex; ++i) {
-                if(gCommonICUDataArray[i]->pHeader == &U_ICUDATA_ENTRY_POINT) {
+                if(gCommonICUDataArray[i]->pHeader == getCommonICUDataHeader()) {
                     /* The linked-in data is already in the list. */
                     return nullptr;
                 }

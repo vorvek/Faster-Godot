@@ -61,7 +61,7 @@ struct Luma
 };
 
 #ifdef __AVX2__
-struct Plane
+struct EtcPakPlane
 {
     uint64_t plane;
     uint64_t error;
@@ -801,7 +801,7 @@ static etcpak_force_inline __m128i r6g7b6_AVX2(__m128 cof, __m128 chf, __m128 cv
     return _mm_shuffle_epi8(cohv5, _mm_setr_epi8(6, 5, 4, -1, 2, 1, 0, -1, 10, 9, 8, -1, -1, -1, -1, -1));
 }
 
-static etcpak_force_inline Plane Planar_AVX2( const Channels& ch, uint8_t& mode, bool useHeuristics )
+static etcpak_force_inline EtcPakPlane Planar_AVX2( const Channels& ch, uint8_t& mode, bool useHeuristics )
 {
     __m128i t0 = _mm_sad_epu8( ch.r8, _mm_setzero_si128() );
     __m128i t1 = _mm_sad_epu8( ch.g8, _mm_setzero_si128() );
@@ -827,7 +827,7 @@ static etcpak_force_inline Plane Planar_AVX2( const Channels& ch, uint8_t& mode,
 
     if( mode != ModePlanar && useHeuristics )
     {
-        Plane plane;
+        EtcPakPlane plane;
         plane.sum4 = _mm256_permute4x64_epi64( srgb, _MM_SHUFFLE( 2, 3, 0, 1 ) );
         return plane;
     }
@@ -1012,7 +1012,7 @@ static etcpak_force_inline Plane Planar_AVX2( const Channels& ch, uint8_t& mode,
     uint64_t result = static_cast<uint32_t>(_bswap(lo));
     result |= static_cast<uint64_t>(static_cast<uint32_t>(_bswap(hi))) << 32;
 
-    Plane plane;
+    EtcPakPlane plane;
 
     plane.plane = result;
     if( useHeuristics )

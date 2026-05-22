@@ -41,10 +41,15 @@ def make_icu_data(target, source, env):
             buf = f.read()
 
         g.write('extern "C" U_EXPORT const size_t U_ICUDATA_SIZE = ' + str(len(buf)) + ";\n")
-        g.write('extern "C" U_EXPORT const unsigned char U_ICUDATA_ENTRY_POINT[] = {\n')
+        g.write("struct ICU_data_header {\n")
+        g.write("\talignas(UDataInfo) unsigned char bytes[" + str(len(buf)) + "];\n")
+        g.write("};\n")
+        g.write('extern "C" U_EXPORT const ICU_data_header U_ICUDATA_ENTRY_POINT = {\n')
+        g.write("\t{\n")
         for i in range(len(buf)):
-            g.write("\t" + str(buf[i]) + ",\n")
+            g.write("\t\t" + str(buf[i]) + ",\n")
 
+        g.write("\t}\n")
         g.write("};\n")
         g.write("#endif")
 

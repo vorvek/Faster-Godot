@@ -45,11 +45,10 @@ if env.editor_build:
     # We already build miniz in the basis_universal module (editor only).
     env_ktx.Append(CPPDEFINES=["MINIZ_HEADER_FILE_ONLY"])
 
+env_ktx.Append(CPPDEFINES=["LIBKTX"])
 if env["vulkan"]:
     env_ktx.Prepend(CPPPATH=["#thirdparty/vulkan/include"])
-else:
-    # Falls back on bundled `vkformat_enum.h`.
-    env_ktx.Append(CPPDEFINES=["LIBKTX"])
+    env_ktx.Append(CPPDEFINES=["KTX_USE_INTERNAL_VK_FORMAT_ENUM"])
 
 env_ktx.Append(CPPDEFINES=[("KHRONOS_STATIC", 1)])
 

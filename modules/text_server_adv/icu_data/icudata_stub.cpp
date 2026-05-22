@@ -32,14 +32,14 @@
 #include <unicode/utypes.h>
 #include <unicode/uversion.h>
 
-typedef struct {
+struct ICU_data_header {
 	uint16_t header_size;
 	uint8_t magic_1, magic_2;
 	UDataInfo info;
 	char padding[8];
 	uint32_t count, reserved;
 	int fake_name_and_data[4];
-} ICU_data_header;
+};
 
 extern "C" U_EXPORT const ICU_data_header U_ICUDATA_ENTRY_POINT = {
 	32,
