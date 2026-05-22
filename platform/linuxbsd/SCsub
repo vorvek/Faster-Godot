@@ -16,7 +16,7 @@ common_linuxbsd = [
 ]
 
 if env["library_type"] == "executable":
-    if env["arch"] == "x86_64" and env["faster_godot"]:
+    if env["arch"] == "x86_64":
         env_cpu_check = env.Clone()
         env_cpu_check.add_source_files(sources, ["godot_linuxbsd.cpp"])
         for flag in ["-mavx2", "-mfma", "-mf16c", "-mpopcnt"]:
@@ -49,7 +49,7 @@ if env["dbus"]:
     if env["use_sowrap"]:
         common_linuxbsd.append("dbus-so_wrap.c")
 
-program_name = "#bin/faster-godot" if env["faster_godot"] else "#bin/godot"
+program_name = "#bin/faster-godot"
 
 if env["library_type"] == "static_library":
     prog = env.add_library(program_name, common_linuxbsd + sources)

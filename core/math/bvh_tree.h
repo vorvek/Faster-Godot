@@ -40,6 +40,7 @@
 
 #include "core/math/aabb.h"
 #include "core/math/bvh_abb.h"
+#include "core/math/simd_defs.h"
 #include "core/math/vector3.h"
 #include "core/templates/local_vector.h"
 #include "core/templates/pooled_list.h"

@@ -32,6 +32,7 @@
 
 #include "core/error/error_macros.h"
 #include "core/math/math_defs.h"
+#include "core/math/simd_defs.h"
 #include "core/typedefs.h"
 
 #include <cfloat>
@@ -732,13 +733,8 @@ _ALWAYS_INLINE_ uint32_t halfbits_to_floatbits(uint16_t p_half) {
 }
 
 _ALWAYS_INLINE_ float halfptr_to_float(const uint16_t *p_half) {
-	union {
-		uint32_t u32;
-		float f32;
-	} u;
-
-	u.u32 = halfbits_to_floatbits(*p_half);
-	return u.f32;
+	const __m128i half = _mm_cvtsi32_si128(*p_half);
+	return _mm_cvtss_f32(_mm_cvtph_ps(half));
 }
 
 _ALWAYS_INLINE_ float half_to_float(const uint16_t p_half) {

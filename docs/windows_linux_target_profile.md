@@ -8,7 +8,8 @@ deployment profile.
 ## Code Changes
 
 - `SConstruct`
-  - Rejects platforms other than `windows` and `linuxbsd` when `faster_godot=yes`.
+  - Always builds the Faster-Godot profile.
+  - Rejects platforms other than `windows` and `linuxbsd`.
   - Rejects non-`x86_64` architectures.
   - Disables non-target graphics backends in the fork profile.
 - `platform/windows/SCsub`
@@ -25,5 +26,5 @@ deployment profile.
 ## Cons
 
 - macOS, mobile, Web, and console targets are outside this fork profile.
-- Developers who still need broader official Godot coverage should build with
-  `faster_godot=no` or use official Godot.
+- Developers who still need broader official Godot coverage should use official
+  Godot.

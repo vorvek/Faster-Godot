@@ -46,4 +46,4 @@ Vulkan Forward+ game.
 - Low-end GPUs with fewer than 48 textures per shader stage are no longer
   supported by fallback.
 - Some official Godot tutorials or samples that depend on Compatibility mode may
-  not run without building with `faster_godot=no`.
+  not run on this fork profile.

@@ -45,8 +45,9 @@ came mostly from the narrower renderer profile and CPU-side hot-path changes:
   fork build, including mobile tonemapping variants and Forward Mobile shader
   generation.
 - AVX2/FMA/F16C/POPCNT baseline: The engine is compiled for modern x86_64
-  desktop CPUs instead of the official broad SSE4.2 baseline, with zstd BMI2
-  paths dispatched at runtime on CPUs that expose BMI2.
+  desktop CPUs instead of the official broad SSE4.2 baseline. Core math hot
+  paths use this SIMD contract directly, while zstd BMI2 paths are still
+  dispatched at runtime on CPUs that expose BMI2.
 - Render culling hot paths: Visibility range checks avoid square roots when no
   fade value is needed, and light culling avoids full AABB projection when only
   the minimum plane distance matters.
@@ -77,25 +78,27 @@ came mostly from the narrower renderer profile and CPU-side hot-path changes:
 
 ## Build
 
-Faster-Godot is enabled by default through the `faster_godot=yes` SCons option.
-Use `faster_godot=no` to build closer to official Godot behavior from this tree.
+Faster-Godot is always built with the fork profile. The old `faster_godot`
+SCons argument is ignored if passed; this tree assumes Windows or Linux,
+`arch=x86_64`, `precision=single`, Forward+, Vulkan, and an
+AVX2/FMA/F16C/POPCNT-capable CPU.
 
 Windows optimized release template:
 
 ```powershell
-scons platform=windows target=template_release arch=x86_64 faster_godot=yes production=yes tests=no optimize=speed lto=full debug_symbols=no
+scons platform=windows target=template_release arch=x86_64 production=yes tests=no optimize=speed lto=full debug_symbols=no
 ```
 
 Windows optimized release editor:
 
 ```powershell
-scons platform=windows target=editor arch=x86_64 faster_godot=yes production=yes tests=no optimize=speed lto=full debug_symbols=no
+scons platform=windows target=editor arch=x86_64 production=yes tests=no optimize=speed lto=full debug_symbols=no
 ```
 
 Linux optimized release template:
 
 ```bash
-scons platform=linuxbsd target=template_release arch=x86_64 faster_godot=yes production=yes tests=no optimize=speed lto=full debug_symbols=no
+scons platform=linuxbsd target=template_release arch=x86_64 production=yes tests=no optimize=speed lto=full debug_symbols=no
 ```
 
 The forked binaries use the `faster-godot` basename and receive the

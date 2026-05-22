@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/math/plane.h"
+#include "core/math/simd_defs.h"
 #include "core/math/vector3.h"
 #include "core/templates/hashfuncs.h"
 
@@ -268,7 +269,35 @@ bool AABB::intersects_convex_shape(const Plane *p_planes, int p_plane_count, con
 	Vector3 half_extents = size * 0.5f;
 	Vector3 ofs = position + half_extents;
 
-	for (int i = 0; i < p_plane_count; i++) {
+	int i = 0;
+	const __m256 half_x = _mm256_set1_ps(half_extents.x);
+	const __m256 half_y = _mm256_set1_ps(half_extents.y);
+	const __m256 half_z = _mm256_set1_ps(half_extents.z);
+	const __m256 neg_half_x = _mm256_set1_ps(-half_extents.x);
+	const __m256 neg_half_y = _mm256_set1_ps(-half_extents.y);
+	const __m256 neg_half_z = _mm256_set1_ps(-half_extents.z);
+	const __m256 ofs_x = _mm256_set1_ps(ofs.x);
+	const __m256 ofs_y = _mm256_set1_ps(ofs.y);
+	const __m256 ofs_z = _mm256_set1_ps(ofs.z);
+	const __m256 zero = _mm256_setzero_ps();
+
+	for (; i + 8 <= p_plane_count; i += 8) {
+		const __m256 nx = _mm256_setr_ps(p_planes[i + 0].normal.x, p_planes[i + 1].normal.x, p_planes[i + 2].normal.x, p_planes[i + 3].normal.x, p_planes[i + 4].normal.x, p_planes[i + 5].normal.x, p_planes[i + 6].normal.x, p_planes[i + 7].normal.x);
+		const __m256 ny = _mm256_setr_ps(p_planes[i + 0].normal.y, p_planes[i + 1].normal.y, p_planes[i + 2].normal.y, p_planes[i + 3].normal.y, p_planes[i + 4].normal.y, p_planes[i + 5].normal.y, p_planes[i + 6].normal.y, p_planes[i + 7].normal.y);
+		const __m256 nz = _mm256_setr_ps(p_planes[i + 0].normal.z, p_planes[i + 1].normal.z, p_planes[i + 2].normal.z, p_planes[i + 3].normal.z, p_planes[i + 4].normal.z, p_planes[i + 5].normal.z, p_planes[i + 6].normal.z, p_planes[i + 7].normal.z);
+		const __m256 d = _mm256_setr_ps(p_planes[i + 0].d, p_planes[i + 1].d, p_planes[i + 2].d, p_planes[i + 3].d, p_planes[i + 4].d, p_planes[i + 5].d, p_planes[i + 6].d, p_planes[i + 7].d);
+
+		const __m256 px = _mm256_add_ps(_mm256_blendv_ps(half_x, neg_half_x, _mm256_cmp_ps(nx, zero, _CMP_GT_OQ)), ofs_x);
+		const __m256 py = _mm256_add_ps(_mm256_blendv_ps(half_y, neg_half_y, _mm256_cmp_ps(ny, zero, _CMP_GT_OQ)), ofs_y);
+		const __m256 pz = _mm256_add_ps(_mm256_blendv_ps(half_z, neg_half_z, _mm256_cmp_ps(nz, zero, _CMP_GT_OQ)), ofs_z);
+		const __m256 dot = Math::simd_fmadd_ps(nz, pz, Math::simd_fmadd_ps(ny, py, _mm256_mul_ps(nx, px)));
+
+		if (_mm256_movemask_ps(_mm256_cmp_ps(dot, d, _CMP_GT_OQ)) != 0) {
+			return false;
+		}
+	}
+
+	for (; i < p_plane_count; i++) {
 		const Plane &p = p_planes[i];
 		Vector3 point(
 				(p.normal.x > 0) ? -half_extents.x : half_extents.x,
@@ -310,7 +339,35 @@ bool AABB::inside_convex_shape(const Plane *p_planes, int p_plane_count) const {
 	Vector3 half_extents = size * 0.5f;
 	Vector3 ofs = position + half_extents;
 
-	for (int i = 0; i < p_plane_count; i++) {
+	int i = 0;
+	const __m256 half_x = _mm256_set1_ps(half_extents.x);
+	const __m256 half_y = _mm256_set1_ps(half_extents.y);
+	const __m256 half_z = _mm256_set1_ps(half_extents.z);
+	const __m256 neg_half_x = _mm256_set1_ps(-half_extents.x);
+	const __m256 neg_half_y = _mm256_set1_ps(-half_extents.y);
+	const __m256 neg_half_z = _mm256_set1_ps(-half_extents.z);
+	const __m256 ofs_x = _mm256_set1_ps(ofs.x);
+	const __m256 ofs_y = _mm256_set1_ps(ofs.y);
+	const __m256 ofs_z = _mm256_set1_ps(ofs.z);
+	const __m256 zero = _mm256_setzero_ps();
+
+	for (; i + 8 <= p_plane_count; i += 8) {
+		const __m256 nx = _mm256_setr_ps(p_planes[i + 0].normal.x, p_planes[i + 1].normal.x, p_planes[i + 2].normal.x, p_planes[i + 3].normal.x, p_planes[i + 4].normal.x, p_planes[i + 5].normal.x, p_planes[i + 6].normal.x, p_planes[i + 7].normal.x);
+		const __m256 ny = _mm256_setr_ps(p_planes[i + 0].normal.y, p_planes[i + 1].normal.y, p_planes[i + 2].normal.y, p_planes[i + 3].normal.y, p_planes[i + 4].normal.y, p_planes[i + 5].normal.y, p_planes[i + 6].normal.y, p_planes[i + 7].normal.y);
+		const __m256 nz = _mm256_setr_ps(p_planes[i + 0].normal.z, p_planes[i + 1].normal.z, p_planes[i + 2].normal.z, p_planes[i + 3].normal.z, p_planes[i + 4].normal.z, p_planes[i + 5].normal.z, p_planes[i + 6].normal.z, p_planes[i + 7].normal.z);
+		const __m256 d = _mm256_setr_ps(p_planes[i + 0].d, p_planes[i + 1].d, p_planes[i + 2].d, p_planes[i + 3].d, p_planes[i + 4].d, p_planes[i + 5].d, p_planes[i + 6].d, p_planes[i + 7].d);
+
+		const __m256 px = _mm256_add_ps(_mm256_blendv_ps(half_x, neg_half_x, _mm256_cmp_ps(nx, zero, _CMP_LT_OQ)), ofs_x);
+		const __m256 py = _mm256_add_ps(_mm256_blendv_ps(half_y, neg_half_y, _mm256_cmp_ps(ny, zero, _CMP_LT_OQ)), ofs_y);
+		const __m256 pz = _mm256_add_ps(_mm256_blendv_ps(half_z, neg_half_z, _mm256_cmp_ps(nz, zero, _CMP_LT_OQ)), ofs_z);
+		const __m256 dot = Math::simd_fmadd_ps(nz, pz, Math::simd_fmadd_ps(ny, py, _mm256_mul_ps(nx, px)));
+
+		if (_mm256_movemask_ps(_mm256_cmp_ps(dot, d, _CMP_GT_OQ)) != 0) {
+			return false;
+		}
+	}
+
+	for (; i < p_plane_count; i++) {
 		const Plane &p = p_planes[i];
 		Vector3 point(
 				(p.normal.x < 0) ? -half_extents.x : half_extents.x,

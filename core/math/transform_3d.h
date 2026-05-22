@@ -33,6 +33,7 @@
 #include "core/math/aabb.h"
 #include "core/math/basis.h"
 #include "core/math/plane.h"
+#include "core/math/simd_defs.h"
 #include "core/templates/vector.h"
 
 struct [[nodiscard]] Transform3D {
@@ -262,7 +263,43 @@ Vector<Vector3> Transform3D::xform(const Vector<Vector3> &p_array) const {
 	const Vector3 *r = p_array.ptr();
 	Vector3 *w = array.ptrw();
 
-	for (int i = 0; i < p_array.size(); ++i) {
+	int i = 0;
+	const int count = p_array.size();
+	const __m256 b00 = _mm256_set1_ps(basis[0][0]);
+	const __m256 b01 = _mm256_set1_ps(basis[0][1]);
+	const __m256 b02 = _mm256_set1_ps(basis[0][2]);
+	const __m256 b10 = _mm256_set1_ps(basis[1][0]);
+	const __m256 b11 = _mm256_set1_ps(basis[1][1]);
+	const __m256 b12 = _mm256_set1_ps(basis[1][2]);
+	const __m256 b20 = _mm256_set1_ps(basis[2][0]);
+	const __m256 b21 = _mm256_set1_ps(basis[2][1]);
+	const __m256 b22 = _mm256_set1_ps(basis[2][2]);
+	const __m256 ox = _mm256_set1_ps(origin.x);
+	const __m256 oy = _mm256_set1_ps(origin.y);
+	const __m256 oz = _mm256_set1_ps(origin.z);
+
+	for (; i + 8 <= count; i += 8) {
+		const __m256 vx = _mm256_setr_ps(r[i + 0].x, r[i + 1].x, r[i + 2].x, r[i + 3].x, r[i + 4].x, r[i + 5].x, r[i + 6].x, r[i + 7].x);
+		const __m256 vy = _mm256_setr_ps(r[i + 0].y, r[i + 1].y, r[i + 2].y, r[i + 3].y, r[i + 4].y, r[i + 5].y, r[i + 6].y, r[i + 7].y);
+		const __m256 vz = _mm256_setr_ps(r[i + 0].z, r[i + 1].z, r[i + 2].z, r[i + 3].z, r[i + 4].z, r[i + 5].z, r[i + 6].z, r[i + 7].z);
+
+		const __m256 tx = Math::simd_fmadd_ps(b02, vz, Math::simd_fmadd_ps(b01, vy, Math::simd_fmadd_ps(b00, vx, ox)));
+		const __m256 ty = Math::simd_fmadd_ps(b12, vz, Math::simd_fmadd_ps(b11, vy, Math::simd_fmadd_ps(b10, vx, oy)));
+		const __m256 tz = Math::simd_fmadd_ps(b22, vz, Math::simd_fmadd_ps(b21, vy, Math::simd_fmadd_ps(b20, vx, oz)));
+
+		alignas(32) float out_x[8];
+		alignas(32) float out_y[8];
+		alignas(32) float out_z[8];
+		_mm256_store_ps(out_x, tx);
+		_mm256_store_ps(out_y, ty);
+		_mm256_store_ps(out_z, tz);
+
+		for (int j = 0; j < 8; j++) {
+			w[i + j] = Vector3(out_x[j], out_y[j], out_z[j]);
+		}
+	}
+
+	for (; i < p_array.size(); ++i) {
 		w[i] = xform(r[i]);
 	}
 	return array;
@@ -275,7 +312,43 @@ Vector<Vector3> Transform3D::xform_inv(const Vector<Vector3> &p_array) const {
 	const Vector3 *r = p_array.ptr();
 	Vector3 *w = array.ptrw();
 
-	for (int i = 0; i < p_array.size(); ++i) {
+	int i = 0;
+	const int count = p_array.size();
+	const __m256 b00 = _mm256_set1_ps(basis.rows[0][0]);
+	const __m256 b01 = _mm256_set1_ps(basis.rows[0][1]);
+	const __m256 b02 = _mm256_set1_ps(basis.rows[0][2]);
+	const __m256 b10 = _mm256_set1_ps(basis.rows[1][0]);
+	const __m256 b11 = _mm256_set1_ps(basis.rows[1][1]);
+	const __m256 b12 = _mm256_set1_ps(basis.rows[1][2]);
+	const __m256 b20 = _mm256_set1_ps(basis.rows[2][0]);
+	const __m256 b21 = _mm256_set1_ps(basis.rows[2][1]);
+	const __m256 b22 = _mm256_set1_ps(basis.rows[2][2]);
+	const __m256 ox = _mm256_set1_ps(origin.x);
+	const __m256 oy = _mm256_set1_ps(origin.y);
+	const __m256 oz = _mm256_set1_ps(origin.z);
+
+	for (; i + 8 <= count; i += 8) {
+		const __m256 vx = _mm256_sub_ps(_mm256_setr_ps(r[i + 0].x, r[i + 1].x, r[i + 2].x, r[i + 3].x, r[i + 4].x, r[i + 5].x, r[i + 6].x, r[i + 7].x), ox);
+		const __m256 vy = _mm256_sub_ps(_mm256_setr_ps(r[i + 0].y, r[i + 1].y, r[i + 2].y, r[i + 3].y, r[i + 4].y, r[i + 5].y, r[i + 6].y, r[i + 7].y), oy);
+		const __m256 vz = _mm256_sub_ps(_mm256_setr_ps(r[i + 0].z, r[i + 1].z, r[i + 2].z, r[i + 3].z, r[i + 4].z, r[i + 5].z, r[i + 6].z, r[i + 7].z), oz);
+
+		const __m256 tx = Math::simd_fmadd_ps(b20, vz, Math::simd_fmadd_ps(b10, vy, _mm256_mul_ps(b00, vx)));
+		const __m256 ty = Math::simd_fmadd_ps(b21, vz, Math::simd_fmadd_ps(b11, vy, _mm256_mul_ps(b01, vx)));
+		const __m256 tz = Math::simd_fmadd_ps(b22, vz, Math::simd_fmadd_ps(b12, vy, _mm256_mul_ps(b02, vx)));
+
+		alignas(32) float out_x[8];
+		alignas(32) float out_y[8];
+		alignas(32) float out_z[8];
+		_mm256_store_ps(out_x, tx);
+		_mm256_store_ps(out_y, ty);
+		_mm256_store_ps(out_z, tz);
+
+		for (int j = 0; j < 8; j++) {
+			w[i + j] = Vector3(out_x[j], out_y[j], out_z[j]);
+		}
+	}
+
+	for (; i < p_array.size(); ++i) {
 		w[i] = xform_inv(r[i]);
 	}
 	return array;

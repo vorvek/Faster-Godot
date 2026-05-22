@@ -30,6 +30,7 @@
 
 #include "geometry_3d.h"
 
+#include "core/math/simd_defs.h"
 #include "core/templates/hash_map.h"
 
 void Geometry3D::get_closest_points_between_segments(const Vector3 &p_p0, const Vector3 &p_p1, const Vector3 &p_q0, const Vector3 &p_q1, Vector3 &r_ps, Vector3 &r_qt) {
@@ -906,7 +907,12 @@ Vector<uint32_t> Geometry3D::generate_edf(const Vector<bool> &p_voxels, const Ve
 	ERR_FAIL_COND_V((uint32_t)p_voxels.size() != float_count, Vector<uint32_t>());
 
 	float *work_memory = memnew_arr(float, float_count);
-	for (uint32_t i = 0; i < float_count; i++) {
+	uint32_t i = 0;
+	const __m256 big_val = _mm256_set1_ps(BIG_VAL);
+	for (; i + 8 <= float_count; i += 8) {
+		_mm256_storeu_ps(&work_memory[i], big_val);
+	}
+	for (; i < float_count; i++) {
 		work_memory[i] = BIG_VAL;
 	}
 
@@ -956,7 +962,13 @@ Vector<uint32_t> Geometry3D::generate_edf(const Vector<bool> &p_voxels, const Ve
 	ret.resize(float_count);
 	{
 		uint32_t *w = ret.ptrw();
-		for (uint32_t i = 0; i < float_count; i++) {
+		i = 0;
+		for (; i + 8 <= float_count; i += 8) {
+			const __m256 dist = _mm256_sqrt_ps(_mm256_loadu_ps(&work_memory[i]));
+			const __m256i as_int = _mm256_cvttps_epi32(dist);
+			_mm256_storeu_si256(reinterpret_cast<__m256i *>(&w[i]), as_int);
+		}
+		for (; i < float_count; i++) {
 			w[i] = uint32_t(Math::sqrt(work_memory[i]));
 		}
 	}
@@ -977,7 +989,20 @@ Vector<int8_t> Geometry3D::generate_sdf8(const Vector<uint32_t> &p_positive, con
 	const uint32_t *rpos = p_positive.ptr();
 	const uint32_t *rneg = p_negative.ptr();
 	int8_t *wsdf = sdf8.ptrw();
-	for (int i = 0; i < s; i++) {
+	int i = 0;
+	const __m256i min_sdf = _mm256_set1_epi32(-128);
+	const __m256i max_sdf = _mm256_set1_epi32(127);
+	for (; i + 8 <= s; i += 8) {
+		const __m256i pos = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(&rpos[i]));
+		const __m256i neg = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(&rneg[i]));
+		const __m256i clamped = _mm256_min_epi32(_mm256_max_epi32(_mm256_sub_epi32(pos, neg), min_sdf), max_sdf);
+		alignas(32) int32_t out[8];
+		_mm256_store_si256(reinterpret_cast<__m256i *>(out), clamped);
+		for (int j = 0; j < 8; j++) {
+			wsdf[i + j] = int8_t(out[j]);
+		}
+	}
+	for (; i < s; i++) {
 		int32_t diff = int32_t(rpos[i]) - int32_t(rneg[i]);
 		wsdf[i] = CLAMP(diff, -128, 127);
 	}

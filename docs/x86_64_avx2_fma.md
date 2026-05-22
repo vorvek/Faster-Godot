@@ -10,14 +10,22 @@ library already provides safe runtime dispatch.
 ## Code Changes
 
 - `SConstruct`
-  - Adds the default-on `faster_godot` build option.
+  - Always builds the Faster-Godot profile; the legacy `faster_godot` argument
+    is ignored if passed.
   - Requires `platform=windows` or `platform=linuxbsd`.
   - Forces `arch=x86_64` when `arch=auto`.
   - Rejects non-`x86_64` builds.
+  - Rejects non-`single` precision builds.
   - Adds `-mavx2 -mfma -mf16c -mpopcnt -ffp-contract=fast` for
     GCC/Clang/MinGW.
   - Adds `/arch:AVX2 /fp:fast` for MSVC.
   - Adds the `.faster_godot` binary suffix.
+- `core/math/simd_defs.h`
+  - Centralizes the core math SIMD contract and makes missing GCC/Clang
+    AVX2/FMA/F16C/POPCNT flags a compile-time error.
+- `core/math`
+  - Uses AVX2/FMA/F16C directly in selected BVH, AABB convex-plane,
+    Transform3D vector-array, half-float decode, and EDF/SDF loops.
 - `platform/windows/cpu_feature_validation.c`
   - Checks SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, OSXSAVE, and XCR0 AVX state
     before entering the main executable.

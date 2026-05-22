@@ -12,7 +12,7 @@ thirdparty_obj = []
 
 if env["builtin_embree"]:
     thirdparty_dir = "#thirdparty/embree/"
-    faster_embree_avx2_profile = env["faster_godot"] and env["arch"] == "x86_64" and env["platform"] in ["windows", "linuxbsd"]
+    faster_embree_avx2_profile = env["arch"] == "x86_64" and env["platform"] in ["windows", "linuxbsd"]
 
     embree_src = [
         "common/sys/sysinfo.cpp",

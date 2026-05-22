@@ -135,4 +135,25 @@ TEST_CASE("[Transform3D] Rotate in-place (local rotation)") {
 	const Transform3D rotated_transform = Transform3D(transform.rotated_local(Vector3(0, 1, 0), Math::PI));
 	CHECK_MESSAGE(rotated_transform.is_equal_approx(expected), "The rotated transform should have a new orientation but still be based on the same origin.");
 }
+
+TEST_CASE("[Transform3D] Array transforms match per-vector transforms") {
+	const Transform3D transform = Transform3D(
+			Basis(Vector3(1.25, -0.5, 0.75), Vector3(0.25, 2.0, -1.5), Vector3(-0.125, 0.5, 1.75)),
+			Vector3(3.0, -2.0, 0.5));
+
+	Vector<Vector3> points;
+	for (int i = 0; i < 17; i++) {
+		points.push_back(Vector3(i * 0.25f - 2.0f, i * -0.5f + 1.25f, i * 0.125f + 0.75f));
+	}
+
+	const Vector<Vector3> transformed = transform.xform(points);
+	const Vector<Vector3> inverse_transformed = transform.xform_inv(points);
+	REQUIRE(transformed.size() == points.size());
+	REQUIRE(inverse_transformed.size() == points.size());
+
+	for (int i = 0; i < points.size(); i++) {
+		CHECK_MESSAGE(transformed[i].is_equal_approx(transform.xform(points[i])), "Array xform result should match scalar xform.");
+		CHECK_MESSAGE(inverse_transformed[i].is_equal_approx(transform.xform_inv(points[i])), "Array inverse xform result should match scalar inverse xform.");
+	}
+}
 } // namespace TestTransform3D

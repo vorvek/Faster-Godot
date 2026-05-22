@@ -199,4 +199,45 @@ TEST_CASE("[Geometry3D] Triangle and Sphere Intersect") {
 	CHECK(Geometry3D::triangle_sphere_intersection_test(triangle_a, triangle_b, triangle_c, Vector3(0, 1, 0), Vector3(0, 0, 0), 5, triangle_contact, sphere_contact) == true);
 	CHECK(Geometry3D::triangle_sphere_intersection_test(triangle_a, triangle_b, triangle_c, Vector3(0, 1, 0), Vector3(20, 0, 0), 5, triangle_contact, sphere_contact) == false);
 }
+
+TEST_CASE("[Geometry3D] Generate EDF for a simple line") {
+	const Vector3i size(10, 1, 1);
+	Vector<bool> voxels;
+	voxels.resize(size.x * size.y * size.z);
+	bool *w = voxels.ptrw();
+	for (int i = 0; i < voxels.size(); i++) {
+		w[i] = false;
+	}
+	w[0] = true;
+
+	const Vector<uint32_t> edf = Geometry3D::generate_edf(voxels, size, false);
+	REQUIRE(edf.size() == voxels.size());
+	for (int i = 0; i < edf.size(); i++) {
+		CHECK(edf[i] == (uint32_t)i);
+	}
+}
+
+TEST_CASE("[Geometry3D] Generate SDF8 clamps signed distance differences") {
+	const int values = 10;
+	const uint32_t positive_values[values] = { 0, 1, 128, 255, 5, 10, 127, 500, 3, 200 };
+	const uint32_t negative_values[values] = { 0, 3, 0, 0, 200, 10, 255, 0, 4, 100 };
+	const int expected[values] = { 0, -2, 127, 127, -128, 0, -128, 127, -1, 100 };
+
+	Vector<uint32_t> positive;
+	Vector<uint32_t> negative;
+	positive.resize(values);
+	negative.resize(values);
+	uint32_t *positive_w = positive.ptrw();
+	uint32_t *negative_w = negative.ptrw();
+	for (int i = 0; i < values; i++) {
+		positive_w[i] = positive_values[i];
+		negative_w[i] = negative_values[i];
+	}
+
+	const Vector<int8_t> sdf8 = Geometry3D::generate_sdf8(positive, negative);
+	REQUIRE(sdf8.size() == values);
+	for (int i = 0; i < values; i++) {
+		CHECK(sdf8[i] == int8_t(expected[i]));
+	}
+}
 } // namespace TestGeometry3D

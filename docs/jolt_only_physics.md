@@ -24,7 +24,6 @@ fork profile.
 
 ## Cons
 
-- Projects depending on Godot Physics behavior need official Godot or
-  `faster_godot=no`.
+- Projects depending on Godot Physics behavior need official Godot.
 - 2D physics is not a supported runtime feature in this profile.
 - Physics results are allowed to differ from official Godot.

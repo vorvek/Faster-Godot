@@ -201,6 +201,41 @@ void _cull_hit(uint32_t p_ref_id, CullParams &p) {
 	_cull_hits.push_back(p_ref_id);
 }
 
+_FORCE_INLINE_ __m256 _cull_leaf_aabb_axis8(const TLeaf &p_leaf, int p_start, int p_axis, bool p_neg_max) const {
+	if (p_neg_max) {
+		return _mm256_setr_ps(
+				p_leaf.get_aabb(p_start + 0).neg_max[p_axis],
+				p_leaf.get_aabb(p_start + 1).neg_max[p_axis],
+				p_leaf.get_aabb(p_start + 2).neg_max[p_axis],
+				p_leaf.get_aabb(p_start + 3).neg_max[p_axis],
+				p_leaf.get_aabb(p_start + 4).neg_max[p_axis],
+				p_leaf.get_aabb(p_start + 5).neg_max[p_axis],
+				p_leaf.get_aabb(p_start + 6).neg_max[p_axis],
+				p_leaf.get_aabb(p_start + 7).neg_max[p_axis]);
+	}
+
+	return _mm256_setr_ps(
+			p_leaf.get_aabb(p_start + 0).min[p_axis],
+			p_leaf.get_aabb(p_start + 1).min[p_axis],
+			p_leaf.get_aabb(p_start + 2).min[p_axis],
+			p_leaf.get_aabb(p_start + 3).min[p_axis],
+			p_leaf.get_aabb(p_start + 4).min[p_axis],
+			p_leaf.get_aabb(p_start + 5).min[p_axis],
+			p_leaf.get_aabb(p_start + 6).min[p_axis],
+			p_leaf.get_aabb(p_start + 7).min[p_axis]);
+}
+
+_FORCE_INLINE_ uint32_t _cull_aabb_swizzled_mask8(const TLeaf &p_leaf, int p_start, const BVHABB_CLASS &p_swizzled_tester) const {
+	__m256 pass = _mm256_castsi256_ps(_mm256_set1_epi32(-1));
+	for (int axis = 0; axis < POINT::AXIS_COUNT; axis++) {
+		const __m256 tester_min = _mm256_set1_ps(p_swizzled_tester.min[axis]);
+		const __m256 tester_neg_max = _mm256_set1_ps(p_swizzled_tester.neg_max[axis]);
+		pass = _mm256_and_ps(pass, _mm256_cmp_ps(tester_min, _cull_leaf_aabb_axis8(p_leaf, p_start, axis, false), _CMP_GE_OQ));
+		pass = _mm256_and_ps(pass, _mm256_cmp_ps(tester_neg_max, _cull_leaf_aabb_axis8(p_leaf, p_start, axis, true), _CMP_GE_OQ));
+	}
+	return (uint32_t)_mm256_movemask_ps(pass);
+}
+
 bool _cull_segment_iterative(uint32_t p_node_id, CullParams &r_params) {
 	// our function parameters to keep on a stack
 	struct CullSegParams {
@@ -374,7 +409,23 @@ bool _cull_aabb_iterative(uint32_t p_node_id, CullParams &r_params, bool p_fully
 				swizzled_tester.min = -r_params.abb.neg_max;
 				swizzled_tester.neg_max = -r_params.abb.min;
 
-				for (int n = 0; n < leaf_num_items; n++) {
+				int n = 0;
+				if constexpr (POINT::AXIS_COUNT == 2 || POINT::AXIS_COUNT == 3) {
+					for (; n + 8 <= leaf_num_items; n += 8) {
+						uint32_t hit_mask = _cull_aabb_swizzled_mask8(leaf, n, swizzled_tester);
+						for (uint32_t lane = 0; lane < 8; lane++) {
+							if ((hit_mask & (1u << lane)) == 0) {
+								continue;
+							}
+							uint32_t child_id = leaf.get_item_ref_id(n + lane);
+
+							// register hit
+							_cull_hit(child_id, r_params);
+						}
+					}
+				}
+
+				for (; n < leaf_num_items; n++) {
 					const BVHABB_CLASS &aabb = leaf.get_aabb(n);
 
 					if (swizzled_tester.intersects_swizzled(aabb)) {

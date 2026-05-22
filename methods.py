@@ -1240,7 +1240,7 @@ def generate_vs_project(env, original_args, project_name="godot"):
     sources_active = []
     others_active = []
 
-    program_basename = "faster-godot" if env.get("faster_godot", False) else "godot"
+    program_basename = "faster-godot"
     get_dependencies(
         env.File(f"#bin/{program_basename}{env['PROGSUFFIX']}"), env, extensions, headers_active, sources_active, others_active
     )

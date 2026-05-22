@@ -92,7 +92,7 @@ sources += res_obj
 if env["accesskit"] and not env.msvc:
     sources += env.DEFLIB("uiautomationcore")
 
-program_name = "#bin/faster-godot" if env["faster_godot"] else "#bin/godot"
+program_name = "#bin/faster-godot"
 
 if env["library_type"] == "static_library":
     prog = env.add_library(program_name, sources, PROGSUFFIX=env["PROGSUFFIX"])

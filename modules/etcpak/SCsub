@@ -25,7 +25,7 @@ thirdparty_sources = [thirdparty_dir + file for file in thirdparty_sources]
 env_etcpak.Prepend(CPPPATH=[thirdparty_dir])
 
 env_thirdparty = env_etcpak.Clone()
-if env["faster_godot"] and env["arch"] == "x86_64" and env.msvc and not methods.using_clang(env):
+if env["arch"] == "x86_64" and env.msvc and not methods.using_clang(env):
     # MSVC's /arch:AVX2 build does not expose the full set of GNU-style
     # feature macros ETCpak uses to keep its AVX2 and SSE4.1 tables in sync.
     env_thirdparty.AppendUnique(

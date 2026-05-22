@@ -30,6 +30,8 @@
 
 #pragma once
 
+#include "core/math/math_funcs.h"
+
 #include "tests/test_macros.h"
 
 namespace TestMath {
@@ -87,6 +89,17 @@ TEST_CASE("[Math] Power of two functions") {
 	CHECK(nearest_shift((uint32_t)16) == 5);
 	CHECK(nearest_shift((uint32_t)17) == 5);
 	CHECK(nearest_shift((uint32_t)65535) == 16);
+}
+
+TEST_CASE("[Math] Half float conversions preserve scalar behavior") {
+	CHECK(Math::half_to_float(0x0000) == 0.0f);
+	CHECK(Math::half_to_float(0x3C00) == 1.0f);
+	CHECK(Math::half_to_float(0xC000) == -2.0f);
+	CHECK(Math::half_to_float(0x7BFF) == doctest::Approx(65504.0f));
+	CHECK(Math::half_to_float(0x0001) == doctest::Approx(5.960464477539063e-8f));
+
+	CHECK(Math::make_half_float(1.0f) == 0x3C00);
+	CHECK(Math::make_half_float(1.0e-8f) == 0x0000);
 }
 
 TEST_CASE_TEMPLATE("[Math] abs", T, int, float, double) {

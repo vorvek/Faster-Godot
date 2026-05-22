@@ -69,6 +69,7 @@
 #include "tests/core/math/test_aabb.h"
 #include "tests/core/math/test_astar.h"
 #include "tests/core/math/test_basis.h"
+#include "tests/core/math/test_bvh.h"
 #include "tests/core/math/test_color.h"
 #include "tests/core/math/test_expression.h"
 #include "tests/core/math/test_geometry_2d.h"

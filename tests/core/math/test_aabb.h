@@ -479,4 +479,39 @@ TEST_CASE("[AABB] Finite number checks") {
 			"AABB with two components infinite should not be finite.");
 }
 
+TEST_CASE("[AABB] Convex shape tests handle eight planes") {
+	const Plane planes[8] = {
+		Plane(Vector3(1, 0, 0), 1),
+		Plane(Vector3(-1, 0, 0), 1),
+		Plane(Vector3(0, 1, 0), 1),
+		Plane(Vector3(0, -1, 0), 1),
+		Plane(Vector3(0, 0, 1), 1),
+		Plane(Vector3(0, 0, -1), 1),
+		Plane(Vector3(1, 1, 0).normalized(), 2),
+		Plane(Vector3(-1, 1, 0).normalized(), 2),
+	};
+	const Vector3 points[8] = {
+		Vector3(-1, -1, -1),
+		Vector3(-1, -1, 1),
+		Vector3(-1, 1, -1),
+		Vector3(-1, 1, 1),
+		Vector3(1, -1, -1),
+		Vector3(1, -1, 1),
+		Vector3(1, 1, -1),
+		Vector3(1, 1, 1),
+	};
+
+	const AABB contained(Vector3(-0.5, -0.5, -0.5), Vector3(1, 1, 1));
+	CHECK(contained.intersects_convex_shape(planes, 8, points, 8));
+	CHECK(contained.inside_convex_shape(planes, 8));
+
+	const AABB crossing(Vector3(0.75, -0.25, -0.25), Vector3(0.5, 0.5, 0.5));
+	CHECK(crossing.intersects_convex_shape(planes, 8, points, 8));
+	CHECK_FALSE(crossing.inside_convex_shape(planes, 8));
+
+	const AABB outside(Vector3(1.25, -0.25, -0.25), Vector3(0.25, 0.5, 0.5));
+	CHECK_FALSE(outside.intersects_convex_shape(planes, 8, points, 8));
+	CHECK_FALSE(outside.inside_convex_shape(planes, 8));
+}
+
 } // namespace TestAABB

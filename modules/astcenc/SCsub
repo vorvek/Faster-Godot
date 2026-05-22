@@ -44,7 +44,7 @@ env_astcenc.Prepend(CPPPATH=[thirdparty_dir])
 env_thirdparty = env_astcenc.Clone()
 env_thirdparty.disable_warnings()
 
-if env["faster_godot"] and env["arch"] == "x86_64" and env.msvc and not methods.using_clang(env):
+if env["arch"] == "x86_64" and env.msvc and not methods.using_clang(env):
     env_thirdparty.AppendUnique(
         CPPDEFINES=[
             ("ASTCENC_SSE", 42),

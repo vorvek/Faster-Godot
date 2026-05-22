@@ -184,13 +184,6 @@ opts.Add(
     )
 )
 opts.Add(BoolVariable("production", "Set defaults to build Godot for use in production", False))
-opts.Add(
-    BoolVariable(
-        "faster_godot",
-        "Build Faster-Godot: Windows/Linux x86_64, Forward+ only, AVX2/FMA/F16C/POPCNT desktop profile",
-        True,
-    )
-)
 opts.Add(BoolVariable("threads", "Enable threading support", True))
 
 # Components
@@ -495,6 +488,9 @@ env.modules_detected = modules_detected
 
 # Update the environment again after all the module options are added.
 opts.Update(env, {**ARGUMENTS, **env.Dictionary()})
+if "faster_godot" in ARGUMENTS:
+    print_warning("The faster_godot option is ignored; this fork always builds the Faster-Godot desktop profile.")
+env["faster_godot"] = True
 Help(opts.GenerateHelpText(env))
 
 
@@ -674,45 +670,47 @@ if env["production"]:
     # LTO "auto" means we handle the preferred option in each platform detect.py.
     env["lto"] = ARGUMENTS.get("lto", "auto")
 
-if env["faster_godot"]:
-    if env["platform"] not in ["windows", "linuxbsd"]:
-        print_error("faster_godot supports only platform=windows and platform=linuxbsd.")
-        Exit(255)
-    if env["arch"] == "auto":
-        env["arch"] = "x86_64"
-    if env["arch"] != "x86_64":
-        print_error("faster_godot requires arch=x86_64.")
-        Exit(255)
+if env["platform"] not in ["windows", "linuxbsd"]:
+    print_error("Faster-Godot supports only platform=windows and platform=linuxbsd.")
+    Exit(255)
+if env["arch"] == "auto":
+    env["arch"] = "x86_64"
+if env["arch"] != "x86_64":
+    print_error("Faster-Godot requires arch=x86_64.")
+    Exit(255)
+if env["precision"] != "single":
+    print_error("Faster-Godot requires precision=single.")
+    Exit(255)
 
-    env["vulkan"] = True
-    env["opengl3"] = False
-    env["metal"] = False
-    env["disable_xr"] = True
-    env["deprecated"] = False
-    env["accesskit"] = False
-    faster_godot_disabled_modules = [
-        "camera",
-        "enet",
-        "godot_physics_2d",
-        "godot_physics_3d",
-        "jsonrpc",
-        "mobile_vr",
-        "multiplayer",
-        "objectdb_profiler",
-        "openxr",
-        "upnp",
-        "webrtc",
-        "websocket",
-        "webxr",
-    ]
-    for module in faster_godot_disabled_modules:
-        opt = f"module_{module}_enabled"
-        if opt in env and opt not in ARGUMENTS:
-            env[opt] = False
-    if "module_jolt_physics_enabled" in env and "module_jolt_physics_enabled" not in ARGUMENTS:
-        env["module_jolt_physics_enabled"] = True
-    env.Append(CPPDEFINES=["FASTER_GODOT", "FASTER_GODOT_FORWARD_PLUS_ONLY"])
-    env.extra_suffix += ".faster_godot"
+env["vulkan"] = True
+env["opengl3"] = False
+env["metal"] = False
+env["disable_xr"] = True
+env["deprecated"] = False
+env["accesskit"] = False
+faster_godot_disabled_modules = [
+    "camera",
+    "enet",
+    "godot_physics_2d",
+    "godot_physics_3d",
+    "jsonrpc",
+    "mobile_vr",
+    "multiplayer",
+    "objectdb_profiler",
+    "openxr",
+    "upnp",
+    "webrtc",
+    "websocket",
+    "webxr",
+]
+for module in faster_godot_disabled_modules:
+    opt = f"module_{module}_enabled"
+    if opt in env and opt not in ARGUMENTS:
+        env[opt] = False
+if "module_jolt_physics_enabled" in env and "module_jolt_physics_enabled" not in ARGUMENTS:
+    env["module_jolt_physics_enabled"] = True
+env.Append(CPPDEFINES=["FASTER_GODOT", "FASTER_GODOT_FORWARD_PLUS_ONLY"])
+env.extra_suffix += ".faster_godot"
 
 if env["strict_checks"]:
     env.Append(CPPDEFINES=["STRICT_CHECKS"])
@@ -815,26 +813,15 @@ elif env.msvc:
 
 # Set x86 CPU instruction sets to use by the compiler's autovectorization.
 if env["arch"] == "x86_64":
-    if env["faster_godot"]:
-        # Faster-Godot targets private x86_64 desktop builds and treats AVX2/FMA/F16C/POPCNT as the minimum CPU contract.
-        if env.msvc and not methods.using_clang(env):
-            if "/fp:strict" in env["CCFLAGS"]:
-                env["CCFLAGS"].remove("/fp:strict")
-            env.Append(CCFLAGS=["/arch:AVX2", "/fp:fast"])
-        else:
-            if "-ffp-contract=off" in env["CCFLAGS"]:
-                env["CCFLAGS"].remove("-ffp-contract=off")
-            env.Append(CCFLAGS=["-mavx2", "-mfma", "-mf16c", "-mpopcnt", "-ffp-contract=fast"])
+    # Faster-Godot treats AVX2/FMA/F16C/POPCNT as the minimum x86_64 CPU contract.
+    if env.msvc and not methods.using_clang(env):
+        if "/fp:strict" in env["CCFLAGS"]:
+            env["CCFLAGS"].remove("/fp:strict")
+        env.Append(CCFLAGS=["/arch:AVX2", "/fp:fast"])
     else:
-        # On 64-bit x86, enable SSE 4.2 and prior instruction sets (SSE3/SSSE3/SSE4/SSE4.1) to improve performance.
-        # This is supported on most CPUs released after 2009-2011 (Intel Nehalem, AMD Bulldozer).
-        # AVX and AVX2 aren't enabled because they aren't available on more recent low-end Intel CPUs.
-        if env.msvc and not methods.using_clang(env):
-            # https://stackoverflow.com/questions/64053597/how-do-i-enable-sse4-1-and-sse3-but-not-avx-in-msvc/69328426
-            env.Append(CCFLAGS=["/d2archSSE42"])
-        else:
-            # `-msse2` is implied when compiling for x86_64.
-            env.Append(CCFLAGS=["-msse4.2", "-mpopcnt"])
+        if "-ffp-contract=off" in env["CCFLAGS"]:
+            env["CCFLAGS"].remove("-ffp-contract=off")
+        env.Append(CCFLAGS=["-mavx2", "-mfma", "-mf16c", "-mpopcnt", "-ffp-contract=fast"])
 elif env["arch"] == "x86_32":
     # Be more conservative with instruction sets on 32-bit x86 to improve compatibility.
     # SSE and SSE2 are present on all CPUs that support 64-bit, even if running a 32-bit OS.
