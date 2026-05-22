@@ -83,19 +83,19 @@ Use `faster_godot=no` to build closer to official Godot behavior from this tree.
 Windows optimized release template:
 
 ```powershell
-scons platform=windows target=template_release arch=x86_64 faster_godot=yes production=yes tests=no optimize=speed lto=full debug_symbols=no -j31
+scons platform=windows target=template_release arch=x86_64 faster_godot=yes production=yes tests=no optimize=speed lto=full debug_symbols=no
 ```
 
 Windows optimized release editor:
 
 ```powershell
-scons platform=windows target=editor arch=x86_64 faster_godot=yes production=yes tests=no optimize=speed lto=full debug_symbols=no -j31
+scons platform=windows target=editor arch=x86_64 faster_godot=yes production=yes tests=no optimize=speed lto=full debug_symbols=no
 ```
 
 Linux optimized release template:
 
 ```bash
-scons platform=linuxbsd target=template_release arch=x86_64 faster_godot=yes production=yes tests=no optimize=speed lto=full debug_symbols=no -j31
+scons platform=linuxbsd target=template_release arch=x86_64 faster_godot=yes production=yes tests=no optimize=speed lto=full debug_symbols=no
 ```
 
 The forked binaries use the `faster-godot` basename and receive the
