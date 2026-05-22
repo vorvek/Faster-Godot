@@ -2712,8 +2712,16 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		if (rt_replaces_opaque && rb_data.is_valid() && rb_data->rt_has_depth_texture()) {
 			RENDER_TIMESTAMP("Copy RT Depth (R32F -> D32F)");
 			RD::get_singleton()->draw_command_begin_label("Copy RT Depth");
-			RID rt_depth_fb = FramebufferCacheRD::get_singleton()->get_cache_multiview(rb->get_view_count(), rb->get_depth_texture());
-			copy_effects->copy_r32f_to_depth_fb(rb_data->rt_get_depth_texture(), rt_depth_fb, Rect2i(0, 0, rb->get_internal_size().x, rb->get_internal_size().y));
+			RD::TextureFormat depth_format = rb->get_texture_format(RB_SCOPE_BUFFERS, RB_TEX_DEPTH);
+			if (depth_format.format == RD::DATA_FORMAT_R32_SFLOAT && (depth_format.usage_bits & RD::TEXTURE_USAGE_CAN_COPY_TO_BIT)) {
+				Size2i internal_size = rb->get_internal_size();
+				for (uint32_t v = 0; v < rb->get_view_count(); v++) {
+					RD::get_singleton()->texture_copy(rb_data->rt_get_depth_texture(), rb->get_depth_texture(), Vector3(), Vector3(), Vector3(internal_size.x, internal_size.y, 1), 0, 0, v, v);
+				}
+			} else {
+				RID rt_depth_fb = FramebufferCacheRD::get_singleton()->get_cache_multiview(rb->get_view_count(), rb->get_depth_texture());
+				copy_effects->copy_r32f_to_depth_fb(rb_data->rt_get_depth_texture(), rt_depth_fb, Rect2i(0, 0, rb->get_internal_size().x, rb->get_internal_size().y));
+			}
 			RD::get_singleton()->draw_command_end_label();
 		}
 
