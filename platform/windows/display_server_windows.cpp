@@ -74,8 +74,6 @@
 #include <windns.h> // For QWORD.
 #include <winuser.h>
 
-#include <limits>
-
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
@@ -4000,45 +3998,9 @@ void DisplayServerWindows::process_events() {
 	process_raw_input();
 
 	MSG msg = {};
-	auto peek_not_input = [&] {
-		if (!app_focused) {
-			return PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE);
-		}
-		BOOL ret = PeekMessageW(&msg, nullptr, 0, WM_INPUT - 1, PM_REMOVE);
-		// Avoid polling what is polled below in `peek_keys_mouse_buttons()`.
-		if (!ret) {
-			ret = PeekMessageW(&msg, nullptr, WM_INPUT + 3, WM_MOUSEMOVE, PM_REMOVE);
-		}
-		if (!ret) {
-			ret = PeekMessageW(&msg, nullptr, WM_MOUSELAST + 1, std::numeric_limits<UINT>::max(), PM_REMOVE);
-		}
-		return ret;
-	};
-
-	auto peek_keys_mouse_buttons = [&] {
-		BOOL ret = PeekMessageW(&msg, nullptr, WM_KEYFIRST, WM_KEYUP, PM_REMOVE);
-		if (!ret) {
-			// Do not process `WM_MOUSEMOVE` here.
-			ret = PeekMessageW(&msg, nullptr, WM_LBUTTONDOWN, WM_MOUSELAST, PM_REMOVE);
-		}
-		return ret;
-	};
-
-	constexpr int MAX_EVENTS_PER_FRAME = 1;
-	constexpr int MAX_EVENTS_PER_FRAME_KMB = 1;
-	int events_processed_this_frame = 0;
-	int events_processed_this_frame_kmb = 0;
-
-	while (events_processed_this_frame < MAX_EVENTS_PER_FRAME && peek_not_input()) {
+	while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
 		TranslateMessage(&msg);
 		DispatchMessageW(&msg);
-		events_processed_this_frame++;
-	}
-
-	if (events_processed_this_frame_kmb < MAX_EVENTS_PER_FRAME_KMB && peek_keys_mouse_buttons()) {
-		TranslateMessage(&msg);
-		DispatchMessageW(&msg);
-		events_processed_this_frame_kmb++;
 	}
 	_THREAD_SAFE_UNLOCK_
 
