@@ -83,12 +83,17 @@ public:
 	};
 
 	enum RTGIDenoiser {
+		// Legacy serialized values kept for compatibility.
 		RTGI_DENOISER_AUTO,
 		RTGI_DENOISER_INTERNAL,
 		RTGI_DENOISER_NVIDIA,
 		RTGI_DENOISER_AMD,
 		RTGI_DENOISER_INTEL,
 		RTGI_DENOISER_OFF,
+		RTGI_DENOISER_GPU,
+		RTGI_DENOISER_CPU,
+		RTGI_DENOISER_SVGF,
+		RTGI_DENOISER_NONE,
 	};
 
 	enum PathtracingDebugMode {
@@ -209,7 +214,7 @@ private:
 	PathtracingDebugMode pathtracing_debug_mode = RT_DEBUG_DISABLED;
 	int pathtracing_samples_per_pixel = 1;
 	int pathtracing_max_bounces = 3;
-	RSE::PathtracingDenoiser pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL;
+	RSE::PathtracingDenoiser pathtracing_denoiser = RSE::PT_DENOISER_OIDN_GPU;
 	RTGIMode rtgi_mode = RTGI_MODE_PATH_TRACED;
 	float rtgi_energy = 1.0;
 	bool rtgi_disable_in_editor = true;
@@ -218,7 +223,7 @@ private:
 	float rtgi_denoiser_strength = 0.65f;
 	float rtgi_overscan_horizontal = 0.0f;
 	float rtgi_overscan_vertical = 0.0f;
-	RTGIDenoiser rtgi_denoiser = RTGI_DENOISER_AUTO;
+	RTGIDenoiser rtgi_denoiser = RTGI_DENOISER_GPU;
 	void _update_pathtracing();
 
 	// Glow

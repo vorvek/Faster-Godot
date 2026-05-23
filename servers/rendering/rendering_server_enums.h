@@ -761,8 +761,11 @@ enum EnvironmentFogMode {
 
 enum PathtracingDenoiser {
 	PT_DENOISER_NONE = 0,
+	// Legacy NVIDIA/DLSS RR value. RTGI now maps this to OIDN GPU in Environment.
 	PT_DENOISER_DLSS_RAY_RECONSTRUCTION = 1,
 	PT_DENOISER_INTERNAL = 2,
+	PT_DENOISER_OIDN_GPU = 3,
+	PT_DENOISER_OIDN_CPU = 4,
 };
 
 // Pathtracing parameter indices. Indices 0-15 are copied into the ray tracing

@@ -709,6 +709,9 @@ public:
 	using PathtracingDenoiser = RSE::PathtracingDenoiser;
 	static constexpr PathtracingDenoiser PT_DENOISER_NONE = RSE::PT_DENOISER_NONE;
 	static constexpr PathtracingDenoiser PT_DENOISER_DLSS_RAY_RECONSTRUCTION = RSE::PT_DENOISER_DLSS_RAY_RECONSTRUCTION;
+	static constexpr PathtracingDenoiser PT_DENOISER_INTERNAL = RSE::PT_DENOISER_INTERNAL;
+	static constexpr PathtracingDenoiser PT_DENOISER_OIDN_GPU = RSE::PT_DENOISER_OIDN_GPU;
+	static constexpr PathtracingDenoiser PT_DENOISER_OIDN_CPU = RSE::PT_DENOISER_OIDN_CPU;
 
 	using PathtracingParamIndex = RSE::PathtracingParamIndex;
 	static constexpr PathtracingParamIndex PT_PARAM_VIS_MODE = RSE::PT_PARAM_VIS_MODE;

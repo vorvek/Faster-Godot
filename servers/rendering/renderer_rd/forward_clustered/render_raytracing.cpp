@@ -145,6 +145,79 @@ static uint64_t _rt_light_buffer_signature(const RT_LightData *p_light_data, uin
 	return signature;
 }
 
+static Vector3 _rt_light_vec3(const float p_value[3]) {
+	return Vector3(p_value[0], p_value[1], p_value[2]);
+}
+
+static float _rt_light_luminance(const RT_LightData &p_light) {
+	return MAX(0.0f, p_light.emission[0] * 0.2126f + p_light.emission[1] * 0.7152f + p_light.emission[2] * 0.0722f);
+}
+
+static bool _rt_light_relative_delta_exceeds(float p_previous, float p_current, float p_relative_threshold, float p_absolute_threshold) {
+	const float delta = Math::abs(p_current - p_previous);
+	const float scale = MAX(MAX(Math::abs(p_previous), Math::abs(p_current)), 0.001f);
+	return delta > p_absolute_threshold && delta / scale > p_relative_threshold;
+}
+
+static bool _rt_light_change_requires_history_reset(RTViewportState *p_state, const RT_LightData *p_light_data, uint32_t p_light_count) {
+	if (!p_state->previous_light_data_valid) {
+		return false;
+	}
+	if (p_state->previous_light_count != p_light_count) {
+		return true;
+	}
+
+	for (uint32_t i = 0; i < p_light_count; i++) {
+		const RT_LightData &previous = p_state->previous_light_data[i];
+		const RT_LightData &current = p_light_data[i];
+
+		if (previous.type != current.type || previous.flags != current.flags || previous.cull_mask != current.cull_mask || previous.shadow_caster_mask != current.shadow_caster_mask) {
+			return true;
+		}
+		if (Math::abs(previous.shadow_opacity - current.shadow_opacity) > 0.25f) {
+			return true;
+		}
+		if (_rt_light_relative_delta_exceeds(previous.indirect_energy, current.indirect_energy, 0.5f, 0.15f)) {
+			return true;
+		}
+		if (_rt_light_relative_delta_exceeds(_rt_light_luminance(previous), _rt_light_luminance(current), 0.6f, 0.2f)) {
+			return true;
+		}
+
+		if (current.type == RT_LIGHT_TYPE_DIRECTIONAL) {
+			Vector3 previous_dir = _rt_light_vec3(previous.position).normalized();
+			Vector3 current_dir = _rt_light_vec3(current.position).normalized();
+			if (!previous_dir.is_finite() || !current_dir.is_finite() || previous_dir.dot(current_dir) < 0.94f) {
+				return true;
+			}
+			continue;
+		}
+
+		const Vector3 previous_pos = _rt_light_vec3(previous.position);
+		const Vector3 current_pos = _rt_light_vec3(current.position);
+		if (!previous_pos.is_finite() || !current_pos.is_finite()) {
+			return true;
+		}
+
+		const float current_range = current.inv_max_range > 0.0f ? 1.0f / current.inv_max_range : 32.0f;
+		const float previous_range = previous.inv_max_range > 0.0f ? 1.0f / previous.inv_max_range : current_range;
+		const float movement_threshold = MAX(1.0f, MIN(current_range, previous_range) * 0.2f);
+		if (previous_pos.distance_squared_to(current_pos) > movement_threshold * movement_threshold) {
+			return true;
+		}
+
+		if (current.type == RT_LIGHT_TYPE_SPOT) {
+			Vector3 previous_dir = _rt_light_vec3(previous.spot_direction).normalized();
+			Vector3 current_dir = _rt_light_vec3(current.spot_direction).normalized();
+			if (!previous_dir.is_finite() || !current_dir.is_finite() || previous_dir.dot(current_dir) < 0.94f) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 static uint32_t _rt_cache_index_from_key(uint64_t p_key) {
 	uint32_t index = uint32_t(p_key) ^ uint32_t(p_key >> 32);
 	return index != 0 ? index : 1u;
@@ -3233,7 +3306,9 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 						compute_list, dirty_blas_list, dirty_blas_update_list, &merged_sd);
 
 		if (use_merged) {
-			uint64_t history_key = _rt_history_mix(pending.history_key, merged_sd.geometry.flags);
+			RT_GeometryData merged_geometry = merged_sd.geometry;
+			merged_geometry.flags |= RT_GEOM_FLAG_PRIMITIVE_HISTORY_ID;
+			uint64_t history_key = _rt_history_mix(pending.history_key, merged_geometry.flags);
 			uint32_t pushed_entries = 0;
 			auto push_merged_entry = [&](uint8_t p_instance_mask, uint32_t p_inst_flags) {
 				if (p_instance_mask == 0) {
@@ -3241,7 +3316,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 				}
 				blass.push_back(merged_sd.blas);
 				blas_transforms.push_back(pending.instance_transform);
-				geometry_data.push_back(_rt_geometry_with_history_validity(state, merged_sd.geometry, history_key, pending.layer_mask, p_instance_mask, pending.history_invalid));
+				geometry_data.push_back(_rt_geometry_with_history_validity(state, merged_geometry, history_key, pending.layer_mask, p_instance_mask, pending.history_invalid));
 				sbt_offsets.push_back(pending.rt_sbt_offset);
 				material_data.push_back(get_surface_material_data_with_sbt(pending.mm_surf, pending.mat_data, pending.rt_sbt_offset));
 				if (pending.transform_moved) {
@@ -3926,6 +4001,15 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			p_state->radiance_history_signature = radiance_signature;
 			p_state->radiance_history_invalidated = true;
 		}
+
+		if (_rt_light_change_requires_history_reset(p_state, rt_light_data, rt_light_count)) {
+			p_state->radiance_history_invalidated = true;
+		}
+		if (rt_light_count > 0) {
+			memcpy(p_state->previous_light_data, rt_light_data, rt_light_count * sizeof(RT_LightData));
+		}
+		p_state->previous_light_count = rt_light_count;
+		p_state->previous_light_data_valid = true;
 
 		// Upload light buffer.
 		{

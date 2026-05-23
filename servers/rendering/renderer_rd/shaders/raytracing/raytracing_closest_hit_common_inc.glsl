@@ -166,6 +166,9 @@ void write_primary_hit_history_validity() {
 	GeometryData geom = geometries[geom_idx];
 	float valid = ((geom.flags & FLAG_HISTORY_INVALID) != 0u) ? 0.0 : 1.0;
 	uint history_id = geom.history_id;
+	if ((geom.flags & FLAG_PRIMITIVE_HISTORY_ID) != 0u) {
+		history_id = mix_history_id(history_id, uint(gl_PrimitiveID));
+	}
 	ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
 	imageStore(rt_history_validity_image, pixel, vec4(valid, 0.0, 0.0, 0.0));
 	imageStore(rt_history_id_image, pixel, pack_history_id(history_id));

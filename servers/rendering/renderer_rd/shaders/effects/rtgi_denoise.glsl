@@ -20,6 +20,7 @@ layout(push_constant, std430) uniform Params {
 	float phi_normal;
 	float phi_depth;
 	float variance_boost;
+	float radiance_space_history;
 	vec2 visible_origin;
 	vec2 visible_size;
 	float fog_inv_length;
@@ -120,10 +121,13 @@ vec3 load_radiance(ivec2 pos) {
 }
 
 vec3 load_demodulated_radiance(ivec2 pos, vec4 normal_roughness, vec4 albedo_metalness, vec2 viewz_hitdist) {
+	if (params.radiance_space_history > 0.5) {
+		return load_radiance(pos);
+	}
 	return demodulate_radiance(load_radiance(pos), normal_roughness, albedo_metalness, viewz_hitdist.x);
 }
 
-bool previous_history_tap_valid(ivec2 tap_pos, vec4 current_nr, vec2 current_viewz_hitdist, vec4 current_albedo_metalness, vec4 current_id) {
+bool previous_history_tap_valid(ivec2 tap_pos, vec4 current_nr, vec2 current_viewz_hitdist, vec4 current_albedo_metalness, vec4 current_id, float motion_px) {
 	if (any(lessThan(tap_pos, ivec2(0))) || any(greaterThanEqual(tap_pos, ivec2(params.resolution)))) {
 		return false;
 	}
@@ -171,11 +175,14 @@ bool previous_history_tap_valid(ivec2 tap_pos, vec4 current_nr, vec2 current_vie
 	float relative_depth_error = abs(current_viewz_hitdist.x - previous_viewz_hitdist.x) / depth_scale;
 	float hitdist_scale = max(max(current_viewz_hitdist.y, previous_viewz_hitdist.y), 1.0);
 	float relative_hitdist_error = abs(current_viewz_hitdist.y - previous_viewz_hitdist.y) / hitdist_scale;
-	return relative_depth_error < 0.11 && relative_hitdist_error < 0.55;
+	float motion_slack = smoothstep(1.0, 32.0, motion_px);
+	float depth_threshold = mix(0.11, 0.35, motion_slack);
+	float hitdist_threshold = mix(0.55, 0.85, motion_slack);
+	return relative_depth_error < depth_threshold && relative_hitdist_error < hitdist_threshold;
 }
 
-void accumulate_history_tap(ivec2 tap_pos, float tap_weight, vec4 current_nr, vec2 current_viewz_hitdist, vec4 current_albedo_metalness, vec4 current_id, inout vec4 history_sum, inout vec4 moments_sum, inout float weight_sum) {
-	if (tap_weight <= 0.0 || !previous_history_tap_valid(tap_pos, current_nr, current_viewz_hitdist, current_albedo_metalness, current_id)) {
+void accumulate_history_tap(ivec2 tap_pos, float tap_weight, vec4 current_nr, vec2 current_viewz_hitdist, vec4 current_albedo_metalness, vec4 current_id, float motion_px, inout vec4 history_sum, inout vec4 moments_sum, inout float weight_sum) {
+	if (tap_weight <= 0.0 || !previous_history_tap_valid(tap_pos, current_nr, current_viewz_hitdist, current_albedo_metalness, current_id, motion_px)) {
 		return;
 	}
 
@@ -184,7 +191,7 @@ void accumulate_history_tap(ivec2 tap_pos, float tap_weight, vec4 current_nr, ve
 	weight_sum += tap_weight;
 }
 
-void sample_reprojected_history(vec2 prev_uv, vec4 current_nr, vec2 current_viewz_hitdist, vec4 current_albedo_metalness, vec4 current_id, out vec4 history_sample, out vec4 moments_sample, out float history_confidence) {
+void sample_reprojected_history(vec2 prev_uv, vec4 current_nr, vec2 current_viewz_hitdist, vec4 current_albedo_metalness, vec4 current_id, float motion_px, out vec4 history_sample, out vec4 moments_sample, out float history_confidence) {
 	vec2 history_pos = prev_uv * params.resolution - vec2(0.5);
 	ivec2 base_pos = ivec2(floor(history_pos));
 	vec2 fraction = fract(history_pos);
@@ -193,17 +200,17 @@ void sample_reprojected_history(vec2 prev_uv, vec4 current_nr, vec2 current_view
 	vec4 moments_sum = vec4(0.0);
 	float weight_sum = 0.0;
 
-	accumulate_history_tap(base_pos + ivec2(0, 0), (1.0 - fraction.x) * (1.0 - fraction.y), current_nr, current_viewz_hitdist, current_albedo_metalness, current_id, history_sum, moments_sum, weight_sum);
-	accumulate_history_tap(base_pos + ivec2(1, 0), fraction.x * (1.0 - fraction.y), current_nr, current_viewz_hitdist, current_albedo_metalness, current_id, history_sum, moments_sum, weight_sum);
-	accumulate_history_tap(base_pos + ivec2(0, 1), (1.0 - fraction.x) * fraction.y, current_nr, current_viewz_hitdist, current_albedo_metalness, current_id, history_sum, moments_sum, weight_sum);
-	accumulate_history_tap(base_pos + ivec2(1, 1), fraction.x * fraction.y, current_nr, current_viewz_hitdist, current_albedo_metalness, current_id, history_sum, moments_sum, weight_sum);
+	accumulate_history_tap(base_pos + ivec2(0, 0), (1.0 - fraction.x) * (1.0 - fraction.y), current_nr, current_viewz_hitdist, current_albedo_metalness, current_id, motion_px, history_sum, moments_sum, weight_sum);
+	accumulate_history_tap(base_pos + ivec2(1, 0), fraction.x * (1.0 - fraction.y), current_nr, current_viewz_hitdist, current_albedo_metalness, current_id, motion_px, history_sum, moments_sum, weight_sum);
+	accumulate_history_tap(base_pos + ivec2(0, 1), (1.0 - fraction.x) * fraction.y, current_nr, current_viewz_hitdist, current_albedo_metalness, current_id, motion_px, history_sum, moments_sum, weight_sum);
+	accumulate_history_tap(base_pos + ivec2(1, 1), fraction.x * fraction.y, current_nr, current_viewz_hitdist, current_albedo_metalness, current_id, motion_px, history_sum, moments_sum, weight_sum);
 
 	if (weight_sum < 0.75) {
 		for (int y = -1; y <= 2; y++) {
 			for (int x = -1; x <= 2; x++) {
 				vec2 delta = vec2(x, y) - fraction;
 				float tap_weight = exp(-dot(delta, delta) * 0.85) * 0.22;
-				accumulate_history_tap(base_pos + ivec2(x, y), tap_weight, current_nr, current_viewz_hitdist, current_albedo_metalness, current_id, history_sum, moments_sum, weight_sum);
+				accumulate_history_tap(base_pos + ivec2(x, y), tap_weight, current_nr, current_viewz_hitdist, current_albedo_metalness, current_id, motion_px, history_sum, moments_sum, weight_sum);
 			}
 		}
 	}
@@ -294,7 +301,7 @@ void main() {
 	vec4 prev_moments;
 	float history_confidence = 0.0;
 	if (prev_in_screen && current_valid) {
-		sample_reprojected_history(prev_uv, normal_roughness, viewz_hitdist, albedo_metalness, current_id, prev_history, prev_moments, history_confidence);
+		sample_reprojected_history(prev_uv, normal_roughness, viewz_hitdist, albedo_metalness, current_id, motion_px, prev_history, prev_moments, history_confidence);
 	} else {
 		prev_history = vec4(0.0);
 		prev_moments = vec4(0.0);
@@ -304,7 +311,7 @@ void main() {
 	float history_len = history_valid ? min(prev_history_len * history_confidence + 1.0, params.max_history) : 1.0;
 	float base_alpha = pow(max(1.0 - params.history_weight, 0.001), 1.35);
 	float current_alpha = history_valid ? max(1.0 / history_len, base_alpha) : 1.0;
-	current_alpha = history_valid ? mix(0.25, current_alpha, smoothstep(0.08, 0.65, history_confidence)) : current_alpha;
+	current_alpha = history_valid ? mix(0.72, current_alpha, smoothstep(0.08, 0.65, history_confidence)) : current_alpha;
 	current_alpha = history_valid ? max(current_alpha, mix(base_alpha, 0.03, smoothstep(1.5, 12.0, motion_px))) : current_alpha;
 
 	vec3 neighborhood_min;

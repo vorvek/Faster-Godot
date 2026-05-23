@@ -27,12 +27,10 @@ The feature is exposed on `Environment`, so it appears through the same
 - `rtgi_overscan_horizontal`
 - `rtgi_overscan_vertical`
 - `rtgi_denoiser`
-  - `Auto`
-  - `Internal`
-  - `NVIDIA`
-  - `AMD`
-  - `Intel`
-  - `Off`
+  - `GPU (Default)`
+  - `CPU (Very Slow)`
+  - `SVGF (Experimental)`
+  - `None`
 - RTGI debug draw modes for noisy input, guides, motion vectors, variance,
   history length, rejection mask, and final denoised output.
 
@@ -85,16 +83,17 @@ The feature is exposed on `Environment`, so it appears through the same
     camera tracks through the scene. The default is `0.70`, which keeps a short
     enough history for gameplay lights to remain responsive.
   - This is only the temporal history weight. Set it lower for pulsing or fast
-    dynamic lights that need to respond quickly. At `0.0`, the internal RTGI
-    denoiser still runs its current-frame spatial passes when `rtgi_denoiser` is
-    enabled, but it does not consult or blend previous-frame lighting.
+    dynamic lights that need to respond quickly. At `0.0`, RTGI denoising still
+    runs when `rtgi_denoiser` is enabled, but it does not consult or blend
+    previous-frame lighting.
   - It is not the viewport TAA history setting.
 - `rtgi_denoiser_strength`
-  - Controls the internal RTGI denoiser's current-frame spatial filtering,
+  - Controls the SVGF RTGI denoiser's current-frame spatial filtering,
     variance cleanup, and firefly suppression. Higher values hide more 1 SPP
     speckles, but can soften texture-driven indirect lighting and small dynamic
     light changes. The default is `0.65`. Lower values preserve more detail and
     response while leaving more raw RT noise.
+  - This setting is ignored by the OIDN GPU and CPU denoisers in this version.
   - This does not change how much previous-frame lighting is reused. Use
     `rtgi_temporal_accumulation_weight` for history persistence.
 - `rtgi_overscan_horizontal` and `rtgi_overscan_vertical`
@@ -112,24 +111,23 @@ The feature is exposed on `Environment`, so it appears through the same
     full-frame motion noise. Keep it at `0.0` when the extra edge stability is
     not worth the RT cost.
 - `rtgi_denoiser`
-  - `Auto`: uses the best shipped path for this build. In this fork that means
-    the internal temporal RT denoiser unless a vendor backend is explicitly
-    added.
-  - `Internal`: forces the built-in RTGI denoiser. It is a vendor-neutral
-    SVGF/RELAX-style RD effect with its own history, moment, variance, and
-    à-trous passes. It uses RT velocity, normal/roughness, albedo/metalness,
-    linear view-Z, hit distance, validity masks, and history IDs to reject stale
-    history and preserve edges.
-  - `NVIDIA`: keeps the NVIDIA/DLSS Ray Reconstruction buffer routing and debug
-    outputs available. Because this fork does not ship Streamline/DLSS RR as a
-    runtime dependency, final denoising falls through to the internal temporal
-    RT denoiser.
-  - `AMD` and `Intel`: reserved for optional vendor denoiser integrations. With
-    no shipped backend present, they fall through to the internal temporal RT
-    denoiser instead of exposing raw noisy output.
-  - `Off`: disables the RT denoiser so the raw sampled RT result is visible.
+  - `GPU (Default)`: uses Intel Open Image Denoise (OIDN) with the fastest
+    detected non-CPU OIDN physical device. OIDN then selects its available GPU
+    module, such as CUDA, HIP, or SYCL. If GPU device creation fails, the
+    renderer falls back to OIDN CPU and logs that fallback once.
+  - `CPU (Very Slow)`: uses OIDN CPU directly. It is intended as a correctness
+    fallback and comparison path, not the real-time default.
+  - `SVGF (Experimental)`: uses the previous built-in RTGI denoiser. It is a
+    vendor-neutral SVGF/RELAX-style RD effect with its own history, moment,
+    variance, and atrous passes. It uses RT velocity, normal/roughness,
+    albedo/metalness, linear view-Z, hit distance, validity masks, and history
+    IDs to reject stale history and preserve edges.
+  - `None`: disables the RT denoiser so the raw sampled RT result is visible.
     This is useful for debugging sample distribution, material hits, and TLAS
     coverage, but it is expected to show more noise.
+  - Old serialized values are normalized on load: `Auto`, `NVIDIA`, `AMD`, and
+    `Intel` map to `GPU (Default)`, `Internal` maps to `SVGF (Experimental)`,
+    and `Off` maps to `None`.
 - RTGI debug draw modes
   - `VIEWPORT_DEBUG_DRAW_RTGI_NOISY`: raw path-traced RTGI input before
     denoising.
@@ -164,16 +162,22 @@ denoise, so they remain visible without contributing to RT GI, shadows, or
 reflections. This avoids particle-driven TLAS spikes and black RT speckle from
 billboard particle geometry.
 
-Internal RT temporal denoising is handled by a dedicated `RTGIDenoise` RD effect
-for both Hybrid RTGI and Path Traced mode, not by the normal viewport TAA
-resolve. The primary hit/miss path writes noisy
-radiance, depth, velocity, normal/roughness, albedo/metalness, view-Z,
-hit-distance, validity, and history ID guides at RT texture size. The denoiser
-then runs temporal reprojection, light-change reactivity, luminance moments,
-variance prefiltering, and edge-aware à-trous filtering before the path-traced
-output is cropped back to the visible viewport. Newly visible geometry, newly
-loaded materials, and geometry that has just become RT-ready therefore start
-from fresh samples instead of borrowing stale accumulated lighting.
+RTGI writes noisy radiance, depth, velocity, normal/roughness,
+albedo/metalness, view-Z, hit-distance, validity, and history ID guides at RT
+texture size. In the default OIDN path, the renderer first runs the existing RT
+temporal resolve when temporal accumulation is enabled, then uses OIDN's `RT`
+filter as the final spatial denoiser with radiance, albedo, and decoded normal
+guides. The first OIDN integration uses blocking CPU staging from `RGBA16F` RT
+textures into OIDN `Float3` buffers for correctness; zero-copy GPU interop is
+reserved for a follow-up pass.
+
+The `SVGF (Experimental)` option uses the dedicated `RTGIDenoise` RD effect for
+both Hybrid RTGI and Path Traced mode. It runs temporal reprojection,
+light-change reactivity, luminance moments, variance prefiltering, and
+edge-aware atrous filtering before the path-traced output is cropped back to the
+visible viewport. Newly visible geometry, newly loaded materials, and geometry
+that has just become RT-ready therefore start from fresh samples instead of
+borrowing stale accumulated lighting.
 
 If the GPU or driver does not expose the required Vulkan ray tracing features,
 the settings remain visible, a warning is printed, and rendering falls back to
@@ -216,9 +220,14 @@ the existing non-ray-traced path instead of destructively changing scene data.
     depth, RT-space motion vectors, normal/roughness, albedo/metalness, view-Z,
     hit-distance, validity, and history ID.
 - `servers/rendering/renderer_rd/effects/rtgi_denoise.*`
-  - Adds the internal SVGF/RELAX-style RTGI denoiser as a separate RD effect.
+  - Adds the SVGF/RELAX-style RTGI denoiser as a separate RD effect.
     It maintains its own history, moments, variance, rejection, noisy-input, and
     previous-guide textures.
+- `servers/rendering/renderer_rd/effects/rtgi_oidn_denoise.*`
+  - Adds the OIDN RTGI denoiser wrapper. It dynamically loads the bundled
+    Windows/Linux OIDN runtime, selects GPU or CPU mode, converts RTGI `RGBA16F`
+    radiance/albedo/normal guides to OIDN `Float3`, runs the `RT` filter, and
+    uploads the result back into the RTGI texture.
 - `servers/rendering/renderer_rd/effects/taa.*`
   - Remains the normal viewport TAA path and fallback temporal resolve. Path
     traced RTGI no longer depends on viewport TAA for the shipped internal
@@ -234,11 +243,15 @@ the existing non-ray-traced path instead of destructively changing scene data.
 
 ## Source And Licensing Notes
 
-The implementation is Godot-native RD/Vulkan code. NVIDIA-RTX/godot was used as
-the main implementation reference and source for compatible Godot renderer
-patterns under Godot's MIT-compatible licensing. yuphin/Lumen was not vendored;
-it remains only an algorithm reference because it is a standalone Vulkan
-renderer rather than a drop-in Godot renderer module.
+The RTGI renderer is Godot-native RD/Vulkan code. NVIDIA-RTX/godot was used as
+an implementation reference and source for compatible Godot renderer patterns
+under Godot's MIT-compatible licensing. yuphin/Lumen was not vendored; it
+remains only an algorithm reference because it is a standalone Vulkan renderer
+rather than a drop-in Godot renderer module.
+
+OIDN 2.4.1 is bundled under `thirdparty/oidn` for Windows and Linux RTGI
+denoising. The runtime is loaded dynamically so startup and non-RTGI renders do
+not link against OIDN.
 
 ## NRD Reference Audit
 
@@ -257,9 +270,9 @@ Current RTGI buffer coverage compared with NRD:
   output, RT velocity, normal/roughness, albedo/metalness, view-Z, hit-distance,
   history validity, history identity masks, temporal moments, variance, history
   length, and rejection mask.
-- Present when the NVIDIA/DLSS RR buffer-output variant is selected: DLSS RR
-  diffuse/specular albedo buffers, normal/roughness, and specular hit-distance
-  debug/output buffers.
+- Present in the legacy DLSS RR buffer-output shader variant: diffuse/specular
+  albedo buffers, normal/roughness, and specular hit-distance debug/output
+  buffers.
 - Present through the main renderer rather than an NRD-specific input: raster
   depth, raster velocity, and Forward+ normal/roughness buffers used by TAA and
   compositor paths.
@@ -270,21 +283,15 @@ Current RTGI buffer coverage compared with NRD:
 - Missing for SIGMA import: dedicated penumbra/translucency shadow inputs and
   a shadow denoiser dispatch path.
 
-The internal RTGI denoiser remains the shipped path. Future NRD work should
-start from the existing guide textures, split diffuse/specular signals to match
-NRD's resource model, then add a compile-time optional backend that consumes
-those guides without making NRD a required runtime dependency.
+The default shipped RTGI denoiser is now OIDN GPU with CPU fallback. Future NRD
+or vendor-specific work should start from the existing guide textures, split
+diffuse/specular signals to match the target backend's resource model, then add
+an optional backend that consumes those guides without changing the four-option
+RTGI denoiser UI.
 
-Vendor denoisers are not hard dependencies. `Auto` prefers the internal
-temporal RT denoiser path first; NVIDIA, AMD, and Intel integrations are kept
-as optional plugin or compile-time integration points.
-
-The NVIDIA RTGI option maps to the DLSS RR buffer-output shader variant and
-emits the DLSS RR G-buffer/debug textures. This fork does not ship a
-Streamline/DLSS reconstruction pass, so the final image still routes through
-the fallback temporal resolve rather than a vendor reconstruction pass. The
-shipped real-time path is `Internal`; RTXDI/ReSTIR and vendor SDK denoisers are
-future sampling/backend work, not this milestone.
+Legacy NVIDIA/DLSS RR enum values are retained only as compatibility aliases and
+normalize to OIDN GPU for RTGI scene data. This fork does not ship a
+Streamline/DLSS reconstruction pass.
 
 ## Validation
 
@@ -294,14 +301,16 @@ Validated so far:
 - Windows editor startup through the console wrapper and live GUI launch.
 - Windows headless startup.
 - Linux/WSL focused builds for the changed renderer/server paths.
+- OIDN 2.4.1 runtime packaged for Windows x64 and Linux x86_64 under
+  `thirdparty/oidn`.
 - Unsupported or unrelated build issues fixed in the target profile:
   - Embree/raycast no longer inherits the global AVX2/FMA flags into its
     lowest-ISA dispatch objects.
   - ETCpak now receives the MSVC AVX2/FMA feature macros required by its SIMD
     tables when building the Faster-Godot profile.
-  - The NVIDIA RTGI denoiser selection now participates in the temporal RT
-    denoising resolve while preserving DLSS RR auxiliary buffers for debug and
-    future backend integration.
+  - The RTGI denoiser selection now routes `GPU`/`CPU` through OIDN, keeps the
+    previous denoiser available as `SVGF (Experimental)`, and preserves legacy
+    serialized values as compatibility aliases.
   - Internal runtime capture of a representative dark 3D validation scene with
     local-light shadows off and on. The captured sequences stayed lit, did not
     produce the previous all-black frames, and did not log shader push-constant
@@ -323,7 +332,8 @@ Validated so far:
   out of scope for this fork profile.
 - Performance depends heavily on scene complexity, samples per pixel, bounce
   count, denoising settings, and GPU class.
-- Vendor denoiser integrations are optional and are not shipped as required
-  runtime dependencies.
+- OIDN GPU/CPU denoising currently uses blocking staging between RD textures and
+  OIDN buffers. This prioritizes correctness over frame time until a zero-copy
+  interop path is validated.
 - Transparent particles are raster-only in this implementation; they do not
   contribute to RT GI, shadows, or reflections.

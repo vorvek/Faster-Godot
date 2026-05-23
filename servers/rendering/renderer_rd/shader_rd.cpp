@@ -529,12 +529,15 @@ String ShaderRD::_get_cache_file_path(Version *p_version, int p_group, const Str
 bool ShaderRD::_load_from_cache(Version *p_version, int p_group) {
 	String api_safe_name = String(RD::get_singleton()->get_device_api_name()).validate_filename().to_lower();
 	Ref<FileAccess> f;
+	String cache_path;
 	if (shader_cache_user_dir_valid) {
-		f = FileAccess::open(_get_cache_file_path(p_version, p_group, api_safe_name, true), FileAccess::READ);
+		cache_path = _get_cache_file_path(p_version, p_group, api_safe_name, true);
+		f = FileAccess::open(cache_path, FileAccess::READ);
 	}
 
 	if (f.is_null() && shader_cache_res_dir_valid) {
-		f = FileAccess::open(_get_cache_file_path(p_version, p_group, api_safe_name, false), FileAccess::READ);
+		cache_path = _get_cache_file_path(p_version, p_group, api_safe_name, false);
+		f = FileAccess::open(cache_path, FileAccess::READ);
 	}
 
 	if (f.is_null()) {
@@ -544,8 +547,11 @@ bool ShaderRD::_load_from_cache(Version *p_version, int p_group) {
 	}
 
 	char header[5] = { 0, 0, 0, 0, 0 };
-	f->get_buffer((uint8_t *)header, 4);
-	ERR_FAIL_COND_V(header != String(shader_file_header), false);
+	uint32_t br = f->get_buffer((uint8_t *)header, 4);
+	if (br != 4 || header != String(shader_file_header)) {
+		print_verbose(vformat("Shader cache miss for %s due to invalid cache header in %s", name.path_join(group_sha256[p_group]).path_join(_version_get_sha1(p_version)), cache_path));
+		return false;
+	}
 
 	uint32_t file_version = f->get_32();
 	if (file_version != cache_file_version) {
@@ -554,7 +560,10 @@ bool ShaderRD::_load_from_cache(Version *p_version, int p_group) {
 
 	uint32_t variant_count = f->get_32();
 
-	ERR_FAIL_COND_V(variant_count != (uint32_t)group_to_variant_map[p_group].size(), false); //should not happen but check
+	if (variant_count != (uint32_t)group_to_variant_map[p_group].size()) {
+		print_verbose(vformat("Shader cache miss for %s due to mismatched variant count in %s", name.path_join(group_sha256[p_group]).path_join(_version_get_sha1(p_version)), cache_path));
+		return false;
+	}
 
 	for (uint32_t i = 0; i < variant_count; i++) {
 		int variant_id = group_to_variant_map[p_group][i];
@@ -570,9 +579,11 @@ bool ShaderRD::_load_from_cache(Version *p_version, int p_group) {
 		Vector<uint8_t> variant_bytes;
 		variant_bytes.resize(variant_size);
 
-		uint32_t br = f->get_buffer(variant_bytes.ptrw(), variant_size);
-
-		ERR_FAIL_COND_V(br != variant_size, false);
+		br = f->get_buffer(variant_bytes.ptrw(), variant_size);
+		if (br != variant_size) {
+			print_verbose(vformat("Shader cache miss for %s due to truncated variant %d in %s", name.path_join(group_sha256[p_group]).path_join(_version_get_sha1(p_version)), variant_id, cache_path));
+			return false;
+		}
 
 		p_version->variant_data.write[variant_id] = variant_bytes;
 	}

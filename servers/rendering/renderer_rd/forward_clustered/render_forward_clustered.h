@@ -36,6 +36,7 @@
 #include "servers/rendering/renderer_rd/effects/fsr2.h"
 #include "servers/rendering/renderer_rd/effects/motion_vectors_store.h"
 #include "servers/rendering/renderer_rd/effects/rtgi_denoise.h"
+#include "servers/rendering/renderer_rd/effects/rtgi_oidn_denoise.h"
 #include "servers/rendering/renderer_rd/effects/ss_effects.h"
 #include "servers/rendering/renderer_rd/effects/taa.h"
 #include "servers/rendering/renderer_rd/forward_clustered/render_raytracing.h"
@@ -175,6 +176,9 @@ public:
 		RID rt_get_texture() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING); }
 		bool rt_has_depth_texture() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH); }
 		RID rt_get_depth_texture() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH); }
+		RID rt_ensure_depth_attachment();
+		bool rt_has_depth_attachment() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH_ATTACHMENT); }
+		RID rt_get_depth_attachment() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH_ATTACHMENT); }
 		RID rt_get_velocity_texture() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_VELOCITY); }
 		bool rt_has_history_validity() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_VALIDITY); }
 		RID rt_get_history_validity() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_VALIDITY); }
@@ -831,6 +835,7 @@ private:
 
 	RendererRD::TAA *taa = nullptr;
 	RendererRD::RTGIDenoise *rtgi_denoise = nullptr;
+	RendererRD::RTGIOIDNDenoise *rtgi_oidn_denoise = nullptr;
 	RendererRD::FSR2Effect *fsr2_effect = nullptr;
 	RendererRD::SSEffects *ss_effects = nullptr;
 

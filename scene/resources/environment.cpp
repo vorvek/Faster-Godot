@@ -644,14 +644,19 @@ int Environment::get_pathtracing_max_bounces() const {
 void Environment::set_pathtracing_denoiser(RSE::PathtracingDenoiser p_denoiser) {
 	pathtracing_denoiser = p_denoiser;
 	switch (p_denoiser) {
+		case RSE::PT_DENOISER_OIDN_GPU:
 		case RSE::PT_DENOISER_DLSS_RAY_RECONSTRUCTION:
-			rtgi_denoiser = RTGI_DENOISER_NVIDIA;
+			rtgi_denoiser = RTGI_DENOISER_GPU;
+			pathtracing_denoiser = RSE::PT_DENOISER_OIDN_GPU;
+			break;
+		case RSE::PT_DENOISER_OIDN_CPU:
+			rtgi_denoiser = RTGI_DENOISER_CPU;
 			break;
 		case RSE::PT_DENOISER_INTERNAL:
-			rtgi_denoiser = RTGI_DENOISER_INTERNAL;
+			rtgi_denoiser = RTGI_DENOISER_SVGF;
 			break;
 		case RSE::PT_DENOISER_NONE:
-			rtgi_denoiser = RTGI_DENOISER_OFF;
+			rtgi_denoiser = RTGI_DENOISER_NONE;
 			break;
 	}
 	_update_pathtracing();
@@ -758,19 +763,32 @@ float Environment::get_rtgi_overscan_vertical() const {
 }
 
 void Environment::set_rtgi_denoiser(RTGIDenoiser p_denoiser) {
-	rtgi_denoiser = p_denoiser;
 	switch (p_denoiser) {
 		case RTGI_DENOISER_AUTO:
-		case RTGI_DENOISER_INTERNAL:
+		case RTGI_DENOISER_NVIDIA:
 		case RTGI_DENOISER_AMD:
 		case RTGI_DENOISER_INTEL:
+		case RTGI_DENOISER_GPU:
+			rtgi_denoiser = RTGI_DENOISER_GPU;
+			pathtracing_denoiser = RSE::PT_DENOISER_OIDN_GPU;
+			break;
+		case RTGI_DENOISER_CPU:
+			rtgi_denoiser = RTGI_DENOISER_CPU;
+			pathtracing_denoiser = RSE::PT_DENOISER_OIDN_CPU;
+			break;
+		case RTGI_DENOISER_INTERNAL:
+		case RTGI_DENOISER_SVGF:
+			rtgi_denoiser = RTGI_DENOISER_SVGF;
 			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL;
 			break;
-		case RTGI_DENOISER_NVIDIA:
-			pathtracing_denoiser = RSE::PT_DENOISER_DLSS_RAY_RECONSTRUCTION;
-			break;
 		case RTGI_DENOISER_OFF:
+		case RTGI_DENOISER_NONE:
+			rtgi_denoiser = RTGI_DENOISER_NONE;
 			pathtracing_denoiser = RSE::PT_DENOISER_NONE;
+			break;
+		default:
+			rtgi_denoiser = RTGI_DENOISER_GPU;
+			pathtracing_denoiser = RSE::PT_DENOISER_OIDN_GPU;
 			break;
 	}
 	_update_pathtracing();
@@ -1687,7 +1705,7 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_strength", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_denoiser_strength", "get_rtgi_denoiser_strength");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_horizontal", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_horizontal", "get_rtgi_overscan_horizontal");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_vertical", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_vertical", "get_rtgi_overscan_vertical");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "Auto,Internal,NVIDIA,AMD,Intel Arc,Off"), "set_rtgi_denoiser", "get_rtgi_denoiser");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "GPU (Default):6,CPU (Very Slow):7,SVGF (Experimental):8,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_debug_mode", PROPERTY_HINT_ENUM, "Disabled,Mirror Reflection,Geometry Normals,Final Normals,Normal Map,Tangent,Bitangent,UV,Albedo,ORM,Diffuse Albedo,Specular Albedo,Normal+Roughness,Specular Hit Dist,Metalness,Roughness,View Normals,Diffuse+Specular,Fresnel F0,Front/Back Face,Depth,Emissive,BRDF Rejection"), "set_rtgi_debug_mode", "get_rtgi_debug_mode");
 
 	// Glow
@@ -1895,6 +1913,10 @@ void Environment::_bind_methods() {
 	BIND_ENUM_CONSTANT(RTGI_DENOISER_AMD);
 	BIND_ENUM_CONSTANT(RTGI_DENOISER_INTEL);
 	BIND_ENUM_CONSTANT(RTGI_DENOISER_OFF);
+	BIND_ENUM_CONSTANT(RTGI_DENOISER_GPU);
+	BIND_ENUM_CONSTANT(RTGI_DENOISER_CPU);
+	BIND_ENUM_CONSTANT(RTGI_DENOISER_SVGF);
+	BIND_ENUM_CONSTANT(RTGI_DENOISER_NONE);
 
 	BIND_ENUM_CONSTANT(RT_DEBUG_DISABLED);
 	BIND_ENUM_CONSTANT(RT_DEBUG_MIRROR_REFLECTION);

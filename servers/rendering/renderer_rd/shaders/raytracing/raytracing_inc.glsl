@@ -18,7 +18,7 @@
 #define RT_PARAM_VIS_MODE 0 // rt_params[0].x - Debug visualization mode (0 = disabled)
 #define RT_PARAM_SAMPLE_COUNT 1 // rt_params[0].y - Samples per pixel
 #define RT_PARAM_MAX_BOUNCES 2 // rt_params[0].z - Maximum ray bounces
-#define RT_PARAM_DENOISER 3 // rt_params[0].w - Denoiser selection (0=none, 1=DLSS RR)
+#define RT_PARAM_DENOISER 3 // rt_params[0].w - Denoiser selection (0=none, 1=legacy DLSS RR, 2=SVGF, 3=OIDN GPU, 4=OIDN CPU)
 #define RT_PARAM_ENERGY 4 // rt_params[1].x - RTGI energy multiplier
 #define RT_PARAM_TEMPORAL_ACCUMULATION 5 // rt_params[1].y - Temporal accumulation enabled
 #define RT_PARAM_MODE 6 // rt_params[1].z - 0=Hybrid RTGI, 1=Path Traced
@@ -182,6 +182,8 @@ const uint FLAG_DEFORMED = 4u;
 const uint FLAG_HISTORY_INVALID = 8u;
 // Set when the attribute buffer is still in the compressed surface layout.
 const uint FLAG_COMPRESSED_ATTRIBUTES = 16u;
+// Fold gl_PrimitiveID into the guide history ID for merged BLASes.
+const uint FLAG_PRIMITIVE_HISTORY_ID = 32u;
 
 // ============================================================================
 // RANDOM NUMBER GENERATION - PCG (Permuted Congruential Generator)

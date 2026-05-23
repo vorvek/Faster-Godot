@@ -20,6 +20,9 @@ misc/msvs/* eol=crlf
 *.icns binary
 *.ico binary
 *.jar binary
+*.dll binary
+*.so binary
+*.so.* binary
 *.png binary
 *.ttf binary
 *.tza binary

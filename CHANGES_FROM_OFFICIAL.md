@@ -25,21 +25,22 @@ desktop Forward+ profile. The detailed notes are split by change area:
 | Independent fork identity and legal notices | [README.md](README.md), [LICENSE.txt](LICENSE.txt), [COPYRIGHT.txt](COPYRIGHT.txt) |
 | Faster-Godot branding and default project icon | Root, editor, app icon, splash, platform export, default project/document, web editor, engine version banner, emitted binary basename, shell completions, Windows version resource/installer metadata, Linux desktop/AppStream/MIME/X11/Wayland metadata and installable icons, macOS bundle metadata, editor About/support links, GitHub Actions release artifacts/release-page publishing, and source archive naming now use the fork's FG gear mark and independent Faster-Godot identity instead of Godot-derived artwork/official branding. The logo and splash rasters use white lettering with contrast outlines/backgrounds so they remain readable on the default gray/dark boot surfaces; see [README.md](README.md) and [COPYRIGHT.txt](COPYRIGHT.txt). |
 
-## RTGI Vendor Denoiser Reference Status
+## RTGI OIDN Denoiser Status
 
-The RTGI implementation was compared against NVIDIA's Godot path tracing branch,
-Streamline/DLSS Ray Reconstruction routing, and NVIDIA NRD. This fork keeps the
-internal temporal RT denoiser as the shipped path. Streamline/DLSS and NRD SDK
-imports are deferred vendor-dependency projects because they add separate source,
-license, build, and packaging obligations.
+RTGI now ships four denoiser choices: `GPU (Default)`, `CPU (Very Slow)`,
+`SVGF (Experimental)`, and `None`. `GPU` and `CPU` use the bundled Intel Open
+Image Denoise 2.4.1 runtime through the C API. GPU mode enumerates OIDN physical
+devices, selects the first non-CPU device from OIDN's fastest-to-slowest order,
+and falls back to OIDN CPU if GPU creation fails. The previous internal temporal
+denoiser remains available as the explicit SVGF experimental option.
 
-The local renderer emits RT depth, RT velocity, and history validity/identity
-masks for RTGI denoising. When the NVIDIA/DLSS RR buffer-output variant is
-selected, it also emits DLSS RR diffuse/specular albedo, normal/roughness, and
-specular hit distance. Direct NRD integration would still need explicit
-NRD-style viewZ ownership, packed diffuse/specular radiance-plus-hit-distance
-inputs, material-demodulated signal contracts, permanent/transient pool
-management, and NRD dispatch integration.
+The local renderer emits RT radiance, depth, velocity, normal/roughness,
+albedo/metalness, view-Z, hit-distance, and history validity/identity masks for
+RTGI denoising. The first OIDN backend uses blocking staging between RD
+`RGBA16F` textures and OIDN `Float3` buffers for correctness. Future zero-copy
+interop work should replace that staging after visual validation. Legacy RTGI
+denoiser values (`Auto`, `NVIDIA`, `AMD`, `Intel`, `Internal`, and `Off`) remain
+loadable and normalize to the new four-option model.
 
 ## Current Benchmark Snapshot
 

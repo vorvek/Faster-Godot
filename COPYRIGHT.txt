@@ -292,6 +292,11 @@ Comment: Embree
 Copyright: 2009-2021 Intel Corporation
 License: Apache-2.0
 
+Files: thirdparty/oidn/*
+Comment: Intel Open Image Denoise
+Copyright: 2005-2025 Intel Corporation
+License: Apache-2.0
+
 Files: thirdparty/enet/*
 Comment: ENet
 Copyright: 2002-2024, Lee Salzman

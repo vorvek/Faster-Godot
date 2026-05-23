@@ -42,6 +42,7 @@
 
 #define RB_TEX_RAYTRACING SNAME("raytracing")
 #define RB_TEX_RT_DEPTH SNAME("rt_depth")
+#define RB_TEX_RT_DEPTH_ATTACHMENT SNAME("rt_depth_attachment")
 #define RB_TEX_RT_VELOCITY SNAME("rt_velocity")
 #define RB_TEX_RT_HISTORY_VALIDITY SNAME("rt_history_validity")
 #define RB_TEX_RT_HISTORY_VALIDITY_PREV SNAME("rt_history_validity_prev")
@@ -217,6 +218,8 @@ enum {
 	RT_GEOM_FLAG_HISTORY_INVALID = 8u,
 	// Attribute buffer is still in the compressed surface layout.
 	RT_GEOM_FLAG_COMPRESSED_ATTRIBUTES = 16u,
+	// Fold gl_PrimitiveID into the guide history ID for merged BLASes.
+	RT_GEOM_FLAG_PRIMITIVE_HISTORY_ID = 32u,
 };
 
 /// Per-instance state for procedural RT geometry. Heap-allocated, only exists for procedural instances.
@@ -361,6 +364,9 @@ struct RTViewportState {
 	uint64_t radiance_history_signature = 0;
 	bool radiance_history_signature_valid = false;
 	bool radiance_history_invalidated = false;
+	RT_LightData previous_light_data[RT_LIGHTS_MAX] = {};
+	uint32_t previous_light_count = 0;
+	bool previous_light_data_valid = false;
 	HashSet<uint64_t> previous_history_keys;
 	HashSet<uint64_t> current_history_keys;
 };

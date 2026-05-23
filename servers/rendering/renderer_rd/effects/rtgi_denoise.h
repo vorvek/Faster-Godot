@@ -11,6 +11,7 @@
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.h"
 
 #define RB_SCOPE_RTGI_DENOISE SNAME("rtgi_denoise")
+#define RB_SCOPE_RTGI_OIDN_TEMPORAL SNAME("rtgi_oidn_temporal")
 #define RB_TEX_RTGI_DENOISE_HISTORY SNAME("history")
 #define RB_TEX_RTGI_DENOISE_NOISY SNAME("noisy")
 #define RB_TEX_RTGI_DENOISE_MOMENTS SNAME("moments")
@@ -49,6 +50,22 @@ public:
 			uint32_t p_view = 0,
 			int p_iterations = 4);
 
+	void process_temporal(Ref<RenderSceneBuffersRD> p_render_buffers,
+			const StringName &p_source_context,
+			const StringName &p_source_texture,
+			RID p_velocity,
+			RID p_normal_roughness,
+			RID p_albedo_metalness,
+			RID p_viewz_hitdist,
+			RID p_history_validity,
+			RID p_prev_history_validity,
+			RID p_history_id,
+			RID p_prev_history_id,
+			float p_history_weight,
+			float p_denoise_strength,
+			const Size2i &p_process_size,
+			uint32_t p_view = 0);
+
 	void composite_volumetric_fog(Ref<RenderSceneBuffersRD> p_render_buffers,
 			const StringName &p_source_context,
 			const StringName &p_source_texture,
@@ -85,7 +102,7 @@ private:
 		float phi_normal;
 		float phi_depth;
 		float variance_boost;
-		float _pad_visible_origin;
+		float radiance_space_history;
 		float visible_origin_width;
 		float visible_origin_height;
 		float visible_size_width;
@@ -100,7 +117,7 @@ private:
 	RID shader_version;
 	RID pipelines[MODE_MAX];
 
-	bool _ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, const Size2i &p_size);
+	bool _ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, const StringName &p_scope, const Size2i &p_size);
 	void _dispatch_temporal(const PushConstant &p_push_constant, RID p_source, RID p_velocity, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_history, RID p_moments, RID p_prev_normal_roughness, RID p_prev_viewz_hitdist, RID p_prev_albedo_metalness, RID p_history_validity, RID p_prev_history_validity, RID p_history_id, RID p_prev_history_id, RID p_temporal_out, RID p_moments_out, RID p_variance_out, RID p_rejection_out, RID p_reactivity_out, RID p_history_length_out);
 	void _dispatch_variance_prefilter(const PushConstant &p_push_constant, RID p_temporal, RID p_normal_roughness, RID p_viewz_hitdist, RID p_variance, RID p_reactivity, RID p_prefilter_out);
 	void _dispatch_atrous(const PushConstant &p_push_constant, RID p_input, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_velocity, RID p_reactivity, RID p_output);

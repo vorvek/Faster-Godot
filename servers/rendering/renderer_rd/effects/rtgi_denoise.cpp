@@ -31,20 +31,20 @@ RTGIDenoise::~RTGIDenoise() {
 	shader.version_free(shader_version);
 }
 
-bool RTGIDenoise::_ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, const Size2i &p_size) {
+bool RTGIDenoise::_ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, const StringName &p_scope, const Size2i &p_size) {
 	ERR_FAIL_COND_V(p_render_buffers.is_null(), false);
 	ERR_FAIL_COND_V(p_size.x <= 0 || p_size.y <= 0, false);
 
-	if (p_render_buffers->has_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_HISTORY) &&
-			p_render_buffers->get_texture_slice_size(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_HISTORY, 0) != p_size) {
-		p_render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE);
+	if (p_render_buffers->has_texture(p_scope, RB_TEX_RTGI_DENOISE_HISTORY) &&
+			p_render_buffers->get_texture_slice_size(p_scope, RB_TEX_RTGI_DENOISE_HISTORY, 0) != p_size) {
+		p_render_buffers->clear_context(p_scope);
 	}
-	if (p_render_buffers->has_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_HISTORY) &&
-			!p_render_buffers->has_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_REACTIVITY)) {
-		p_render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE);
+	if (p_render_buffers->has_texture(p_scope, RB_TEX_RTGI_DENOISE_HISTORY) &&
+			!p_render_buffers->has_texture(p_scope, RB_TEX_RTGI_DENOISE_REACTIVITY)) {
+		p_render_buffers->clear_context(p_scope);
 	}
 
-	if (p_render_buffers->has_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_HISTORY)) {
+	if (p_render_buffers->has_texture(p_scope, RB_TEX_RTGI_DENOISE_HISTORY)) {
 		return false;
 	}
 
@@ -53,19 +53,19 @@ bool RTGIDenoise::_ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, co
 			RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT |
 			RD::TEXTURE_USAGE_CAN_COPY_TO_BIT;
 
-	RID history = p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_HISTORY, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	RID noisy = p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_NOISY, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	RID moments = p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_MOMENTS, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_TEMP_A, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_TEMP_B, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_TEMP_C, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	RID variance = p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_VARIANCE, RD::DATA_FORMAT_R16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	RID history_length = p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH, RD::DATA_FORMAT_R16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	RID rejection = p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_REJECTION, RD::DATA_FORMAT_R8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	RID reactivity = p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_REACTIVITY, RD::DATA_FORMAT_R8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	RID prev_normal_roughness = p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_PREV_NORMAL_ROUGHNESS, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	RID prev_viewz_hitdist = p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_PREV_VIEWZ_HITDIST, RD::DATA_FORMAT_R16G16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	RID prev_albedo_metalness = p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_PREV_ALBEDO_METALNESS, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
+	RID history = p_render_buffers->create_texture(p_scope, RB_TEX_RTGI_DENOISE_HISTORY, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
+	RID noisy = p_render_buffers->create_texture(p_scope, RB_TEX_RTGI_DENOISE_NOISY, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
+	RID moments = p_render_buffers->create_texture(p_scope, RB_TEX_RTGI_DENOISE_MOMENTS, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
+	p_render_buffers->create_texture(p_scope, RB_TEX_RTGI_DENOISE_TEMP_A, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
+	p_render_buffers->create_texture(p_scope, RB_TEX_RTGI_DENOISE_TEMP_B, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
+	p_render_buffers->create_texture(p_scope, RB_TEX_RTGI_DENOISE_TEMP_C, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
+	RID variance = p_render_buffers->create_texture(p_scope, RB_TEX_RTGI_DENOISE_VARIANCE, RD::DATA_FORMAT_R16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
+	RID history_length = p_render_buffers->create_texture(p_scope, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH, RD::DATA_FORMAT_R16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
+	RID rejection = p_render_buffers->create_texture(p_scope, RB_TEX_RTGI_DENOISE_REJECTION, RD::DATA_FORMAT_R8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
+	RID reactivity = p_render_buffers->create_texture(p_scope, RB_TEX_RTGI_DENOISE_REACTIVITY, RD::DATA_FORMAT_R8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
+	RID prev_normal_roughness = p_render_buffers->create_texture(p_scope, RB_TEX_RTGI_DENOISE_PREV_NORMAL_ROUGHNESS, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
+	RID prev_viewz_hitdist = p_render_buffers->create_texture(p_scope, RB_TEX_RTGI_DENOISE_PREV_VIEWZ_HITDIST, RD::DATA_FORMAT_R16G16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
+	RID prev_albedo_metalness = p_render_buffers->create_texture(p_scope, RB_TEX_RTGI_DENOISE_PREV_ALBEDO_METALNESS, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
 
 	RD::get_singleton()->texture_clear(history, Color(0, 0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
 	RD::get_singleton()->texture_clear(noisy, Color(0, 0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
@@ -240,22 +240,23 @@ void RTGIDenoise::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 	ERR_FAIL_COND(!p_history_validity.is_valid() || !p_prev_history_validity.is_valid() || !p_history_id.is_valid() || !p_prev_history_id.is_valid());
 	ERR_FAIL_UNSIGNED_INDEX(p_view, p_render_buffers->get_view_count());
 
-	_ensure_buffers(p_render_buffers, p_process_size);
+	const StringName denoise_scope = RB_SCOPE_RTGI_DENOISE;
+	_ensure_buffers(p_render_buffers, denoise_scope, p_process_size);
 
 	RID source = p_render_buffers->get_texture_slice(p_source_context, p_source_texture, p_view, 0);
-	RID history = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_HISTORY, p_view, 0);
-	RID noisy = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_NOISY, p_view, 0);
-	RID moments = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_MOMENTS, p_view, 0);
-	RID temp_a = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_TEMP_A, p_view, 0);
-	RID temp_b = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_TEMP_B, p_view, 0);
-	RID temp_c = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_TEMP_C, p_view, 0);
-	RID variance = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_VARIANCE, p_view, 0);
-	RID history_length = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH, p_view, 0);
-	RID rejection = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_REJECTION, p_view, 0);
-	RID reactivity = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_REACTIVITY, p_view, 0);
-	RID prev_normal_roughness = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_PREV_NORMAL_ROUGHNESS, p_view, 0);
-	RID prev_viewz_hitdist = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_PREV_VIEWZ_HITDIST, p_view, 0);
-	RID prev_albedo_metalness = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_PREV_ALBEDO_METALNESS, p_view, 0);
+	RID history = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_HISTORY, p_view, 0);
+	RID noisy = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_NOISY, p_view, 0);
+	RID moments = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_MOMENTS, p_view, 0);
+	RID temp_a = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_TEMP_A, p_view, 0);
+	RID temp_b = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_TEMP_B, p_view, 0);
+	RID temp_c = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_TEMP_C, p_view, 0);
+	RID variance = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_VARIANCE, p_view, 0);
+	RID history_length = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH, p_view, 0);
+	RID rejection = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_REJECTION, p_view, 0);
+	RID reactivity = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_REACTIVITY, p_view, 0);
+	RID prev_normal_roughness = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_PREV_NORMAL_ROUGHNESS, p_view, 0);
+	RID prev_viewz_hitdist = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_PREV_VIEWZ_HITDIST, p_view, 0);
+	RID prev_albedo_metalness = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_PREV_ALBEDO_METALNESS, p_view, 0);
 
 	PushConstant push_constant;
 	memset(&push_constant, 0, sizeof(PushConstant));
@@ -298,6 +299,72 @@ void RTGIDenoise::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 
 	_dispatch_composite(push_constant, read, temp_c, p_normal_roughness, p_albedo_metalness, p_viewz_hitdist, reactivity, source);
 
+	RD::get_singleton()->texture_copy(p_normal_roughness, prev_normal_roughness, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, p_view, 0);
+	RD::get_singleton()->texture_copy(p_viewz_hitdist, prev_viewz_hitdist, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, p_view, 0);
+	RD::get_singleton()->texture_copy(p_albedo_metalness, prev_albedo_metalness, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, p_view, 0);
+	RD::get_singleton()->texture_copy(p_history_validity, p_prev_history_validity, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, p_view, p_view);
+	RD::get_singleton()->texture_copy(p_history_id, p_prev_history_id, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, p_view, p_view);
+}
+
+void RTGIDenoise::process_temporal(Ref<RenderSceneBuffersRD> p_render_buffers,
+		const StringName &p_source_context,
+		const StringName &p_source_texture,
+		RID p_velocity,
+		RID p_normal_roughness,
+		RID p_albedo_metalness,
+		RID p_viewz_hitdist,
+		RID p_history_validity,
+		RID p_prev_history_validity,
+		RID p_history_id,
+		RID p_prev_history_id,
+		float p_history_weight,
+		float p_denoise_strength,
+		const Size2i &p_process_size,
+		uint32_t p_view) {
+	ERR_FAIL_COND(p_render_buffers.is_null());
+	ERR_FAIL_COND(p_process_size.x <= 0 || p_process_size.y <= 0);
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_source_context, p_source_texture));
+	ERR_FAIL_COND(!p_velocity.is_valid() || !p_normal_roughness.is_valid() || !p_albedo_metalness.is_valid() || !p_viewz_hitdist.is_valid());
+	ERR_FAIL_COND(!p_history_validity.is_valid() || !p_prev_history_validity.is_valid() || !p_history_id.is_valid() || !p_prev_history_id.is_valid());
+	ERR_FAIL_UNSIGNED_INDEX(p_view, p_render_buffers->get_view_count());
+
+	const StringName denoise_scope = RB_SCOPE_RTGI_OIDN_TEMPORAL;
+	_ensure_buffers(p_render_buffers, denoise_scope, p_process_size);
+
+	RID source = p_render_buffers->get_texture_slice(p_source_context, p_source_texture, p_view, 0);
+	RID history = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_HISTORY, p_view, 0);
+	RID noisy = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_NOISY, p_view, 0);
+	RID moments = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_MOMENTS, p_view, 0);
+	RID temp_a = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_TEMP_A, p_view, 0);
+	RID temp_c = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_TEMP_C, p_view, 0);
+	RID variance = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_VARIANCE, p_view, 0);
+	RID history_length = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH, p_view, 0);
+	RID rejection = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_REJECTION, p_view, 0);
+	RID reactivity = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_REACTIVITY, p_view, 0);
+	RID prev_normal_roughness = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_PREV_NORMAL_ROUGHNESS, p_view, 0);
+	RID prev_viewz_hitdist = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_PREV_VIEWZ_HITDIST, p_view, 0);
+	RID prev_albedo_metalness = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_PREV_ALBEDO_METALNESS, p_view, 0);
+
+	PushConstant push_constant;
+	memset(&push_constant, 0, sizeof(PushConstant));
+	push_constant.resolution_width = (float)p_process_size.x;
+	push_constant.resolution_height = (float)p_process_size.y;
+	push_constant.history_weight = CLAMP(p_history_weight, 0.0f, 0.99f);
+	push_constant.denoise_strength = CLAMP(p_denoise_strength, 0.0f, 1.0f);
+	push_constant.max_history = Math::lerp(1.0f, 96.0f, push_constant.history_weight);
+	push_constant.step_size = 1;
+	push_constant.phi_color = 4.0f;
+	push_constant.phi_normal = 16.0f;
+	push_constant.phi_depth = 0.045f;
+	push_constant.variance_boost = 2.0f;
+	push_constant.radiance_space_history = 1.0f;
+
+	RD::get_singleton()->texture_copy(source, noisy, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, 0, 0);
+
+	_dispatch_temporal(push_constant, source, p_velocity, p_normal_roughness, p_albedo_metalness, p_viewz_hitdist, history, moments, prev_normal_roughness, prev_viewz_hitdist, prev_albedo_metalness, p_history_validity, p_prev_history_validity, p_history_id, p_prev_history_id, temp_c, temp_a, variance, rejection, reactivity, history_length);
+	RD::get_singleton()->texture_copy(temp_a, moments, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, 0, 0);
+	RD::get_singleton()->texture_copy(temp_c, history, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, 0, 0);
+	RD::get_singleton()->texture_copy(temp_c, source, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, 0, 0);
 	RD::get_singleton()->texture_copy(p_normal_roughness, prev_normal_roughness, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, p_view, 0);
 	RD::get_singleton()->texture_copy(p_viewz_hitdist, prev_viewz_hitdist, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, p_view, 0);
 	RD::get_singleton()->texture_copy(p_albedo_metalness, prev_albedo_metalness, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, p_view, 0);
