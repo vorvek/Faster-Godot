@@ -42,10 +42,7 @@ fn print_version() {
         .try_to()
         .unwrap_or_default();
     if physics_engine == "DEFAULT" {
-        godot_print_rich!(
-            "[color=green]PHYSICS ENGINE 2D: Rapier2D v{} (default)[/color]",
-            PLUGIN_VERSION
-        );
+        return;
     } else if physics_engine != "Rapier2D" {
         godot_print_rich!(
             "[color=red]PHYSICS ENGINE 2D: {}[/color]. Go to [b]Advanced Settings -> Physics -> 2D[/b] to change it to [b]Rapier2D[/b].",
