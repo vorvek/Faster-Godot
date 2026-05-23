@@ -2918,10 +2918,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				// accumulation has the same wall-clock decay at high refresh rates.
 				rt_history_weight = Math::pow(CLAMP(rt_history_weight, 0.0f, 0.99f), (float)time_step * 60.0f);
 			}
-			if (rt_replaces_opaque && rt_internal_denoiser) {
+			if (rt_internal_denoiser) {
 				rtgi_denoise->process(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight, rt_denoise_strength, rb_data->rt_get_size(), 0, 5);
-				composite_rt_volumetric_fog();
-				raytracing->copy_output_texture(p_render_data);
+				if (rt_replaces_opaque) {
+					composite_rt_volumetric_fog();
+					raytracing->copy_output_texture(p_render_data);
+				}
 			} else if (rt_replaces_opaque) {
 				taa->process_texture(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, SNAME("rtgi_taa"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, rb_data->rt_get_velocity_texture(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, true, rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight, rb_data->rt_get_size(), rb_data->rt_get_depth_texture());
 				composite_rt_volumetric_fog();

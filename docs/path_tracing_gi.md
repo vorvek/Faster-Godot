@@ -82,20 +82,19 @@ The feature is exposed on `Environment`, so it appears through the same
     frame time so high-refresh captures do not shorten the denoiser history in
     wall-clock time. Higher values reduce light speckles and improve stability
     in static views, but can increase light ghosting or wobbling while the
-    camera tracks through the scene. The default is `0.94`, which is
-    intentionally shorter than the old forced `0.97` RT denoiser history
-    weight.
+    camera tracks through the scene. The default is `0.70`, which keeps a short
+    enough history for gameplay lights to remain responsive.
   - This is only the temporal history weight. Set it lower for pulsing or fast
     dynamic lights that need to respond quickly. At `0.0`, the internal RTGI
     denoiser still runs its current-frame spatial passes when `rtgi_denoiser` is
-    enabled, but it does not blend previous-frame lighting.
+    enabled, but it does not consult or blend previous-frame lighting.
   - It is not the viewport TAA history setting.
 - `rtgi_denoiser_strength`
   - Controls the internal RTGI denoiser's current-frame spatial filtering,
     variance cleanup, and firefly suppression. Higher values hide more 1 SPP
     speckles, but can soften texture-driven indirect lighting and small dynamic
-    light changes. Lower values preserve more detail and response while leaving
-    more raw RT noise.
+    light changes. The default is `0.65`. Lower values preserve more detail and
+    response while leaving more raw RT noise.
   - This does not change how much previous-frame lighting is reused. Use
     `rtgi_temporal_accumulation_weight` for history persistence.
 - `rtgi_overscan_horizontal` and `rtgi_overscan_vertical`
@@ -165,15 +164,16 @@ denoise, so they remain visible without contributing to RT GI, shadows, or
 reflections. This avoids particle-driven TLAS spikes and black RT speckle from
 billboard particle geometry.
 
-RT temporal denoising is handled by a dedicated `RTGIDenoise` RD effect, not by
-the normal viewport TAA resolve. The primary hit/miss path writes noisy
+Internal RT temporal denoising is handled by a dedicated `RTGIDenoise` RD effect
+for both Hybrid RTGI and Path Traced mode, not by the normal viewport TAA
+resolve. The primary hit/miss path writes noisy
 radiance, depth, velocity, normal/roughness, albedo/metalness, view-Z,
 hit-distance, validity, and history ID guides at RT texture size. The denoiser
-then runs temporal reprojection, luminance moments, variance prefiltering, and
-edge-aware à-trous filtering before the path-traced output is cropped back to
-the visible viewport. Newly visible geometry, newly loaded materials, and
-geometry that has just become RT-ready therefore start from fresh samples instead
-of borrowing stale accumulated lighting.
+then runs temporal reprojection, light-change reactivity, luminance moments,
+variance prefiltering, and edge-aware à-trous filtering before the path-traced
+output is cropped back to the visible viewport. Newly visible geometry, newly
+loaded materials, and geometry that has just become RT-ready therefore start
+from fresh samples instead of borrowing stale accumulated lighting.
 
 If the GPU or driver does not expose the required Vulkan ray tracing features,
 the settings remain visible, a warning is printed, and rendering falls back to

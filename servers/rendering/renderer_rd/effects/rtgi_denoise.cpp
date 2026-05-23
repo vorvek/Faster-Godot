@@ -39,6 +39,10 @@ bool RTGIDenoise::_ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, co
 			p_render_buffers->get_texture_slice_size(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_HISTORY, 0) != p_size) {
 		p_render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE);
 	}
+	if (p_render_buffers->has_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_HISTORY) &&
+			!p_render_buffers->has_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_REACTIVITY)) {
+		p_render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE);
+	}
 
 	if (p_render_buffers->has_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_HISTORY)) {
 		return false;
@@ -58,6 +62,7 @@ bool RTGIDenoise::_ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, co
 	RID variance = p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_VARIANCE, RD::DATA_FORMAT_R16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
 	RID history_length = p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH, RD::DATA_FORMAT_R16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
 	RID rejection = p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_REJECTION, RD::DATA_FORMAT_R8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
+	RID reactivity = p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_REACTIVITY, RD::DATA_FORMAT_R8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
 	RID prev_normal_roughness = p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_PREV_NORMAL_ROUGHNESS, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
 	RID prev_viewz_hitdist = p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_PREV_VIEWZ_HITDIST, RD::DATA_FORMAT_R16G16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
 	RID prev_albedo_metalness = p_render_buffers->create_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_PREV_ALBEDO_METALNESS, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
@@ -68,6 +73,7 @@ bool RTGIDenoise::_ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, co
 	RD::get_singleton()->texture_clear(variance, Color(0, 0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
 	RD::get_singleton()->texture_clear(history_length, Color(0, 0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
 	RD::get_singleton()->texture_clear(rejection, Color(1, 0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
+	RD::get_singleton()->texture_clear(reactivity, Color(0, 0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
 	RD::get_singleton()->texture_clear(prev_normal_roughness, Color(0.5, 0.5, 1.0, 1.0), 0, 1, 0, p_render_buffers->get_view_count());
 	RD::get_singleton()->texture_clear(prev_viewz_hitdist, Color(65504.0, 65504.0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
 	RD::get_singleton()->texture_clear(prev_albedo_metalness, Color(1, 1, 1, 0), 0, 1, 0, p_render_buffers->get_view_count());
@@ -75,7 +81,7 @@ bool RTGIDenoise::_ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, co
 	return true;
 }
 
-void RTGIDenoise::_dispatch_temporal(const PushConstant &p_push_constant, RID p_source, RID p_velocity, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_history, RID p_moments, RID p_prev_normal_roughness, RID p_prev_viewz_hitdist, RID p_prev_albedo_metalness, RID p_history_validity, RID p_prev_history_validity, RID p_history_id, RID p_prev_history_id, RID p_temporal_out, RID p_moments_out, RID p_variance_out, RID p_rejection_out, RID p_history_length_out) {
+void RTGIDenoise::_dispatch_temporal(const PushConstant &p_push_constant, RID p_source, RID p_velocity, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_history, RID p_moments, RID p_prev_normal_roughness, RID p_prev_viewz_hitdist, RID p_prev_albedo_metalness, RID p_history_validity, RID p_prev_history_validity, RID p_history_id, RID p_prev_history_id, RID p_temporal_out, RID p_moments_out, RID p_variance_out, RID p_rejection_out, RID p_reactivity_out, RID p_history_length_out) {
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
@@ -104,7 +110,8 @@ void RTGIDenoise::_dispatch_temporal(const PushConstant &p_push_constant, RID p_
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 15, p_moments_out));
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 16, p_variance_out));
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 17, p_rejection_out));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 18, p_history_length_out));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 18, p_reactivity_out));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 19, p_history_length_out));
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[MODE_TEMPORAL]);
@@ -114,7 +121,7 @@ void RTGIDenoise::_dispatch_temporal(const PushConstant &p_push_constant, RID p_
 	RD::get_singleton()->compute_list_end();
 }
 
-void RTGIDenoise::_dispatch_variance_prefilter(const PushConstant &p_push_constant, RID p_temporal, RID p_normal_roughness, RID p_viewz_hitdist, RID p_variance, RID p_prefilter_out) {
+void RTGIDenoise::_dispatch_variance_prefilter(const PushConstant &p_push_constant, RID p_temporal, RID p_normal_roughness, RID p_viewz_hitdist, RID p_variance, RID p_reactivity, RID p_prefilter_out) {
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
@@ -127,17 +134,18 @@ void RTGIDenoise::_dispatch_variance_prefilter(const PushConstant &p_push_consta
 	RD::Uniform u_normal_roughness(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ nearest_sampler, p_normal_roughness }));
 	RD::Uniform u_viewz_hitdist(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, Vector<RID>({ nearest_sampler, p_viewz_hitdist }));
 	RD::Uniform u_variance(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 3, Vector<RID>({ nearest_sampler, p_variance }));
-	RD::Uniform u_prefilter_out(RD::UNIFORM_TYPE_IMAGE, 4, p_prefilter_out);
+	RD::Uniform u_reactivity(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 4, Vector<RID>({ nearest_sampler, p_reactivity }));
+	RD::Uniform u_prefilter_out(RD::UNIFORM_TYPE_IMAGE, 5, p_prefilter_out);
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[MODE_VARIANCE_PREFILTER]);
-	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_rd, 0, u_temporal, u_normal_roughness, u_viewz_hitdist, u_variance, u_prefilter_out), 0);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_rd, 0, u_temporal, u_normal_roughness, u_viewz_hitdist, u_variance, u_reactivity, u_prefilter_out), 0);
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &p_push_constant, sizeof(PushConstant));
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, (uint32_t)p_push_constant.resolution_width, (uint32_t)p_push_constant.resolution_height, 1);
 	RD::get_singleton()->compute_list_end();
 }
 
-void RTGIDenoise::_dispatch_atrous(const PushConstant &p_push_constant, RID p_input, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_velocity, RID p_output) {
+void RTGIDenoise::_dispatch_atrous(const PushConstant &p_push_constant, RID p_input, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_velocity, RID p_reactivity, RID p_output) {
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
@@ -151,17 +159,18 @@ void RTGIDenoise::_dispatch_atrous(const PushConstant &p_push_constant, RID p_in
 	RD::Uniform u_albedo_metalness(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, Vector<RID>({ nearest_sampler, p_albedo_metalness }));
 	RD::Uniform u_viewz_hitdist(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 3, Vector<RID>({ nearest_sampler, p_viewz_hitdist }));
 	RD::Uniform u_velocity(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 4, Vector<RID>({ nearest_sampler, p_velocity }));
-	RD::Uniform u_output(RD::UNIFORM_TYPE_IMAGE, 5, p_output);
+	RD::Uniform u_reactivity(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 5, Vector<RID>({ nearest_sampler, p_reactivity }));
+	RD::Uniform u_output(RD::UNIFORM_TYPE_IMAGE, 6, p_output);
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[MODE_ATROUS]);
-	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_rd, 0, u_input, u_normal_roughness, u_albedo_metalness, u_viewz_hitdist, u_velocity, u_output), 0);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_rd, 0, u_input, u_normal_roughness, u_albedo_metalness, u_viewz_hitdist, u_velocity, u_reactivity, u_output), 0);
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &p_push_constant, sizeof(PushConstant));
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, (uint32_t)p_push_constant.resolution_width, (uint32_t)p_push_constant.resolution_height, 1);
 	RD::get_singleton()->compute_list_end();
 }
 
-void RTGIDenoise::_dispatch_composite(const PushConstant &p_push_constant, RID p_filtered, RID p_temporal, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_output) {
+void RTGIDenoise::_dispatch_composite(const PushConstant &p_push_constant, RID p_filtered, RID p_temporal, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_reactivity, RID p_output) {
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
@@ -175,11 +184,12 @@ void RTGIDenoise::_dispatch_composite(const PushConstant &p_push_constant, RID p
 	RD::Uniform u_normal_roughness(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, Vector<RID>({ nearest_sampler, p_normal_roughness }));
 	RD::Uniform u_albedo_metalness(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 3, Vector<RID>({ nearest_sampler, p_albedo_metalness }));
 	RD::Uniform u_viewz_hitdist(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 4, Vector<RID>({ nearest_sampler, p_viewz_hitdist }));
-	RD::Uniform u_output(RD::UNIFORM_TYPE_IMAGE, 5, p_output);
+	RD::Uniform u_reactivity(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 5, Vector<RID>({ nearest_sampler, p_reactivity }));
+	RD::Uniform u_output(RD::UNIFORM_TYPE_IMAGE, 6, p_output);
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[MODE_COMPOSITE]);
-	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_rd, 0, u_filtered, u_temporal, u_normal_roughness, u_albedo_metalness, u_viewz_hitdist, u_output), 0);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_rd, 0, u_filtered, u_temporal, u_normal_roughness, u_albedo_metalness, u_viewz_hitdist, u_reactivity, u_output), 0);
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &p_push_constant, sizeof(PushConstant));
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, (uint32_t)p_push_constant.resolution_width, (uint32_t)p_push_constant.resolution_height, 1);
 	RD::get_singleton()->compute_list_end();
@@ -242,6 +252,7 @@ void RTGIDenoise::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 	RID variance = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_VARIANCE, p_view, 0);
 	RID history_length = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH, p_view, 0);
 	RID rejection = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_REJECTION, p_view, 0);
+	RID reactivity = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_REACTIVITY, p_view, 0);
 	RID prev_normal_roughness = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_PREV_NORMAL_ROUGHNESS, p_view, 0);
 	RID prev_viewz_hitdist = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_PREV_VIEWZ_HITDIST, p_view, 0);
 	RID prev_albedo_metalness = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_PREV_ALBEDO_METALNESS, p_view, 0);
@@ -261,28 +272,31 @@ void RTGIDenoise::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 
 	RD::get_singleton()->texture_copy(source, noisy, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, 0, 0);
 
-	_dispatch_temporal(push_constant, source, p_velocity, p_normal_roughness, p_albedo_metalness, p_viewz_hitdist, history, moments, prev_normal_roughness, prev_viewz_hitdist, prev_albedo_metalness, p_history_validity, p_prev_history_validity, p_history_id, p_prev_history_id, temp_c, temp_a, variance, rejection, history_length);
+	_dispatch_temporal(push_constant, source, p_velocity, p_normal_roughness, p_albedo_metalness, p_viewz_hitdist, history, moments, prev_normal_roughness, prev_viewz_hitdist, prev_albedo_metalness, p_history_validity, p_prev_history_validity, p_history_id, p_prev_history_id, temp_c, temp_a, variance, rejection, reactivity, history_length);
 	RD::get_singleton()->texture_copy(temp_a, moments, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, 0, 0);
-	_dispatch_variance_prefilter(push_constant, temp_c, p_normal_roughness, p_viewz_hitdist, variance, temp_b);
-	RD::get_singleton()->texture_copy(temp_b, history, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, 0, 0);
+	RD::get_singleton()->texture_copy(temp_c, history, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, 0, 0);
+	_dispatch_variance_prefilter(push_constant, temp_c, p_normal_roughness, p_viewz_hitdist, variance, reactivity, temp_b);
 
 	RID read = temp_b;
 	RID write = temp_a;
 	const int max_iterations = CLAMP(p_iterations, 1, 5);
-	const int iterations = CLAMP((int)Math::ceil((double)max_iterations * (double)MAX(push_constant.denoise_strength, 0.01f)), 1, max_iterations);
+	int iterations = CLAMP((int)Math::round(Math::lerp(2.0, 4.0, (double)push_constant.denoise_strength)), 1, max_iterations);
+	if (push_constant.denoise_strength > 0.92f) {
+		iterations = max_iterations;
+	}
 	for (int i = 0; i < iterations; i++) {
 		push_constant.pass_index = i;
 		push_constant.step_size = 1 << i;
 		push_constant.phi_color = 3.5f + (float)i * 0.75f;
 		push_constant.phi_depth = 0.035f + (float)i * 0.015f;
-		_dispatch_atrous(push_constant, read, p_normal_roughness, p_albedo_metalness, p_viewz_hitdist, p_velocity, write);
+		_dispatch_atrous(push_constant, read, p_normal_roughness, p_albedo_metalness, p_viewz_hitdist, p_velocity, reactivity, write);
 
 		RID swap = read;
 		read = write;
 		write = swap;
 	}
 
-	_dispatch_composite(push_constant, read, temp_c, p_normal_roughness, p_albedo_metalness, p_viewz_hitdist, source);
+	_dispatch_composite(push_constant, read, temp_c, p_normal_roughness, p_albedo_metalness, p_viewz_hitdist, reactivity, source);
 
 	RD::get_singleton()->texture_copy(p_normal_roughness, prev_normal_roughness, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, p_view, 0);
 	RD::get_singleton()->texture_copy(p_viewz_hitdist, prev_viewz_hitdist, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, p_view, 0);

@@ -214,8 +214,8 @@ private:
 	float rtgi_energy = 1.0;
 	bool rtgi_disable_in_editor = true;
 	bool rtgi_temporal_accumulation = true;
-	float rtgi_temporal_accumulation_weight = 0.94f;
-	float rtgi_denoiser_strength = 0.8f;
+	float rtgi_temporal_accumulation_weight = 0.70f;
+	float rtgi_denoiser_strength = 0.65f;
 	float rtgi_overscan_horizontal = 0.0f;
 	float rtgi_overscan_vertical = 0.0f;
 	RTGIDenoiser rtgi_denoiser = RTGI_DENOISER_AUTO;
