@@ -18,21 +18,21 @@
 #define RT_PARAM_VIS_MODE 0 // rt_params[0].x - Debug visualization mode (0 = disabled)
 #define RT_PARAM_SAMPLE_COUNT 1 // rt_params[0].y - Samples per pixel
 #define RT_PARAM_MAX_BOUNCES 2 // rt_params[0].z - Maximum ray bounces
-#define RT_PARAM_DENOISER 3 // rt_params[0].w - Denoiser selection (0=none, 1=legacy DLSS RR, 2=SVGF, 3=OIDN GPU, 4=OIDN CPU)
+#define RT_PARAM_DENOISER 3 // rt_params[0].w - Denoiser selection (0=none, non-zero=SVGF)
 #define RT_PARAM_ENERGY 4 // rt_params[1].x - RTGI energy multiplier
-#define RT_PARAM_TEMPORAL_ACCUMULATION 5 // rt_params[1].y - Temporal accumulation enabled
-#define RT_PARAM_MODE 6 // rt_params[1].z - 0=Hybrid RTGI, 1=Path Traced
+#define RT_PARAM_RESERVED_5 5 // rt_params[1].y - Reserved
+#define RT_PARAM_MODE 6 // rt_params[1].z - 0=Simple RT, 1=Path Traced
 #define RT_PARAM_BACKGROUND_USES_SKY 7 // rt_params[1].w - Miss shader samples sky radiance
 #define RT_PARAM_BACKGROUND_R 8 // rt_params[2].x - Linear fallback background color
 #define RT_PARAM_BACKGROUND_G 9 // rt_params[2].y
 #define RT_PARAM_BACKGROUND_B 10 // rt_params[2].z
-#define RT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT 11 // rt_params[2].w - RTGI temporal accumulation history weight
+#define RT_PARAM_RESERVED_11 11 // rt_params[2].w - Reserved
 #define RT_PARAM_OVERSCAN_HORIZONTAL 12 // rt_params[3].x - Path traced RTGI horizontal overscan fraction
 #define RT_PARAM_OVERSCAN_VERTICAL 13 // rt_params[3].y - Path traced RTGI vertical overscan fraction
 #define RT_PARAM_LIGHT_COUNT 14 // rt_params[3].z - Number of active lights in light buffer
 #define RT_PARAM_FRAME_INDEX 15 // rt_params[3].w - Frame counter for temporal variation
 
-#define RT_MODE_HYBRID 0u
+#define RT_MODE_HYBRID 0u // Compatibility name for Simple RT.
 #define RT_MODE_PATH_TRACED 1u
 
 // ============================================================================

@@ -708,10 +708,10 @@ public:
 
 	using PathtracingDenoiser = RSE::PathtracingDenoiser;
 	static constexpr PathtracingDenoiser PT_DENOISER_NONE = RSE::PT_DENOISER_NONE;
-	static constexpr PathtracingDenoiser PT_DENOISER_DLSS_RAY_RECONSTRUCTION = RSE::PT_DENOISER_DLSS_RAY_RECONSTRUCTION;
+	static constexpr PathtracingDenoiser PT_DENOISER_RESERVED_1 = RSE::PT_DENOISER_RESERVED_1;
 	static constexpr PathtracingDenoiser PT_DENOISER_INTERNAL = RSE::PT_DENOISER_INTERNAL;
-	static constexpr PathtracingDenoiser PT_DENOISER_OIDN_GPU = RSE::PT_DENOISER_OIDN_GPU;
-	static constexpr PathtracingDenoiser PT_DENOISER_OIDN_CPU = RSE::PT_DENOISER_OIDN_CPU;
+	static constexpr PathtracingDenoiser PT_DENOISER_RESERVED_3 = RSE::PT_DENOISER_RESERVED_3;
+	static constexpr PathtracingDenoiser PT_DENOISER_RESERVED_4 = RSE::PT_DENOISER_RESERVED_4;
 
 	using PathtracingParamIndex = RSE::PathtracingParamIndex;
 	static constexpr PathtracingParamIndex PT_PARAM_VIS_MODE = RSE::PT_PARAM_VIS_MODE;
@@ -719,9 +719,7 @@ public:
 	static constexpr PathtracingParamIndex PT_PARAM_MAX_BOUNCES = RSE::PT_PARAM_MAX_BOUNCES;
 	static constexpr PathtracingParamIndex PT_PARAM_DENOISER = RSE::PT_PARAM_DENOISER;
 	static constexpr PathtracingParamIndex PT_PARAM_ENERGY = RSE::PT_PARAM_ENERGY;
-	static constexpr PathtracingParamIndex PT_PARAM_TEMPORAL_ACCUMULATION = RSE::PT_PARAM_TEMPORAL_ACCUMULATION;
 	static constexpr PathtracingParamIndex PT_PARAM_MODE = RSE::PT_PARAM_MODE;
-	static constexpr PathtracingParamIndex PT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT = RSE::PT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT;
 	static constexpr PathtracingParamIndex PT_PARAM_OVERSCAN_HORIZONTAL = RSE::PT_PARAM_OVERSCAN_HORIZONTAL;
 	static constexpr PathtracingParamIndex PT_PARAM_OVERSCAN_VERTICAL = RSE::PT_PARAM_OVERSCAN_VERTICAL;
 	static constexpr PathtracingParamIndex PT_PARAM_LIGHT_COUNT = RSE::PT_PARAM_LIGHT_COUNT;

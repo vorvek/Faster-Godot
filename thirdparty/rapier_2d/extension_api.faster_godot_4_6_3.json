@@ -105974,28 +105974,12 @@
 					"is_bitfield": false,
 					"values": [
 						{
-							"name": "RTGI_DENOISER_AUTO",
-							"value": 0
+							"name": "RTGI_DENOISER_SVGF",
+							"value": 8
 						},
 						{
-							"name": "RTGI_DENOISER_INTERNAL",
-							"value": 1
-						},
-						{
-							"name": "RTGI_DENOISER_NVIDIA",
-							"value": 2
-						},
-						{
-							"name": "RTGI_DENOISER_AMD",
-							"value": 3
-						},
-						{
-							"name": "RTGI_DENOISER_INTEL",
-							"value": 4
-						},
-						{
-							"name": "RTGI_DENOISER_OFF",
-							"value": 5
+							"name": "RTGI_DENOISER_NONE",
+							"value": 9
 						}
 					]
 				},
@@ -107737,58 +107721,6 @@
 					}
 				},
 				{
-					"name": "set_rtgi_temporal_accumulation",
-					"is_const": false,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 2586408642,
-					"arguments": [
-						{
-							"name": "enabled",
-							"type": "bool"
-						}
-					]
-				},
-				{
-					"name": "is_rtgi_temporal_accumulation_enabled",
-					"is_const": true,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 36873697,
-					"return_value": {
-						"type": "bool"
-					}
-				},
-				{
-					"name": "set_rtgi_temporal_accumulation_weight",
-					"is_const": false,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 373806689,
-					"arguments": [
-						{
-							"name": "weight",
-							"type": "float",
-							"meta": "float"
-						}
-					]
-				},
-				{
-					"name": "get_rtgi_temporal_accumulation_weight",
-					"is_const": true,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 1740695150,
-					"return_value": {
-						"type": "float",
-						"meta": "float"
-					}
-				},
-				{
 					"name": "set_rtgi_denoiser",
 					"is_const": false,
 					"is_vararg": false,
@@ -109349,18 +109281,6 @@
 					"name": "rtgi_disable_in_editor",
 					"setter": "set_rtgi_disable_in_editor",
 					"getter": "is_rtgi_disabled_in_editor"
-				},
-				{
-					"type": "bool",
-					"name": "rtgi_temporal_accumulation",
-					"setter": "set_rtgi_temporal_accumulation",
-					"getter": "is_rtgi_temporal_accumulation_enabled"
-				},
-				{
-					"type": "float",
-					"name": "rtgi_temporal_accumulation_weight",
-					"setter": "set_rtgi_temporal_accumulation_weight",
-					"getter": "get_rtgi_temporal_accumulation_weight"
 				},
 				{
 					"type": "int",

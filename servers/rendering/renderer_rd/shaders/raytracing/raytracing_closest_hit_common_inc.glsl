@@ -277,11 +277,27 @@ void write_primary_hit_guides(HitData h, MaterialResult m) {
 			vec4(0.0, 0.0, 0.0, 1.0)));
 	vec3 view_pos = (view_mat * vec4(h.hit_pos, 1.0)).xyz;
 	ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
+	uint geom_idx = gl_InstanceCustomIndexEXT;
+	GeometryData geom = geometries[geom_idx];
+	int mi = motion_indices[geom_idx];
+	float expected_prev_view_z = 0.0;
+	bool can_reconstruct_prev_pos = (geom.flags & (FLAG_DEFORMED | FLAG_PROCEDURAL)) == 0u;
+	if (can_reconstruct_prev_pos) {
+		mat4 prev_model = (mi >= 0) ? decode_prev_object_to_world(mi) : mat4(gl_ObjectToWorldEXT);
+		vec3 obj_pos = (mat4(gl_WorldToObjectEXT) * vec4(h.hit_pos, 1.0)).xyz;
+		vec3 prev_world_pos = (prev_model * vec4(obj_pos, 1.0)).xyz;
+		mat4 prev_view_mat = transpose(mat4(scene_data_block.prev_data.view_matrix[0],
+				scene_data_block.prev_data.view_matrix[1],
+				scene_data_block.prev_data.view_matrix[2],
+				vec4(0.0, 0.0, 0.0, 1.0)));
+		vec3 prev_view_pos = (prev_view_mat * vec4(prev_world_pos, 1.0)).xyz;
+		expected_prev_view_z = abs(prev_view_pos.z);
+	}
 
 	vec3 normal = normalize(m.normal);
 	imageStore(rt_normal_roughness_image, pixel, vec4(normal * 0.5 + 0.5, clamp(m.roughness, 0.0, 1.0)));
 	imageStore(rt_albedo_metalness_image, pixel, vec4(max(m.albedo, vec3(0.0)), clamp(m.metalness, 0.0, 1.0)));
-	imageStore(rt_viewz_hitdist_image, pixel, vec4(abs(view_pos.z), max(gl_HitTEXT, 0.0), 0.0, 0.0));
+	imageStore(rt_viewz_hitdist_image, pixel, vec4(abs(view_pos.z), max(gl_HitTEXT, 0.0), expected_prev_view_z, 0.0));
 }
 #endif
 

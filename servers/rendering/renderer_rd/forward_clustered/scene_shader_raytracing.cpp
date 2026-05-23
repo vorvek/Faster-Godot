@@ -788,9 +788,6 @@ uint32_t SceneShaderRaytracing::compute_rt_flags(const float *p_env_params, bool
 		}
 		sample_count = MAX(1u, (uint32_t)p_env_params[RT_PARAM_SAMPLE_COUNT]);
 		max_bounces = MAX(1u, MIN(8u, (uint32_t)p_env_params[RT_PARAM_MAX_BOUNCES]));
-		if ((uint32_t)p_env_params[RT_PARAM_DENOISER] == RSE::PT_DENOISER_DLSS_RAY_RECONSTRUCTION) {
-			flags |= RT_FLAG_DLSS_RR_ENABLED;
-		}
 	}
 
 	if (p_fog_enabled) {

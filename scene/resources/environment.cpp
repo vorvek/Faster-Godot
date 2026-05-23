@@ -643,20 +643,14 @@ int Environment::get_pathtracing_max_bounces() const {
 
 void Environment::set_pathtracing_denoiser(RSE::PathtracingDenoiser p_denoiser) {
 	pathtracing_denoiser = p_denoiser;
-	switch (p_denoiser) {
-		case RSE::PT_DENOISER_OIDN_GPU:
-		case RSE::PT_DENOISER_DLSS_RAY_RECONSTRUCTION:
-			rtgi_denoiser = RTGI_DENOISER_GPU;
-			pathtracing_denoiser = RSE::PT_DENOISER_OIDN_GPU;
-			break;
-		case RSE::PT_DENOISER_OIDN_CPU:
-			rtgi_denoiser = RTGI_DENOISER_CPU;
-			break;
-		case RSE::PT_DENOISER_INTERNAL:
-			rtgi_denoiser = RTGI_DENOISER_SVGF;
-			break;
+	switch ((int)p_denoiser) {
 		case RSE::PT_DENOISER_NONE:
 			rtgi_denoiser = RTGI_DENOISER_NONE;
+			break;
+		case RSE::PT_DENOISER_INTERNAL:
+		default:
+			rtgi_denoiser = RTGI_DENOISER_SVGF;
+			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL;
 			break;
 	}
 	_update_pathtracing();
@@ -717,24 +711,6 @@ bool Environment::is_rtgi_disabled_in_editor() const {
 	return rtgi_disable_in_editor;
 }
 
-void Environment::set_rtgi_temporal_accumulation(bool p_enabled) {
-	rtgi_temporal_accumulation = p_enabled;
-	_update_pathtracing();
-}
-
-bool Environment::is_rtgi_temporal_accumulation_enabled() const {
-	return rtgi_temporal_accumulation;
-}
-
-void Environment::set_rtgi_temporal_accumulation_weight(float p_weight) {
-	rtgi_temporal_accumulation_weight = CLAMP(p_weight, 0.0f, 0.99f);
-	_update_pathtracing();
-}
-
-float Environment::get_rtgi_temporal_accumulation_weight() const {
-	return rtgi_temporal_accumulation_weight;
-}
-
 void Environment::set_rtgi_denoiser_strength(float p_strength) {
 	rtgi_denoiser_strength = CLAMP(p_strength, 0.0f, 1.0f);
 	_update_pathtracing();
@@ -763,32 +739,16 @@ float Environment::get_rtgi_overscan_vertical() const {
 }
 
 void Environment::set_rtgi_denoiser(RTGIDenoiser p_denoiser) {
-	switch (p_denoiser) {
-		case RTGI_DENOISER_AUTO:
-		case RTGI_DENOISER_NVIDIA:
-		case RTGI_DENOISER_AMD:
-		case RTGI_DENOISER_INTEL:
-		case RTGI_DENOISER_GPU:
-			rtgi_denoiser = RTGI_DENOISER_GPU;
-			pathtracing_denoiser = RSE::PT_DENOISER_OIDN_GPU;
-			break;
-		case RTGI_DENOISER_CPU:
-			rtgi_denoiser = RTGI_DENOISER_CPU;
-			pathtracing_denoiser = RSE::PT_DENOISER_OIDN_CPU;
-			break;
-		case RTGI_DENOISER_INTERNAL:
-		case RTGI_DENOISER_SVGF:
-			rtgi_denoiser = RTGI_DENOISER_SVGF;
-			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL;
-			break;
-		case RTGI_DENOISER_OFF:
+	switch ((int)p_denoiser) {
 		case RTGI_DENOISER_NONE:
+		case 5:
 			rtgi_denoiser = RTGI_DENOISER_NONE;
 			pathtracing_denoiser = RSE::PT_DENOISER_NONE;
 			break;
+		case RTGI_DENOISER_SVGF:
 		default:
-			rtgi_denoiser = RTGI_DENOISER_GPU;
-			pathtracing_denoiser = RSE::PT_DENOISER_OIDN_GPU;
+			rtgi_denoiser = RTGI_DENOISER_SVGF;
+			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL;
 			break;
 	}
 	_update_pathtracing();
@@ -817,9 +777,9 @@ void Environment::_update_pathtracing() {
 	params.write[RSE::PT_PARAM_MAX_BOUNCES] = (float)pathtracing_max_bounces;
 	params.write[RSE::PT_PARAM_DENOISER] = (float)(int)pathtracing_denoiser;
 	params.write[RSE::PT_PARAM_ENERGY] = rtgi_energy;
-	params.write[RSE::PT_PARAM_TEMPORAL_ACCUMULATION] = rtgi_temporal_accumulation ? 1.0f : 0.0f;
+	params.write[RSE::PT_PARAM_RESERVED_5] = 0.0f;
 	params.write[RSE::PT_PARAM_MODE] = (float)(int)rtgi_mode;
-	params.write[RSE::PT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT] = rtgi_temporal_accumulation_weight;
+	params.write[RSE::PT_PARAM_RESERVED_11] = 0.0f;
 	params.write[RSE::PT_PARAM_OVERSCAN_HORIZONTAL] = rtgi_overscan_horizontal;
 	params.write[RSE::PT_PARAM_OVERSCAN_VERTICAL] = rtgi_overscan_vertical;
 	params.write[RSE::PT_PARAM_DENOISER_STRENGTH] = rtgi_denoiser_strength;
@@ -1678,10 +1638,6 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_rtgi_energy"), &Environment::get_rtgi_energy);
 	ClassDB::bind_method(D_METHOD("set_rtgi_disable_in_editor", "disabled"), &Environment::set_rtgi_disable_in_editor);
 	ClassDB::bind_method(D_METHOD("is_rtgi_disabled_in_editor"), &Environment::is_rtgi_disabled_in_editor);
-	ClassDB::bind_method(D_METHOD("set_rtgi_temporal_accumulation", "enabled"), &Environment::set_rtgi_temporal_accumulation);
-	ClassDB::bind_method(D_METHOD("is_rtgi_temporal_accumulation_enabled"), &Environment::is_rtgi_temporal_accumulation_enabled);
-	ClassDB::bind_method(D_METHOD("set_rtgi_temporal_accumulation_weight", "weight"), &Environment::set_rtgi_temporal_accumulation_weight);
-	ClassDB::bind_method(D_METHOD("get_rtgi_temporal_accumulation_weight"), &Environment::get_rtgi_temporal_accumulation_weight);
 	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser_strength", "strength"), &Environment::set_rtgi_denoiser_strength);
 	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser_strength"), &Environment::get_rtgi_denoiser_strength);
 	ClassDB::bind_method(D_METHOD("set_rtgi_overscan_horizontal", "overscan"), &Environment::set_rtgi_overscan_horizontal);
@@ -1695,17 +1651,15 @@ void Environment::_bind_methods() {
 
 	ADD_GROUP("RTGI", "rtgi_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_enabled", PROPERTY_HINT_GROUP_ENABLE), "set_rtgi_enabled", "is_rtgi_enabled");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_mode", PROPERTY_HINT_ENUM, "Hybrid RTGI,Path Traced"), "set_rtgi_mode", "get_rtgi_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_mode", PROPERTY_HINT_ENUM, "Simple RT,Path Traced"), "set_rtgi_mode", "get_rtgi_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_samples_per_pixel", PROPERTY_HINT_RANGE, "1,16,1"), "set_rtgi_samples_per_pixel", "get_rtgi_samples_per_pixel");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_max_bounces", PROPERTY_HINT_RANGE, "1,8,1"), "set_rtgi_max_bounces", "get_rtgi_max_bounces");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_energy", PROPERTY_HINT_RANGE, "0,16,0.01,or_greater"), "set_rtgi_energy", "get_rtgi_energy");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_disable_in_editor"), "set_rtgi_disable_in_editor", "is_rtgi_disabled_in_editor");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_temporal_accumulation"), "set_rtgi_temporal_accumulation", "is_rtgi_temporal_accumulation_enabled");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_temporal_accumulation_weight", PROPERTY_HINT_RANGE, "0,0.99,0.001"), "set_rtgi_temporal_accumulation_weight", "get_rtgi_temporal_accumulation_weight");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_strength", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_denoiser_strength", "get_rtgi_denoiser_strength");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_horizontal", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_horizontal", "get_rtgi_overscan_horizontal");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_vertical", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_vertical", "get_rtgi_overscan_vertical");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "GPU (Default):6,CPU (Very Slow):7,SVGF (Experimental):8,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "SVGF (Default):8,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_debug_mode", PROPERTY_HINT_ENUM, "Disabled,Mirror Reflection,Geometry Normals,Final Normals,Normal Map,Tangent,Bitangent,UV,Albedo,ORM,Diffuse Albedo,Specular Albedo,Normal+Roughness,Specular Hit Dist,Metalness,Roughness,View Normals,Diffuse+Specular,Fresnel F0,Front/Back Face,Depth,Emissive,BRDF Rejection"), "set_rtgi_debug_mode", "get_rtgi_debug_mode");
 
 	// Glow
@@ -1907,14 +1861,6 @@ void Environment::_bind_methods() {
 	BIND_ENUM_CONSTANT(RTGI_MODE_HYBRID);
 	BIND_ENUM_CONSTANT(RTGI_MODE_PATH_TRACED);
 
-	BIND_ENUM_CONSTANT(RTGI_DENOISER_AUTO);
-	BIND_ENUM_CONSTANT(RTGI_DENOISER_INTERNAL);
-	BIND_ENUM_CONSTANT(RTGI_DENOISER_NVIDIA);
-	BIND_ENUM_CONSTANT(RTGI_DENOISER_AMD);
-	BIND_ENUM_CONSTANT(RTGI_DENOISER_INTEL);
-	BIND_ENUM_CONSTANT(RTGI_DENOISER_OFF);
-	BIND_ENUM_CONSTANT(RTGI_DENOISER_GPU);
-	BIND_ENUM_CONSTANT(RTGI_DENOISER_CPU);
 	BIND_ENUM_CONSTANT(RTGI_DENOISER_SVGF);
 	BIND_ENUM_CONSTANT(RTGI_DENOISER_NONE);
 

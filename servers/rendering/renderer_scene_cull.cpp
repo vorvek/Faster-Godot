@@ -2860,10 +2860,7 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 		if (camera_data.view_count == 1 && environment.is_valid() && scene_render->environment_get_pathtracing_enabled(environment)) {
 			PackedFloat32Array params = scene_render->environment_get_pathtracing_params(environment);
 			const uint32_t denoiser = params.size() > RSE::PT_PARAM_DENOISER ? (uint32_t)params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
-			rt_temporal_motion_vectors = denoiser == RSE::PT_DENOISER_INTERNAL ||
-					denoiser == RSE::PT_DENOISER_OIDN_GPU ||
-					denoiser == RSE::PT_DENOISER_OIDN_CPU ||
-					denoiser == RSE::PT_DENOISER_DLSS_RAY_RECONSTRUCTION;
+			rt_temporal_motion_vectors = denoiser != RSE::PT_DENOISER_NONE;
 		}
 		RSG::viewport->viewport_set_rt_temporal_motion_vectors(p_viewport, rt_temporal_motion_vectors);
 	}

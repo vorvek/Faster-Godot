@@ -36,7 +36,6 @@
 #include "servers/rendering/renderer_rd/effects/fsr2.h"
 #include "servers/rendering/renderer_rd/effects/motion_vectors_store.h"
 #include "servers/rendering/renderer_rd/effects/rtgi_denoise.h"
-#include "servers/rendering/renderer_rd/effects/rtgi_oidn_denoise.h"
 #include "servers/rendering/renderer_rd/effects/ss_effects.h"
 #include "servers/rendering/renderer_rd/effects/taa.h"
 #include "servers/rendering/renderer_rd/forward_clustered/render_raytracing.h"
@@ -835,7 +834,6 @@ private:
 
 	RendererRD::TAA *taa = nullptr;
 	RendererRD::RTGIDenoise *rtgi_denoise = nullptr;
-	RendererRD::RTGIOIDNDenoise *rtgi_oidn_denoise = nullptr;
 	RendererRD::FSR2Effect *fsr2_effect = nullptr;
 	RendererRD::SSEffects *ss_effects = nullptr;
 

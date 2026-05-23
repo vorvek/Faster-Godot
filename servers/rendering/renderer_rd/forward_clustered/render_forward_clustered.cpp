@@ -204,7 +204,6 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_clear_textures
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_ALBEDO_METALNESS);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_VIEWZ_HITDIST);
 	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE);
-	render_buffers->clear_context(RB_SCOPE_RTGI_OIDN_TEMPORAL);
 }
 
 void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_textures() {
@@ -334,7 +333,7 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 		render_buffers->create_texture(
 				RB_SCOPE_FORWARD_CLUSTERED,
 				RB_TEX_RT_VIEWZ_HITDIST,
-				RD::DATA_FORMAT_R16G16_SFLOAT,
+				RD::DATA_FORMAT_R16G16B16A16_SFLOAT,
 				usage_bits,
 				RD::TEXTURE_SAMPLES_1,
 				rt_size);
@@ -2137,12 +2136,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			: nullptr;
 	bool rt_replaces_opaque = scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_PATH_TRACED;
 	const uint32_t rt_denoiser = rt_env_params ? (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
-	const bool rt_svgf_denoiser = rt_denoiser == RSE::PT_DENOISER_INTERNAL;
-	const bool rt_oidn_gpu_denoiser = rt_denoiser == RSE::PT_DENOISER_OIDN_GPU || rt_denoiser == RSE::PT_DENOISER_DLSS_RAY_RECONSTRUCTION;
-	const bool rt_oidn_cpu_denoiser = rt_denoiser == RSE::PT_DENOISER_OIDN_CPU;
-	const bool rt_oidn_denoiser = rt_oidn_gpu_denoiser || rt_oidn_cpu_denoiser;
-	const bool rt_temporal_denoiser = rt_svgf_denoiser || rt_oidn_denoiser;
-	const bool rt_temporal_accumulation = rt_env_params && rt_env_params[RSE::PT_PARAM_TEMPORAL_ACCUMULATION] != 0.0f;
+	const bool rt_svgf_denoiser = rt_denoiser != RSE::PT_DENOISER_NONE;
+	const bool rt_temporal_denoiser = rt_svgf_denoiser;
 
 	static const int texture_multisamples[RSE::VIEWPORT_MSAA_MAX] = { 1, 2, 4, 8 };
 
@@ -2398,7 +2393,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->texture_clear(rb_data->rt_get_prev_history_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 		}
 		rb->clear_context(RB_SCOPE_RTGI_DENOISE);
-		rb->clear_context(RB_SCOPE_RTGI_OIDN_TEMPORAL);
 	};
 	auto reject_rt_previous_history = [&]() {
 		if (!rb_data.is_valid()) {
@@ -2445,7 +2439,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		} else if (_rt_camera_history_cut_detected(p_render_data)) {
 			reject_rt_previous_history();
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE);
-			rb->clear_context(RB_SCOPE_RTGI_OIDN_TEMPORAL);
 		}
 
 		RTViewportState *rt_state = raytracing->build_tlas(p_render_data, rt_flags);
@@ -2502,8 +2495,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		depth_prepass_uniform_buffer_index = _setup_environment(p_render_data, is_reflection_probe, screen_size, screen_size, p_default_bg_color, false);
 		_update_render_base_uniform_set();
 	}
-	// Path Traced mode skips OPAQUE (TLAS is built from rt_instances). Hybrid
-	// RTGI still renders the normal raster opaque path and composites RTGI later.
+	// Path Traced mode skips OPAQUE (TLAS is built from rt_instances). Simple RT
+	// still renders the normal raster opaque path and composites RT lighting later.
 	_fill_render_list(RENDER_LIST_OPAQUE, p_render_data, PASS_MODE_COLOR, using_sdfgi, using_sdfgi || using_voxelgi, using_motion_pass, false, rt_replaces_opaque);
 
 	int *render_info = p_render_data->render_info ? p_render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_VISIBLE] : (int *)nullptr;
@@ -2874,7 +2867,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	if (rt_setup_deferred && scene_features.rt) {
 		if (!setup_rt_state()) {
-			ERR_PRINT_ONCE_ED("Failed to initialize Hybrid RTGI pipeline or uniform set. Rendering raster output without RTGI for this frame.");
+			ERR_PRINT_ONCE_ED("Failed to initialize Simple RT pipeline or uniform set. Rendering raster output without RTGI for this frame.");
 			scene_features.rt = false;
 			scene_features.raw &= ~uint32_t(SCENE_FEATURE_DEPTH_RECONSTRUCT);
 			using_rt_denoise = false;
@@ -2886,7 +2879,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 	}
 
-	// Execute raytracing if enabled. Hybrid RTGI produces an indirect-light
+	// Execute raytracing if enabled. Simple RT produces an indirect-light
 	// texture; Path Traced mode replaces the opaque/motion vector pass.
 	if (scene_features.rt && rb_data.is_valid() && raytracing && raytracing->get_shader()) {
 		auto composite_rt_volumetric_fog = [&]() {
@@ -2952,7 +2945,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		RD::get_singleton()->draw_command_end_label();
 
-		// Path Traced mode owns the main depth buffer. Hybrid keeps raster depth
+		// Path Traced mode owns the main depth buffer. Simple RT keeps raster depth
 		// and uses RT depth only for RTGI history rejection.
 		if (rt_replaces_opaque && rb_data.is_valid() && rb_data->rt_has_depth_texture()) {
 			RENDER_TIMESTAMP("Copy RT Depth (R32F -> D32F)");
@@ -2990,38 +2983,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->draw_command_begin_label("RT Denoise");
 			RENDER_TIMESTAMP("RT Denoise");
 			const float rt_denoise_strength = CLAMP(rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_STRENGTH] : 0.8f, 0.0f, 1.0f);
-			float rt_history_weight = rt_temporal_accumulation && rt_env_params ? rt_env_params[RSE::PT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT] : 0.0f;
-			if (time_step > 0.0) {
-				// Treat the RTGI history setting as a 60 FPS baseline so temporal
-				// accumulation has the same wall-clock decay at high refresh rates.
-				rt_history_weight = Math::pow(CLAMP(rt_history_weight, 0.0f, 0.99f), (float)time_step * 60.0f);
-			}
+			const float rt_history_weight = 0.0f;
 			if (rt_svgf_denoiser) {
-				if (rtgi_oidn_denoise != nullptr) {
-					rtgi_oidn_denoise->invalidate();
-				}
-				rb->clear_context(RB_SCOPE_RTGI_OIDN_TEMPORAL);
 				rtgi_denoise->process(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight, rt_denoise_strength, rb_data->rt_get_size(), 0, 5);
-				if (rt_replaces_opaque) {
-					composite_rt_volumetric_fog();
-					raytracing->copy_output_texture(p_render_data);
-				}
-			} else if (rt_oidn_denoiser) {
-				rb->clear_context(RB_SCOPE_RTGI_DENOISE);
-				const RendererRD::RTGIOIDNDenoise::Mode oidn_mode = rt_oidn_cpu_denoiser ? RendererRD::RTGIOIDNDenoise::MODE_CPU : RendererRD::RTGIOIDNDenoise::MODE_GPU;
-				if (rtgi_oidn_denoise != nullptr && rtgi_oidn_denoise->prepare(oidn_mode, rb_data->rt_get_size())) {
-					const bool oidn_processed = rtgi_oidn_denoise->process(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_size(), oidn_mode, 0);
-					if (oidn_processed && rt_history_weight > 0.001f) {
-						rtgi_denoise->process_temporal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight, rt_denoise_strength, rb_data->rt_get_size(), 0);
-					} else {
-						reject_rt_previous_history();
-						rb->clear_context(RB_SCOPE_RTGI_OIDN_TEMPORAL);
-					}
-				} else {
-					rb->clear_context(SNAME("rtgi_taa"));
-					rb->clear_context(RB_SCOPE_RTGI_OIDN_TEMPORAL);
-					reject_rt_previous_history();
-				}
 				if (rt_replaces_opaque) {
 					composite_rt_volumetric_fog();
 					raytracing->copy_output_texture(p_render_data);
@@ -3032,7 +2996,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->draw_command_begin_label("RT TAA");
 			RENDER_TIMESTAMP("RT TAA");
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE);
-			rb->clear_context(RB_SCOPE_RTGI_OIDN_TEMPORAL);
 			taa->process_texture(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, SNAME("rtgi_taa"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, rb_data->rt_get_velocity_texture(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, false, rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), 0.94f, rb_data->rt_get_size(), rb_data->rt_get_depth_texture());
 			composite_rt_volumetric_fog();
 			raytracing->copy_output_texture(p_render_data);
@@ -3041,10 +3004,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->texture_clear(rb_data->rt_get_prev_history_validity(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 			RD::get_singleton()->texture_clear(rb_data->rt_get_prev_history_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE);
-			rb->clear_context(RB_SCOPE_RTGI_OIDN_TEMPORAL);
-			if (rtgi_oidn_denoise != nullptr) {
-				rtgi_oidn_denoise->invalidate();
-			}
 			if (rt_replaces_opaque) {
 				composite_rt_volumetric_fog();
 				raytracing->copy_output_texture(p_render_data);
@@ -3056,8 +3015,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 
 		if (!rt_replaces_opaque) {
-			RD::get_singleton()->draw_command_begin_label("Composite Hybrid RTGI");
-			RENDER_TIMESTAMP("Composite Hybrid RTGI");
+			RD::get_singleton()->draw_command_begin_label("Composite Simple RT");
+			RENDER_TIMESTAMP("Composite Simple RT");
 			copy_effects->additive_blend(color_only_framebuffer, rb_data->rt_get_texture(), p_render_data->scene_data->view_count);
 			RD::get_singleton()->draw_command_end_label();
 		}
@@ -3119,7 +3078,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	if (use_msaa) {
 		RENDER_TIMESTAMP("Resolve MSAA");
 
-		// Path Traced mode writes internal_texture directly; Hybrid still uses
+		// Path Traced mode writes internal_texture directly; Simple RT still uses
 		// the normal raster MSAA target.
 		if (!rt_replaces_opaque && (scene_state.used_screen_texture || using_separate_specular || ce_pre_transparent_resolved_color)) {
 			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
@@ -3204,7 +3163,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// so if we've requested this, we need another copy.
 			// Fairly unlikely scenario though.
 
-			// Path Traced mode writes internal_texture directly; Hybrid still
+			// Path Traced mode writes internal_texture directly; Simple RT still
 			// uses the normal raster MSAA target.
 			if (!rt_replaces_opaque && ce_pre_transparent_resolved_color) {
 				for (uint32_t v = 0; v < rb->get_view_count(); v++) {
@@ -3271,7 +3230,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	if (rb_data.is_valid() && use_msaa) {
 		bool resolve_velocity_buffer = (using_taa || using_upscaling || ce_needs_motion_vectors) && rb->has_velocity_buffer(true);
 		for (uint32_t v = 0; v < rb->get_view_count(); v++) {
-			// Path Traced mode writes internal_texture directly; Hybrid still
+			// Path Traced mode writes internal_texture directly; Simple RT still
 			// uses the normal raster MSAA target.
 			if (!rt_replaces_opaque) {
 				RD::get_singleton()->texture_resolve_multisample(rb->get_color_msaa(v), rb->get_internal_texture(v));
@@ -3475,10 +3434,8 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 	{
 		Size2i rtsize = texture_storage->render_target_get_size(render_target);
 		RID fb = texture_storage->render_target_get_rd_framebuffer(render_target);
-		const StringName rtgi_debug_scope = rb->has_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_HISTORY) ? RB_SCOPE_RTGI_DENOISE : RB_SCOPE_RTGI_OIDN_TEMPORAL;
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_NOISY && rb->has_texture(rtgi_debug_scope, RB_TEX_RTGI_DENOISE_NOISY)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(rtgi_debug_scope, RB_TEX_RTGI_DENOISE_NOISY), fb, Rect2(Vector2(), rtsize), false, false);
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_NOISY && rb->has_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_NOISY)) {
+			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_NOISY), fb, Rect2(Vector2(), rtsize), false, false);
 		}
 
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_NORMAL_ROUGHNESS && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_NORMAL_ROUGHNESS)) {
@@ -3493,16 +3450,16 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 			debug_effects->draw_motion_vectors(rb_data->rt_get_velocity_texture(), rb_data->rt_get_depth_texture(), fb, p_render_data->scene_data->cam_projection, p_render_data->scene_data->cam_transform, p_render_data->scene_data->prev_cam_projection, p_render_data->scene_data->prev_cam_transform, rb_data->rt_get_size());
 		}
 
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_VARIANCE && rb->has_texture(rtgi_debug_scope, RB_TEX_RTGI_DENOISE_VARIANCE)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(rtgi_debug_scope, RB_TEX_RTGI_DENOISE_VARIANCE), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_VARIANCE && rb->has_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_VARIANCE)) {
+			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_VARIANCE), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
 		}
 
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_HISTORY_LENGTH && rb->has_texture(rtgi_debug_scope, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(rtgi_debug_scope, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH), fb, Rect2(Vector2(), rtsize), false, true);
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_HISTORY_LENGTH && rb->has_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH)) {
+			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH), fb, Rect2(Vector2(), rtsize), false, true);
 		}
 
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_REJECTION && rb->has_texture(rtgi_debug_scope, RB_TEX_RTGI_DENOISE_REJECTION)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(rtgi_debug_scope, RB_TEX_RTGI_DENOISE_REJECTION), fb, Rect2(Vector2(), rtsize), false, true);
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_REJECTION && rb->has_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_REJECTION)) {
+			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_REJECTION), fb, Rect2(Vector2(), rtsize), false, true);
 		}
 
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_FINAL && rb_data->rt_has_texture()) {
@@ -6219,7 +6176,6 @@ RenderForwardClustered::RenderForwardClustered() {
 
 	taa = memnew(RendererRD::TAA);
 	rtgi_denoise = memnew(RendererRD::RTGIDenoise);
-	rtgi_oidn_denoise = memnew(RendererRD::RTGIOIDNDenoise);
 	fsr2_effect = memnew(RendererRD::FSR2Effect);
 	ss_effects = memnew(RendererRD::SSEffects);
 	motion_vectors_store = memnew(RendererRD::MotionVectorsStore);
@@ -6244,11 +6200,6 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (rtgi_denoise != nullptr) {
 		memdelete(rtgi_denoise);
 		rtgi_denoise = nullptr;
-	}
-
-	if (rtgi_oidn_denoise != nullptr) {
-		memdelete(rtgi_oidn_denoise);
-		rtgi_oidn_denoise = nullptr;
 	}
 
 	if (fsr2_effect) {
