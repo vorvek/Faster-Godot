@@ -2859,11 +2859,9 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 		bool rt_temporal_motion_vectors = false;
 		if (camera_data.view_count == 1 && environment.is_valid() && scene_render->environment_get_pathtracing_enabled(environment)) {
 			PackedFloat32Array params = scene_render->environment_get_pathtracing_params(environment);
-			if (params.size() > RSE::PT_PARAM_TEMPORAL_ACCUMULATION && params[RSE::PT_PARAM_TEMPORAL_ACCUMULATION] != 0.0f) {
-				const uint32_t denoiser = params.size() > RSE::PT_PARAM_DENOISER ? (uint32_t)params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
-				rt_temporal_motion_vectors = denoiser == RSE::PT_DENOISER_INTERNAL ||
-						denoiser == RSE::PT_DENOISER_DLSS_RAY_RECONSTRUCTION;
-			}
+			const uint32_t denoiser = params.size() > RSE::PT_PARAM_DENOISER ? (uint32_t)params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
+			rt_temporal_motion_vectors = denoiser == RSE::PT_DENOISER_INTERNAL ||
+					denoiser == RSE::PT_DENOISER_DLSS_RAY_RECONSTRUCTION;
 		}
 		RSG::viewport->viewport_set_rt_temporal_motion_vectors(p_viewport, rt_temporal_motion_vectors);
 	}

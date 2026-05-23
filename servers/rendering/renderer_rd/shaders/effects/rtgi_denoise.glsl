@@ -13,6 +13,7 @@ layout(push_constant, std430) uniform Params {
 	vec2 resolution;
 	float history_weight;
 	float max_history;
+	float denoise_strength;
 	int step_size;
 	int pass_index;
 	float phi_color;
@@ -272,11 +273,11 @@ void main() {
 	float history_luma = luminance(history_color);
 	float variance_sigma = sqrt(previous_variance);
 	float surface_firefly_risk = max(1.0 - clamp(normal_roughness.a, 0.0, 1.0), clamp(albedo_metalness.a, 0.0, 1.0));
-	float history_trust = history_valid ? smoothstep(2.0, 10.0, history_len) * history_confidence : 0.0;
+	float history_trust = history_valid ? smoothstep(2.0, 10.0, history_len) * history_confidence * params.denoise_strength : 0.0;
 	float neighborhood_limit = max(neighborhood_luma * 3.0 + 0.18, neighborhood_luma + 0.35);
 	float history_limit = max(max(history_luma, neighborhood_luma) + variance_sigma * mix(2.0, 1.0, surface_firefly_risk) + mix(0.22, 0.08, surface_firefly_risk), 0.05);
 	float current_limit = mix(neighborhood_limit, min(neighborhood_limit, history_limit), history_trust);
-	float firefly_strength = smoothstep(current_limit, current_limit * 2.5 + 0.25, current_luma);
+	float firefly_strength = smoothstep(current_limit, current_limit * 2.5 + 0.25, current_luma) * params.denoise_strength;
 	current = mix(current, clamp_luminance(current, current_limit), firefly_strength);
 
 	vec3 temporal = sanitize_color(mix(history_color, current, current_alpha));
@@ -393,7 +394,7 @@ void main() {
 		float outlier_limit = neighbor_luma + sqrt(neighbor_variance) * 1.25 + 0.045;
 		float outlier = smoothstep(outlier_limit, outlier_limit + 0.16, center_luma);
 		vec3 capped = clamp_luminance(temporal.rgb, max(outlier_limit, neighbor_luma + 0.03));
-		temporal.rgb = sanitize_color(mix(temporal.rgb, mix(capped, neighbor_color, 0.85), outlier));
+		temporal.rgb = sanitize_color(mix(temporal.rgb, mix(capped, neighbor_color, 0.85), outlier * params.denoise_strength));
 	}
 	temporal.a = variance_sum / max(weight_sum, 1e-5);
 	imageStore(prefilter_out, pos, temporal);
@@ -438,6 +439,7 @@ void main() {
 	float variance = max(center.a * params.variance_boost, 1e-4);
 	float specular_surface = max(1.0 - clamp(center_nr.a, 0.0, 1.0), clamp(center_albedo.a, 0.0, 1.0));
 	float roughness_filter = mix(0.45, 1.0, clamp(center_nr.a, 0.0, 1.0));
+	float spatial_strength = clamp(params.denoise_strength, 0.0, 1.0);
 	float moving_step_weight = exp(-float(max(params.step_size - 1, 0)) * smoothstep(1.0, 16.0, center_motion_px) * 0.35);
 
 	vec3 color_sum = vec3(0.0);
@@ -474,7 +476,7 @@ void main() {
 		}
 	}
 
-	vec3 filtered = color_sum / max(weight_sum, 1e-5);
+	vec3 filtered = mix(center.rgb, color_sum / max(weight_sum, 1e-5), spatial_strength);
 	float filtered_variance = variance_sum / max(weight_sum, 1e-5);
 	imageStore(output_buffer, pos, vec4(sanitize_color(filtered), filtered_variance));
 }
@@ -506,7 +508,7 @@ void main() {
 	float bright_bleed = smoothstep(temporal_luma + variance_sigma * 1.5 + 0.15, temporal_luma + variance_sigma * 4.0 + 0.75, filtered_luma);
 	float low_roughness = 1.0 - clamp(normal_roughness.a, 0.0, 1.0);
 	float metallic = clamp(albedo_metalness.a, 0.0, 1.0);
-	float temporal_guard = bright_bleed * mix(0.65, 0.9, max(low_roughness, metallic));
+	float temporal_guard = bright_bleed * mix(0.65, 0.9, max(low_roughness, metallic)) * params.denoise_strength;
 	vec3 denoised = sanitize_color(mix(filtered.rgb, temporal.rgb, temporal_guard));
 
 	vec3 center_n = decode_normal(normal_roughness);
@@ -577,7 +579,7 @@ void main() {
 				smoothstep(neighbor_luma + 0.004, neighbor_luma + 0.055, center_final_luma);
 		float dark_excess = smoothstep(neighbor_luma + 0.002, neighbor_luma + 0.035, center_final_luma);
 		float dark_smooth = dark_neighborhood * dark_excess * (1.0 - smoothstep(0.12, 0.65, bright_support)) * mix(0.72, 0.88, specular_surface);
-		float suppress = max(max(isolated_bright * mix(0.65, 0.95, max(specular_surface, dark_neighborhood)), isolated_dim * 0.92), dark_smooth);
+		float suppress = max(max(isolated_bright * mix(0.65, 0.95, max(specular_surface, dark_neighborhood)), isolated_dim * 0.92), dark_smooth) * params.denoise_strength;
 		denoised = sanitize_color(mix(denoised, lower_neighbor_color, suppress));
 	}
 

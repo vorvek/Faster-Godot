@@ -911,7 +911,7 @@ bool RendererEnvironmentStorage::environment_get_pathtracing_enabled(RID p_env) 
 void RendererEnvironmentStorage::environment_set_pathtracing_params(RID p_env, const PackedFloat32Array &p_params) {
 	Environment *env = environment_owner.get_or_null(p_env);
 	ERR_FAIL_NULL(env);
-	for (int i = 0; i < 16 && i < p_params.size(); i++) {
+	for (int i = 0; i < RSE::PT_PARAM_MAX && i < p_params.size(); i++) {
 		env->pathtracing_params[i] = p_params[i];
 	}
 }
@@ -920,8 +920,8 @@ PackedFloat32Array RendererEnvironmentStorage::environment_get_pathtracing_param
 	Environment *env = environment_owner.get_or_null(p_env);
 	ERR_FAIL_NULL_V(env, PackedFloat32Array());
 	PackedFloat32Array result;
-	result.resize(16);
-	for (int i = 0; i < 16; i++) {
+	result.resize(RSE::PT_PARAM_MAX);
+	for (int i = 0; i < RSE::PT_PARAM_MAX; i++) {
 		result.write[i] = env->pathtracing_params[i];
 	}
 	return result;

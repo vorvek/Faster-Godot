@@ -723,6 +723,8 @@ public:
 	static constexpr PathtracingParamIndex PT_PARAM_OVERSCAN_VERTICAL = RSE::PT_PARAM_OVERSCAN_VERTICAL;
 	static constexpr PathtracingParamIndex PT_PARAM_LIGHT_COUNT = RSE::PT_PARAM_LIGHT_COUNT;
 	static constexpr PathtracingParamIndex PT_PARAM_FRAME_INDEX = RSE::PT_PARAM_FRAME_INDEX;
+	static constexpr PathtracingParamIndex PT_PARAM_DENOISER_STRENGTH = RSE::PT_PARAM_DENOISER_STRENGTH;
+	static constexpr PathtracingParamIndex PT_PARAM_MAX = RSE::PT_PARAM_MAX;
 
 	using SubSurfaceScatteringQuality = RSE::SubSurfaceScatteringQuality;
 	static constexpr SubSurfaceScatteringQuality SUB_SURFACE_SCATTERING_QUALITY_DISABLED = RSE::SUB_SURFACE_SCATTERING_QUALITY_DISABLED;

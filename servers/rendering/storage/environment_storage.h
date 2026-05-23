@@ -174,7 +174,7 @@ private:
 
 		// Pathtracing
 		bool pathtracing_enabled = false;
-		float pathtracing_params[16] = { 0 };
+		float pathtracing_params[RSE::PT_PARAM_MAX] = { 0 };
 
 		// Adjustments
 		bool adjustments_enabled = false;

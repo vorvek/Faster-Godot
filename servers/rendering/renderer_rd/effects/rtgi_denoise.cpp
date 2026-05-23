@@ -219,6 +219,7 @@ void RTGIDenoise::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 		RID p_history_id,
 		RID p_prev_history_id,
 		float p_history_weight,
+		float p_denoise_strength,
 		const Size2i &p_process_size,
 		uint32_t p_view,
 		int p_iterations) {
@@ -250,7 +251,8 @@ void RTGIDenoise::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 	push_constant.resolution_width = (float)p_process_size.x;
 	push_constant.resolution_height = (float)p_process_size.y;
 	push_constant.history_weight = CLAMP(p_history_weight, 0.0f, 0.99f);
-	push_constant.max_history = 96.0f;
+	push_constant.denoise_strength = CLAMP(p_denoise_strength, 0.0f, 1.0f);
+	push_constant.max_history = Math::lerp(1.0f, 96.0f, push_constant.history_weight);
 	push_constant.step_size = 1;
 	push_constant.phi_color = 4.0f;
 	push_constant.phi_normal = 16.0f;
@@ -266,7 +268,8 @@ void RTGIDenoise::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 
 	RID read = temp_b;
 	RID write = temp_a;
-	const int iterations = CLAMP(p_iterations, 1, 5);
+	const int max_iterations = CLAMP(p_iterations, 1, 5);
+	const int iterations = CLAMP((int)Math::ceil((double)max_iterations * (double)MAX(push_constant.denoise_strength, 0.01f)), 1, max_iterations);
 	for (int i = 0; i < iterations; i++) {
 		push_constant.pass_index = i;
 		push_constant.step_size = 1 << i;

@@ -23,6 +23,7 @@ The feature is exposed on `Environment`, so it appears through the same
 - `rtgi_disable_in_editor`
 - `rtgi_temporal_accumulation`
 - `rtgi_temporal_accumulation_weight`
+- `rtgi_denoiser_strength`
 - `rtgi_overscan_horizontal`
 - `rtgi_overscan_vertical`
 - `rtgi_denoiser`
@@ -84,9 +85,19 @@ The feature is exposed on `Environment`, so it appears through the same
     camera tracks through the scene. The default is `0.94`, which is
     intentionally shorter than the old forced `0.97` RT denoiser history
     weight.
-  - The internal denoiser treats this as the temporal history weight before its
-    variance prefilter and edge-aware spatial passes. It is not the viewport TAA
-    history setting.
+  - This is only the temporal history weight. Set it lower for pulsing or fast
+    dynamic lights that need to respond quickly. At `0.0`, the internal RTGI
+    denoiser still runs its current-frame spatial passes when `rtgi_denoiser` is
+    enabled, but it does not blend previous-frame lighting.
+  - It is not the viewport TAA history setting.
+- `rtgi_denoiser_strength`
+  - Controls the internal RTGI denoiser's current-frame spatial filtering,
+    variance cleanup, and firefly suppression. Higher values hide more 1 SPP
+    speckles, but can soften texture-driven indirect lighting and small dynamic
+    light changes. Lower values preserve more detail and response while leaving
+    more raw RT noise.
+  - This does not change how much previous-frame lighting is reused. Use
+    `rtgi_temporal_accumulation_weight` for history persistence.
 - `rtgi_overscan_horizontal` and `rtgi_overscan_vertical`
   - Add an opt-in path-traced RTGI history margin around the rendered viewport.
     The values are fractions of the visible viewport size. For example, `0.05`

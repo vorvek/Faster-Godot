@@ -2144,9 +2144,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RENDER_TIMESTAMP("Setup 3D Scene");
 
 	bool using_debug_mvs = get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_MOTION_VECTORS;
-	bool using_rt_temporal_denoise = !is_reflection_probe && scene_features.rt && rt_temporal_denoiser && rt_temporal_accumulation;
+	bool using_rt_denoise = !is_reflection_probe && scene_features.rt && rt_temporal_denoiser;
 	bool using_viewport_taa = rb->get_use_taa();
-	bool using_taa = using_viewport_taa || using_rt_temporal_denoise;
+	bool using_taa = using_viewport_taa || using_rt_denoise;
 
 	enum {
 		SCALE_NONE,
@@ -2177,7 +2177,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		motion_vectors_required = true;
 	} else if (ce_needs_motion_vectors) {
 		motion_vectors_required = true;
-	} else if (!is_reflection_probe && (using_viewport_taa || (using_rt_temporal_denoise && rt_replaces_opaque))) {
+	} else if (!is_reflection_probe && (using_viewport_taa || (using_rt_denoise && rt_replaces_opaque))) {
 		motion_vectors_required = true;
 	} else if (!is_reflection_probe && using_upscaling) {
 		motion_vectors_required = true;
@@ -2372,7 +2372,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		float rt_overscan_horizontal = 0.0f;
 		float rt_overscan_vertical = 0.0f;
-		if (rt_replaces_opaque && (using_rt_temporal_denoise || using_viewport_taa) && !dlss_rr_enabled && env_params) {
+		if (rt_replaces_opaque && (using_rt_denoise || using_viewport_taa) && !dlss_rr_enabled && env_params) {
 			rt_overscan_horizontal = env_params[RSE::PT_PARAM_OVERSCAN_HORIZONTAL];
 			rt_overscan_vertical = env_params[RSE::PT_PARAM_OVERSCAN_VERTICAL];
 		}
@@ -2410,7 +2410,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		scene_features.rt = false;
 		rt_replaces_opaque = false;
 		scene_features.raw &= ~uint32_t(SCENE_FEATURE_DEPTH_RECONSTRUCT);
-		using_rt_temporal_denoise = false;
+		using_rt_denoise = false;
 		using_taa = using_viewport_taa;
 		using_motion_pass = rb_data.is_valid() && (using_upscaling || using_viewport_taa);
 		if (using_motion_pass) {
@@ -2810,7 +2810,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			ERR_PRINT_ONCE_ED("Failed to initialize Hybrid RTGI pipeline or uniform set. Rendering raster output without RTGI for this frame.");
 			scene_features.rt = false;
 			scene_features.raw &= ~uint32_t(SCENE_FEATURE_DEPTH_RECONSTRUCT);
-			using_rt_temporal_denoise = false;
+			using_rt_denoise = false;
 			using_taa = using_viewport_taa;
 			if (rb_data.is_valid() && rb_data->dlss_rr_has_buffers()) {
 				rb_data->dlss_rr_free_buffers();
@@ -2908,17 +2908,18 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->draw_command_end_label();
 		}
 
-		if (using_rt_temporal_denoise) {
+		if (using_rt_denoise) {
 			RD::get_singleton()->draw_command_begin_label("RT Denoise");
 			RENDER_TIMESTAMP("RT Denoise");
-			float rt_history_weight = rt_env_params ? rt_env_params[RSE::PT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT] : 0.94f;
+			const float rt_denoise_strength = CLAMP(rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_STRENGTH] : 0.8f, 0.0f, 1.0f);
+			float rt_history_weight = rt_temporal_accumulation && rt_env_params ? rt_env_params[RSE::PT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT] : 0.0f;
 			if (time_step > 0.0) {
 				// Treat the RTGI history setting as a 60 FPS baseline so temporal
 				// accumulation has the same wall-clock decay at high refresh rates.
 				rt_history_weight = Math::pow(CLAMP(rt_history_weight, 0.0f, 0.99f), (float)time_step * 60.0f);
 			}
 			if (rt_replaces_opaque && rt_internal_denoiser) {
-				rtgi_denoise->process(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight, rb_data->rt_get_size(), 0, 5);
+				rtgi_denoise->process(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight, rt_denoise_strength, rb_data->rt_get_size(), 0, 5);
 				composite_rt_volumetric_fog();
 				raytracing->copy_output_texture(p_render_data);
 			} else if (rt_replaces_opaque) {

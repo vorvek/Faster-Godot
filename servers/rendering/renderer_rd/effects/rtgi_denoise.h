@@ -43,6 +43,7 @@ public:
 			RID p_history_id,
 			RID p_prev_history_id,
 			float p_history_weight,
+			float p_denoise_strength,
 			const Size2i &p_process_size,
 			uint32_t p_view = 0,
 			int p_iterations = 4);
@@ -76,6 +77,7 @@ private:
 		float resolution_height;
 		float history_weight;
 		float max_history;
+		float denoise_strength;
 		int32_t step_size;
 		int32_t pass_index;
 		float phi_color;
@@ -90,7 +92,7 @@ private:
 		float fog_detail_spread;
 		float fog_sky_affect;
 		float fog_legacy_blending;
-		float _pad[2];
+		float _pad[1];
 	};
 
 	RtgiDenoiseShaderRD shader;
