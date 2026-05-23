@@ -39,6 +39,10 @@ float luminance(vec3 color) {
 	return max(dot(color, vec3(0.2126, 0.7152, 0.0722)), 0.0);
 }
 
+float tonemap_luma(float luma) {
+	return luma / (1.0 + luma);
+}
+
 vec3 clamp_luminance(vec3 color, float max_luma) {
 	float luma = luminance(color);
 	return (luma > max_luma) ? color * (max_luma / max(luma, 1e-4)) : color;
@@ -224,6 +228,9 @@ void current_neighborhood(ivec2 pos, vec4 center_nr, vec2 center_viewz_hitdist, 
 	vec3 center_n = decode_normal(center_nr);
 	for (int y = -1; y <= 1; y++) {
 		for (int x = -1; x <= 1; x++) {
+			if (x == 0 && y == 0) {
+				continue;
+			}
 			ivec2 tap_pos = pos + ivec2(x, y);
 			if (any(lessThan(tap_pos, ivec2(0))) || any(greaterThanEqual(tap_pos, ivec2(params.resolution)))) {
 				continue;
@@ -236,7 +243,7 @@ void current_neighborhood(ivec2 pos, vec4 center_nr, vec2 center_viewz_hitdist, 
 			float relative_depth_error = abs(center_viewz_hitdist.x - tap_viewz_hitdist.x) / depth_scale;
 			bool sky_or_far = center_viewz_hitdist.x > 60000.0 && tap_viewz_hitdist.x > 60000.0;
 			float albedo_delta = length(tap_albedo.rgb - center_albedo.rgb) + abs(tap_albedo.a - center_albedo.a);
-			bool compatible = (x == 0 && y == 0) || ((normal_similarity > 0.82) && (relative_depth_error < 0.07 || sky_or_far) && albedo_delta < 0.45);
+			bool compatible = (normal_similarity > 0.82) && (relative_depth_error < 0.07 || sky_or_far) && albedo_delta < 0.45;
 			if (!compatible) {
 				continue;
 			}
@@ -246,10 +253,8 @@ void current_neighborhood(ivec2 pos, vec4 center_nr, vec2 center_viewz_hitdist, 
 			neighborhood_max = max(neighborhood_max, tap);
 			neighborhood_avg += tap;
 			weight_sum += 1.0;
-			if (x != 0 || y != 0) {
-				neighbor_avg += tap;
-				neighbor_weight_sum += 1.0;
-			}
+			neighbor_avg += tap;
+			neighbor_weight_sum += 1.0;
 		}
 	}
 	if (weight_sum <= 0.0) {
@@ -308,9 +313,15 @@ void main() {
 	vec3 neighbor_avg;
 	float neighbor_weight_sum;
 	current_neighborhood(pos, normal_roughness, viewz_hitdist, albedo_metalness, neighborhood_min, neighborhood_max, neighborhood_avg, neighbor_avg, neighbor_weight_sum);
+	if (neighbor_weight_sum <= 0.0 && history_valid) {
+		vec3 history_reference = sanitize_color(prev_history.rgb);
+		neighborhood_min = history_reference;
+		neighborhood_max = history_reference;
+		neighborhood_avg = history_reference;
+	}
 	float previous_variance = max(prev_history.a, 0.0);
 	vec3 neighborhood_range = max(neighborhood_max - neighborhood_min, vec3(0.05));
-	vec3 clip_expand = neighborhood_range * 0.75 + vec3(sqrt(previous_variance) * 1.5 + 0.05);
+	vec3 clip_expand = neighborhood_range * 0.45 + vec3(sqrt(previous_variance) * 0.85 + 0.02);
 	vec3 history_color = history_valid ? clamp(sanitize_color(prev_history.rgb), neighborhood_min - clip_expand, neighborhood_max + clip_expand) : current;
 
 	float current_luma = luminance(current);
@@ -325,17 +336,17 @@ void main() {
 	float neighborhood_history_change = relative_luma_delta(neighbor_luma, history_luma);
 	float center_history_change = relative_luma_delta(current_luma, raw_history_luma);
 	float neighborhood_agreement = (1.0 - smoothstep(0.18, 0.72, relative_luma_delta(current_luma, neighbor_luma))) * neighbor_support;
-	float visible_light = smoothstep(0.025, 0.14, max(max(support_luma, history_luma), current_luma));
-	float history_or_neighbor_visible = smoothstep(0.025, 0.14, support_luma);
+	float visible_light = smoothstep(0.015, 0.10, max(max(support_luma, history_luma), current_luma));
+	float history_or_neighbor_visible = smoothstep(0.015, 0.10, support_luma);
 	float isolated_spike_limit = max(support_luma * 4.0 + 0.25, 0.35);
 	float isolated_spike = smoothstep(isolated_spike_limit, isolated_spike_limit * 2.0 + 0.5, current_luma);
 	float unsupported_spike = isolated_spike * (1.0 - history_or_neighbor_visible) * (1.0 - neighborhood_agreement);
 	float light_change_support = max(neighborhood_agreement, history_or_neighbor_visible);
-	float neighborhood_light_change = smoothstep(0.025, 0.14, neighborhood_history_change) * mix(0.25, 1.0, neighborhood_agreement) * neighbor_support;
-	float center_light_change = smoothstep(0.08, 0.28, center_history_change) * smoothstep(0.24, 0.72, light_change_support) * (1.0 - unsupported_spike);
+	float neighborhood_light_change = smoothstep(0.015, 0.09, neighborhood_history_change) * mix(0.25, 1.0, neighborhood_agreement) * neighbor_support;
+	float center_light_change = smoothstep(0.05, 0.18, center_history_change) * smoothstep(0.16, 0.55, light_change_support) * (1.0 - unsupported_spike);
 	float light_reactivity = history_valid ? clamp(max(neighborhood_light_change, center_light_change) * visible_light * history_confidence, 0.0, 1.0) : 0.0;
-	current_alpha = history_valid ? mix(current_alpha, max(current_alpha, mix(0.5, 0.95, max(neighborhood_light_change, center_light_change))), light_reactivity) : current_alpha;
-	history_len = history_valid ? mix(history_len, min(history_len, 1.5), light_reactivity * 0.92) : history_len;
+	current_alpha = history_valid ? mix(current_alpha, max(current_alpha, mix(0.62, 0.98, max(neighborhood_light_change, center_light_change))), light_reactivity) : current_alpha;
+	history_len = history_valid ? mix(history_len, min(history_len, 1.0), light_reactivity * 0.95) : history_len;
 
 	float history_trust = history_valid ? smoothstep(2.0, 10.0, history_len) * history_confidence * params.denoise_strength * (1.0 - light_reactivity) : 0.0;
 	float neighborhood_limit = max(support_luma * 3.0 + 0.18, support_luma + 0.35);
@@ -489,7 +500,10 @@ float kernel_weight(int offset) {
 	if (a == 1) {
 		return 0.25;
 	}
-	return 0.0625;
+	if (a == 2) {
+		return 0.0625;
+	}
+	return 0.0;
 }
 
 void main() {
@@ -507,6 +521,7 @@ void main() {
 	float center_reactivity = texelFetch(reactivity_buffer, pos, 0).r;
 	float center_motion_px = velocity_pixels(center_velocity);
 	float center_luma = luminance(center.rgb);
+	float center_luma_t = tonemap_luma(center_luma);
 	float variance = max(center.a * params.variance_boost, 1e-4);
 	float specular_surface = max(1.0 - clamp(center_nr.a, 0.0, 1.0), clamp(center_albedo.a, 0.0, 1.0));
 	float roughness_filter = mix(0.45, 1.0, clamp(center_nr.a, 0.0, 1.0));
@@ -519,8 +534,8 @@ void main() {
 	float variance_sum = 0.0;
 	float weight_sum = 0.0;
 
-	for (int y = -3; y <= 3; y++) {
-		for (int x = -3; x <= 3; x++) {
+	for (int y = -2; y <= 2; y++) {
+		for (int x = -2; x <= 2; x++) {
 			ivec2 tap_pos = clamp(pos + ivec2(x, y) * params.step_size, ivec2(0), ivec2(params.resolution) - ivec2(1));
 			vec4 tap = texelFetch(input_buffer, tap_pos, 0);
 			vec4 tap_nr = texelFetch(normal_roughness_buffer, tap_pos, 0);
@@ -533,9 +548,10 @@ void main() {
 			float depth_w = exp(-abs(tap_z - center_z) / max(center_z * params.phi_depth, 0.02));
 			float albedo_w = exp(-length(tap_albedo.rgb - center_albedo.rgb) * 7.0);
 			float tap_luma = luminance(tap.rgb);
+			float tap_luma_t = tonemap_luma(tap_luma);
 			float luma_sigma = sqrt(variance);
-			float luma_width = (luma_sigma * params.phi_color + mix(0.05, 0.32, specular_surface)) * mix(1.0, 0.65, reactive_detail);
-			float luma_w = exp(-abs(tap_luma - center_luma) / luma_width);
+			float luma_width = (tonemap_luma(luma_sigma * params.phi_color) * 0.35 + mix(0.05, 0.32, specular_surface)) * mix(1.0, 0.65, reactive_detail);
+			float luma_w = exp(-abs(tap_luma_t - center_luma_t) / max(luma_width, 1e-4));
 			float bright_tap_limit = center_luma + luma_sigma * 1.5 + 0.2;
 			float bright_tap_w = (x == 0 && y == 0) ? 1.0 : min(1.0, bright_tap_limit / max(tap_luma, 1e-4));
 			float metal_w = 1.0 - abs(tap_albedo.a - center_albedo.a);
@@ -544,13 +560,15 @@ void main() {
 			float w = base_w * normal_w * depth_w * albedo_w * luma_w * bright_tap_w * velocity_w * step_w * clamp(metal_w, 0.0, 1.0);
 
 			color_sum += tap.rgb * w;
-			variance_sum += tap.a * w;
+			variance_sum += tap.a * w * w;
 			weight_sum += w;
 		}
 	}
 
-	vec3 filtered = mix(center.rgb, color_sum / max(weight_sum, 1e-5), spatial_strength);
-	float filtered_variance = variance_sum / max(weight_sum, 1e-5);
+	vec3 filtered_avg = color_sum / max(weight_sum, 1e-5);
+	float filtered_avg_variance = variance_sum / max(weight_sum * weight_sum, 1e-5);
+	vec3 filtered = mix(center.rgb, filtered_avg, spatial_strength);
+	float filtered_variance = mix(center.a, filtered_avg_variance, spatial_strength);
 	imageStore(output_buffer, pos, vec4(sanitize_color(filtered), filtered_variance));
 }
 

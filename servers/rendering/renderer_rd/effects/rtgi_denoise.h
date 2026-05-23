@@ -85,6 +85,7 @@ private:
 		float phi_normal;
 		float phi_depth;
 		float variance_boost;
+		float _pad_visible_origin;
 		float visible_origin_width;
 		float visible_origin_height;
 		float visible_size_width;
@@ -93,7 +94,6 @@ private:
 		float fog_detail_spread;
 		float fog_sky_affect;
 		float fog_legacy_blending;
-		float _pad[1];
 	};
 
 	RtgiDenoiseShaderRD shader;
