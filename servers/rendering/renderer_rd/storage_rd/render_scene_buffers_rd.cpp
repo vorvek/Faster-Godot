@@ -54,6 +54,7 @@ void RenderSceneBuffersRD::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_texture_slice", "context", "name", "layer", "mipmap", "layers", "mipmaps"), &RenderSceneBuffersRD::get_texture_slice);
 	ClassDB::bind_method(D_METHOD("get_texture_slice_view", "context", "name", "layer", "mipmap", "layers", "mipmaps", "view"), &RenderSceneBuffersRD::_get_texture_slice_view);
 	ClassDB::bind_method(D_METHOD("get_texture_slice_size", "context", "name", "mipmap"), &RenderSceneBuffersRD::get_texture_slice_size);
+	ClassDB::bind_method(D_METHOD("clear_texture", "context", "name"), &RenderSceneBuffersRD::clear_texture);
 	ClassDB::bind_method(D_METHOD("clear_context", "context"), &RenderSceneBuffersRD::clear_context);
 
 	// Access to some core buffers so users don't need to know their names.
@@ -486,6 +487,17 @@ Size2i RenderSceneBuffersRD::get_texture_slice_size(const StringName &p_context,
 
 	// return our size
 	return named_texture.sizes[p_mipmap];
+}
+
+void RenderSceneBuffersRD::clear_texture(const StringName &p_context, const StringName &p_texture_name) {
+	NTKey key(p_context, p_texture_name);
+
+	if (!named_textures.has(key)) {
+		return;
+	}
+
+	free_named_texture(named_textures[key]);
+	named_textures.erase(key);
 }
 
 void RenderSceneBuffersRD::clear_context(const StringName &p_context) {

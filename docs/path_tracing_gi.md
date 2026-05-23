@@ -23,6 +23,8 @@ The feature is exposed on `Environment`, so it appears through the same
 - `rtgi_disable_in_editor`
 - `rtgi_temporal_accumulation`
 - `rtgi_temporal_accumulation_weight`
+- `rtgi_overscan_horizontal`
+- `rtgi_overscan_vertical`
 - `rtgi_denoiser`
   - `Auto`
   - `Internal`
@@ -30,8 +32,8 @@ The feature is exposed on `Environment`, so it appears through the same
   - `AMD`
   - `Intel`
   - `Off`
-- RTGI debug draw modes for lighting, rays/noise, TLAS/instance coverage, and
-  denoiser input/output.
+- RTGI debug draw modes for noisy input, guides, motion vectors, variance,
+  history length, rejection mask, and final denoised output.
 
 ## RTGI Panel Option Differences
 
@@ -69,6 +71,10 @@ The feature is exposed on `Environment`, so it appears through the same
   - Enables accumulation of RT lighting across frames. It improves convergence
     at low sample counts but depends on valid motion, depth, and RT history
     masks. Newly visible or newly RT-ready geometry rejects stale history.
+  - Moving views must render continuously so motion vectors and history buffers
+    advance every frame. Static or update-once viewports are only appropriate
+    for static views; they are expected to break down at `1 SPP` when the
+    camera or subject moves.
 - `rtgi_temporal_accumulation_weight`
   - Controls how much previous-frame RT lighting contributes to temporal
     accumulation. The value is treated as a 60 FPS reference and normalized by
@@ -78,17 +84,32 @@ The feature is exposed on `Environment`, so it appears through the same
     camera tracks through the scene. The default is `0.94`, which is
     intentionally shorter than the old forced `0.97` RT denoiser history
     weight.
-  - At low internal viewport resolutions, the RT denoiser uses a confidence
-    weighted 2x2 history footprint instead of a single nearest history texel.
-    This reduces whole-pixel reprojection wobble in tracking-camera shots while
-    rejecting incompatible history taps instead of blending them into the
-    result.
+  - The internal denoiser treats this as the temporal history weight before its
+    variance prefilter and edge-aware spatial passes. It is not the viewport TAA
+    history setting.
+- `rtgi_overscan_horizontal` and `rtgi_overscan_vertical`
+  - Add an opt-in path-traced RTGI history margin around the rendered viewport.
+    The values are fractions of the visible viewport size. For example, `0.05`
+    allocates 5% extra pixels on both sides of that axis.
+  - The visible crop is moved using camera motion so the leading edge can use up
+    to twice the configured margin while the trailing edge uses less. This keeps
+    accumulated RT history just outside the current viewport and can reduce
+    edge-local speckles or bright strips from newly revealed pixels during
+    camera motion.
+  - Overscan increases the ray tracing resolution before denoising and is
+    currently applied to Path Traced mode with the internal temporal denoiser.
+    It does not add samples to interior pixels or replace denoiser tuning for
+    full-frame motion noise. Keep it at `0.0` when the extra edge stability is
+    not worth the RT cost.
 - `rtgi_denoiser`
   - `Auto`: uses the best shipped path for this build. In this fork that means
     the internal temporal RT denoiser unless a vendor backend is explicitly
     added.
-  - `Internal`: forces the built-in temporal RT denoiser. It uses RT depth,
-    velocity, validity, and history ID textures to reject stale history.
+  - `Internal`: forces the built-in RTGI denoiser. It is a vendor-neutral
+    SVGF/RELAX-style RD effect with its own history, moment, variance, and
+    à-trous passes. It uses RT velocity, normal/roughness, albedo/metalness,
+    linear view-Z, hit distance, validity masks, and history IDs to reject stale
+    history and preserve edges.
   - `NVIDIA`: keeps the NVIDIA/DLSS Ray Reconstruction buffer routing and debug
     outputs available. Because this fork does not ship Streamline/DLSS RR as a
     runtime dependency, final denoising falls through to the internal temporal
@@ -100,9 +121,17 @@ The feature is exposed on `Environment`, so it appears through the same
     This is useful for debugging sample distribution, material hits, and TLAS
     coverage, but it is expected to show more noise.
 - RTGI debug draw modes
-  - Lighting/debug views show intermediate RT lighting, raw ray noise, TLAS and
-    instance coverage, and denoiser input/output. They are diagnostic views and
-    should not be treated as final color output.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_NOISY`: raw path-traced RTGI input before
+    denoising.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_NORMAL_ROUGHNESS`: RT normal/roughness guide.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_VIEWZ_HITDIST`: linear view-Z and hit-distance
+    guide buffer.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_MOTION_VECTORS`: RT-space motion vectors.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_VARIANCE`: temporal luminance variance.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_HISTORY_LENGTH`: normalized history length.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_REJECTION`: disocclusion/history rejection mask.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_FINAL`: final denoised RTGI texture before crop or
+    composition.
 
 ## Rendering Behavior
 
@@ -125,10 +154,13 @@ denoise, so they remain visible without contributing to RT GI, shadows, or
 reflections. This avoids particle-driven TLAS spikes and black RT speckle from
 billboard particle geometry.
 
-RT temporal denoising writes explicit history validity and history ID masks from
-the primary hit/miss path. The TAA resolve rejects history when the current hit
-is invalid, when the reprojected previous validity mask is invalid, or when the
-history IDs no longer match. Newly visible geometry, newly loaded materials, and
+RT temporal denoising is handled by a dedicated `RTGIDenoise` RD effect, not by
+the normal viewport TAA resolve. The primary hit/miss path writes noisy
+radiance, depth, velocity, normal/roughness, albedo/metalness, view-Z,
+hit-distance, validity, and history ID guides at RT texture size. The denoiser
+then runs temporal reprojection, luminance moments, variance prefiltering, and
+edge-aware à-trous filtering before the path-traced output is cropped back to
+the visible viewport. Newly visible geometry, newly loaded materials, and
 geometry that has just become RT-ready therefore start from fresh samples instead
 of borrowing stale accumulated lighting.
 
@@ -156,8 +188,8 @@ the existing non-ray-traced path instead of destructively changing scene data.
     can build startup blit pipelines before the first resize.
 - `servers/rendering/renderer_rd/forward_clustered/render_raytracing.*`
   - Builds and updates ray tracing scene state for Forward+.
-  - Handles geometry instances, materials, lights, temporal accumulation, and
-    denoised output.
+  - Handles geometry instances, materials, lights, guide-buffer output, temporal
+    accumulation state, and denoised output.
   - Skips `INSTANCE_PARTICLES` and alpha-overlay instances in TLAS construction.
   - Tracks per-viewport RT geometry/material history so newly visible or newly
     ready surfaces reject stale denoiser history.
@@ -169,11 +201,21 @@ the existing non-ray-traced path instead of destructively changing scene data.
   - Adds ray tracing shader version management.
 - `servers/rendering/renderer_rd/shaders/raytracing/`
   - Adds ray generation and shared ray tracing shader includes.
+  - Writes RTGI guide buffers for the internal denoiser: noisy radiance, RT
+    depth, RT-space motion vectors, normal/roughness, albedo/metalness, view-Z,
+    hit-distance, validity, and history ID.
+- `servers/rendering/renderer_rd/effects/rtgi_denoise.*`
+  - Adds the internal SVGF/RELAX-style RTGI denoiser as a separate RD effect.
+    It maintains its own history, moments, variance, rejection, noisy-input, and
+    previous-guide textures.
 - `servers/rendering/renderer_rd/effects/taa.*`
-  - Allows the RT denoiser path to provide current/previous RT validity and
-    history ID textures to the TAA resolve.
+  - Remains the normal viewport TAA path and fallback temporal resolve. Path
+    traced RTGI no longer depends on viewport TAA for the shipped internal
+    denoiser.
 - `servers/rendering/renderer_rd/shaders/effects/taa_resolve.glsl`
-  - Rejects reprojected history when RT validity or history ID checks fail.
+  - Rejects reprojected history when RT validity or history ID checks fail in
+    fallback RT temporal resolves without carrying the failed RTGI prefilter and
+    relaxed-history experiments.
 - `servers/rendering/renderer_rd/effects/depth_reconstruct.*`
   - Adds depth reconstruction used by the ray tracing path.
 - `servers/rendering/storage/ltc/`
@@ -200,24 +242,25 @@ pass.
 
 Current RTGI buffer coverage compared with NRD:
 
-- Present for every RTGI denoised frame: RT depth output, RT velocity, and
-  history validity and history identity masks.
+- Present for every internal RTGI denoised frame: noisy radiance, RT depth
+  output, RT velocity, normal/roughness, albedo/metalness, view-Z, hit-distance,
+  history validity, history identity masks, temporal moments, variance, history
+  length, and rejection mask.
 - Present when the NVIDIA/DLSS RR buffer-output variant is selected: DLSS RR
   diffuse/specular albedo buffers, normal/roughness, and specular hit-distance
   debug/output buffers.
 - Present through the main renderer rather than an NRD-specific input: raster
   depth, raster velocity, and Forward+ normal/roughness buffers used by TAA and
   compositor paths.
-- Missing for direct NRD REBLUR/RELAX import: canonical `IN_VIEWZ` linear view-Z
-  texture ownership, NRD-packed diffuse/specular radiance-plus-hit-distance
-  inputs, normalized diffuse hit distance, material-demodulated radiance
-  contracts, NRD permanent/transient pool management, NRD dispatch/pipeline
-  integration, and NRD-specific common/denoiser settings.
+- Missing for direct NRD REBLUR/RELAX import: NRD-packed diffuse/specular
+  radiance-plus-hit-distance signal separation, normalized diffuse hit distance,
+  NRD permanent/transient pool management, NRD dispatch/pipeline integration,
+  and NRD-specific common/denoiser settings.
 - Missing for SIGMA import: dedicated penumbra/translucency shadow inputs and
   a shadow denoiser dispatch path.
 
-The internal temporal RT denoiser remains the shipped path. Future NRD work
-should first split RT output into explicit guide/signal textures that match
+The internal RTGI denoiser remains the shipped path. Future NRD work should
+start from the existing guide textures, split diffuse/specular signals to match
 NRD's resource model, then add a compile-time optional backend that consumes
 those guides without making NRD a required runtime dependency.
 
@@ -228,9 +271,9 @@ as optional plugin or compile-time integration points.
 The NVIDIA RTGI option maps to the DLSS RR buffer-output shader variant and
 emits the DLSS RR G-buffer/debug textures. This fork does not ship a
 Streamline/DLSS reconstruction pass, so the final image still routes through
-the same temporal RT denoising resolve used by the internal denoiser. That
-avoids the previous behavior where selecting NVIDIA produced auxiliary buffers
-but left the final RTGI image effectively undenoised.
+the fallback temporal resolve rather than a vendor reconstruction pass. The
+shipped real-time path is `Internal`; RTXDI/ReSTIR and vendor SDK denoisers are
+future sampling/backend work, not this milestone.
 
 ## Validation
 

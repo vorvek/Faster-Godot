@@ -47,6 +47,9 @@
 #define RB_TEX_RT_HISTORY_VALIDITY_PREV SNAME("rt_history_validity_prev")
 #define RB_TEX_RT_HISTORY_ID SNAME("rt_history_id")
 #define RB_TEX_RT_HISTORY_ID_PREV SNAME("rt_history_id_prev")
+#define RB_TEX_RT_NORMAL_ROUGHNESS SNAME("rt_normal_roughness")
+#define RB_TEX_RT_ALBEDO_METALNESS SNAME("rt_albedo_metalness")
+#define RB_TEX_RT_VIEWZ_HITDIST SNAME("rt_viewz_hitdist")
 
 #define RB_SCOPE_DLSS_RR SNAME("dlss_rr")
 #define RB_TEX_DLSS_RR_DIFFUSE_ALBEDO SNAME("diffuse_albedo")

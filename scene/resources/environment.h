@@ -215,6 +215,8 @@ private:
 	bool rtgi_disable_in_editor = true;
 	bool rtgi_temporal_accumulation = true;
 	float rtgi_temporal_accumulation_weight = 0.94f;
+	float rtgi_overscan_horizontal = 0.0f;
+	float rtgi_overscan_vertical = 0.0f;
 	RTGIDenoiser rtgi_denoiser = RTGI_DENOISER_AUTO;
 	void _update_pathtracing();
 
@@ -433,6 +435,10 @@ public:
 	bool is_rtgi_temporal_accumulation_enabled() const;
 	void set_rtgi_temporal_accumulation_weight(float p_weight);
 	float get_rtgi_temporal_accumulation_weight() const;
+	void set_rtgi_overscan_horizontal(float p_overscan);
+	float get_rtgi_overscan_horizontal() const;
+	void set_rtgi_overscan_vertical(float p_overscan);
+	float get_rtgi_overscan_vertical() const;
 	void set_rtgi_denoiser(RTGIDenoiser p_denoiser);
 	RTGIDenoiser get_rtgi_denoiser() const;
 	void set_rtgi_debug_mode(PathtracingDebugMode p_mode);

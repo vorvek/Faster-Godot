@@ -730,6 +730,24 @@ float Environment::get_rtgi_temporal_accumulation_weight() const {
 	return rtgi_temporal_accumulation_weight;
 }
 
+void Environment::set_rtgi_overscan_horizontal(float p_overscan) {
+	rtgi_overscan_horizontal = CLAMP(p_overscan, 0.0f, 0.25f);
+	_update_pathtracing();
+}
+
+float Environment::get_rtgi_overscan_horizontal() const {
+	return rtgi_overscan_horizontal;
+}
+
+void Environment::set_rtgi_overscan_vertical(float p_overscan) {
+	rtgi_overscan_vertical = CLAMP(p_overscan, 0.0f, 0.25f);
+	_update_pathtracing();
+}
+
+float Environment::get_rtgi_overscan_vertical() const {
+	return rtgi_overscan_vertical;
+}
+
 void Environment::set_rtgi_denoiser(RTGIDenoiser p_denoiser) {
 	rtgi_denoiser = p_denoiser;
 	switch (p_denoiser) {
@@ -775,6 +793,8 @@ void Environment::_update_pathtracing() {
 	params.write[RSE::PT_PARAM_TEMPORAL_ACCUMULATION] = rtgi_temporal_accumulation ? 1.0f : 0.0f;
 	params.write[RSE::PT_PARAM_MODE] = (float)(int)rtgi_mode;
 	params.write[RSE::PT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT] = rtgi_temporal_accumulation_weight;
+	params.write[RSE::PT_PARAM_OVERSCAN_HORIZONTAL] = rtgi_overscan_horizontal;
+	params.write[RSE::PT_PARAM_OVERSCAN_VERTICAL] = rtgi_overscan_vertical;
 	RS::get_singleton()->environment_set_pathtracing_params(environment, params);
 }
 
@@ -1634,6 +1654,10 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_rtgi_temporal_accumulation_enabled"), &Environment::is_rtgi_temporal_accumulation_enabled);
 	ClassDB::bind_method(D_METHOD("set_rtgi_temporal_accumulation_weight", "weight"), &Environment::set_rtgi_temporal_accumulation_weight);
 	ClassDB::bind_method(D_METHOD("get_rtgi_temporal_accumulation_weight"), &Environment::get_rtgi_temporal_accumulation_weight);
+	ClassDB::bind_method(D_METHOD("set_rtgi_overscan_horizontal", "overscan"), &Environment::set_rtgi_overscan_horizontal);
+	ClassDB::bind_method(D_METHOD("get_rtgi_overscan_horizontal"), &Environment::get_rtgi_overscan_horizontal);
+	ClassDB::bind_method(D_METHOD("set_rtgi_overscan_vertical", "overscan"), &Environment::set_rtgi_overscan_vertical);
+	ClassDB::bind_method(D_METHOD("get_rtgi_overscan_vertical"), &Environment::get_rtgi_overscan_vertical);
 	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser", "denoiser"), &Environment::set_rtgi_denoiser);
 	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser"), &Environment::get_rtgi_denoiser);
 	ClassDB::bind_method(D_METHOD("set_rtgi_debug_mode", "mode"), &Environment::set_rtgi_debug_mode);
@@ -1648,6 +1672,8 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_disable_in_editor"), "set_rtgi_disable_in_editor", "is_rtgi_disabled_in_editor");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_temporal_accumulation"), "set_rtgi_temporal_accumulation", "is_rtgi_temporal_accumulation_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_temporal_accumulation_weight", PROPERTY_HINT_RANGE, "0,0.99,0.001"), "set_rtgi_temporal_accumulation_weight", "get_rtgi_temporal_accumulation_weight");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_horizontal", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_horizontal", "get_rtgi_overscan_horizontal");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_vertical", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_vertical", "get_rtgi_overscan_vertical");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "Auto,Internal,NVIDIA,AMD,Intel Arc,Off"), "set_rtgi_denoiser", "get_rtgi_denoiser");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_debug_mode", PROPERTY_HINT_ENUM, "Disabled,Mirror Reflection,Geometry Normals,Final Normals,Normal Map,Tangent,Bitangent,UV,Albedo,ORM,Diffuse Albedo,Specular Albedo,Normal+Roughness,Specular Hit Dist,Metalness,Roughness,View Normals,Diffuse+Specular,Fresnel F0,Front/Back Face,Depth,Emissive,BRDF Rejection"), "set_rtgi_debug_mode", "get_rtgi_debug_mode");
 

@@ -28,8 +28,12 @@ layout(location = 0) rayPayloadEXT PathPayload payload;
 
 void main() {
 	uvec2 pixel = gl_LaunchIDEXT.xy;
-	const vec2 pixel_center = vec2(pixel) + vec2(0.5);
-	const vec2 in_uv = pixel_center / vec2(gl_LaunchSizeEXT.xy);
+	ivec2 pixel_i = ivec2(pixel);
+	const vec2 in_uv = rt_current_visible_uv(pixel_i);
+	ivec2 visible_pixel_i = pixel_i - ivec2(round(rt_current_origin()));
+	ivec2 visible_size_i = ivec2(round(rt_visible_size()));
+	bool pixel_in_visible = all(greaterThanEqual(visible_pixel_i, ivec2(0))) && all(lessThan(visible_pixel_i, visible_size_i));
+	uvec2 rng_pixel = pixel_in_visible ? uvec2(visible_pixel_i) : pixel + uvec2(131071u, 524287u);
 	vec2 d = in_uv * 2.0 - 1.0;
 
 	mat4 inv_view = transpose(mat4(scene_data_block.data.inv_view_matrix[0],
@@ -37,7 +41,7 @@ void main() {
 			scene_data_block.data.inv_view_matrix[2],
 			vec4(0.0, 0.0, 0.0, 1.0)));
 
-	vec4 target = scene_data_block.data.inv_projection_matrix * vec4(d.x, d.y, 1.0, 1.0);
+	vec4 target = inv_projection_unjittered * vec4(d.x, d.y, 1.0, 1.0);
 	vec4 origin = inv_view * vec4(0.0, 0.0, 0.0, 1.0);
 	vec4 direction = inv_view * vec4(normalize(target.xyz), 0);
 
@@ -58,7 +62,7 @@ void main() {
 		ps.radiance = vec3(0.0);
 		ps.throughput = vec3(1.0);
 		ps.packed_bounces_flags = (sample_idx == 0u) ? set_sample_zero(0u) : 0u;
-		ps.rng_state = init_rng(pixel, frame_index, sample_idx);
+		ps.rng_state = init_rng(rng_pixel, frame_index, sample_idx);
 
 		vec3 ray_origin = origin.xyz;
 		vec3 ray_dir = direction.xyz;
@@ -100,7 +104,7 @@ void main() {
 	final_radiance *= max(0.0, get_rt_param(RT_PARAM_ENERGY));
 	final_radiance = sanitize_payload_vec3(final_radiance);
 
-	imageStore(image, ivec2(pixel), vec4(final_radiance, 1.0));
+	imageStore(image, pixel_i, vec4(final_radiance, 1.0));
 }
 
 #[miss]
@@ -162,17 +166,26 @@ void main() {
 
 			imageStore(rt_depth_image, pixel, vec4(0.0));
 
-			// Sky velocity: reproject a far-plane point using unjittered VPs.
+			// Sky velocity: project the ray direction at infinity so camera translation does not create parallax.
 			{
-				vec3 far_world = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * 10000.0;
-				vec4 curr_clip = curr_vp_unjittered * vec4(far_world, 1.0);
-				vec4 prev_clip = prev_vp_unjittered * vec4(far_world, 1.0);
-				vec2 curr_uv = curr_clip.xy / curr_clip.w * 0.5 + 0.5;
-				vec2 prev_uv = (abs(prev_clip.w) > 1e-5) ? (prev_clip.xy / prev_clip.w * 0.5 + 0.5) : curr_uv;
-				float history_valid = (prev_clip.w > 1e-5) ? 1.0 : 0.0;
+				vec3 sky_direction = normalize(gl_WorldRayDirectionEXT);
+				vec4 curr_clip = curr_vp_unjittered * vec4(sky_direction, 0.0);
+				vec4 prev_clip = prev_vp_unjittered * vec4(sky_direction, 0.0);
+				bool curr_valid = !any(isnan(curr_clip)) && !any(isinf(curr_clip)) && curr_clip.w > 1e-5;
+				bool prev_valid = !any(isnan(prev_clip)) && !any(isinf(prev_clip)) && prev_clip.w > 1e-5;
+				vec2 curr_uv = curr_valid ? (curr_clip.xy / curr_clip.w * 0.5 + 0.5) : rt_current_visible_uv(pixel);
+				vec2 prev_uv = prev_valid ? (prev_clip.xy / prev_clip.w * 0.5 + 0.5) : curr_uv;
+				float history_valid = (curr_valid && prev_valid) ? 1.0 : 0.0;
 				imageStore(rt_history_validity_image, pixel, vec4(history_valid, 0.0, 0.0, 0.0));
-				imageStore(rt_history_id_image, pixel, vec4(normalize(gl_WorldRayDirectionEXT) * 0.5 + 0.5, 1.0));
-				imageStore(rt_velocity_image, pixel, vec4(prev_uv - curr_uv, 0.0, 0.0));
+				imageStore(rt_history_id_image, pixel, vec4(sky_direction * 0.5 + 0.5, 1.0));
+				imageStore(rt_normal_roughness_image, pixel, vec4(-sky_direction * 0.5 + 0.5, 1.0));
+				imageStore(rt_albedo_metalness_image, pixel, vec4(1.0, 1.0, 1.0, 0.0));
+				imageStore(rt_viewz_hitdist_image, pixel, vec4(65504.0, 65504.0, 0.0, 0.0));
+				if (history_valid > 0.5) {
+					rt_store_primary_velocity(pixel, curr_uv, prev_uv);
+				} else {
+					rt_store_invalid_primary_velocity(pixel);
+				}
 			}
 		}
 	}
@@ -360,11 +373,14 @@ void main() {
 		m.normal = apply_normal_map(h, ts_normal, normal_map_depth);
 	}
 
+	vec3 V = -gl_WorldRayDirectionEXT;
+	m.normal = clampShadingNormal(m.normal, h.geometry_normal, V, RT_SHADING_NORMAL_CLAMP_THRESHOLD);
+	write_primary_hit_guides(h, m);
+
 #ifdef RT_DEBUG_ENABLED
 	{
 		int VIS_MODE = int(get_rt_param(RT_PARAM_VIS_MODE));
 		if (VIS_MODE != 0) {
-			vec3 V = -gl_WorldRayDirectionEXT;
 			float NdotV = max(dot(m.normal, V), 0.0001);
 			vec3 orm = vec3(1.0, m.roughness, m.metalness);
 			debug_visualize(VIS_MODE, h.geometry_normal, m.normal, normal_map,
@@ -430,13 +446,16 @@ void main() {
 	m.emissive = emissive;
 	m.normal = final_normal;
 
+	vec3 V = -gl_WorldRayDirectionEXT;
+	m.normal = clampShadingNormal(m.normal, h.geometry_normal, V, RT_SHADING_NORMAL_CLAMP_THRESHOLD);
+	write_primary_hit_guides(h, m);
+
 #ifdef RT_DEBUG_ENABLED
 	{
 		int VIS_MODE = int(get_rt_param(RT_PARAM_VIS_MODE));
 		if (VIS_MODE != 0) {
-			vec3 V = -gl_WorldRayDirectionEXT;
 			float NdotV = max(dot(m.normal, V), 0.0001);
-			debug_visualize(VIS_MODE, h.geometry_normal, final_normal, tangent_space_normal,
+			debug_visualize(VIS_MODE, h.geometry_normal, m.normal, tangent_space_normal,
 					h.tangent, h.bitangent, uv, albedo, orm, metalness, roughness, mat.specular, emissive, V, NdotV);
 			return;
 		}

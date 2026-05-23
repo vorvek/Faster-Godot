@@ -3821,8 +3821,11 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			float params[16];
 			float prev_vp_unjittered[16];
 			float curr_vp_unjittered[16];
+			float inv_projection_unjittered[16];
+			float rt_overscan[4];
+			float rt_prev_overscan[4];
 		} rt_ubo = {};
-		static_assert(sizeof(rt_ubo) == 48 * sizeof(float));
+		static_assert(sizeof(rt_ubo) == 72 * sizeof(float));
 
 		if (p_render_data && p_render_data->environment.is_valid()) {
 			const float *env_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
@@ -3834,6 +3837,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		// rt_params layout (see RaytracingParamIndex enum):
 		// [0] = VIS_MODE, [1] = SAMPLE_COUNT, [2] = MAX_BOUNCES,
 		// [3] = DENOISER, [11] = TEMPORAL_ACCUMULATION_WEIGHT,
+		// [12] = OVERSCAN_HORIZONTAL, [13] = OVERSCAN_VERTICAL,
 		// [14] = LIGHT_COUNT, [15] = FRAME_INDEX
 		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_FRAME_INDEX] = float(p_state->frame_counter++);
 
@@ -3888,7 +3892,23 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 
 			Projection curr_vp = (correction * p_render_data->scene_data->cam_projection) * Projection(p_render_data->scene_data->cam_transform.affine_inverse());
 			RendererRD::MaterialStorage::store_camera(curr_vp, rt_ubo.curr_vp_unjittered);
+
+			Projection curr_projection = correction * p_render_data->scene_data->cam_projection;
+			RendererRD::MaterialStorage::store_camera(curr_projection.inverse(), rt_ubo.inv_projection_unjittered);
 		}
+
+		const Vector2i rt_visible_origin = rb_data->rt_get_visible_origin();
+		const Vector2i rt_prev_visible_origin = rb_data->rt_get_prev_visible_origin();
+		const Size2i rt_visible_size = rb_data->rt_get_visible_size();
+		const Size2i rt_size = rb_data->rt_get_size();
+		rt_ubo.rt_overscan[0] = (float)rt_visible_origin.x;
+		rt_ubo.rt_overscan[1] = (float)rt_visible_origin.y;
+		rt_ubo.rt_overscan[2] = (float)rt_visible_size.x;
+		rt_ubo.rt_overscan[3] = (float)rt_visible_size.y;
+		rt_ubo.rt_prev_overscan[0] = (float)rt_prev_visible_origin.x;
+		rt_ubo.rt_prev_overscan[1] = (float)rt_prev_visible_origin.y;
+		rt_ubo.rt_prev_overscan[2] = (float)rt_size.x;
+		rt_ubo.rt_prev_overscan[3] = (float)rt_size.y;
 
 		// --- Light gathering ---
 		uint32_t rt_light_count = 0;
@@ -4056,23 +4076,12 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		}
 	}
 
-	// Binding 28: Velocity output (RG16F). Past the 16-27 sampler range.
+	// Binding 28: RT-space velocity output (RG16F). Past the 16-27 sampler range.
 	{
-		Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
-		bool hybrid_mode = true;
-		if (p_render_data && p_render_data->environment.is_valid()) {
-			const float *env_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
-			hybrid_mode = !env_params || (uint32_t)env_params[SceneShaderRaytracing::RT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_HYBRID;
-		}
 		RD::Uniform u;
 		u.binding = 28;
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		if (hybrid_mode) {
-			add_uniform_id(u, rb_data->rt_get_velocity_texture());
-		} else {
-			rb->ensure_velocity();
-			add_uniform_id(u, rb->get_velocity_buffer(false));
-		}
+		add_uniform_id(u, rb_data->rt_get_velocity_texture());
 		uniforms.push_back(u);
 	}
 
@@ -4091,6 +4100,45 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		u.binding = 30;
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
 		add_uniform_id(u, rb_data->rt_get_history_id());
+		uniforms.push_back(u);
+	}
+
+	// Binding 31: Visible viewport velocity output for path-traced mode.
+	{
+		Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
+		rb->ensure_velocity();
+
+		RD::Uniform u;
+		u.binding = 31;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb->get_velocity_buffer(false));
+		uniforms.push_back(u);
+	}
+
+	// Binding 33: RTGI normal + roughness guide buffer.
+	{
+		RD::Uniform u;
+		u.binding = 33;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_normal_roughness());
+		uniforms.push_back(u);
+	}
+
+	// Binding 34: RTGI albedo + metalness guide buffer.
+	{
+		RD::Uniform u;
+		u.binding = 34;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_albedo_metalness());
+		uniforms.push_back(u);
+	}
+
+	// Binding 35: RTGI linear view-Z + hit-distance guide buffer.
+	{
+		RD::Uniform u;
+		u.binding = 35;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_viewz_hitdist());
 		uniforms.push_back(u);
 	}
 
@@ -4144,9 +4192,10 @@ void RenderRaytracing::copy_output_texture(const RenderDataRD *p_render_data) {
 	}
 
 	// Copy raytracing output to main color buffer
+	const Rect2i src_rect(rb_data->rt_get_visible_origin(), rb_data->rt_get_visible_size());
 	for (uint32_t v = 0; v < rb->get_view_count(); v++) {
 		RID src = rb_data->rt_get_texture();
 		RID dst = rb->get_internal_texture(v);
-		owner->copy_effects->copy_to_rect(src, dst, Rect2i(0, 0, rb->get_internal_size().x, rb->get_internal_size().y), false, false, false, false, false, true);
+		owner->copy_effects->copy_to_rect_region(src, dst, src_rect, Vector2i(), false, false, false, false, true);
 	}
 }

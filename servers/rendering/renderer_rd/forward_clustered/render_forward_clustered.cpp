@@ -48,6 +48,56 @@ using namespace RendererSceneRenderImplementation;
 
 #define FADE_ALPHA_PASS_THRESHOLD 0.999
 
+static Vector2 _estimate_rt_overscan_motion_pixels(const RenderDataRD *p_render_data, const Size2i &p_visible_size) {
+	if (!p_render_data || !p_render_data->scene_data || p_visible_size.x <= 0 || p_visible_size.y <= 0) {
+		return Vector2();
+	}
+
+	Projection correction;
+	correction.set_depth_correction(true);
+
+	const Projection &prev_proj = p_render_data->scene_data->prev_cam_projection;
+	const Projection &cur_proj = p_render_data->scene_data->cam_projection;
+	const Transform3D &prev_transform = p_render_data->scene_data->prev_cam_transform;
+	const Transform3D &cur_transform = p_render_data->scene_data->cam_transform;
+	Projection reprojection = (correction * prev_proj) * prev_transform.affine_inverse() * cur_transform * (correction * cur_proj).inverse();
+
+	static const float sample_xy[3] = { -0.85f, 0.0f, 0.85f };
+	static const float sample_depth[3] = { 0.2f, 0.5f, 0.8f };
+
+	Vector2 best_velocity;
+	for (int z = 0; z < 3; z++) {
+		for (int y = 0; y < 3; y++) {
+			for (int x = 0; x < 3; x++) {
+				const float clip_x = sample_xy[x];
+				const float clip_y = sample_xy[y];
+				const Vector4 prev_clip = reprojection.xform(Vector4(clip_x, clip_y, sample_depth[z], 1.0f));
+				if (Math::abs(prev_clip.w) <= CMP_EPSILON) {
+					continue;
+				}
+
+				const Vector2 curr_uv = Vector2(clip_x, clip_y) * 0.5f + Vector2(0.5f, 0.5f);
+				const Vector2 prev_uv = Vector2(prev_clip.x, prev_clip.y) / prev_clip.w * 0.5f + Vector2(0.5f, 0.5f);
+				const Vector2 velocity = Vector2(
+						(prev_uv.x - curr_uv.x) * (float)p_visible_size.x,
+						(prev_uv.y - curr_uv.y) * (float)p_visible_size.y);
+				if (!velocity.is_finite()) {
+					continue;
+				}
+
+				if (Math::abs(velocity.x) > Math::abs(best_velocity.x)) {
+					best_velocity.x = velocity.x;
+				}
+				if (Math::abs(velocity.y) > Math::abs(best_velocity.y)) {
+					best_velocity.y = velocity.y;
+				}
+			}
+		}
+	}
+
+	return best_velocity;
+}
+
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_specular() {
 	ERR_FAIL_NULL(render_buffers);
 
@@ -84,8 +134,65 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_voxelgi() 
 	}
 }
 
+bool RenderForwardClustered::RenderBufferDataForwardClustered::rt_update_overscan(const Size2i &p_visible_size, float p_horizontal, float p_vertical, const Vector2 &p_motion_pixels) {
+	ERR_FAIL_COND_V(p_visible_size.x <= 0 || p_visible_size.y <= 0, false);
+
+	const Size2i old_size = rt_size;
+	const Size2i old_visible_size = rt_visible_size;
+	const Vector2i old_origin = rt_visible_origin;
+
+	rt_visible_size = p_visible_size;
+
+	const int margin_x = MAX(0, (int)Math::ceil((double)p_visible_size.x * (double)CLAMP(p_horizontal, 0.0f, 0.25f)));
+	const int margin_y = MAX(0, (int)Math::ceil((double)p_visible_size.y * (double)CLAMP(p_vertical, 0.0f, 0.25f)));
+
+	rt_size = Size2i(p_visible_size.x + margin_x * 2, p_visible_size.y + margin_y * 2);
+	rt_visible_origin = Vector2i(
+			CLAMP((int)Math::round((double)margin_x - (double)p_motion_pixels.x), 0, margin_x * 2),
+			CLAMP((int)Math::round((double)margin_y - (double)p_motion_pixels.y), 0, margin_y * 2));
+
+	if (!rt_overscan_initialized || old_size != rt_size || old_visible_size != rt_visible_size) {
+		rt_prev_visible_origin = rt_visible_origin;
+		rt_overscan_initialized = true;
+		rt_clear_textures();
+		return true;
+	}
+
+	rt_prev_visible_origin = old_origin;
+	return false;
+}
+
+void RenderForwardClustered::RenderBufferDataForwardClustered::rt_clear_textures() {
+	ERR_FAIL_NULL(render_buffers);
+
+	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING);
+	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH);
+	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_VELOCITY);
+	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_VALIDITY);
+	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_VALIDITY_PREV);
+	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_ID);
+	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_ID_PREV);
+	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_NORMAL_ROUGHNESS);
+	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_ALBEDO_METALNESS);
+	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_VIEWZ_HITDIST);
+	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE);
+}
+
 void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_textures() {
 	ERR_FAIL_NULL(render_buffers);
+
+	if (rt_size == Size2i()) {
+		rt_size = render_buffers->get_internal_size();
+		rt_visible_size = rt_size;
+		rt_visible_origin = Vector2i();
+		rt_prev_visible_origin = Vector2i();
+		rt_overscan_initialized = true;
+	}
+
+	if (render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING) &&
+			render_buffers->get_texture_slice_size(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, 0) != rt_size) {
+		rt_clear_textures();
+	}
 
 	uint32_t usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT |
 			RD::TEXTURE_USAGE_SAMPLING_BIT |
@@ -98,7 +205,8 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 				RB_TEX_RAYTRACING,
 				RD::DATA_FORMAT_R16G16B16A16_SFLOAT,
 				usage_bits,
-				RD::TEXTURE_SAMPLES_1);
+				RD::TEXTURE_SAMPLES_1,
+				rt_size);
 	}
 
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH)) {
@@ -107,7 +215,8 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 				RB_TEX_RT_DEPTH,
 				RD::DATA_FORMAT_R32_SFLOAT,
 				usage_bits,
-				RD::TEXTURE_SAMPLES_1);
+				RD::TEXTURE_SAMPLES_1,
+				rt_size);
 	}
 
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_VELOCITY)) {
@@ -116,7 +225,8 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 				RB_TEX_RT_VELOCITY,
 				RD::DATA_FORMAT_R16G16_SFLOAT,
 				usage_bits,
-				RD::TEXTURE_SAMPLES_1);
+				RD::TEXTURE_SAMPLES_1,
+				rt_size);
 	}
 
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_VALIDITY)) {
@@ -125,7 +235,8 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 				RB_TEX_RT_HISTORY_VALIDITY,
 				RD::DATA_FORMAT_R8_UNORM,
 				usage_bits,
-				RD::TEXTURE_SAMPLES_1);
+				RD::TEXTURE_SAMPLES_1,
+				rt_size);
 		RD::get_singleton()->texture_clear(history_validity, Color(0, 0, 0, 0), 0, 1, 0, render_buffers->get_view_count());
 	}
 
@@ -135,7 +246,8 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 				RB_TEX_RT_HISTORY_VALIDITY_PREV,
 				RD::DATA_FORMAT_R8_UNORM,
 				usage_bits,
-				RD::TEXTURE_SAMPLES_1);
+				RD::TEXTURE_SAMPLES_1,
+				rt_size);
 		RD::get_singleton()->texture_clear(prev_history_validity, Color(0, 0, 0, 0), 0, 1, 0, render_buffers->get_view_count());
 	}
 
@@ -145,7 +257,8 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 				RB_TEX_RT_HISTORY_ID,
 				RD::DATA_FORMAT_R8G8B8A8_UNORM,
 				usage_bits,
-				RD::TEXTURE_SAMPLES_1);
+				RD::TEXTURE_SAMPLES_1,
+				rt_size);
 		RD::get_singleton()->texture_clear(history_id, Color(0, 0, 0, 0), 0, 1, 0, render_buffers->get_view_count());
 	}
 
@@ -155,8 +268,39 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 				RB_TEX_RT_HISTORY_ID_PREV,
 				RD::DATA_FORMAT_R8G8B8A8_UNORM,
 				usage_bits,
-				RD::TEXTURE_SAMPLES_1);
+				RD::TEXTURE_SAMPLES_1,
+				rt_size);
 		RD::get_singleton()->texture_clear(prev_history_id, Color(0, 0, 0, 0), 0, 1, 0, render_buffers->get_view_count());
+	}
+
+	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_NORMAL_ROUGHNESS)) {
+		render_buffers->create_texture(
+				RB_SCOPE_FORWARD_CLUSTERED,
+				RB_TEX_RT_NORMAL_ROUGHNESS,
+				RD::DATA_FORMAT_R16G16B16A16_SFLOAT,
+				usage_bits,
+				RD::TEXTURE_SAMPLES_1,
+				rt_size);
+	}
+
+	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_ALBEDO_METALNESS)) {
+		render_buffers->create_texture(
+				RB_SCOPE_FORWARD_CLUSTERED,
+				RB_TEX_RT_ALBEDO_METALNESS,
+				RD::DATA_FORMAT_R16G16B16A16_SFLOAT,
+				usage_bits,
+				RD::TEXTURE_SAMPLES_1,
+				rt_size);
+	}
+
+	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_VIEWZ_HITDIST)) {
+		render_buffers->create_texture(
+				RB_SCOPE_FORWARD_CLUSTERED,
+				RB_TEX_RT_VIEWZ_HITDIST,
+				RD::DATA_FORMAT_R16G16_SFLOAT,
+				usage_bits,
+				RD::TEXTURE_SAMPLES_1,
+				rt_size);
 	}
 }
 
@@ -2137,6 +2281,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	bool using_ssil = scene_features.has(SCENE_FEATURE_SSIL);
 	bool using_ssr = scene_features.has(SCENE_FEATURE_SSR);
 	bool using_voxelgi = scene_features.has(SCENE_FEATURE_VOXELGI);
+	bool rt_needs_volumetric_fog = rt_replaces_opaque && rb_data.is_valid() && p_render_data->environment.is_valid() && environment_get_volumetric_fog_enabled(p_render_data->environment);
 
 	p_render_data->scene_data->emissive_exposure_normalization = -1.0;
 
@@ -2190,6 +2335,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->texture_clear(rb_data->rt_get_history_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 			RD::get_singleton()->texture_clear(rb_data->rt_get_prev_history_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 		}
+		rb->clear_context(RB_SCOPE_RTGI_DENOISE);
 	};
 	auto reject_rt_previous_history = [&]() {
 		if (!rb_data.is_valid()) {
@@ -2222,6 +2368,17 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			scene_features.set(SCENE_FEATURE_DEPTH_RECONSTRUCT);
 		} else if (rb_data->dlss_rr_has_buffers()) {
 			rb_data->dlss_rr_free_buffers();
+		}
+
+		float rt_overscan_horizontal = 0.0f;
+		float rt_overscan_vertical = 0.0f;
+		if (rt_replaces_opaque && (using_rt_temporal_denoise || using_viewport_taa) && !dlss_rr_enabled && env_params) {
+			rt_overscan_horizontal = env_params[RSE::PT_PARAM_OVERSCAN_HORIZONTAL];
+			rt_overscan_vertical = env_params[RSE::PT_PARAM_OVERSCAN_VERTICAL];
+		}
+		const Vector2 rt_overscan_motion = (rt_overscan_horizontal > 0.0f || rt_overscan_vertical > 0.0f) ? _estimate_rt_overscan_motion_pixels(p_render_data, rb->get_internal_size()) : Vector2();
+		if (rb_data->rt_update_overscan(rb->get_internal_size(), rt_overscan_horizontal, rt_overscan_vertical, rt_overscan_motion)) {
+			invalidate_rt_temporal_history();
 		}
 
 		RTViewportState *rt_state = raytracing->build_tlas(p_render_data, rt_flags);
@@ -2641,6 +2798,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				RD::get_singleton()->draw_command_end_label();
 			}
 		}
+	} else if (rt_needs_volumetric_fog) {
+		// Path Traced mode skips the raster opaque pass, but volumetric fog
+		// still needs current light buffers, shadows, cluster data, and its
+		// froxel volume before RT color is copied to the visible viewport.
+		_pre_opaque_render(p_render_data, false, false, false, false, nullptr, RID());
 	}
 
 	if (rt_setup_deferred && scene_features.rt) {
@@ -2660,6 +2822,20 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// Execute raytracing if enabled. Hybrid RTGI produces an indirect-light
 	// texture; Path Traced mode replaces the opaque/motion vector pass.
 	if (scene_features.rt && rb_data.is_valid() && raytracing && raytracing->get_shader()) {
+		auto composite_rt_volumetric_fog = [&]() {
+			if (!rt_replaces_opaque || !rt_needs_volumetric_fog || !rb->has_custom_data(RB_SCOPE_FOG)) {
+				return;
+			}
+
+			Ref<RendererRD::Fog::VolumetricFog> fog = rb->get_custom_data(RB_SCOPE_FOG);
+			if (fog.is_null() || !fog->fog_map.is_valid()) {
+				return;
+			}
+
+			const float fog_sky_affect = p_render_data->environment.is_valid() ? environment_get_volumetric_fog_sky_affect(p_render_data->environment) : 1.0f;
+			rtgi_denoise->composite_volumetric_fog(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, rb_data->rt_get_viewz_hitdist(), fog->fog_map, rb_data->rt_get_size(), rb_data->rt_get_visible_origin(), rb_data->rt_get_visible_size(), fog->length, fog->spread, fog_sky_affect, fog_use_legacy_blending_get(), 0);
+		};
+
 		RD::get_singleton()->draw_command_begin_label("Raytracing");
 		RENDER_TIMESTAMP("TLAS Build");
 
@@ -2700,10 +2876,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			raytracing->add_unique_buffer_dependency(raytracing_list, deformed_buffer);
 		}
 
-		// Raytracing dispatches at internal (pre-upscale) size because the RT
-		// output texture is allocated at that resolution; FSR/upscaler runs
-		// afterward as a separate compute pass.
-		Size2i rt_size = rb->get_internal_size();
+		// Raytracing dispatches at its own RT size. Path-traced RTGI may add
+		// overscan around the visible viewport so temporal history exists just
+		// outside the final crop.
+		Size2i rt_size = rb_data->rt_get_size();
 		RD::get_singleton()->raytracing_list_trace_rays(raytracing_list, 0, raytracing->get_shader()->get_hit_sbt(rt_flags), rt_size.width, rt_size.height, 1);
 		RD::get_singleton()->raytracing_list_end();
 
@@ -2715,22 +2891,21 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RENDER_TIMESTAMP("Copy RT Depth (R32F -> D32F)");
 			RD::get_singleton()->draw_command_begin_label("Copy RT Depth");
 			RD::TextureFormat depth_format = rb->get_texture_format(RB_SCOPE_BUFFERS, RB_TEX_DEPTH);
+			const Vector2i rt_visible_origin = rb_data->rt_get_visible_origin();
+			const Size2i rt_visible_size = rb_data->rt_get_visible_size();
 			if (depth_format.format == RD::DATA_FORMAT_R32_SFLOAT && (depth_format.usage_bits & RD::TEXTURE_USAGE_CAN_COPY_TO_BIT)) {
-				Size2i internal_size = rb->get_internal_size();
 				for (uint32_t v = 0; v < rb->get_view_count(); v++) {
-					RD::get_singleton()->texture_copy(rb_data->rt_get_depth_texture(), rb->get_depth_texture(), Vector3(), Vector3(), Vector3(internal_size.x, internal_size.y, 1), 0, 0, v, v);
+					RD::get_singleton()->texture_copy(rb_data->rt_get_depth_texture(), rb->get_depth_texture(), Vector3(rt_visible_origin.x, rt_visible_origin.y, 0), Vector3(), Vector3(rt_visible_size.x, rt_visible_size.y, 1), 0, 0, v, v);
 				}
 			} else {
 				RID rt_depth_fb = FramebufferCacheRD::get_singleton()->get_cache_multiview(rb->get_view_count(), rb->get_depth_texture());
-				copy_effects->copy_r32f_to_depth_fb(rb_data->rt_get_depth_texture(), rt_depth_fb, Rect2i(0, 0, rb->get_internal_size().x, rb->get_internal_size().y));
+				const Size2i full_rt_size = rb_data->rt_get_size();
+				const Rect2 source_rect(
+						Vector2((float)rt_visible_origin.x / (float)full_rt_size.x, (float)rt_visible_origin.y / (float)full_rt_size.y),
+						Vector2((float)rt_visible_size.x / (float)full_rt_size.x, (float)rt_visible_size.y / (float)full_rt_size.y));
+				copy_effects->copy_r32f_to_depth_fb(rb_data->rt_get_depth_texture(), rt_depth_fb, Rect2i(0, 0, rt_visible_size.x, rt_visible_size.y), source_rect);
 			}
 			RD::get_singleton()->draw_command_end_label();
-		}
-
-		if (rt_replaces_opaque) {
-			// Motion vectors are fully generated by the RT raygen/closest-hit/miss
-			// shaders (written to the main velocity image). No raster motion pass needed.
-			raytracing->copy_output_texture(p_render_data);
 		}
 
 		if (using_rt_temporal_denoise) {
@@ -2742,8 +2917,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				// accumulation has the same wall-clock decay at high refresh rates.
 				rt_history_weight = Math::pow(CLAMP(rt_history_weight, 0.0f, 0.99f), (float)time_step * 60.0f);
 			}
-			if (rt_replaces_opaque) {
-				taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, true, rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight);
+			if (rt_replaces_opaque && rt_internal_denoiser) {
+				rtgi_denoise->process(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight, rb_data->rt_get_size(), 0, 5);
+				composite_rt_volumetric_fog();
+				raytracing->copy_output_texture(p_render_data);
+			} else if (rt_replaces_opaque) {
+				taa->process_texture(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, SNAME("rtgi_taa"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, rb_data->rt_get_velocity_texture(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, true, rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight, rb_data->rt_get_size(), rb_data->rt_get_depth_texture());
+				composite_rt_volumetric_fog();
+				raytracing->copy_output_texture(p_render_data);
 			} else {
 				taa->process_texture(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, SNAME("rtgi_taa"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, rb_data->rt_get_velocity_texture(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, true, rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight);
 			}
@@ -2751,11 +2932,23 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		} else if (rt_replaces_opaque && using_viewport_taa) {
 			RD::get_singleton()->draw_command_begin_label("RT TAA");
 			RENDER_TIMESTAMP("RT TAA");
-			taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, false, rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id());
+			rb->clear_context(RB_SCOPE_RTGI_DENOISE);
+			taa->process_texture(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, SNAME("rtgi_taa"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, rb_data->rt_get_velocity_texture(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, false, rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), 0.94f, rb_data->rt_get_size(), rb_data->rt_get_depth_texture());
+			composite_rt_volumetric_fog();
+			raytracing->copy_output_texture(p_render_data);
 			RD::get_singleton()->draw_command_end_label();
 		} else {
 			RD::get_singleton()->texture_clear(rb_data->rt_get_prev_history_validity(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 			RD::get_singleton()->texture_clear(rb_data->rt_get_prev_history_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
+			rb->clear_context(RB_SCOPE_RTGI_DENOISE);
+			if (rt_replaces_opaque) {
+				composite_rt_volumetric_fog();
+				raytracing->copy_output_texture(p_render_data);
+			}
+		}
+
+		if (rt_replaces_opaque) {
+			rb->clear_context(SNAME("taa"));
 		}
 
 		if (!rt_replaces_opaque) {
@@ -3165,6 +3358,44 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_DLSS_RR_SPECULAR_HIT_DIST) {
 			copy_effects->copy_to_fb_rect(rb_data->dlss_rr_get_specular_hit_dist(), fb, Rect2(Vector2(), rtsize), false, true);
+		}
+	}
+
+	// RTGI denoiser debug views.
+	{
+		Size2i rtsize = texture_storage->render_target_get_size(render_target);
+		RID fb = texture_storage->render_target_get_rd_framebuffer(render_target);
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_NOISY && rb->has_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_NOISY)) {
+			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_NOISY), fb, Rect2(Vector2(), rtsize), false, false);
+		}
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_NORMAL_ROUGHNESS && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_NORMAL_ROUGHNESS)) {
+			copy_effects->copy_to_fb_rect(rb_data->rt_get_normal_roughness(), fb, Rect2(Vector2(), rtsize), false, false, false, false, RID(), false, false, false, true);
+		}
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_VIEWZ_HITDIST && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_VIEWZ_HITDIST)) {
+			copy_effects->copy_to_fb_rect(rb_data->rt_get_viewz_hitdist(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
+		}
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_MOTION_VECTORS && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_VELOCITY) && rb_data->rt_has_depth_texture()) {
+			debug_effects->draw_motion_vectors(rb_data->rt_get_velocity_texture(), rb_data->rt_get_depth_texture(), fb, p_render_data->scene_data->cam_projection, p_render_data->scene_data->cam_transform, p_render_data->scene_data->prev_cam_projection, p_render_data->scene_data->prev_cam_transform, rb_data->rt_get_size());
+		}
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_VARIANCE && rb->has_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_VARIANCE)) {
+			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_VARIANCE), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
+		}
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_HISTORY_LENGTH && rb->has_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH)) {
+			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH), fb, Rect2(Vector2(), rtsize), false, true);
+		}
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_REJECTION && rb->has_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_REJECTION)) {
+			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_REJECTION), fb, Rect2(Vector2(), rtsize), false, true);
+		}
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_FINAL && rb_data->rt_has_texture()) {
+			copy_effects->copy_to_fb_rect(rb_data->rt_get_texture(), fb, Rect2(Vector2(), rtsize), false, false);
 		}
 	}
 
@@ -5876,6 +6107,7 @@ RenderForwardClustered::RenderForwardClustered() {
 	_update_global_pipeline_data_requirements_from_project();
 
 	taa = memnew(RendererRD::TAA);
+	rtgi_denoise = memnew(RendererRD::RTGIDenoise);
 	fsr2_effect = memnew(RendererRD::FSR2Effect);
 	ss_effects = memnew(RendererRD::SSEffects);
 	motion_vectors_store = memnew(RendererRD::MotionVectorsStore);
@@ -5895,6 +6127,11 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (taa != nullptr) {
 		memdelete(taa);
 		taa = nullptr;
+	}
+
+	if (rtgi_denoise != nullptr) {
+		memdelete(rtgi_denoise);
+		rtgi_denoise = nullptr;
 	}
 
 	if (fsr2_effect) {

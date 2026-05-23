@@ -208,8 +208,18 @@
 		<member name="rtgi_enabled" type="bool" setter="set_rtgi_enabled" getter="is_rtgi_enabled" default="false">
 			If [code]true[/code], enables hardware RTGI or path tracing for this environment when the active renderer and GPU support Vulkan ray tracing.
 		</member>
+		<member name="rtgi_overscan_horizontal" type="float" setter="set_rtgi_overscan_horizontal" getter="get_rtgi_overscan_horizontal" default="0.0">
+			Sets the extra horizontal path-traced RTGI margin as a fraction of the viewport width. The renderer allocates this margin on both sides, then shifts the visible crop using camera motion so history is kept on the leading edge of the view. For example, [code]0.05[/code] allows up to 10% extra pixels on one horizontal edge and 0% on the other. Higher values can reduce edge speckles from newly revealed pixels while moving, but increase RT cost and do not add samples to the interior of the image.
+		</member>
+		<member name="rtgi_overscan_vertical" type="float" setter="set_rtgi_overscan_vertical" getter="get_rtgi_overscan_vertical" default="0.0">
+			Sets the extra vertical path-traced RTGI margin as a fraction of the viewport height. The renderer allocates this margin on both sides, then shifts the visible crop using camera motion so history is kept on the leading edge of the view. For example, [code]0.05[/code] allows up to 10% extra pixels on one vertical edge and 0% on the other. Higher values can reduce edge speckles from newly revealed pixels while moving, but increase RT cost and do not add samples to the interior of the image.
+		</member>
+		<member name="rtgi_temporal_accumulation" type="bool" setter="set_rtgi_temporal_accumulation" getter="is_rtgi_temporal_accumulation_enabled" default="true">
+			If [code]true[/code], accumulates RTGI lighting over multiple continuously rendered frames. Moving scenes require continuous viewport updates and valid motion vectors so the denoiser can reproject history. Static or update-once viewports are only suitable for static views.
+		</member>
 		<member name="rtgi_temporal_accumulation_weight" type="float" setter="set_rtgi_temporal_accumulation_weight" getter="get_rtgi_temporal_accumulation_weight" default="0.94">
-			Sets how much previous frame history contributes to RTGI temporal accumulation. Higher values reduce ray-traced lighting speckles, but can increase light ghosting or wobbling during camera motion.
+			Sets how much previous rendered viewport history contributes to RTGI temporal accumulation. Higher values reduce ray-traced lighting speckles, but can increase light ghosting or wobbling during camera motion.
+			[b]Note:[/b] The internal RTGI denoiser uses RT motion vectors, normal/roughness, albedo/metalness, view depth, hit distance, validity masks, and history IDs. Low update-rate [SubViewport] feeds, such as viewports rendered with [constant SubViewport.UPDATE_ONCE], can show more 1-sample-per-pixel noise while the camera moves because newly revealed pixels have little or no reusable history. For low sample counts, render the viewport continuously while moving.
 		</member>
 		<member name="sdfgi_bounce_feedback" type="float" setter="set_sdfgi_bounce_feedback" getter="get_sdfgi_bounce_feedback" default="0.5">
 			The energy multiplier applied to light every time it bounces from a surface when using SDFGI. Values greater than [code]0.0[/code] will simulate multiple bounces, resulting in a more realistic appearance. Increasing [member sdfgi_bounce_feedback] generally has no performance impact. See also [member sdfgi_energy].

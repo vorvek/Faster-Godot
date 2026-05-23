@@ -41,7 +41,7 @@ public:
 	~TAA();
 
 	void process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far, bool p_raytracing_denoise = false, RID p_rt_history_validity = RID(), RID p_rt_prev_history_validity = RID(), RID p_rt_history_id = RID(), RID p_rt_prev_history_id = RID(), float p_raytracing_history_weight = 0.94f);
-	void process_texture(Ref<RenderSceneBuffersRD> p_render_buffers, const StringName &p_source_context, const StringName &p_source_texture, const StringName &p_history_context, RD::DataFormat p_format, RID p_velocity_texture, float p_z_near, float p_z_far, bool p_raytracing_denoise = false, RID p_rt_history_validity = RID(), RID p_rt_prev_history_validity = RID(), RID p_rt_history_id = RID(), RID p_rt_prev_history_id = RID(), float p_raytracing_history_weight = 0.94f);
+	void process_texture(Ref<RenderSceneBuffersRD> p_render_buffers, const StringName &p_source_context, const StringName &p_source_texture, const StringName &p_history_context, RD::DataFormat p_format, RID p_velocity_texture, float p_z_near, float p_z_far, bool p_raytracing_denoise = false, RID p_rt_history_validity = RID(), RID p_rt_prev_history_validity = RID(), RID p_rt_history_id = RID(), RID p_rt_prev_history_id = RID(), float p_raytracing_history_weight = 0.94f, const Size2i &p_process_size = Size2i(), RID p_depth_texture = RID());
 
 private:
 	struct TAAResolvePushConstant {

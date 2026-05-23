@@ -309,7 +309,7 @@ vec3 rt_firefly_clamp_3x3(ivec2 group_pos, vec3 center) {
 	float mean = (l1 + l2 + l3 + l4 + l6 + l7 + l8 + l9) * 0.125;
 	float mean2 = (l1 * l1 + l2 * l2 + l3 * l3 + l4 * l4 + l6 * l6 + l7 * l7 + l8 * l8 + l9 * l9) * 0.125;
 	float deviation = sqrt(max(mean2 - mean * mean, 0.0));
-	float limit = max(mean + deviation * 3.0, mean * 3.0 + 0.05);
+	float limit = max(mean + deviation * 2.0, mean * 2.0 + 0.02);
 	float center_luma = luminance(center);
 
 	if (center_luma > limit) {
@@ -340,7 +340,7 @@ vec3 rt_firefly_clamp_screen_3x3(ivec2 screen_pos, vec3 center) {
 	float mean = (l1 + l2 + l3 + l4 + l6 + l7 + l8 + l9) * 0.125;
 	float mean2 = (l1 * l1 + l2 * l2 + l3 * l3 + l4 * l4 + l6 * l6 + l7 * l7 + l8 * l8 + l9 * l9) * 0.125;
 	float deviation = sqrt(max(mean2 - mean * mean, 0.0));
-	float limit = max(mean + deviation * 3.0, mean * 3.0 + 0.05);
+	float limit = max(mean + deviation * 2.0, mean * 2.0 + 0.02);
 	float center_luma = luminance(center);
 
 	if (center_luma > limit) {

@@ -27,7 +27,8 @@
 #define RT_PARAM_BACKGROUND_G 9 // rt_params[2].y
 #define RT_PARAM_BACKGROUND_B 10 // rt_params[2].z
 #define RT_PARAM_TEMPORAL_ACCUMULATION_WEIGHT 11 // rt_params[2].w - RTGI temporal accumulation history weight
-// Indices 12-13 reserved for future use
+#define RT_PARAM_OVERSCAN_HORIZONTAL 12 // rt_params[3].x - Path traced RTGI horizontal overscan fraction
+#define RT_PARAM_OVERSCAN_VERTICAL 13 // rt_params[3].y - Path traced RTGI vertical overscan fraction
 #define RT_PARAM_LIGHT_COUNT 14 // rt_params[3].z - Number of active lights in light buffer
 #define RT_PARAM_FRAME_INDEX 15 // rt_params[3].w - Frame counter for temporal variation
 
@@ -193,10 +194,21 @@ uint pcg_hash(uint seed) {
 	return (word >> 22u) ^ word;
 }
 
-/// Initialize RNG state with improved mixing to eliminate patterns
+uint rng_mix(uint value) {
+	value ^= value >> 16u;
+	value *= 0x7feb352du;
+	value ^= value >> 15u;
+	value *= 0x846ca68bu;
+	value ^= value >> 16u;
+	return value;
+}
+
+/// Initialize RNG state with independent pixel/frame/sample mixing.
 uint init_rng(uvec2 pixel, uint frame, uint sample_idx) {
-	// Use Wang hash for better mixing - eliminates linear patterns
-	uint seed = pixel.x + pixel.y * 65536u + frame * 1000000u + sample_idx * 100000000u;
+	uint seed = rng_mix(pixel.x);
+	seed ^= rng_mix(pixel.y + 0x9e3779b9u);
+	seed ^= rng_mix(frame + 0x85ebca6bu);
+	seed ^= rng_mix(sample_idx + 0xc2b2ae35u);
 	return pcg_hash(seed);
 }
 

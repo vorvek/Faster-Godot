@@ -245,11 +245,42 @@ void write_primary_hit_velocity(vec3 hit_pos) {
 
 	vec3 prev_world_pos = (prev_model * vec4(prev_obj_pos, 1.0)).xyz;
 
-	vec2 curr_uv = project_uv(hit_pos, curr_vp_unjittered);
-	vec2 prev_uv = project_uv(prev_world_pos, prev_vp_unjittered);
+	vec2 curr_uv;
+	vec2 prev_uv;
+	ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
+	if (!project_uv_checked(hit_pos, curr_vp_unjittered, curr_uv) ||
+			!project_uv_checked(prev_world_pos, prev_vp_unjittered, prev_uv)) {
+		rt_store_invalid_primary_velocity(pixel);
+		imageStore(rt_history_validity_image, pixel, vec4(0.0));
+		return;
+	}
 
-	imageStore(rt_velocity_image, ivec2(gl_LaunchIDEXT.xy), vec4(prev_uv - curr_uv, 0.0, 0.0));
+	rt_store_primary_velocity(pixel, curr_uv, prev_uv);
 }
+
+// ============================================================================
+// RTGI GUIDE WRITES (primary ray only)
+// ============================================================================
+
+#ifdef RT_STAGE_CLOSEST_HIT
+void write_primary_hit_guides(HitData h, MaterialResult m) {
+	if (get_total_bounces(payload.packed_bounces_flags) != 0u || !is_sample_zero(payload.packed_bounces_flags)) {
+		return;
+	}
+
+	mat4 view_mat = transpose(mat4(scene_data_block.data.view_matrix[0],
+			scene_data_block.data.view_matrix[1],
+			scene_data_block.data.view_matrix[2],
+			vec4(0.0, 0.0, 0.0, 1.0)));
+	vec3 view_pos = (view_mat * vec4(h.hit_pos, 1.0)).xyz;
+	ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
+
+	vec3 normal = normalize(m.normal);
+	imageStore(rt_normal_roughness_image, pixel, vec4(normal * 0.5 + 0.5, clamp(m.roughness, 0.0, 1.0)));
+	imageStore(rt_albedo_metalness_image, pixel, vec4(max(m.albedo, vec3(0.0)), clamp(m.metalness, 0.0, 1.0)));
+	imageStore(rt_viewz_hitdist_image, pixel, vec4(abs(view_pos.z), max(gl_HitTEXT, 0.0), 0.0, 0.0));
+}
+#endif
 
 // ============================================================================
 // ENVIRONMENT FOG (per ray segment)

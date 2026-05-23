@@ -35,6 +35,7 @@
 #include "servers/rendering/renderer_rd/cluster_builder_rd.h"
 #include "servers/rendering/renderer_rd/effects/fsr2.h"
 #include "servers/rendering/renderer_rd/effects/motion_vectors_store.h"
+#include "servers/rendering/renderer_rd/effects/rtgi_denoise.h"
 #include "servers/rendering/renderer_rd/effects/ss_effects.h"
 #include "servers/rendering/renderer_rd/effects/taa.h"
 #include "servers/rendering/renderer_rd/forward_clustered/render_raytracing.h"
@@ -157,6 +158,18 @@ public:
 #endif
 
 		// Raytracing support
+		Size2i rt_size;
+		Size2i rt_visible_size;
+		Vector2i rt_visible_origin;
+		Vector2i rt_prev_visible_origin;
+		bool rt_overscan_initialized = false;
+
+		bool rt_update_overscan(const Size2i &p_visible_size, float p_horizontal, float p_vertical, const Vector2 &p_motion_pixels);
+		void rt_clear_textures();
+		Size2i rt_get_size() const { return rt_size; }
+		Size2i rt_get_visible_size() const { return rt_visible_size; }
+		Vector2i rt_get_visible_origin() const { return rt_visible_origin; }
+		Vector2i rt_get_prev_visible_origin() const { return rt_prev_visible_origin; }
 		void rt_ensure_textures();
 		bool rt_has_texture() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING); }
 		RID rt_get_texture() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING); }
@@ -169,6 +182,9 @@ public:
 		bool rt_has_history_id() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_ID); }
 		RID rt_get_history_id() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_ID); }
 		RID rt_get_prev_history_id() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_ID_PREV); }
+		RID rt_get_normal_roughness() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_NORMAL_ROUGHNESS); }
+		RID rt_get_albedo_metalness() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_ALBEDO_METALNESS); }
+		RID rt_get_viewz_hitdist() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_VIEWZ_HITDIST); }
 
 		// DLSS Ray Reconstruction output buffers
 		void dlss_rr_ensure_buffers();
@@ -814,6 +830,7 @@ private:
 	/* Effects */
 
 	RendererRD::TAA *taa = nullptr;
+	RendererRD::RTGIDenoise *rtgi_denoise = nullptr;
 	RendererRD::FSR2Effect *fsr2_effect = nullptr;
 	RendererRD::SSEffects *ss_effects = nullptr;
 

@@ -298,51 +298,56 @@ bool lights_trace_shadow_ray(vec3 origin, vec3 direction, float max_dist, uint s
 // Next Event Estimation (NEE) - Direct Light Sampling
 // ============================================================================
 
-// Evaluate direct lighting using NEE with stochastic light selection.
-vec3 lights_evaluate_direct_lighting(
+float lights_selection_weight(vec3 hit_pos, vec3 N, RTLightData light, bool is_indirect_bounce) {
+	float energy = max(luminance(max(light.emission, vec3(0.0))), 0.0);
+	energy *= is_indirect_bounce ? max(light.indirect_energy, 0.0) : 1.0;
+	if (energy <= 0.0) {
+		return 0.0;
+	}
+
+	if (light.type == RT_LIGHT_TYPE_OMNI || light.type == RT_LIGHT_TYPE_SPOT) {
+		vec3 to_light = light.position - hit_pos;
+		float dist_sq = dot(to_light, to_light);
+		if (light.max_range_squared != 0.0 && dist_sq > light.max_range_squared) {
+			return 0.0;
+		}
+
+		float dist = sqrt(max(dist_sq, 1e-8));
+		vec3 L = to_light / dist;
+		float spot_atten = 1.0;
+		if (light.type == RT_LIGHT_TYPE_SPOT) {
+			float scos = dot(-L, light.spot_direction);
+			if (scos <= light.cos_spot_angle) {
+				return 0.0;
+			}
+			float spot_rim = max(1e-4, (1.0 - scos) / (1.0 - light.cos_spot_angle));
+			spot_atten = 1.0 - pow(spot_rim, light.inv_spot_attenuation);
+		}
+
+		LightSample ls;
+		ls.distance_sq = dist_sq;
+		float atten = lights_get_attenuation(ls, light.inv_max_range, light.attenuation) * spot_atten;
+		float n_dot_l = max(dot(N, L), 0.02);
+		return max(energy * atten * n_dot_l, 1e-6);
+	}
+
+	vec3 L = -normalize(light.position);
+	float n_dot_l = max(dot(N, L), 0.02);
+	return max(energy * n_dot_l, 1e-6);
+}
+
+const uint RTGI_DETERMINISTIC_DIRECT_LIGHT_LIMIT = 12u;
+
+vec3 lights_evaluate_single_direct_light(
+		RTLightData light,
+		float light_select_pdf,
 		vec3 hit_pos,
 		vec3 geometry_normal,
 		vec3 N,
 		vec3 V,
 		MaterialProperties material,
 		inout uint rng_state,
-		bool is_indirect_bounce,
-		uint receiver_layer_mask,
-		uint light_count) {
-	if (light_count == 0u) {
-		return vec3(0.0);
-	}
-
-	uint valid_count = 0u;
-	uint selected_idx = 0u;
-
-	for (uint idx = 0u; idx < light_count; idx++) {
-		RTLightData test_light = rt_lights[idx];
-
-		// Range check for positional lights.
-		bool is_valid = (test_light.cull_mask & receiver_layer_mask) != 0u;
-		bool is_positional = (test_light.type == RT_LIGHT_TYPE_OMNI || test_light.type == RT_LIGHT_TYPE_SPOT);
-		if (is_valid && is_positional) {
-			vec3 to_l = test_light.position - hit_pos;
-			float d2 = dot(to_l, to_l);
-			is_valid = (test_light.max_range_squared == 0.0 || d2 <= test_light.max_range_squared);
-		}
-
-		if (is_valid) {
-			valid_count++;
-			if (rand(rng_state) < 1.0 / float(valid_count)) {
-				selected_idx = idx;
-			}
-		}
-	}
-
-	if (valid_count == 0u) {
-		return vec3(0.0);
-	}
-
-	float light_select_pdf = 1.0 / float(valid_count);
-
-	RTLightData light = rt_lights[selected_idx];
+		bool is_indirect_bounce) {
 	vec2 u = rand2(rng_state);
 
 	// === POSITIONAL LIGHT PATH (omni + spot) ===
@@ -452,4 +457,111 @@ vec3 lights_evaluate_direct_lighting(
 
 		return brdf_value * light.emission * indirect_mul / max(light_select_pdf, 1e-10);
 	}
+}
+
+// Evaluate direct lighting using NEE. Small light sets are summed explicitly to
+// avoid one-light roulette impulses that are very visible in 1-SPP RTGI.
+vec3 lights_evaluate_direct_lighting(
+		vec3 hit_pos,
+		vec3 geometry_normal,
+		vec3 N,
+		vec3 V,
+		MaterialProperties material,
+		inout uint rng_state,
+		bool is_indirect_bounce,
+		uint receiver_layer_mask,
+		uint light_count) {
+	if (light_count == 0u) {
+		return vec3(0.0);
+	}
+
+	uint deterministic_light_limit = is_indirect_bounce ? 4u : RTGI_DETERMINISTIC_DIRECT_LIGHT_LIMIT;
+	uint valid_count = 0u;
+	uint selected_idx = 0u;
+	float total_weight = 0.0;
+	float selected_weight = 0.0;
+
+	for (uint idx = 0u; idx < light_count; idx++) {
+		RTLightData test_light = rt_lights[idx];
+
+		// Range check for positional lights.
+		bool is_valid = (test_light.cull_mask & receiver_layer_mask) != 0u;
+		bool is_positional = (test_light.type == RT_LIGHT_TYPE_OMNI || test_light.type == RT_LIGHT_TYPE_SPOT);
+		if (is_valid && is_positional) {
+			vec3 to_l = test_light.position - hit_pos;
+			float d2 = dot(to_l, to_l);
+			is_valid = (test_light.max_range_squared == 0.0 || d2 <= test_light.max_range_squared);
+		}
+
+		if (!is_valid) {
+			continue;
+		}
+
+		float light_weight = lights_selection_weight(hit_pos, N, test_light, is_indirect_bounce);
+		if (light_weight <= 0.0) {
+			continue;
+		}
+
+		valid_count++;
+		total_weight += light_weight;
+	}
+
+	if (valid_count == 0u) {
+		return vec3(0.0);
+	}
+
+	if (valid_count <= deterministic_light_limit) {
+		vec3 deterministic_sum = vec3(0.0);
+		for (uint idx = 0u; idx < light_count; idx++) {
+			RTLightData test_light = rt_lights[idx];
+
+			bool is_valid = (test_light.cull_mask & receiver_layer_mask) != 0u;
+			bool is_positional = (test_light.type == RT_LIGHT_TYPE_OMNI || test_light.type == RT_LIGHT_TYPE_SPOT);
+			if (is_valid && is_positional) {
+				vec3 to_l = test_light.position - hit_pos;
+				float d2 = dot(to_l, to_l);
+				is_valid = (test_light.max_range_squared == 0.0 || d2 <= test_light.max_range_squared);
+			}
+			if (!is_valid || lights_selection_weight(hit_pos, N, test_light, is_indirect_bounce) <= 0.0) {
+				continue;
+			}
+			deterministic_sum += lights_evaluate_single_direct_light(test_light, 1.0, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce);
+		}
+		return deterministic_sum;
+	}
+
+	float selected_cdf = rand(rng_state) * total_weight;
+	float cdf = 0.0;
+	for (uint idx = 0u; idx < light_count; idx++) {
+		RTLightData test_light = rt_lights[idx];
+
+		bool is_valid = (test_light.cull_mask & receiver_layer_mask) != 0u;
+		bool is_positional = (test_light.type == RT_LIGHT_TYPE_OMNI || test_light.type == RT_LIGHT_TYPE_SPOT);
+		if (is_valid && is_positional) {
+			vec3 to_l = test_light.position - hit_pos;
+			float d2 = dot(to_l, to_l);
+			is_valid = (test_light.max_range_squared == 0.0 || d2 <= test_light.max_range_squared);
+		}
+		if (!is_valid) {
+			continue;
+		}
+
+		float light_weight = lights_selection_weight(hit_pos, N, test_light, is_indirect_bounce);
+		if (light_weight <= 0.0) {
+			continue;
+		}
+		cdf += light_weight;
+		if (selected_cdf <= cdf) {
+			selected_idx = idx;
+			selected_weight = light_weight;
+			break;
+		}
+	}
+
+	if (selected_weight <= 0.0) {
+		return vec3(0.0);
+	}
+
+	float light_select_pdf = selected_weight / max(total_weight, 1e-10);
+	return lights_evaluate_single_direct_light(rt_lights[selected_idx], light_select_pdf, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce);
 }

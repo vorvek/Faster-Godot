@@ -36,6 +36,9 @@ layout(set = 0, binding = 6, std140) uniform RaytracingParams {
 	vec4 rt_params[4];
 	mat4 prev_vp_unjittered;
 	mat4 curr_vp_unjittered;
+	mat4 inv_projection_unjittered;
+	vec4 rt_overscan;
+	vec4 rt_prev_overscan;
 };
 
 float get_rt_param(uint idx) {
@@ -48,6 +51,40 @@ vec2 project_uv(vec3 world_pos, mat4 vp) {
 	return clip.xy / clip.w * 0.5 + 0.5;
 }
 
+bool project_uv_checked(vec3 world_pos, mat4 vp, out vec2 uv) {
+	vec4 clip = vp * vec4(world_pos, 1.0);
+	if (any(isnan(clip)) || any(isinf(clip)) || clip.w <= 1e-5) {
+		uv = vec2(0.0);
+		return false;
+	}
+	uv = clip.xy / clip.w * 0.5 + 0.5;
+	return !any(isnan(uv)) && !any(isinf(uv));
+}
+
+vec2 rt_visible_size() {
+	return max(rt_overscan.zw, vec2(1.0));
+}
+
+vec2 rt_extent() {
+	return max(rt_prev_overscan.zw, vec2(1.0));
+}
+
+vec2 rt_current_origin() {
+	return rt_overscan.xy;
+}
+
+vec2 rt_previous_origin() {
+	return rt_prev_overscan.xy;
+}
+
+vec2 rt_current_visible_uv(ivec2 pixel) {
+	return (vec2(pixel) + vec2(0.5) - rt_current_origin()) / rt_visible_size();
+}
+
+vec2 rt_visible_to_texture_uv(vec2 visible_uv, vec2 origin) {
+	return (visible_uv * rt_visible_size() + origin) / rt_extent();
+}
+
 #ifdef DLSS_RR_ENABLED
 layout(set = 0, binding = 9, rgba8) uniform image2D dlss_rr_diffuse_albedo;
 layout(set = 0, binding = 10, rgba16f) uniform image2D dlss_rr_specular_albedo;
@@ -56,12 +93,42 @@ layout(set = 0, binding = 12, r16f) uniform image2D dlss_rr_specular_hit_dist;
 #endif
 
 // Binding 14 is reserved for GlobalShaderUniformData (declared above).
-// Samplers occupy 16-27 (see raytracing_samplers_inc.glsl); RT output side
-// channels start at the first free slots past them so we do not collide with either.
+// Samplers occupy 16-27 (see raytracing_samplers_inc.glsl). Motion transforms
+// use binding 32, so RT output side channels continue at 33.
 layout(set = 0, binding = 28, rg16f) uniform image2D rt_velocity_image;
 layout(set = 0, binding = 29, r8) uniform image2D rt_history_validity_image;
 layout(set = 0, binding = 30, rgba8) uniform image2D rt_history_id_image;
+layout(set = 0, binding = 31, rg16f) uniform image2D rt_visible_velocity_image;
 layout(set = 0, binding = 15, r32f) uniform image2D rt_depth_image;
+layout(set = 0, binding = 33, rgba16f) uniform image2D rt_normal_roughness_image;
+layout(set = 0, binding = 34, rgba16f) uniform image2D rt_albedo_metalness_image;
+layout(set = 0, binding = 35, rg16f) uniform image2D rt_viewz_hitdist_image;
+
+void rt_store_primary_velocity(ivec2 pixel, vec2 curr_visible_uv, vec2 prev_visible_uv) {
+	vec2 curr_texture_uv = rt_visible_to_texture_uv(curr_visible_uv, rt_current_origin());
+	vec2 prev_texture_uv = rt_visible_to_texture_uv(prev_visible_uv, rt_previous_origin());
+	imageStore(rt_velocity_image, pixel, vec4(prev_texture_uv - curr_texture_uv, 0.0, 0.0));
+
+	if (uint(get_rt_param(RT_PARAM_MODE)) == RT_MODE_PATH_TRACED) {
+		ivec2 visible_pixel = pixel - ivec2(round(rt_current_origin()));
+		ivec2 visible_size_i = ivec2(round(rt_visible_size()));
+		if (all(greaterThanEqual(visible_pixel, ivec2(0))) && all(lessThan(visible_pixel, visible_size_i))) {
+			imageStore(rt_visible_velocity_image, visible_pixel, vec4(prev_visible_uv - curr_visible_uv, 0.0, 0.0));
+		}
+	}
+}
+
+void rt_store_invalid_primary_velocity(ivec2 pixel) {
+	imageStore(rt_velocity_image, pixel, vec4(0.0));
+
+	if (uint(get_rt_param(RT_PARAM_MODE)) == RT_MODE_PATH_TRACED) {
+		ivec2 visible_pixel = pixel - ivec2(round(rt_current_origin()));
+		ivec2 visible_size_i = ivec2(round(rt_visible_size()));
+		if (all(greaterThanEqual(visible_pixel, ivec2(0))) && all(lessThan(visible_pixel, visible_size_i))) {
+			imageStore(rt_visible_velocity_image, visible_pixel, vec4(0.0));
+		}
+	}
+}
 
 #endif // !RT_STAGE_ANY_HIT
 
