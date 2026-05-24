@@ -54,6 +54,16 @@ struct GeometryData {
 	uint _pad[2];
 };
 
+const uint RT_GEOM_FLAG_RASTER_GI_LIGHTMAP = 64u;
+const uint RT_GEOM_FLAG_RASTER_GI_LIGHTMAP_CAPTURE = 128u;
+const uint RT_GEOM_FLAG_RASTER_GI_VOXELGI = 256u;
+const uint RT_GEOM_FLAG_RASTER_GI_SDFGI = 512u;
+const uint RT_GEOM_FLAG_RASTER_GI_OWNER =
+		RT_GEOM_FLAG_RASTER_GI_LIGHTMAP |
+		RT_GEOM_FLAG_RASTER_GI_LIGHTMAP_CAPTURE |
+		RT_GEOM_FLAG_RASTER_GI_VOXELGI |
+		RT_GEOM_FLAG_RASTER_GI_SDFGI;
+
 void get_aabb_compression_xforms(GeometryData geom, out mat4 aabb_xform, out mat4 inv_aabb_xform) {
 	if ((geom.flags & FLAG_COMPRESSED) == 0u) {
 		aabb_xform = mat4(1.0);

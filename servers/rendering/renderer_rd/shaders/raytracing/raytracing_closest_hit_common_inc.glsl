@@ -549,6 +549,9 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	uint total_bounces = get_total_bounces(ps.packed_bounces_flags);
 	uint diffuse_bounces = get_diffuse_bounces(ps.packed_bounces_flags);
 	bool hybrid_primary = uint(get_rt_param(RT_PARAM_MODE)) == RT_MODE_HYBRID && total_bounces == 0u;
+	if (hybrid_primary && (geometries[h.geometry_idx].flags & RT_GEOM_FLAG_RASTER_GI_OWNER) != 0u) {
+		ps.packed_bounces_flags = set_primary_raster_gi_owner(ps.packed_bounces_flags);
+	}
 
 	// Environment fog for this ray segment (before surface contribution).
 	if (!hybrid_primary) {

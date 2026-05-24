@@ -84,7 +84,7 @@ func _parse_args() -> void:
 			_sparkle_frames = clampi(arg.trim_prefix("--rtgi-sparkle-frames=").to_int(), 0, 64)
 		elif arg.begins_with("--rtgi-scene="):
 			var requested_scene := arg.trim_prefix("--rtgi-scene=").to_lower()
-			if requested_scene in ["stress", "cornell", "sponza"]:
+			if requested_scene in ["stress", "cornell", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive"]:
 				_scene_mode = requested_scene
 			else:
 				push_warning("Unknown RTGI quality scene '%s'; using stress scene." % requested_scene)
@@ -176,6 +176,9 @@ func _build_scene() -> void:
 		env.rtgi_max_bounces = 5
 		_build_sponza_scene(env)
 		return
+	if _is_coexistence_scene():
+		_build_coexistence_scene(env)
+		return
 
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color(0.006, 0.007, 0.009)
@@ -221,6 +224,188 @@ func _build_scene() -> void:
 	_camera.position = Vector3(0.15, 1.45, 2.5)
 	add_child(_camera)
 	_camera.look_at(Vector3(-0.15, 1.15, -2.5), Vector3.UP)
+
+
+func _is_coexistence_scene() -> bool:
+	return _scene_mode in ["sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive"]
+
+
+func _build_coexistence_scene(env: Environment) -> void:
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.012, 0.014, 0.018)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.018, 0.019, 0.022)
+	env.ambient_light_energy = 0.08
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.rtgi_mode = Environment.RTGI_MODE_PATH_TRACED if _scene_mode == "path_traced_sdfgi_exclusive" else Environment.RTGI_MODE_HYBRID
+	env.rtgi_max_bounces = 4
+	env.sdfgi_enabled = _scene_mode in ["sdfgi", "path_traced_sdfgi_exclusive"]
+	if env.sdfgi_enabled:
+		env.sdfgi_use_occlusion = true
+		env.sdfgi_energy = 1.15
+
+	var floor_material := _make_flat_material(Color(0.36, 0.35, 0.32), 0.78, 0.0)
+	var wall_material := _make_flat_material(Color(0.30, 0.32, 0.36), 0.82, 0.0)
+	var owner_material := _make_flat_material(Color(0.64, 0.60, 0.52), 0.72, 0.0)
+	var emitter_material := _make_emissive_material(Color(0.16, 0.72, 1.0), 5.5)
+	_add_box("CoexistFloor", Vector3(0.0, -0.05, -1.0), Vector3(5.4, 0.10, 5.2), floor_material)
+	_add_box("CoexistBackWall", Vector3(0.0, 1.35, -3.45), Vector3(5.4, 2.8, 0.12), wall_material)
+	_add_box("CoexistLeftWall", Vector3(-2.70, 1.35, -1.0), Vector3(0.12, 2.8, 5.2), wall_material)
+	_add_box("CoexistRightWall", Vector3(2.70, 1.35, -1.0), Vector3(0.12, 2.8, 5.2), wall_material)
+	_add_box("CoexistCyanEmitter", Vector3(-1.85, 1.15, -3.35), Vector3(0.46, 0.70, 0.06), emitter_material)
+
+	match _scene_mode:
+		"lightmap":
+			var owner := _add_lightmapped_quad("CoexistLightmapOwner", owner_material)
+			_add_procedural_lightmap(owner, Color(0.26, 0.72, 0.54, 1.0))
+		"lightprobe":
+			var probe_owner := _add_sphere("CoexistLightProbeDynamicOwner", Vector3(0.0, 0.76, -2.45), 0.55, owner_material)
+			probe_owner.gi_mode = GeometryInstance3D.GI_MODE_DYNAMIC
+			_add_procedural_lightprobe_data(Color(0.28, 0.62, 0.94, 1.0))
+		_:
+			_add_box("CoexistRasterGIOwner", Vector3(0.0, 0.75, -2.80), Vector3(1.45, 1.35, 0.16), owner_material)
+
+	var key := OmniLight3D.new()
+	key.name = "CoexistRealtimeKey"
+	key.position = Vector3(1.9, 2.2, 0.6)
+	key.light_energy = 6.0 if _scene_mode == "path_traced_sdfgi_exclusive" else 0.65
+	key.light_bake_mode = Light3D.BAKE_DYNAMIC
+	key.omni_range = 5.0
+	key.shadow_enabled = true
+	add_child(key)
+
+	var baked_static := OmniLight3D.new()
+	baked_static.name = "CoexistStaticBakedLight"
+	baked_static.position = Vector3(-1.25, 1.45, -2.15)
+	baked_static.light_color = Color(0.50, 0.78, 1.0)
+	baked_static.light_energy = 1.15
+	baked_static.light_bake_mode = Light3D.BAKE_STATIC
+	baked_static.omni_range = 4.0
+	baked_static.shadow_enabled = true
+	add_child(baked_static)
+
+	if _scene_mode == "voxelgi":
+		_add_voxelgi_probe()
+
+	_camera = Camera3D.new()
+	_camera.name = "CoexistenceCamera"
+	_camera.current = true
+	_camera.fov = 55.0
+	_camera.near = 0.05
+	_camera.far = 40.0
+	_camera.position = Vector3(0.0, 1.25, 1.95)
+	add_child(_camera)
+	_camera.look_at(Vector3(0.0, 0.88, -2.55), Vector3.UP)
+
+
+func _add_lightmapped_quad(node_name: String, material: Material) -> MeshInstance3D:
+	var vertices := PackedVector3Array([
+		Vector3(-1.15, 0.20, -2.70),
+		Vector3(1.15, 0.20, -2.70),
+		Vector3(1.15, 1.95, -2.70),
+		Vector3(-1.15, 0.20, -2.70),
+		Vector3(1.15, 1.95, -2.70),
+		Vector3(-1.15, 1.95, -2.70),
+	])
+	var normal := Vector3(0.0, 0.0, 1.0)
+	var normals := PackedVector3Array([normal, normal, normal, normal, normal, normal])
+	var uvs := PackedVector2Array([
+		Vector2(0.0, 1.0),
+		Vector2(1.0, 1.0),
+		Vector2(1.0, 0.0),
+		Vector2(0.0, 1.0),
+		Vector2(1.0, 0.0),
+		Vector2(0.0, 0.0),
+	])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_TEX_UV2] = uvs
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+
+	var instance := MeshInstance3D.new()
+	instance.name = node_name
+	instance.mesh = mesh
+	instance.gi_mode = GeometryInstance3D.GI_MODE_STATIC
+	instance.set_surface_override_material(0, material)
+	add_child(instance)
+	return instance
+
+
+func _add_procedural_lightmap(owner: MeshInstance3D, color: Color) -> void:
+	var image := Image.create_empty(8, 8, false, Image.FORMAT_RGBA8)
+	image.fill(color)
+	var texture_array := Texture2DArray.new()
+	texture_array.create_from_images([image])
+	var data := LightmapGIData.new()
+	data.set_uses_spherical_harmonics(false)
+	data.set_lightmap_textures([texture_array])
+
+	var lightmap := LightmapGI.new()
+	lightmap.name = "CoexistProceduralLightmapGI"
+	add_child(lightmap)
+	data.add_user(lightmap.get_path_to(owner), Rect2(0.0, 0.0, 1.0, 1.0), 0, -1)
+	lightmap.light_data = data
+
+
+func _add_procedural_lightprobe_data(color: Color) -> void:
+	var data := LightmapGIData.new()
+	var points := PackedVector3Array([
+		Vector3(-1.6, 0.0, -3.6),
+		Vector3(1.6, 0.0, -3.6),
+		Vector3(0.0, 2.6, -3.2),
+		Vector3(0.0, 0.8, -0.8),
+	])
+	var sh := PackedColorArray()
+	var l0 := Color(color.r / 0.886227, color.g / 0.886227, color.b / 0.886227, color.a)
+	for i in range(4):
+		sh.append(l0)
+		for j in range(8):
+			sh.append(Color(0, 0, 0, 0))
+	var tetrahedra := PackedInt32Array([0, 1, 2, 3])
+	var bsp := PackedInt32Array()
+	bsp.resize(6)
+	bsp[0] = 0
+	bsp[1] = 0
+	bsp[2] = 0
+	bsp[3] = 0
+	bsp[4] = -1
+	bsp[5] = -1
+	data.probe_data = {
+		"bounds": AABB(Vector3(-2.0, -0.2, -3.8), Vector3(4.0, 3.2, 3.4)),
+		"interior": false,
+		"points": points,
+		"sh": sh,
+		"tetrahedra": tetrahedra,
+		"bsp": bsp,
+		"baked_exposure": 1.0,
+		"lightprobe_hash": 1,
+	}
+
+	var lightmap := LightmapGI.new()
+	lightmap.name = "CoexistProceduralLightProbeGI"
+	add_child(lightmap)
+	lightmap.light_data = data
+
+	var probe := LightmapProbe.new()
+	probe.name = "CoexistLightmapProbe"
+	probe.position = Vector3(0.0, 0.8, -2.2)
+	add_child(probe)
+
+
+func _add_voxelgi_probe() -> void:
+	var voxel := VoxelGI.new()
+	voxel.name = "CoexistVoxelGI"
+	voxel.size = Vector3(5.6, 3.2, 5.6)
+	voxel.position = Vector3(0.0, 1.25, -1.55)
+	voxel.subdiv = VoxelGI.SUBDIV_64
+	add_child(voxel)
+	voxel.bake(self, false)
+	if voxel.data == null:
+		push_warning("VoxelGI coexistence bake did not produce probe data; metrics will report the missing contribution.")
 
 
 func _build_cornell_box_scene(_env: Environment) -> void:
@@ -411,6 +596,8 @@ func _run_capture() -> void:
 			metrics.merge(_compare_cornell_reference(final_image, base_name), true)
 	elif _scene_mode == "sponza":
 		metrics.merge(_measure_sponza_image(final_image), true)
+	elif _is_coexistence_scene():
+		metrics.merge(await _measure_coexistence_image(final_image, base_name), true)
 	metrics["denoise_strength"] = _denoise_strength
 	metrics["history_weight"] = _history_weight
 	metrics["firefly_suppression"] = _firefly_suppression
@@ -684,6 +871,52 @@ func _measure_image(image: Image) -> Dictionary:
 		"luma_max": luma_stats["max"],
 		"saturated_luma_fraction": luma_stats["saturated_fraction"],
 	}
+
+
+func _measure_coexistence_image(rt_image: Image, base_name: String) -> Dictionary:
+	var roi := _coexistence_owner_roi(rt_image)
+	var rt_luma := _measure_mean_luma(rt_image, roi.position.x, roi.position.y, roi.end.x, roi.end.y)
+	var rt_color := _measure_mean_color(rt_image, roi.position.x, roi.position.y, roi.end.x, roi.end.y)
+	var metrics := {
+		"coexistence_rt_owner_luma": rt_luma,
+		"coexistence_rt_owner_blue_green_margin": maxf(rt_color.b, rt_color.g) - rt_color.r,
+		"coexistence_mode": _environment.rtgi_mode if _environment != null else -1,
+	}
+	if _environment == null:
+		return metrics
+
+	var previous_enabled := _environment.rtgi_enabled
+	var previous_mode := _environment.rtgi_mode
+	_environment.rtgi_enabled = false
+	_apply_debug_view("beauty")
+	for frame in range(mini(_warmup_frames, 24)):
+		await _wait_render_frame()
+	var raster_image := get_viewport().get_texture().get_image()
+	raster_image.convert(Image.FORMAT_RGBA8)
+	var raster_path := "%s/%s_raster_fallback.png" % [_output_dir, base_name]
+	raster_image.save_png(raster_path)
+	var raster_luma := _measure_mean_luma(raster_image, roi.position.x, roi.position.y, roi.end.x, roi.end.y)
+	var raster_color := _measure_mean_color(raster_image, roi.position.x, roi.position.y, roi.end.x, roi.end.y)
+
+	_environment.rtgi_enabled = previous_enabled
+	_environment.rtgi_mode = previous_mode
+	for frame in range(mini(_warmup_frames, 24)):
+		await _wait_render_frame()
+
+	metrics["coexistence_raster_owner_luma"] = raster_luma
+	metrics["coexistence_raster_owner_blue_green_margin"] = maxf(raster_color.b, raster_color.g) - raster_color.r
+	metrics["coexistence_owner_luma_delta"] = rt_luma - raster_luma
+	metrics["coexistence_owner_luma_ratio"] = rt_luma / maxf(raster_luma, 0.001)
+	metrics["coexistence_raster_fallback_path"] = ProjectSettings.globalize_path(raster_path)
+	return metrics
+
+
+func _coexistence_owner_roi(image: Image) -> Rect2i:
+	var width := image.get_width()
+	var height := image.get_height()
+	return Rect2i(
+			Vector2i(int(width * 0.36), int(height * 0.29)),
+			Vector2i(int(width * 0.28), int(height * 0.34)))
 
 
 func _measure_cornell_image(image: Image) -> Dictionary:
@@ -1132,6 +1365,13 @@ func _compare_metrics(metrics: Dictionary, expected: Dictionary) -> Array[String
 	_check_min_threshold(metrics, thresholds, "sponza_corridor_edge_energy", failures)
 	_check_min_threshold(metrics, thresholds, "sponza_corridor_luma_stddev", failures)
 	_check_max_threshold(metrics, thresholds, "sponza_deep_shadow_fireflies", failures)
+	_check_min_threshold(metrics, thresholds, "coexistence_rt_owner_luma", failures)
+	_check_min_threshold(metrics, thresholds, "coexistence_raster_owner_luma", failures)
+	_check_min_threshold(metrics, thresholds, "coexistence_rt_owner_blue_green_margin", failures)
+	_check_min_threshold(metrics, thresholds, "coexistence_raster_owner_blue_green_margin", failures)
+	_check_max_threshold(metrics, thresholds, "coexistence_rt_owner_luma", failures)
+	_check_max_threshold(metrics, thresholds, "coexistence_owner_luma_ratio", failures)
+	_check_max_threshold(metrics, thresholds, "coexistence_owner_luma_delta", failures)
 	return failures
 
 

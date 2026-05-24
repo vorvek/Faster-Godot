@@ -47,6 +47,53 @@
 				"min_sponza_corridor_edge_energy": 0.004,
 				"min_sponza_corridor_luma_stddev": 0.015
 			}
+		},
+		"sdfgi": {
+			"thresholds": {
+				"min_coexistence_rt_owner_luma": 0.015,
+				"min_coexistence_raster_owner_luma": 0.015,
+				"min_coexistence_rt_owner_blue_green_margin": 0.010,
+				"min_coexistence_raster_owner_blue_green_margin": 0.010,
+				"max_coexistence_owner_luma_ratio": 1.60,
+				"max_coexistence_owner_luma_delta": 0.10
+			}
+		},
+		"voxelgi": {
+			"thresholds": {
+				"min_coexistence_rt_owner_luma": 0.012,
+				"min_coexistence_raster_owner_luma": 0.012,
+				"min_coexistence_rt_owner_blue_green_margin": 0.006,
+				"min_coexistence_raster_owner_blue_green_margin": 0.006,
+				"max_coexistence_owner_luma_ratio": 1.60,
+				"max_coexistence_owner_luma_delta": 0.10
+			}
+		},
+		"lightmap": {
+			"thresholds": {
+				"min_coexistence_rt_owner_luma": 0.025,
+				"min_coexistence_raster_owner_luma": 0.025,
+				"min_coexistence_rt_owner_blue_green_margin": 0.020,
+				"min_coexistence_raster_owner_blue_green_margin": 0.020,
+				"max_coexistence_owner_luma_ratio": 1.35,
+				"max_coexistence_owner_luma_delta": 0.08
+			}
+		},
+		"lightprobe": {
+			"thresholds": {
+				"min_coexistence_rt_owner_luma": 0.018,
+				"min_coexistence_raster_owner_luma": 0.018,
+				"min_coexistence_rt_owner_blue_green_margin": 0.012,
+				"min_coexistence_raster_owner_blue_green_margin": 0.012,
+				"max_coexistence_owner_luma_ratio": 1.45,
+				"max_coexistence_owner_luma_delta": 0.08
+			}
+		},
+		"path_traced_sdfgi_exclusive": {
+			"thresholds": {
+				"min_coexistence_raster_owner_luma": 0.015,
+				"min_coexistence_raster_owner_blue_green_margin": 0.010,
+				"max_coexistence_rt_owner_luma": 0.080
+			}
 		}
 	}
 }

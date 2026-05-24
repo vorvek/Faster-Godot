@@ -223,6 +223,12 @@ enum {
 	RT_GEOM_FLAG_COMPRESSED_ATTRIBUTES = 16u,
 	// Fold gl_PrimitiveID into the guide history ID for merged BLASes.
 	RT_GEOM_FLAG_PRIMITIVE_HISTORY_ID = 32u,
+	// Primary hit belongs to a raster GI owner in Simple RT. The shader uses
+	// these to suppress diffuse RTGI while keeping RT specular/reflections.
+	RT_GEOM_FLAG_RASTER_GI_LIGHTMAP = 64u,
+	RT_GEOM_FLAG_RASTER_GI_LIGHTMAP_CAPTURE = 128u,
+	RT_GEOM_FLAG_RASTER_GI_VOXELGI = 256u,
+	RT_GEOM_FLAG_RASTER_GI_SDFGI = 512u,
 };
 
 /// Per-instance state for procedural RT geometry. Heap-allocated, only exists for procedural instances.

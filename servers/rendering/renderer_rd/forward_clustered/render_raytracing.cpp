@@ -2757,6 +2757,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 		uint8_t visible_instance_mask;
 		uint8_t shadow_instance_mask;
 		uint32_t rt_sbt_offset;
+		uint32_t raster_gi_flags;
 		uint64_t history_key;
 	};
 	LocalVector<PendingMMSurface> pending_mm_surfaces;
@@ -2919,6 +2920,17 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 		const bool instance_shadow_only = inst->data->cast_shadows_only;
 		const bool instance_alpha_overlay = _rt_instance_uses_alpha_overlay(inst, p_render_data);
 		const bool instance_can_cast_rt_shadows = inst->data->shadow_casting_setting_enabled;
+		uint32_t raster_gi_flags = 0;
+		if (inst->lightmap_instance.is_valid()) {
+			raster_gi_flags = RT_GEOM_FLAG_RASTER_GI_LIGHTMAP;
+		} else if (inst->lightmap_sh) {
+			raster_gi_flags = RT_GEOM_FLAG_RASTER_GI_LIGHTMAP_CAPTURE;
+		} else if (inst->voxel_gi_instances[0].is_valid()) {
+			raster_gi_flags = RT_GEOM_FLAG_RASTER_GI_VOXELGI;
+		} else if (inst->can_sdfgi && p_render_data->environment.is_valid() &&
+				RendererEnvironmentStorage::get_singleton()->environment_get_sdfgi_enabled(p_render_data->environment)) {
+			raster_gi_flags = RT_GEOM_FLAG_RASTER_GI_SDFGI;
+		}
 
 		// Determine previous-frame transform for motion vectors.
 		const Transform3D &prev_instance_transform =
@@ -2975,7 +2987,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 				}
 
 				RT_GeometryData geom = {};
-				geom.flags = RT_GEOM_FLAG_PROCEDURAL;
+				geom.flags = RT_GEOM_FLAG_PROCEDURAL | raster_gi_flags;
 				geom.normal_byte_offset = RT_OFFSET_NONE;
 				geom.tangent_byte_offset = RT_OFFSET_NONE;
 				geom.uv_byte_offset = RT_OFFSET_NONE;
@@ -3128,6 +3140,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 				pending.visible_instance_mask = visible_instance_mask;
 				pending.shadow_instance_mask = effective_shadow_instance_mask;
 				pending.rt_sbt_offset = rt_sbt_offset;
+				pending.raster_gi_flags = raster_gi_flags;
 				uint64_t history_key = _rt_history_mix(0x6d756c74696d6573ULL, inst->rt_history_instance_id);
 				history_key = _rt_history_mix_rid(history_key, mm_rid);
 				history_key = _rt_history_mix(history_key, mm_count);
@@ -3202,6 +3215,8 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 				surf = surf->next;
 				continue;
 			}
+			RT_GeometryData rt_geometry = surf_data->geometry;
+			rt_geometry.flags |= raster_gi_flags;
 
 			// Resolve material before TLAS so unready custom HGs can use the default material path for this frame.
 			RID material_rid = resolve_surface_material_rid(surf, surf->owner->data->base);
@@ -3234,7 +3249,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 			history_key = _rt_history_mix(history_key, material_counter);
 			history_key = _rt_history_mix(history_key, rt_sbt_offset);
 			history_key = _rt_history_mix(history_key, custom_global_uniform_version);
-			history_key = _rt_history_mix(history_key, surf_data->geometry.flags);
+			history_key = _rt_history_mix(history_key, rt_geometry.flags);
 
 			uint32_t pushed_entries = 0;
 			auto push_mesh_entry = [&](uint8_t p_instance_mask, uint32_t p_inst_flags) {
@@ -3244,7 +3259,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 				blass.push_back(surf_data->blas);
 				blas_transforms.push_back(final_transform);
 				const bool mesh_history_invalid = transform_teleported || deformed_history_invalid || custom_temporal_unsupported;
-				geometry_data.push_back(_rt_geometry_with_history_validity(state, surf_data->geometry, history_key, inst->layer_mask, p_instance_mask, mesh_history_invalid));
+				geometry_data.push_back(_rt_geometry_with_history_validity(state, rt_geometry, history_key, inst->layer_mask, p_instance_mask, mesh_history_invalid));
 
 				if (inst->transform_status == RenderForwardClustered::GeometryInstanceForwardClustered::TransformStatus::MOVED) {
 					motion_indices.push_back((int32_t)motion_transforms.size());
@@ -3307,7 +3322,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 
 		if (use_merged) {
 			RT_GeometryData merged_geometry = merged_sd.geometry;
-			merged_geometry.flags |= RT_GEOM_FLAG_PRIMITIVE_HISTORY_ID;
+			merged_geometry.flags |= RT_GEOM_FLAG_PRIMITIVE_HISTORY_ID | pending.raster_gi_flags;
 			uint64_t history_key = _rt_history_mix(pending.history_key, merged_geometry.flags);
 			uint32_t pushed_entries = 0;
 			auto push_merged_entry = [&](uint8_t p_instance_mask, uint32_t p_inst_flags) {
@@ -3367,6 +3382,8 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 			if (!surf_data || !surf_data->blas.is_valid()) {
 				continue;
 			}
+			RT_GeometryData rt_geometry = surf_data->geometry;
+			rt_geometry.flags |= pending.raster_gi_flags;
 
 			for (uint32_t mi = 0; mi < pending.mm_count; mi++) {
 				const float *d = mm_data + (mm_cur_offset + mi) * mm_stride;
@@ -3405,7 +3422,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 				}
 
 				uint64_t history_key = _rt_history_mix(pending.history_key, mi);
-				history_key = _rt_history_mix(history_key, surf_data->geometry.flags);
+				history_key = _rt_history_mix(history_key, rt_geometry.flags);
 
 				auto push_mm_instance_entry = [&](uint8_t p_instance_mask, uint32_t p_inst_flags) {
 					if (p_instance_mask == 0) {
@@ -3413,7 +3430,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 					}
 					blass.push_back(surf_data->blas);
 					blas_transforms.push_back(final_transform);
-					geometry_data.push_back(_rt_geometry_with_history_validity(state, surf_data->geometry, history_key, pending.layer_mask, p_instance_mask, pending.history_invalid));
+					geometry_data.push_back(_rt_geometry_with_history_validity(state, rt_geometry, history_key, pending.layer_mask, p_instance_mask, pending.history_invalid));
 					sbt_offsets.push_back(pending.rt_sbt_offset);
 					material_data.push_back(get_surface_material_data_with_sbt(pending.mm_surf, pending.mat_data, pending.rt_sbt_offset));
 

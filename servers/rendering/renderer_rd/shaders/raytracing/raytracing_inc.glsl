@@ -194,6 +194,14 @@ bool is_path_terminated(uint packed) {
 	return (packed & PATH_TERMINATED_FLAG) != 0u;
 }
 
+const uint PRIMARY_RASTER_GI_OWNER_FLAG = (1u << 27);
+uint set_primary_raster_gi_owner(uint packed) {
+	return packed | PRIMARY_RASTER_GI_OWNER_FLAG;
+}
+bool has_primary_raster_gi_owner(uint packed) {
+	return (packed & PRIMARY_RASTER_GI_OWNER_FLAG) != 0u;
+}
+
 // Bounce limits
 #define MAX_DIFFUSE_BOUNCES 2u
 #define MAX_DENOISER_SPECULAR_HIT_THRESHOLD 0.25

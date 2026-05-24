@@ -1422,8 +1422,10 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 				}
 			}
 
-			// Setup GI.
-			if (inst->lightmap_instance.is_valid()) {
+			// Setup GI. Path Traced RTGI owns opaque indirect lighting; alpha-only
+			// overlays must not inherit stale raster GI indices from earlier frames.
+			const bool allow_raster_gi = !p_alpha_only;
+			if (allow_raster_gi && inst->lightmap_instance.is_valid()) {
 				// find index of the lightmap_instance of the instance being rendered
 				int32_t lightmap_cull_index = -1;
 				for (uint32_t j = 0; j < scene_state.lightmaps_used; j++) {
@@ -1444,7 +1446,7 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 					inst->gi_offset_cache = 0xFFFFFFFF;
 				}
 
-			} else if (inst->lightmap_sh) {
+			} else if (allow_raster_gi && inst->lightmap_sh) {
 				if (lightmap_captures_used < scene_state.max_lightmap_captures) {
 					const Color *src_capture = inst->lightmap_sh->sh;
 					LightmapCaptureData &lcd = scene_state.lightmap_captures[lightmap_captures_used];
@@ -1461,11 +1463,11 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 				}
 
 			} else {
-				if (p_using_opaque_gi) {
+				if (allow_raster_gi && p_using_opaque_gi) {
 					flags |= INSTANCE_DATA_FLAG_USE_GI_BUFFERS;
 				}
 
-				if (inst->voxel_gi_instances[0].is_valid()) {
+				if (allow_raster_gi && inst->voxel_gi_instances[0].is_valid()) {
 					uint32_t probe0_index = 0xFFFF;
 					uint32_t probe1_index = 0xFFFF;
 
@@ -1482,11 +1484,15 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 						SWAP(probe0_index, probe1_index);
 					}
 
-					inst->gi_offset_cache = probe0_index | (probe1_index << 16);
-					flags |= INSTANCE_DATA_FLAG_USE_VOXEL_GI;
-					uses_gi = true;
+					if (probe0_index != 0xFFFF) {
+						inst->gi_offset_cache = probe0_index | (probe1_index << 16);
+						flags |= INSTANCE_DATA_FLAG_USE_VOXEL_GI;
+						uses_gi = true;
+					} else {
+						inst->gi_offset_cache = 0xFFFFFFFF;
+					}
 				} else {
-					if (p_using_sdfgi && inst->can_sdfgi) {
+					if (allow_raster_gi && p_using_sdfgi && inst->can_sdfgi) {
 						flags |= INSTANCE_DATA_FLAG_USE_SDFGI;
 						uses_gi = true;
 					}
@@ -2189,6 +2195,16 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	// sdfgi first
 	_update_sdfgi(p_render_data);
+	auto prepare_sdfgi_for_raster = [&]() {
+		if (rb->has_custom_data(RB_SCOPE_SDFGI)) {
+			Ref<RendererRD::GI::SDFGI> sdfgi = rb->get_custom_data(RB_SCOPE_SDFGI);
+			if (sdfgi.is_valid()) {
+				sdfgi->update_cascades();
+				sdfgi->pre_process_gi(p_render_data->scene_data->cam_transform, p_render_data);
+				sdfgi->update_light();
+			}
+		}
+	};
 
 	// assign render indices to voxel_gi_instances
 	for (uint32_t i = 0; i < (uint32_t)p_render_data->voxel_gi_instances->size(); i++) {
@@ -2208,13 +2224,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		p_render_data->voxel_gi_count = 0;
 
-		if (!rt_replaces_opaque && rb->has_custom_data(RB_SCOPE_SDFGI)) {
-			Ref<RendererRD::GI::SDFGI> sdfgi = rb->get_custom_data(RB_SCOPE_SDFGI);
-			if (sdfgi.is_valid()) {
-				sdfgi->update_cascades();
-				sdfgi->pre_process_gi(p_render_data->scene_data->cam_transform, p_render_data);
-				sdfgi->update_light();
-			}
+		if (!rt_replaces_opaque) {
+			prepare_sdfgi_for_raster();
 		}
 
 		if (!rt_replaces_opaque) {
@@ -2443,6 +2454,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->texture_clear(rb_data->rt_get_prev_history_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 		}
 	};
+	auto clear_path_traced_raster_gi_state = [&]() {
+		scene_state.lightmaps_used = 0;
+		scene_state.voxelgis_used = 0;
+		p_render_data->voxel_gi_count = 0;
+		if (rb->has_custom_data(RB_SCOPE_SDFGI)) {
+			Ref<RendererRD::GI::SDFGI> sdfgi;
+			rb->set_custom_data(RB_SCOPE_SDFGI, sdfgi);
+		}
+	};
 	auto setup_rt_state = [&]() -> bool {
 		if (!scene_features.rt || !rb_data.is_valid() || !raytracing || !raytracing->get_shader()) {
 			return false;
@@ -2496,8 +2516,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		return rt_uniform_set.is_valid() && rt_pipeline.is_valid();
 	};
 
+	bool rt_setup_ready = false;
 	if (!rt_setup_deferred && scene_features.rt) {
-		setup_rt_state();
+		rt_setup_ready = setup_rt_state();
 	} else if (!scene_features.rt) {
 		if (rb_data.is_valid() && rb_data->dlss_rr_has_buffers()) {
 			// RT disabled: free DLSS RR buffers so DLSS falls back to SR.
@@ -2531,10 +2552,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		using_ssil = scene_features.has(SCENE_FEATURE_SSIL);
 		using_ssr = scene_features.has(SCENE_FEATURE_SSR);
 		using_voxelgi = scene_features.has(SCENE_FEATURE_VOXELGI);
+		prepare_sdfgi_for_raster();
 		_setup_lightmaps(p_render_data, *p_render_data->lightmaps, p_render_data->scene_data->cam_transform);
 		_setup_voxelgis(*p_render_data->voxel_gi_instances);
 		depth_prepass_uniform_buffer_index = _setup_environment(p_render_data, is_reflection_probe, screen_size, screen_size, p_default_bg_color, false);
 		_update_render_base_uniform_set();
+	} else if (rt_replaces_opaque && rt_setup_ready) {
+		clear_path_traced_raster_gi_state();
 	}
 	// Path Traced mode skips OPAQUE (TLAS is built from rt_instances). Simple RT
 	// still renders the normal raster opaque path and composites RT lighting later.
@@ -4937,13 +4961,10 @@ void RenderForwardClustered::sdfgi_update(const Ref<RenderSceneBuffers> &p_rende
 		sdfgi = rb->get_custom_data(RB_SCOPE_SDFGI);
 	}
 
-	// Path Traced RTGI owns the opaque pass, but Simple RT keeps the raster GI path.
-	bool rt_path_traced = false;
-	if (p_environment.is_valid() && environment_get_pathtracing_enabled(p_environment)) {
-		const float *rt_env_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_environment);
-		rt_path_traced = rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_PATH_TRACED;
-	}
-	bool needs_sdfgi = !rt_path_traced && p_environment.is_valid() && environment_get_sdfgi_enabled(p_environment);
+	// Keep SDFGI allocation tied to the raster environment state. Path Traced
+	// RTGI only suppresses it after RT setup succeeds for the frame, so raster
+	// fallback/multiview never loses SDFGI merely because Path Traced was requested.
+	bool needs_sdfgi = p_environment.is_valid() && environment_get_sdfgi_enabled(p_environment);
 	bool needs_reset = sdfgi.is_valid() ? sdfgi->version != gi.sdfgi_current_version : false;
 
 	if (!needs_sdfgi || needs_reset) {

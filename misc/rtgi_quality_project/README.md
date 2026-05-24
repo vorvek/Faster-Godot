@@ -22,7 +22,7 @@ Use `--rtgi-output-dir=<path>` for an explicit output directory.
 
 Useful options:
 
-- `--rtgi-scene=stress|cornell|sponza`
+- `--rtgi-scene=stress|cornell|sponza|sdfgi|voxelgi|lightmap|lightprobe|path_traced_sdfgi_exclusive`
 - `--rtgi-denoise-strength=0.0..1.0`
 - `--rtgi-history-weight=0.0..0.98` (default `0.95` for split diffuse)
 - `--rtgi-firefly-suppression=0.0..1.0`
@@ -51,6 +51,20 @@ Path Traced single-beauty fallback, Hybrid RT, no-RTGI, and high-SPP reference
 captures plus a comparison grid for visual
 inspection. `final` is still captured by `--rtgi-capture-debug` as the denoised
 RTGI debug buffer.
+
+## Coexistence Modes
+
+The `sdfgi`, `voxelgi`, `lightmap`, and `lightprobe` scenes validate Simple RT
+coexisting with raster GI owners. Each mode captures the RTGI frame and a
+temporary no-RTGI raster fallback frame, then checks that the raster GI
+contribution remains visible without a large Simple RT diffuse boost.
+
+`lightmap` builds a tiny procedural `Texture2DArray` and `LightmapGIData` at
+runtime, so it does not require baked assets. `lightprobe` creates procedural
+LightmapGI probe capture data for a dynamic object. `voxelgi` bakes a small
+procedural VoxelGI during scene setup. `path_traced_sdfgi_exclusive` keeps SDFGI
+enabled in the environment, but expects the Path Traced frame to stay exclusive
+while the temporary raster fallback still shows SDFGI lighting.
 
 ## Cornell Box
 
