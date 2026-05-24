@@ -104,11 +104,11 @@ static uint64_t _rt_history_mix_color(uint64_t p_hash, const Color &p_color) {
 	return _rt_history_mix_float(p_hash, p_color.a);
 }
 
-static uint64_t _rt_radiance_signature(uint32_t p_rt_flags, RID p_environment, RID p_camera_attributes, const float p_rt_params[16], const Color &p_background_color, bool p_background_uses_sky, const RT_LightData *p_light_data, uint32_t p_light_count) {
+static uint64_t _rt_radiance_signature(uint32_t p_rt_flags, RID p_environment, RID p_camera_attributes, const float p_rt_params[SceneShaderRaytracing::RT_PARAM_SHADER_FLOAT_COUNT], const Color &p_background_color, bool p_background_uses_sky, const RT_LightData *p_light_data, uint32_t p_light_count) {
 	uint64_t signature = _rt_history_mix(0x727472616469616eULL, p_rt_flags);
 	signature = _rt_history_mix_rid(signature, p_environment);
 	signature = _rt_history_mix_rid(signature, p_camera_attributes);
-	for (uint32_t i = 0; i < 16; i++) {
+	for (uint32_t i = 0; i < SceneShaderRaytracing::RT_PARAM_SHADER_FLOAT_COUNT; i++) {
 		if (i == SceneShaderRaytracing::RT_PARAM_FRAME_INDEX) {
 			continue;
 		}
@@ -3650,7 +3650,7 @@ uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, RT_L
 		ld.attenuation = 0.0f; // No distance attenuation.
 		ld.inv_max_range = -1.0f; // Infinite range.
 		ld.max_range_squared = 0.0f;
-		ld.specular_amount = ls->light_get_param(base, RSE::LIGHT_PARAM_SPECULAR);
+		ld.specular_amount = ls->light_get_param(base, RSE::LIGHT_PARAM_SPECULAR) * 2.0f; // Matches rasterizer convention, normalizes 0.5 default to 1.0.
 		ld.indirect_energy = ls->light_get_param(base, RSE::LIGHT_PARAM_INDIRECT_ENERGY);
 		ld.inv_spot_attenuation = 0.0f;
 		ld.cos_spot_angle = 0.0f;
@@ -3890,22 +3890,22 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		uniforms.push_back(u);
 	}
 
-	// Binding 6: Raytracing params + unjittered VP matrices.
+		// Binding 6: Raytracing params + unjittered VP matrices.
 	{
 		struct {
-			float params[16];
+			float params[SceneShaderRaytracing::RT_PARAM_SHADER_FLOAT_COUNT];
 			float prev_vp_unjittered[16];
 			float curr_vp_unjittered[16];
 			float inv_projection_unjittered[16];
 			float rt_overscan[4];
 			float rt_prev_overscan[4];
 		} rt_ubo = {};
-		static_assert(sizeof(rt_ubo) == 72 * sizeof(float));
+		static_assert(sizeof(rt_ubo) == 80 * sizeof(float));
 
 		if (p_render_data && p_render_data->environment.is_valid()) {
 			const float *env_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
 			if (env_params) {
-				memcpy(rt_ubo.params, env_params, sizeof(float) * 16);
+				memcpy(rt_ubo.params, env_params, sizeof(float) * MIN((uint32_t)RSE::PT_PARAM_MAX, SceneShaderRaytracing::RT_PARAM_SHADER_FLOAT_COUNT));
 			}
 		}
 
@@ -3913,7 +3913,9 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		// [0] = VIS_MODE, [1] = SAMPLE_COUNT, [2] = MAX_BOUNCES,
 		// [3] = DENOISER, [5] and [11] = reserved,
 		// [12] = OVERSCAN_HORIZONTAL, [13] = OVERSCAN_VERTICAL,
-		// [14] = LIGHT_COUNT, [15] = FRAME_INDEX
+		// [14] = LIGHT_COUNT, [15] = FRAME_INDEX,
+		// [16-19] = SVGF controls, [20] = RAY_FIREFLY_SUPPRESSION,
+		// [21] = RAY_MAX_RADIANCE.
 		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_FRAME_INDEX] = float(p_state->frame_counter++);
 
 		bool background_uses_sky = false;

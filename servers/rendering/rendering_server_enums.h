@@ -767,9 +767,8 @@ enum PathtracingDenoiser {
 	PT_DENOISER_RESERVED_4 = 4,
 };
 
-// Pathtracing parameter indices. Indices 0-15 are copied into the ray tracing
-// shader params buffer and must match RT_PARAM_* defines in raytracing_inc.glsl.
-// Higher indices are CPU-side render settings.
+// Pathtracing parameter indices. Indices copied into the ray tracing shader
+// params buffer must match RT_PARAM_* defines in raytracing_inc.glsl.
 enum PathtracingParamIndex {
 	PT_PARAM_VIS_MODE = 0,
 	PT_PARAM_SAMPLE_COUNT = 1,
@@ -785,7 +784,12 @@ enum PathtracingParamIndex {
 	PT_PARAM_LIGHT_COUNT = 14,
 	PT_PARAM_FRAME_INDEX = 15,
 	PT_PARAM_DENOISER_STRENGTH = 16,
-	PT_PARAM_MAX = 17,
+	PT_PARAM_DENOISER_HISTORY_WEIGHT = 17,
+	PT_PARAM_DENOISER_FIREFLY_SUPPRESSION = 18,
+	PT_PARAM_DENOISER_DETAIL_PRESERVATION = 19,
+	PT_PARAM_RAY_FIREFLY_SUPPRESSION = 20,
+	PT_PARAM_RAY_MAX_RADIANCE = 21,
+	PT_PARAM_MAX = 22,
 };
 
 enum SubSurfaceScatteringQuality {

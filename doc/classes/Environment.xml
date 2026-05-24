@@ -214,6 +214,21 @@
 		<member name="rtgi_denoiser_strength" type="float" setter="set_rtgi_denoiser_strength" getter="get_rtgi_denoiser_strength" default="0.9">
 			Controls the SVGF RTGI denoiser's spatial filtering, blotch stabilization, and firefly suppression strength. Higher values reduce 1-sample-per-pixel speckles, but can blur fine indirect-light detail. Lower values preserve texture and fast dynamic light changes better, but leave more raw RT noise.
 		</member>
+		<member name="rtgi_denoiser_history_weight" type="float" setter="set_rtgi_denoiser_history_weight" getter="get_rtgi_denoiser_history_weight" default="0.92">
+			Controls how much valid previous-frame RTGI radiance is kept by the SVGF temporal pass. Higher values improve stability on static surfaces, but can increase ghosting if guide rejection misses a change. A value of [code]0.0[/code] disables temporal RTGI radiance reuse.
+		</member>
+		<member name="rtgi_denoiser_firefly_suppression" type="float" setter="set_rtgi_denoiser_firefly_suppression" getter="get_rtgi_denoiser_firefly_suppression" default="1.0">
+			Controls additional isolated bright-pixel suppression in the SVGF denoiser. Lower values preserve sparse highlights and tiny emissive details, but can leave more fireflies in dark regions.
+		</member>
+		<member name="rtgi_denoiser_detail_preservation" type="float" setter="set_rtgi_denoiser_detail_preservation" getter="get_rtgi_denoiser_detail_preservation" default="1.0">
+			Controls how strongly the SVGF denoiser protects high-frequency albedo detail from broad rough-surface smoothing. Lower values allow more aggressive smoothing on textured surfaces.
+		</member>
+		<member name="rtgi_ray_firefly_suppression" type="float" setter="set_rtgi_ray_firefly_suppression" getter="get_rtgi_ray_firefly_suppression" default="0.85">
+			Controls biased pre-denoiser suppression of extreme ray/path contributions in linear HDR space. Higher values reduce isolated 1-sample-per-pixel fireflies before they enter temporal history, especially on indirect glossy and emissive paths, but can dim legitimate tiny highlights.
+		</member>
+		<member name="rtgi_ray_max_radiance" type="float" setter="set_rtgi_ray_max_radiance" getter="get_rtgi_ray_max_radiance" default="32.0">
+			Sets the approximate linear HDR luminance limit used by [member rtgi_ray_firefly_suppression]. A value of [code]0.0[/code] disables this pre-denoiser ray contribution clamp.
+		</member>
 		<member name="rtgi_overscan_horizontal" type="float" setter="set_rtgi_overscan_horizontal" getter="get_rtgi_overscan_horizontal" default="0.0">
 			Sets the extra horizontal path-traced RTGI margin as a fraction of the viewport width. The renderer allocates this margin on both sides, then shifts the visible crop using camera motion so pixels are traced just outside the leading edge of the view. For example, [code]0.05[/code] allows up to 10% extra pixels on one horizontal edge and 0% on the other. Higher values can reduce edge speckles from newly revealed pixels while moving, but increase RT cost and do not add samples to the interior of the image.
 		</member>

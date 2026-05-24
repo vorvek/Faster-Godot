@@ -1,0 +1,21 @@
+; Engine configuration file.
+; This small project is a local RTGI denoiser quality harness.
+
+config_version=5
+
+[application]
+
+config/name="RTGI Quality Harness"
+run/main_scene="res://scenes/rtgi_quality_main.tscn"
+config/features=PackedStringArray("4.6", "Forward Plus")
+
+[display]
+
+window/size/viewport_width=960
+window/size/viewport_height=540
+window/size/resizable=false
+window/stretch/mode="viewport"
+
+[rendering]
+
+renderer/rendering_method="forward_plus"

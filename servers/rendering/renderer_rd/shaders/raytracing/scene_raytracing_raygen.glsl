@@ -97,7 +97,11 @@ void main() {
 			ray_dir = ps.next_ray_dir;
 		}
 
-		total_radiance += ps.radiance;
+		if (get_rt_param(RT_PARAM_VIS_MODE) == 0.0) {
+			total_radiance += sanitize_payload_vec3(ps.radiance);
+		} else {
+			total_radiance += ps.radiance;
+		}
 	}
 
 	vec3 final_radiance = total_radiance / float(samples_per_pixel);
@@ -245,13 +249,17 @@ void main() {
 		if (VIS_MODE == 20) {
 			ps.radiance = vec3(1.0);
 		} else if (VIS_MODE == 0) {
-			ps.radiance += ps.throughput * sky_color;
+			uint sky_total_bounces = get_total_bounces(ps.packed_bounces_flags);
+			vec3 sky_contribution = ps.throughput * sky_color;
+			ps.radiance += sky_total_bounces > 0u ? rt_clamp_path_contribution(sky_contribution, 0.0, 1.0, true, true) : sky_contribution;
 		} else {
 			ps.radiance = sky_color;
 		}
 	}
 #else
-	ps.radiance += ps.throughput * sky_color;
+	uint sky_total_bounces = get_total_bounces(ps.packed_bounces_flags);
+	vec3 sky_contribution = ps.throughput * sky_color;
+	ps.radiance += sky_total_bounces > 0u ? rt_clamp_path_contribution(sky_contribution, 0.0, 1.0, true, true) : sky_contribution;
 #endif // RT_DEBUG_ENABLED
 
 	path_pack(payload, ps);

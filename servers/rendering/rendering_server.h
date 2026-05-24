@@ -725,6 +725,11 @@ public:
 	static constexpr PathtracingParamIndex PT_PARAM_LIGHT_COUNT = RSE::PT_PARAM_LIGHT_COUNT;
 	static constexpr PathtracingParamIndex PT_PARAM_FRAME_INDEX = RSE::PT_PARAM_FRAME_INDEX;
 	static constexpr PathtracingParamIndex PT_PARAM_DENOISER_STRENGTH = RSE::PT_PARAM_DENOISER_STRENGTH;
+	static constexpr PathtracingParamIndex PT_PARAM_DENOISER_HISTORY_WEIGHT = RSE::PT_PARAM_DENOISER_HISTORY_WEIGHT;
+	static constexpr PathtracingParamIndex PT_PARAM_DENOISER_FIREFLY_SUPPRESSION = RSE::PT_PARAM_DENOISER_FIREFLY_SUPPRESSION;
+	static constexpr PathtracingParamIndex PT_PARAM_DENOISER_DETAIL_PRESERVATION = RSE::PT_PARAM_DENOISER_DETAIL_PRESERVATION;
+	static constexpr PathtracingParamIndex PT_PARAM_RAY_FIREFLY_SUPPRESSION = RSE::PT_PARAM_RAY_FIREFLY_SUPPRESSION;
+	static constexpr PathtracingParamIndex PT_PARAM_RAY_MAX_RADIANCE = RSE::PT_PARAM_RAY_MAX_RADIANCE;
 	static constexpr PathtracingParamIndex PT_PARAM_MAX = RSE::PT_PARAM_MAX;
 
 	using SubSurfaceScatteringQuality = RSE::SubSurfaceScatteringQuality;

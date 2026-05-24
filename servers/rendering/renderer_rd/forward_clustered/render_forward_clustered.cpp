@@ -2983,9 +2983,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->draw_command_begin_label("RT Denoise");
 			RENDER_TIMESTAMP("RT Denoise");
 			const float rt_denoise_strength = CLAMP(rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_STRENGTH] : 0.8f, 0.0f, 1.0f);
-			const float rt_history_weight = 0.0f;
+			const float rt_firefly_suppression = CLAMP(rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_FIREFLY_SUPPRESSION] : 1.0f, 0.0f, 1.0f);
+			const float rt_detail_preservation = CLAMP(rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_DETAIL_PRESERVATION] : 1.0f, 0.0f, 1.0f);
+			float rt_history_weight = rt_denoise_strength <= 0.001f ? 0.0f : CLAMP(rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_HISTORY_WEIGHT] : 0.92f, 0.0f, 0.98f);
+			if (rt_history_weight > 0.0f && time_step > 0.0) {
+				// Treat the internal RTGI history as a 60 FPS baseline so high-refresh renders keep the same wall-clock decay.
+				rt_history_weight = Math::pow(rt_history_weight, (float)time_step * 60.0f);
+			}
 			if (rt_svgf_denoiser) {
-				rtgi_denoise->process(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight, rt_denoise_strength, rb_data->rt_get_size(), 0, 5);
+				rtgi_denoise->process(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight, rt_denoise_strength, rt_firefly_suppression, rt_detail_preservation, rb_data->rt_get_size(), 0, 5);
 				if (rt_replaces_opaque) {
 					composite_rt_volumetric_fog();
 					raytracing->copy_output_texture(p_render_data);

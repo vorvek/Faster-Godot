@@ -33,7 +33,7 @@ global_shader_uniforms;
 #ifndef RT_STAGE_ANY_HIT
 
 layout(set = 0, binding = 6, std140) uniform RaytracingParams {
-	vec4 rt_params[4];
+	vec4 rt_params[6];
 	mat4 prev_vp_unjittered;
 	mat4 curr_vp_unjittered;
 	mat4 inv_projection_unjittered;
@@ -43,6 +43,46 @@ layout(set = 0, binding = 6, std140) uniform RaytracingParams {
 
 float get_rt_param(uint idx) {
 	return rt_params[idx >> 2u][idx & 3u];
+}
+
+vec3 rt_clamp_luminance(vec3 color, float max_luma) {
+	float luma = rt_luminance(color);
+	if (luma <= max_luma || luma <= 1e-6) {
+		return color;
+	}
+	return color * (max_luma / luma);
+}
+
+vec3 rt_clamp_path_contribution(vec3 contribution, float roughness, float metalness, bool indirect_path, bool secondary_emissive_or_miss) {
+	float strength = clamp(get_rt_param(RT_PARAM_RAY_FIREFLY_SUPPRESSION), 0.0, 1.0);
+	float max_radiance = get_rt_param(RT_PARAM_RAY_MAX_RADIANCE);
+	if (strength <= 0.001 || max_radiance <= 0.0 || get_rt_param(RT_PARAM_VIS_MODE) != 0.0) {
+		return sanitize_payload_vec3(contribution);
+	}
+
+	float specular_risk = max(1.0 - clamp(roughness, 0.0, 1.0), clamp(metalness, 0.0, 1.0));
+	float path_risk = max(specular_risk, indirect_path ? 0.55 : 0.0);
+	path_risk = max(path_risk, secondary_emissive_or_miss ? 0.75 : 0.0);
+	float limit = max(0.001, max_radiance) * mix(1.05, 0.32, clamp(path_risk, 0.0, 1.0));
+	limit *= indirect_path ? 0.72 : 1.0;
+	limit *= secondary_emissive_or_miss ? 0.58 : 1.0;
+	float luma = rt_luminance(contribution);
+	float clamp_active = smoothstep(limit * mix(1.18, 0.82, clamp(path_risk, 0.0, 1.0)), limit * 2.1 + 0.001, luma) * strength;
+	return sanitize_payload_vec3(mix(contribution, rt_clamp_luminance(contribution, limit), clamp_active));
+}
+
+vec3 rt_clamp_throughput(vec3 throughput, float roughness, float metalness, uint total_bounces) {
+	float strength = clamp(get_rt_param(RT_PARAM_RAY_FIREFLY_SUPPRESSION), 0.0, 1.0);
+	float max_radiance = get_rt_param(RT_PARAM_RAY_MAX_RADIANCE);
+	if (strength <= 0.001 || max_radiance <= 0.0 || get_rt_param(RT_PARAM_VIS_MODE) != 0.0) {
+		return sanitize_payload_vec3(throughput);
+	}
+	float specular_risk = max(1.0 - clamp(roughness, 0.0, 1.0), clamp(metalness, 0.0, 1.0));
+	float bounce_risk = smoothstep(0.0, 3.0, float(total_bounces));
+	float limit = max(1.0, max_radiance * mix(0.55, 0.20, max(specular_risk, bounce_risk)));
+	float luma = rt_luminance(throughput);
+	float clamp_active = smoothstep(limit, limit * 2.0 + 0.001, luma) * strength;
+	return sanitize_payload_vec3(mix(throughput, rt_clamp_luminance(throughput, limit), clamp_active));
 }
 
 /// Project a world-space point to UV through an unjittered VP.

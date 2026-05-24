@@ -22,6 +22,11 @@ The feature is exposed on `Environment`, so it appears through the same
 - `rtgi_energy`
 - `rtgi_disable_in_editor`
 - `rtgi_denoiser_strength`
+- `rtgi_denoiser_history_weight`
+- `rtgi_denoiser_firefly_suppression`
+- `rtgi_denoiser_detail_preservation`
+- `rtgi_ray_firefly_suppression`
+- `rtgi_ray_max_radiance`
 - `rtgi_overscan_horizontal`
 - `rtgi_overscan_vertical`
 - `rtgi_denoiser`
@@ -50,7 +55,7 @@ The feature is exposed on `Environment`, so it appears through the same
 - `rtgi_samples_per_pixel`
   - Controls how many RT samples are traced per pixel each frame. Higher values
     reduce raw noise but cost more GPU time. Lower values rely more heavily on
-    current-frame denoising.
+    the internal temporal denoiser and current-frame spatial filtering.
 - `rtgi_max_bounces`
   - Controls the maximum indirect bounce depth. One bounce is cheaper and works
     well for most local-light GI; extra bounces can brighten enclosed scenes but
@@ -69,6 +74,31 @@ The feature is exposed on `Environment`, so it appears through the same
     indirect lighting and small dynamic light changes. The default is `0.90`.
     Lower values preserve more detail and response while leaving more raw RT
     noise.
+- `rtgi_denoiser_history_weight`
+  - Controls valid previous-frame radiance reuse in the SVGF temporal pass.
+    Higher values improve stability on static surfaces; lower values reduce
+    ghosting and response lag. `0.0` disables temporal RTGI radiance reuse, and
+    `rtgi_denoiser_strength = 0.0` also forces history off.
+- `rtgi_denoiser_firefly_suppression`
+  - Controls additional isolated bright-pixel suppression. Raise it for dark
+    1 SPP scenes with unsupported sparkles; lower it when small emissives,
+    sparse highlights, or thin bright details are being clipped too strongly.
+- `rtgi_denoiser_detail_preservation`
+  - Controls albedo-detail protection in the broad rough-surface cleanup
+    stages. Raise it when brick, stone, patterned floors, or other textured
+    surfaces get flattened at high denoiser strength; lower it if textured
+    surfaces keep too much residual grain.
+- `rtgi_ray_firefly_suppression`
+  - Applies a biased linear-HDR contribution clamp before the SVGF denoiser.
+    It affects direct-light samples, secondary emissive/sky hits, and secondary
+    throughput before those values enter temporal history. Primary sky/background
+    rays are not clamped by this control. Raise it when dark 1 SPP scenes show
+    isolated fireflies that survive the denoiser; lower it when legitimate tiny
+    lights or glossy highlights are clipped.
+- `rtgi_ray_max_radiance`
+  - Sets the approximate luminance limit used by the pre-denoiser ray clamp.
+    `0.0` disables this source-side clamp. The default is conservative and is
+    intended to stop extreme path samples rather than flatten authored lighting.
 - `rtgi_overscan_horizontal` and `rtgi_overscan_vertical`
   - Add an opt-in path-traced RTGI render margin around the visible viewport.
     The values are fractions of the visible viewport size. For example, `0.05`
@@ -126,17 +156,27 @@ billboard particle geometry.
 
 RTGI writes noisy radiance, depth, velocity, normal/roughness,
 albedo/metalness, view-Z, hit-distance, validity, and history ID guides at RT
-texture size. The SVGF path consumes those guides directly on the GPU and does
-not expose a previous-frame RTGI radiance blend control; fast movement favors
-current-frame stability.
+texture size. The SVGF path consumes those guides directly on the GPU and uses
+previous-frame radiance history controlled by `rtgi_denoiser_history_weight`.
+Fast movement and disocclusion favor current-frame samples through guide-based
+rejection.
 
 The `SVGF (Default)` option uses the dedicated `RTGIDenoise` RD effect for
-both Simple RT and Path Traced mode. It runs current-frame guided stabilization,
-luminance moments, variance prefiltering, and edge-aware atrous filtering before
-the path-traced output is cropped back to the visible viewport. Newly visible
-geometry, newly loaded materials, and geometry that has just become RT-ready
-therefore start from fresh samples instead of borrowing stale accumulated
-lighting.
+both Simple RT and Path Traced mode. It runs temporal reprojection, guided
+stabilization, light-change reactivity, luminance moments, variance
+prefiltering, and edge-aware atrous filtering before the path-traced output is
+cropped back to the visible viewport. Newly visible geometry, newly loaded
+materials, and geometry that has just become RT-ready therefore start from fresh
+samples instead of borrowing stale accumulated lighting.
+
+The ray tracing path now applies optional source-side contribution clamping in
+linear HDR space before SVGF sees the sample. The high-strength denoiser path
+then treats isolated bright pixels in dark, unsupported neighborhoods as
+firefly candidates before they enter temporal moments/history. Broad diffuse
+cleanup is reduced on textured rough surfaces, while glossy and metallic
+surfaces use shorter temporal history and less spatial filtering so brick,
+stone, polished metal, and similar material detail are less likely to be
+flattened by max-strength filtering.
 
 If the GPU or driver does not expose the required Vulkan ray tracing features,
 the settings remain visible, a warning is printed, and rendering falls back to
@@ -146,8 +186,8 @@ the existing non-ray-traced path instead of destructively changing scene data.
 
 - `scene/resources/environment.*`
   - Adds RTGI properties, inspector bindings, enum values, and defaults.
-  - Low-SPP stability is handled by the SVGF denoiser without a user-tuned RTGI
-    history weight.
+  - Low-SPP stability is handled by the SVGF denoiser with a dedicated RTGI
+    history-weight control.
 - `servers/rendering/storage/environment_storage.*`
   - Stores RTGI state in rendering-server environment data.
 - `servers/rendering/rendering_server*`
@@ -164,6 +204,8 @@ the existing non-ray-traced path instead of destructively changing scene data.
   - Builds and updates ray tracing scene state for Forward+.
   - Handles geometry instances, materials, lights, guide-buffer output, and
     denoised output.
+  - Passes source-side ray firefly controls to the ray shaders and invalidates
+    RT history when those radiance-shaping parameters change.
   - Skips `INSTANCE_PARTICLES` and alpha-overlay instances in TLAS construction.
   - Tracks per-viewport RT geometry/material validity so newly visible or newly
     ready surfaces start from fresh denoiser inputs.
@@ -178,11 +220,15 @@ the existing non-ray-traced path instead of destructively changing scene data.
   - Writes RTGI guide buffers for the internal denoiser: noisy radiance, RT
     depth, RT-space motion vectors, normal/roughness, albedo/metalness, view-Z,
     hit-distance, validity, and history ID.
+  - Applies clean-room, biased linear-HDR contribution limits to extreme direct
+    samples, secondary emissive/sky hits, and secondary path throughput before
+    SVGF history.
 - `servers/rendering/renderer_rd/effects/rtgi_denoise.*`
   - Adds the SVGF/RELAX-style RTGI denoiser as a separate RD effect.
     It maintains moments, variance, rejection, noisy-input, and guide textures,
     then runs a current-frame guided stabilizer to reduce broad diffuse
-    blotches.
+    blotches. Max denoiser strength uses stronger isolated-outlier suppression
+    instead of forcing an extra large-radius atrous pass.
 - `servers/rendering/renderer_rd/effects/taa.*`
   - Remains the normal viewport TAA path and fallback temporal resolve. Path
     traced RTGI uses its dedicated SVGF denoiser before transparent rendering.
@@ -254,6 +300,13 @@ Validated so far:
     local-light shadows off and on. The captured sequences stayed lit, did not
     produce the previous all-black frames, and did not log shader push-constant
     or RT pipeline setup errors.
+
+The standalone `misc/rtgi_quality_project` harness procedurally builds a small
+dark RTGI room with textured brick/stone surfaces, a small warm light, a dark
+firefly-detection region, and a detail-retention region. It can capture final
+and RTGI debug views, then writes JSON metrics for isolated hot pixels, dark
+region luminance, and high-frequency texture detail. Use it for Phase 2 baseline
+captures before enabling experimental direct-light reuse.
 
 ## Pros
 

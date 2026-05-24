@@ -1,0 +1,52 @@
+{
+	"description": "Initial thresholds for the RTGI quality harness. They are intentionally broad until per-GPU baseline captures are recorded and reviewed.",
+	"scenes": {
+		"stress": {
+			"thresholds": {
+				"max_dark_fireflies_per_megapixel": 15.0,
+				"max_full_frame_fireflies_per_megapixel": 25.0,
+				"max_visible_speckles_per_megapixel": 220.0,
+				"max_temporal_sparkle_per_megapixel_max": 180.0,
+				"max_dark_roi_mean_luma": 0.16,
+				"max_luma_p99": 0.80,
+				"max_luma_max": 1.0,
+				"max_saturated_luma_fraction": 0.0008,
+				"min_detail_edge_energy": 0.006,
+				"min_detail_luma_stddev": 0.020,
+				"max_specular_fireflies": 4.0
+			}
+		},
+		"cornell": {
+			"thresholds": {
+				"max_dark_fireflies_per_megapixel": 25.0,
+				"max_full_frame_fireflies_per_megapixel": 35.0,
+				"max_visible_speckles_per_megapixel": 180.0,
+				"max_temporal_sparkle_per_megapixel_max": 150.0,
+				"max_cornell_ceiling_hot_pixels": 8.0,
+				"max_saturated_luma_fraction": 0.010,
+				"max_cornell_reference_luma_mae": 0.08,
+				"max_cornell_black_fraction_luma_002": 0.10,
+				"max_cornell_black_fraction_luma_005": 0.18,
+				"max_cornell_red_wall_black_fraction": 0.05,
+				"max_cornell_green_wall_black_fraction": 0.05,
+				"max_cornell_back_wall_black_fraction": 0.05,
+				"max_cornell_floor_black_fraction": 0.05,
+				"max_cornell_flat_patch_noise": 0.015,
+				"min_cornell_red_wall_chroma_margin": 0.015,
+				"min_cornell_green_wall_chroma_margin": 0.015,
+				"min_cornell_wall_min_luma": 0.10,
+				"min_cornell_center_edge_energy": 0.001
+			}
+		},
+		"sponza": {
+			"thresholds": {
+				"max_dark_fireflies_per_megapixel": 40.0,
+				"max_full_frame_fireflies_per_megapixel": 60.0,
+				"max_visible_speckles_per_megapixel": 280.0,
+				"max_temporal_sparkle_per_megapixel_max": 220.0,
+				"min_sponza_corridor_edge_energy": 0.004,
+				"min_sponza_corridor_luma_stddev": 0.015
+			}
+		}
+	}
+}

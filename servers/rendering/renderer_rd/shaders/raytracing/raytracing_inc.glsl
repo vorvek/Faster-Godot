@@ -13,7 +13,7 @@
 // ============================================================================
 // RT_PARAMS INDICES - Must match RT_PARAM_* in scene_shader_raytracing.h
 // ============================================================================
-// rt_params is a vec4[4] uniform buffer (16 floats total)
+// rt_params is a vec4[6] uniform buffer (24 floats total)
 // Access: rt_params[idx >> 2][idx & 3] or get_rt_param(idx)
 #define RT_PARAM_VIS_MODE 0 // rt_params[0].x - Debug visualization mode (0 = disabled)
 #define RT_PARAM_SAMPLE_COUNT 1 // rt_params[0].y - Samples per pixel
@@ -31,6 +31,12 @@
 #define RT_PARAM_OVERSCAN_VERTICAL 13 // rt_params[3].y - Path traced RTGI vertical overscan fraction
 #define RT_PARAM_LIGHT_COUNT 14 // rt_params[3].z - Number of active lights in light buffer
 #define RT_PARAM_FRAME_INDEX 15 // rt_params[3].w - Frame counter for temporal variation
+#define RT_PARAM_DENOISER_STRENGTH 16 // rt_params[4].x - SVGF strength, included for history invalidation
+#define RT_PARAM_DENOISER_HISTORY_WEIGHT 17 // rt_params[4].y - SVGF history weight
+#define RT_PARAM_DENOISER_FIREFLY_SUPPRESSION 18 // rt_params[4].z - SVGF firefly suppression
+#define RT_PARAM_DENOISER_DETAIL_PRESERVATION 19 // rt_params[4].w - SVGF detail preservation
+#define RT_PARAM_RAY_FIREFLY_SUPPRESSION 20 // rt_params[5].x - Pre-denoiser path contribution clamp strength
+#define RT_PARAM_RAY_MAX_RADIANCE 21 // rt_params[5].y - Pre-denoiser linear HDR luminance limit
 
 #define RT_MODE_HYBRID 0u // Compatibility name for Simple RT.
 #define RT_MODE_PATH_TRACED 1u
@@ -48,6 +54,10 @@
 // Use PathState + path_pack/path_unpack for fp32 working copies.
 
 const float RT_FP16_MAX = 65504.0;
+
+float rt_luminance(vec3 rgb) {
+	return dot(rgb, vec3(0.2126, 0.7152, 0.0722));
+}
 
 vec3 sanitize_payload_vec3(vec3 v) {
 	v = mix(v, vec3(0.0), isnan(v));

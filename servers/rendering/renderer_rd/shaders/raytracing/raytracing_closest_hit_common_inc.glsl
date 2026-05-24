@@ -555,7 +555,8 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 
 	// Emissive contribution.
 	if (!hybrid_primary) {
-		ps.radiance += ps.throughput * m.emissive;
+		bool secondary_emissive = total_bounces > 0u;
+		ps.radiance += rt_clamp_path_contribution(ps.throughput * m.emissive, m.roughness, m.metalness, secondary_emissive, secondary_emissive);
 	}
 
 	// Bounce limit check.
@@ -659,7 +660,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		uint receiver_layer_mask = geometries[h.geometry_idx].layer_mask;
 		vec3 direct_light = lights_evaluate_direct_lighting(
 				h.hit_pos, h.geometry_normal, N, V, brdf_mat, ps.rng_state, is_indirect, receiver_layer_mask, rt_light_count);
-		ps.radiance += ps.throughput * direct_light;
+		ps.radiance += rt_clamp_path_contribution(ps.throughput * direct_light, m.roughness, m.metalness, is_indirect, false);
 	}
 
 	// =================================================================
@@ -705,6 +706,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	}
 
 	ps.throughput *= brdf_weight;
+	ps.throughput = rt_clamp_throughput(ps.throughput, m.roughness, m.metalness, total_bounces + 1u);
 
 	if (brdfType == DIFFUSE_TYPE) {
 		ps.packed_bounces_flags = inc_diffuse_bounce(ps.packed_bounces_flags);

@@ -109,6 +109,9 @@ public:
 	static constexpr int RT_PARAM_OVERSCAN_VERTICAL = RSE::PT_PARAM_OVERSCAN_VERTICAL;
 	static constexpr int RT_PARAM_LIGHT_COUNT = RSE::PT_PARAM_LIGHT_COUNT;
 	static constexpr int RT_PARAM_FRAME_INDEX = RSE::PT_PARAM_FRAME_INDEX;
+	static constexpr int RT_PARAM_RAY_FIREFLY_SUPPRESSION = RSE::PT_PARAM_RAY_FIREFLY_SUPPRESSION;
+	static constexpr int RT_PARAM_RAY_MAX_RADIANCE = RSE::PT_PARAM_RAY_MAX_RADIANCE;
+	static constexpr uint32_t RT_PARAM_SHADER_FLOAT_COUNT = 24;
 
 	static constexpr uint32_t RT_MODE_HYBRID = 0;
 	static constexpr uint32_t RT_MODE_PATH_TRACED = 1;

@@ -720,6 +720,51 @@ float Environment::get_rtgi_denoiser_strength() const {
 	return rtgi_denoiser_strength;
 }
 
+void Environment::set_rtgi_denoiser_history_weight(float p_weight) {
+	rtgi_denoiser_history_weight = CLAMP(p_weight, 0.0f, 0.98f);
+	_update_pathtracing();
+}
+
+float Environment::get_rtgi_denoiser_history_weight() const {
+	return rtgi_denoiser_history_weight;
+}
+
+void Environment::set_rtgi_denoiser_firefly_suppression(float p_suppression) {
+	rtgi_denoiser_firefly_suppression = CLAMP(p_suppression, 0.0f, 1.0f);
+	_update_pathtracing();
+}
+
+float Environment::get_rtgi_denoiser_firefly_suppression() const {
+	return rtgi_denoiser_firefly_suppression;
+}
+
+void Environment::set_rtgi_denoiser_detail_preservation(float p_preservation) {
+	rtgi_denoiser_detail_preservation = CLAMP(p_preservation, 0.0f, 1.0f);
+	_update_pathtracing();
+}
+
+float Environment::get_rtgi_denoiser_detail_preservation() const {
+	return rtgi_denoiser_detail_preservation;
+}
+
+void Environment::set_rtgi_ray_firefly_suppression(float p_suppression) {
+	rtgi_ray_firefly_suppression = CLAMP(p_suppression, 0.0f, 1.0f);
+	_update_pathtracing();
+}
+
+float Environment::get_rtgi_ray_firefly_suppression() const {
+	return rtgi_ray_firefly_suppression;
+}
+
+void Environment::set_rtgi_ray_max_radiance(float p_radiance) {
+	rtgi_ray_max_radiance = MAX(p_radiance, 0.0f);
+	_update_pathtracing();
+}
+
+float Environment::get_rtgi_ray_max_radiance() const {
+	return rtgi_ray_max_radiance;
+}
+
 void Environment::set_rtgi_overscan_horizontal(float p_overscan) {
 	rtgi_overscan_horizontal = CLAMP(p_overscan, 0.0f, 0.25f);
 	_update_pathtracing();
@@ -783,6 +828,11 @@ void Environment::_update_pathtracing() {
 	params.write[RSE::PT_PARAM_OVERSCAN_HORIZONTAL] = rtgi_overscan_horizontal;
 	params.write[RSE::PT_PARAM_OVERSCAN_VERTICAL] = rtgi_overscan_vertical;
 	params.write[RSE::PT_PARAM_DENOISER_STRENGTH] = rtgi_denoiser_strength;
+	params.write[RSE::PT_PARAM_DENOISER_HISTORY_WEIGHT] = rtgi_denoiser_history_weight;
+	params.write[RSE::PT_PARAM_DENOISER_FIREFLY_SUPPRESSION] = rtgi_denoiser_firefly_suppression;
+	params.write[RSE::PT_PARAM_DENOISER_DETAIL_PRESERVATION] = rtgi_denoiser_detail_preservation;
+	params.write[RSE::PT_PARAM_RAY_FIREFLY_SUPPRESSION] = rtgi_ray_firefly_suppression;
+	params.write[RSE::PT_PARAM_RAY_MAX_RADIANCE] = rtgi_ray_max_radiance;
 	RS::get_singleton()->environment_set_pathtracing_params(environment, params);
 }
 
@@ -1640,6 +1690,16 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_rtgi_disabled_in_editor"), &Environment::is_rtgi_disabled_in_editor);
 	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser_strength", "strength"), &Environment::set_rtgi_denoiser_strength);
 	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser_strength"), &Environment::get_rtgi_denoiser_strength);
+	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser_history_weight", "weight"), &Environment::set_rtgi_denoiser_history_weight);
+	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser_history_weight"), &Environment::get_rtgi_denoiser_history_weight);
+	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser_firefly_suppression", "suppression"), &Environment::set_rtgi_denoiser_firefly_suppression);
+	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser_firefly_suppression"), &Environment::get_rtgi_denoiser_firefly_suppression);
+	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser_detail_preservation", "preservation"), &Environment::set_rtgi_denoiser_detail_preservation);
+	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser_detail_preservation"), &Environment::get_rtgi_denoiser_detail_preservation);
+	ClassDB::bind_method(D_METHOD("set_rtgi_ray_firefly_suppression", "suppression"), &Environment::set_rtgi_ray_firefly_suppression);
+	ClassDB::bind_method(D_METHOD("get_rtgi_ray_firefly_suppression"), &Environment::get_rtgi_ray_firefly_suppression);
+	ClassDB::bind_method(D_METHOD("set_rtgi_ray_max_radiance", "radiance"), &Environment::set_rtgi_ray_max_radiance);
+	ClassDB::bind_method(D_METHOD("get_rtgi_ray_max_radiance"), &Environment::get_rtgi_ray_max_radiance);
 	ClassDB::bind_method(D_METHOD("set_rtgi_overscan_horizontal", "overscan"), &Environment::set_rtgi_overscan_horizontal);
 	ClassDB::bind_method(D_METHOD("get_rtgi_overscan_horizontal"), &Environment::get_rtgi_overscan_horizontal);
 	ClassDB::bind_method(D_METHOD("set_rtgi_overscan_vertical", "overscan"), &Environment::set_rtgi_overscan_vertical);
@@ -1657,6 +1717,11 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_energy", PROPERTY_HINT_RANGE, "0,16,0.01,or_greater"), "set_rtgi_energy", "get_rtgi_energy");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_disable_in_editor"), "set_rtgi_disable_in_editor", "is_rtgi_disabled_in_editor");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_strength", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_denoiser_strength", "get_rtgi_denoiser_strength");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_history_weight", PROPERTY_HINT_RANGE, "0,0.98,0.001"), "set_rtgi_denoiser_history_weight", "get_rtgi_denoiser_history_weight");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_firefly_suppression", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_denoiser_firefly_suppression", "get_rtgi_denoiser_firefly_suppression");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_detail_preservation", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_denoiser_detail_preservation", "get_rtgi_denoiser_detail_preservation");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_ray_firefly_suppression", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_ray_firefly_suppression", "get_rtgi_ray_firefly_suppression");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_ray_max_radiance", PROPERTY_HINT_RANGE, "0,4096,0.1,or_greater"), "set_rtgi_ray_max_radiance", "get_rtgi_ray_max_radiance");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_horizontal", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_horizontal", "get_rtgi_overscan_horizontal");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_vertical", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_vertical", "get_rtgi_overscan_vertical");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "SVGF (Default):8,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");

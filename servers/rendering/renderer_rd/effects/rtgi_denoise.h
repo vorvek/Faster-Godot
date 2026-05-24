@@ -45,6 +45,8 @@ public:
 			RID p_prev_history_id,
 			float p_history_weight,
 			float p_denoise_strength,
+			float p_firefly_suppression,
+			float p_detail_preservation,
 			const Size2i &p_process_size,
 			uint32_t p_view = 0,
 			int p_iterations = 4);
@@ -87,6 +89,8 @@ private:
 		float phi_depth;
 		float variance_boost;
 		float radiance_space_history;
+		float firefly_suppression;
+		float detail_preservation;
 		float visible_origin_width;
 		float visible_origin_height;
 		float visible_size_width;
@@ -95,6 +99,8 @@ private:
 		float fog_detail_spread;
 		float fog_sky_affect;
 		float fog_legacy_blending;
+		float pad0;
+		float pad1;
 	};
 
 	RtgiDenoiseShaderRD shader;

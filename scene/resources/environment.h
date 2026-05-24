@@ -210,6 +210,11 @@ private:
 	float rtgi_energy = 1.0;
 	bool rtgi_disable_in_editor = true;
 	float rtgi_denoiser_strength = 0.90f;
+	float rtgi_denoiser_history_weight = 0.92f;
+	float rtgi_denoiser_firefly_suppression = 1.0f;
+	float rtgi_denoiser_detail_preservation = 1.0f;
+	float rtgi_ray_firefly_suppression = 0.85f;
+	float rtgi_ray_max_radiance = 32.0f;
 	float rtgi_overscan_horizontal = 0.0f;
 	float rtgi_overscan_vertical = 0.0f;
 	RTGIDenoiser rtgi_denoiser = RTGI_DENOISER_SVGF;
@@ -428,6 +433,16 @@ public:
 	bool is_rtgi_disabled_in_editor() const;
 	void set_rtgi_denoiser_strength(float p_strength);
 	float get_rtgi_denoiser_strength() const;
+	void set_rtgi_denoiser_history_weight(float p_weight);
+	float get_rtgi_denoiser_history_weight() const;
+	void set_rtgi_denoiser_firefly_suppression(float p_suppression);
+	float get_rtgi_denoiser_firefly_suppression() const;
+	void set_rtgi_denoiser_detail_preservation(float p_preservation);
+	float get_rtgi_denoiser_detail_preservation() const;
+	void set_rtgi_ray_firefly_suppression(float p_suppression);
+	float get_rtgi_ray_firefly_suppression() const;
+	void set_rtgi_ray_max_radiance(float p_radiance);
+	float get_rtgi_ray_max_radiance() const;
 	void set_rtgi_overscan_horizontal(float p_overscan);
 	float get_rtgi_overscan_horizontal() const;
 	void set_rtgi_overscan_vertical(float p_overscan);

@@ -559,6 +559,19 @@ Error RenderingContextDriverVulkan::_find_validation_layers(TightLocalVector<con
 	return OK;
 }
 
+static bool _vulkan_is_known_external_loader_noise(VkDebugUtilsMessageTypeFlagsEXT p_message_type, const char *p_message) {
+	if (p_message == nullptr || (p_message_type & VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT) == 0) {
+		return false;
+	}
+	if (strstr(p_message, "Layer name GalaxyOverlayVkLayer") != nullptr && strstr(p_message, "does not conform to naming standard") != nullptr) {
+		return true;
+	}
+	if (strstr(p_message, "loader_get_json: Failed to open JSON file") != nullptr && strstr(p_message, "SocialClubVulkanLayer.json") != nullptr) {
+		return true;
+	}
+	return false;
+}
+
 VKAPI_ATTR VkBool32 VKAPI_CALL RenderingContextDriverVulkan::_debug_messenger_callback(VkDebugUtilsMessageSeverityFlagBitsEXT p_message_severity, VkDebugUtilsMessageTypeFlagsEXT p_message_type, const VkDebugUtilsMessengerCallbackDataEXT *p_callback_data, void *p_user_data) {
 	// This error needs to be ignored because the AMD allocator will mix up memory types on IGP processors.
 	if (strstr(p_callback_data->pMessage, "Mapping an image with layout") != nullptr && strstr(p_callback_data->pMessage, "can result in undefined behavior if this memory is used by the device") != nullptr) {
@@ -579,6 +592,11 @@ VKAPI_ATTR VkBool32 VKAPI_CALL RenderingContextDriverVulkan::_debug_messenger_ca
 	}
 
 	if (p_callback_data->pMessageIdName && strstr(p_callback_data->pMessageIdName, "UNASSIGNED-CoreValidation-DrawState-ClearCmdBeforeDraw") != nullptr) {
+		return VK_FALSE;
+	}
+
+	if (_vulkan_is_known_external_loader_noise(p_message_type, p_callback_data->pMessage)) {
+		print_verbose(String("Vulkan: Suppressed known third-party loader message: ") + String(p_callback_data->pMessage));
 		return VK_FALSE;
 	}
 

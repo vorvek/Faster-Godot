@@ -1,0 +1,5 @@
+.godot/
+_phase*_output/
+_phase*/
+captures/
+external_assets/

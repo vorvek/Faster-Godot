@@ -256,6 +256,8 @@ void RTGIDenoise::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 		RID p_prev_history_id,
 		float p_history_weight,
 		float p_denoise_strength,
+		float p_firefly_suppression,
+		float p_detail_preservation,
 		const Size2i &p_process_size,
 		uint32_t p_view,
 		int p_iterations) {
@@ -267,7 +269,7 @@ void RTGIDenoise::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 	ERR_FAIL_UNSIGNED_INDEX(p_view, p_render_buffers->get_view_count());
 
 	const StringName denoise_scope = RB_SCOPE_RTGI_DENOISE;
-	_ensure_buffers(p_render_buffers, denoise_scope, p_process_size);
+	const bool reset_history = _ensure_buffers(p_render_buffers, denoise_scope, p_process_size);
 
 	RID source = p_render_buffers->get_texture_slice(p_source_context, p_source_texture, p_view, 0);
 	RID history = p_render_buffers->get_texture_slice(denoise_scope, RB_TEX_RTGI_DENOISE_HISTORY, p_view, 0);
@@ -288,14 +290,17 @@ void RTGIDenoise::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 	memset(&push_constant, 0, sizeof(PushConstant));
 	push_constant.resolution_width = (float)p_process_size.x;
 	push_constant.resolution_height = (float)p_process_size.y;
-	push_constant.history_weight = CLAMP(p_history_weight, 0.0f, 0.99f);
+	const float requested_history_weight = CLAMP(p_history_weight, 0.0f, 0.99f);
+	push_constant.history_weight = reset_history ? 0.0f : requested_history_weight;
 	push_constant.denoise_strength = CLAMP(p_denoise_strength, 0.0f, 1.0f);
-	push_constant.max_history = Math::lerp(1.0f, 96.0f, push_constant.history_weight);
+	push_constant.max_history = Math::lerp(1.0f, 96.0f, requested_history_weight);
 	push_constant.step_size = 1;
 	push_constant.phi_color = 4.0f;
 	push_constant.phi_normal = 16.0f;
 	push_constant.phi_depth = 0.045f;
 	push_constant.variance_boost = 2.0f;
+	push_constant.firefly_suppression = CLAMP(p_firefly_suppression, 0.0f, 1.0f);
+	push_constant.detail_preservation = CLAMP(p_detail_preservation, 0.0f, 1.0f);
 
 	RD::get_singleton()->texture_copy(source, noisy, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, 0, 0);
 
@@ -308,9 +313,6 @@ void RTGIDenoise::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 	RID write = temp_a;
 	const int max_iterations = CLAMP(p_iterations, 1, 5);
 	int iterations = CLAMP((int)Math::round(Math::lerp(2.0, 4.0, (double)push_constant.denoise_strength)), 1, max_iterations);
-	if (push_constant.denoise_strength > 0.92f) {
-		iterations = max_iterations;
-	}
 	for (int i = 0; i < iterations; i++) {
 		push_constant.pass_index = i;
 		push_constant.step_size = 1 << i;
