@@ -2170,6 +2170,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			? RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment)
 			: nullptr;
 	bool rt_replaces_opaque = scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_PATH_TRACED;
+	scene_features.rt_replaces_opaque = rt_replaces_opaque;
 	const uint32_t rt_denoiser = rt_env_params ? (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
 	const bool rt_svgf_denoiser = rt_denoiser != RSE::PT_DENOISER_NONE;
 	const bool rt_temporal_denoiser = rt_svgf_denoiser;
@@ -2207,7 +2208,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		p_render_data->voxel_gi_count = 0;
 
-		if (!scene_features.rt && rb->has_custom_data(RB_SCOPE_SDFGI)) {
+		if (!rt_replaces_opaque && rb->has_custom_data(RB_SCOPE_SDFGI)) {
 			Ref<RendererRD::GI::SDFGI> sdfgi = rb->get_custom_data(RB_SCOPE_SDFGI);
 			if (sdfgi.is_valid()) {
 				sdfgi->update_cascades();
@@ -2216,7 +2217,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			}
 		}
 
-		if (!scene_features.rt) {
+		if (!rt_replaces_opaque) {
 			gi.setup_voxel_gi_instances(p_render_data, p_render_data->render_buffers, p_render_data->scene_data->cam_transform, *p_render_data->voxel_gi_instances, p_render_data->voxel_gi_count);
 		}
 	} else {
@@ -2382,7 +2383,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	if (!rt_replaces_opaque) {
 		_setup_lightmaps(p_render_data, *p_render_data->lightmaps, p_render_data->scene_data->cam_transform);
 	}
-	if (!scene_features.rt) {
+	if (!rt_replaces_opaque) {
 		_setup_voxelgis(*p_render_data->voxel_gi_instances);
 	}
 
@@ -2508,6 +2509,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		ERR_PRINT_ONCE_ED("Failed to initialize raytracing pipeline or uniform set. Falling back to raster opaque rendering for this frame.");
 		scene_features.rt = false;
 		rt_replaces_opaque = false;
+		scene_features.rt_replaces_opaque = false;
 		scene_features.raw &= ~uint32_t(SCENE_FEATURE_DEPTH_RECONSTRUCT);
 		using_rt_denoise = false;
 		using_taa = using_viewport_taa;
@@ -2908,6 +2910,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		if (!setup_rt_state()) {
 			ERR_PRINT_ONCE_ED("Failed to initialize Simple RT pipeline or uniform set. Rendering raster output without RTGI for this frame.");
 			scene_features.rt = false;
+			scene_features.rt_replaces_opaque = false;
 			scene_features.raw &= ~uint32_t(SCENE_FEATURE_DEPTH_RECONSTRUCT);
 			using_rt_denoise = false;
 			using_taa = using_viewport_taa;
@@ -3039,10 +3042,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				if (rt_split_signals) {
 					rb->clear_context(RB_SCOPE_RTGI_DENOISE);
 					rtgi_denoise->capture_noisy(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, RB_SCOPE_RTGI_DENOISE, rb_data->rt_get_size(), 0);
-					rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DIFFUSE_RADIANCE, RB_SCOPE_RTGI_DENOISE_DIFFUSE, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight, rt_denoise_strength, rt_firefly_suppression, rt_detail_preservation, false, true, false, rb_data->rt_get_size(), 0, 5);
+					rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DIFFUSE_RADIANCE, RB_SCOPE_RTGI_DENOISE_DIFFUSE, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), RID(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight, rt_denoise_strength, rt_firefly_suppression, rt_detail_preservation, false, true, false, rb_data->rt_get_size(), 0, 5);
 					const float specular_denoise_strength = rt_denoise_strength * rt_specular_spatial_strength;
-					rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_RADIANCE, RB_SCOPE_RTGI_DENOISE_SPECULAR, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_specular_history_weight, specular_denoise_strength, rt_firefly_suppression, rt_detail_preservation, true, false, false, rb_data->rt_get_size(), 0, 3);
-					rtgi_denoise->composite_split(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DIFFUSE_RADIANCE, RB_TEX_RT_SPECULAR_RADIANCE, RB_TEX_RAYTRACING, rb_data->rt_get_size(), 0);
+					rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_RADIANCE, RB_SCOPE_RTGI_DENOISE_SPECULAR, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_specular_guide(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_specular_history_weight, specular_denoise_strength, rt_firefly_suppression, rt_detail_preservation, true, false, false, rb_data->rt_get_size(), 0, 3);
+					rtgi_denoise->composite_split(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DIFFUSE_RADIANCE, RB_TEX_RT_SPECULAR_RADIANCE, rb_data->rt_get_velocity_texture(), RB_TEX_RAYTRACING, rt_denoise_strength, rt_firefly_suppression, rb_data->rt_get_size(), 0);
 					RD::get_singleton()->texture_copy(rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), Vector3(), Vector3(), Vector3(rb_data->rt_get_size().x, rb_data->rt_get_size().y, 1), 0, 0, 0, 0);
 					RD::get_singleton()->texture_copy(rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), Vector3(), Vector3(), Vector3(rb_data->rt_get_size().x, rb_data->rt_get_size().y, 1), 0, 0, 0, 0);
 				} else {
@@ -4934,9 +4937,13 @@ void RenderForwardClustered::sdfgi_update(const Ref<RenderSceneBuffers> &p_rende
 		sdfgi = rb->get_custom_data(RB_SCOPE_SDFGI);
 	}
 
-	// SDFGI is incompatible with raytracing -- disable entirely when RT is active.
-	bool rt_active = p_environment.is_valid() && environment_get_pathtracing_enabled(p_environment);
-	bool needs_sdfgi = !rt_active && p_environment.is_valid() && environment_get_sdfgi_enabled(p_environment);
+	// Path Traced RTGI owns the opaque pass, but Simple RT keeps the raster GI path.
+	bool rt_path_traced = false;
+	if (p_environment.is_valid() && environment_get_pathtracing_enabled(p_environment)) {
+		const float *rt_env_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_environment);
+		rt_path_traced = rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_PATH_TRACED;
+	}
+	bool needs_sdfgi = !rt_path_traced && p_environment.is_valid() && environment_get_sdfgi_enabled(p_environment);
 	bool needs_reset = sdfgi.is_valid() ? sdfgi->version != gi.sdfgi_current_version : false;
 
 	if (!needs_sdfgi || needs_reset) {

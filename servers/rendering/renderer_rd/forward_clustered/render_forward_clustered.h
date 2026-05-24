@@ -349,17 +349,23 @@ private:
 		SCENE_FEATURE_DEPTH_RECONSTRUCT = (1 << 6),
 	};
 
-	// Raster indirect/screen-space features disabled while hardware RTGI is active.
-	// Depth prepass remains available to Hybrid because Forward+ still owns primary raster.
+	// Screen-space effects are disabled while hardware RTGI is active. Raster GI
+	// sources remain available to Simple RT because Forward+ still owns primary raster.
 	constexpr static uint32_t RT_DISABLED_FEATURES =
-			SCENE_FEATURE_SDFGI | SCENE_FEATURE_SSIL | SCENE_FEATURE_SSR | SCENE_FEATURE_SSAO | SCENE_FEATURE_VOXELGI;
+			SCENE_FEATURE_SSIL | SCENE_FEATURE_SSR | SCENE_FEATURE_SSAO;
+	constexpr static uint32_t RT_REPLACES_OPAQUE_DISABLED_FEATURES =
+			SCENE_FEATURE_SDFGI | SCENE_FEATURE_VOXELGI;
 
 	struct SceneFeatures {
 		uint32_t raw = 0;
 		bool rt = false;
+		bool rt_replaces_opaque = false;
 
 		void set(uint32_t p_feature) { raw |= p_feature; }
-		uint32_t get() const { return rt ? (raw & ~RT_DISABLED_FEATURES) : raw; }
+		uint32_t get() const {
+			uint32_t features = rt ? (raw & ~RT_DISABLED_FEATURES) : raw;
+			return rt_replaces_opaque ? (features & ~RT_REPLACES_OPAQUE_DISABLED_FEATURES) : features;
+		}
 		bool has(uint32_t p_feature) const { return (get() & p_feature) != 0; }
 	};
 
