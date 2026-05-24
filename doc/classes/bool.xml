@@ -81,7 +81,7 @@
 			<return type="bool" />
 			<param index="0" name="right" type="bool" />
 			<description>
-				Returns [code]true[/code] if one operand is [code]true[/code] and the other operand is [code]false[/code]. Equivalent to logical [b]XOR[/b] ([b]NEQ[/b]).
+				Returns [code]true[/code] if one [bool] is [code]true[/code] and the other [bool] is [code]false[/code]. Equivalent to logical XOR (NEQ).
 			</description>
 		</operator>
 		<operator name="operator &lt;">
@@ -95,7 +95,7 @@
 			<return type="bool" />
 			<param index="0" name="right" type="bool" />
 			<description>
-				Returns [code]true[/code] if both operands are [code]true[/code], or if both operands are [code]false[/code]. Equivalent to logical [b]XNOR[/b] ([b]EQ[/b]).
+				Returns [code]true[/code] if both [bool]s are [code]true[/code], or if both [bool]s are [code]false[/code]. Equivalent to logical XNOR (EQ).
 			</description>
 		</operator>
 		<operator name="operator &gt;">
