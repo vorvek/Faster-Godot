@@ -11,6 +11,8 @@
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.h"
 
 #define RB_SCOPE_RTGI_DENOISE SNAME("rtgi_denoise")
+#define RB_SCOPE_RTGI_DENOISE_DIFFUSE SNAME("rtgi_denoise_diffuse")
+#define RB_SCOPE_RTGI_DENOISE_SPECULAR SNAME("rtgi_denoise_specular")
 #define RB_TEX_RTGI_DENOISE_HISTORY SNAME("history")
 #define RB_TEX_RTGI_DENOISE_NOISY SNAME("noisy")
 #define RB_TEX_RTGI_DENOISE_MOMENTS SNAME("moments")
@@ -51,6 +53,44 @@ public:
 			uint32_t p_view = 0,
 			int p_iterations = 4);
 
+	void process_signal(Ref<RenderSceneBuffersRD> p_render_buffers,
+			const StringName &p_source_context,
+			const StringName &p_source_texture,
+			const StringName &p_denoise_scope,
+			RID p_velocity,
+			RID p_normal_roughness,
+			RID p_albedo_metalness,
+			RID p_viewz_hitdist,
+			RID p_history_validity,
+			RID p_prev_history_validity,
+			RID p_history_id,
+			RID p_prev_history_id,
+			float p_history_weight,
+			float p_denoise_strength,
+			float p_firefly_suppression,
+			float p_detail_preservation,
+			bool p_radiance_space_history,
+			bool p_enable_blotch_stabilize,
+			bool p_update_shared_history,
+			const Size2i &p_process_size,
+			uint32_t p_view = 0,
+			int p_iterations = 4);
+
+	void capture_noisy(Ref<RenderSceneBuffersRD> p_render_buffers,
+			const StringName &p_source_context,
+			const StringName &p_source_texture,
+			const StringName &p_denoise_scope,
+			const Size2i &p_process_size,
+			uint32_t p_view = 0);
+
+	void composite_split(Ref<RenderSceneBuffersRD> p_render_buffers,
+			const StringName &p_source_context,
+			const StringName &p_diffuse_texture,
+			const StringName &p_specular_texture,
+			const StringName &p_output_texture,
+			const Size2i &p_process_size,
+			uint32_t p_view = 0);
+
 	void composite_volumetric_fog(Ref<RenderSceneBuffersRD> p_render_buffers,
 			const StringName &p_source_context,
 			const StringName &p_source_texture,
@@ -72,6 +112,7 @@ private:
 		MODE_ATROUS,
 		MODE_COMPOSITE,
 		MODE_BLOTCH_STABILIZE,
+		MODE_SPLIT_COMPOSITE,
 		MODE_VOLUMETRIC_FOG,
 		MODE_MAX
 	};
@@ -113,6 +154,7 @@ private:
 	void _dispatch_atrous(const PushConstant &p_push_constant, RID p_input, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_velocity, RID p_reactivity, RID p_output);
 	void _dispatch_composite(const PushConstant &p_push_constant, RID p_filtered, RID p_temporal, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_reactivity, RID p_output);
 	void _dispatch_blotch_stabilize(const PushConstant &p_push_constant, RID p_input, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_velocity, RID p_reactivity, RID p_output);
+	void _dispatch_split_composite(const PushConstant &p_push_constant, RID p_diffuse, RID p_specular, RID p_output);
 	void _dispatch_volumetric_fog(const PushConstant &p_push_constant, RID p_color, RID p_viewz_hitdist, RID p_fog_map);
 };
 

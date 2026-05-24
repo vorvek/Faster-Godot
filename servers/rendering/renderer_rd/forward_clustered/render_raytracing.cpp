@@ -3900,7 +3900,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			float rt_overscan[4];
 			float rt_prev_overscan[4];
 		} rt_ubo = {};
-		static_assert(sizeof(rt_ubo) == 80 * sizeof(float));
+		static_assert(sizeof(rt_ubo) == 84 * sizeof(float));
 
 		if (p_render_data && p_render_data->environment.is_valid()) {
 			const float *env_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
@@ -3915,7 +3915,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		// [12] = OVERSCAN_HORIZONTAL, [13] = OVERSCAN_VERTICAL,
 		// [14] = LIGHT_COUNT, [15] = FRAME_INDEX,
 		// [16-19] = SVGF controls, [20] = RAY_FIREFLY_SUPPRESSION,
-		// [21] = RAY_MAX_RADIANCE.
+		// [21] = RAY_MAX_RADIANCE, [22-24] = split-signal denoiser controls.
 		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_FRAME_INDEX] = float(p_state->frame_counter++);
 
 		bool background_uses_sky = false;
@@ -4225,6 +4225,33 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		u.binding = 35;
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
 		add_uniform_id(u, rb_data->rt_get_viewz_hitdist());
+		uniforms.push_back(u);
+	}
+
+	// Binding 36: RTGI diffuse radiance split output.
+	{
+		RD::Uniform u;
+		u.binding = 36;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_diffuse_radiance());
+		uniforms.push_back(u);
+	}
+
+	// Binding 37: RTGI specular/source radiance split output.
+	{
+		RD::Uniform u;
+		u.binding = 37;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_specular_radiance());
+		uniforms.push_back(u);
+	}
+
+	// Binding 38: RTGI specular guide output.
+	{
+		RD::Uniform u;
+		u.binding = 38;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_specular_guide());
 		uniforms.push_back(u);
 	}
 

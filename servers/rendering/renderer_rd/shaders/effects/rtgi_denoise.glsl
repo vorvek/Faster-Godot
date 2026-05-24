@@ -338,9 +338,13 @@ void main() {
 	motion_history_cap = min(motion_history_cap, mix(params.max_history, 10.0, specular_history_guard));
 	float history_len = history_valid ? min(min(prev_history_len * history_confidence + 1.0, params.max_history), motion_history_cap) : 1.0;
 	float base_alpha = max(pow(max(1.0 - params.history_weight, 0.001), 1.15), 0.025);
+	if (params.radiance_space_history > 0.5) {
+		base_alpha = max(pow(max(1.0 - params.history_weight, 0.001), 2.20), 0.055);
+	}
 	float current_alpha = history_valid ? max(1.0 / history_len, base_alpha) : 1.0;
 	current_alpha = history_valid ? mix(0.72, current_alpha, smoothstep(0.08, 0.65, history_confidence)) : current_alpha;
-	current_alpha = history_valid ? max(current_alpha, mix(0.0, 0.16, specular_history_guard)) : current_alpha;
+	float specular_min_alpha = params.radiance_space_history > 0.5 ? 0.07 : 0.16;
+	current_alpha = history_valid ? max(current_alpha, mix(0.0, specular_min_alpha, specular_history_guard)) : current_alpha;
 	current_alpha = history_valid ? max(current_alpha, mix(base_alpha, 0.90, fast_motion)) : current_alpha;
 	current_alpha = history_valid ? max(current_alpha, mix(0.90, 1.0, extreme_motion)) : current_alpha;
 
@@ -532,13 +536,32 @@ void main() {
 	float blotch_signal = max(smoothstep(0.018, 0.090, local_delta), smoothstep(0.08, 0.38, relative_delta) * 0.75);
 	float albedo_detail_guard = smoothstep(0.055, 0.24, surface_albedo_detail) * rough_diffuse * params.detail_preservation;
 	float stabilizer = blotch_signal * variance_gate * support * rough_diffuse * motion_guard * params.denoise_strength * mix(1.0, 0.30, center_reactivity);
-	stabilizer *= mix(1.0, 0.48, albedo_detail_guard);
+	stabilizer *= mix(1.0, 0.55, albedo_detail_guard);
 	stabilizer = max(stabilizer, unsupported_bright * support * rough_diffuse * motion_guard * params.denoise_strength * mix(0.40, 0.18, center_reactivity));
-	stabilizer = min(stabilizer, 0.55);
+	stabilizer = min(stabilizer, 0.82);
 
 	vec3 stabilized = mix(center_demod, neighborhood, stabilizer);
-	vec3 output_color = remodulate_radiance(stabilized, center_nr, center_albedo, center_z);
+	vec3 output_color = params.radiance_space_history > 0.5 ? sanitize_color(stabilized) : remodulate_radiance(stabilized, center_nr, center_albedo, center_z);
 	imageStore(output_image, pos, vec4(output_color, center_rgba.a));
+}
+
+#endif
+
+#ifdef MODE_SPLIT_COMPOSITE
+
+layout(set = 0, binding = 0) uniform sampler2D diffuse_buffer;
+layout(set = 0, binding = 1) uniform sampler2D specular_buffer;
+layout(rgba16f, set = 0, binding = 2) uniform restrict writeonly image2D output_image;
+
+void main() {
+	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+	if (any(greaterThanEqual(pos, ivec2(params.resolution)))) {
+		return;
+	}
+
+	vec3 diffuse = sanitize_color(texelFetch(diffuse_buffer, pos, 0).rgb);
+	vec3 specular = sanitize_color(texelFetch(specular_buffer, pos, 0).rgb);
+	imageStore(output_image, pos, vec4(sanitize_color(diffuse + specular), 1.0));
 }
 
 #endif
@@ -697,6 +720,9 @@ void main() {
 	float center_luma_t = tonemap_luma(center_luma);
 	float variance = max(center.a * params.variance_boost, 1e-4);
 	float specular_surface = max(1.0 - clamp(center_nr.a, 0.0, 1.0), clamp(center_albedo.a, 0.0, 1.0));
+	if (params.radiance_space_history > 0.5) {
+		specular_surface = max(specular_surface, 0.70);
+	}
 	float specular_spatial_guard = smoothstep(0.25, 0.95, specular_surface);
 	float roughness_filter = mix(1.45, 1.0, clamp(center_nr.a, 0.0, 1.0));
 	float variance_filter = smoothstep(0.0008, 0.055, variance);
@@ -873,7 +899,13 @@ void main() {
 		float dark_smooth = dark_neighborhood * dark_excess * (1.0 - smoothstep(0.20, 0.74, bright_support)) * mix(0.86, 1.0, specular_surface);
 		float salt_noise = dark_neighborhood * smoothstep(neighbor_luma + 0.003, neighbor_luma + 0.024, center_final_luma) * (1.0 - smoothstep(0.30, 0.82, bright_support));
 		float suppress = max(max(max(isolated_bright * mix(0.82, 1.0, max(specular_surface, dark_neighborhood)), isolated_dim), dark_smooth), salt_noise) * params.denoise_strength * params.firefly_suppression * mix(1.0, 0.48, reactive_detail);
-		suppress = min(suppress * mix(1.0, 3.20, dark_neighborhood), 1.0);
+		if (params.radiance_space_history > 0.5) {
+			float unsupported_specular_twinkle = smoothstep(neighbor_luma + 0.003, neighbor_luma + 0.035, center_final_luma) *
+					(1.0 - smoothstep(0.10, 0.75, bright_support)) *
+					mix(0.55, 1.0, dark_neighborhood);
+			suppress = max(suppress, unsupported_specular_twinkle * params.denoise_strength * params.firefly_suppression * mix(1.0, 0.42, reactive_detail));
+		}
+		suppress = min(suppress * mix(1.0, params.radiance_space_history > 0.5 ? 6.50 : 3.20, dark_neighborhood), 1.0);
 		suppress *= mix(1.0, 0.80, supported_texture_guard);
 		denoised = sanitize_color(mix(denoised, lower_neighbor_color, suppress));
 
@@ -882,8 +914,8 @@ void main() {
 				smoothstep(0.00008, 0.006, neighbor_variance) *
 				(1.0 - smoothstep(0.35, 0.95, bright_support));
 		float plane_grain_smooth = rough_diffuse_plane * local_grain * params.denoise_strength * mix(1.0, 0.35, reactive_detail);
-		plane_grain_smooth *= mix(1.0, 0.34, albedo_detail_guard);
-		denoised = sanitize_color(mix(denoised, neighbor_color, plane_grain_smooth * mix(1.50, 0.58, albedo_detail_guard)));
+		plane_grain_smooth *= mix(1.0, 0.22, albedo_detail_guard);
+		denoised = sanitize_color(mix(denoised, neighbor_color, min(plane_grain_smooth * mix(2.40, 0.72, albedo_detail_guard), 0.88)));
 		center_final_luma = luminance(denoised);
 
 		float dark_hole = rough_diffuse_plane *
@@ -938,7 +970,9 @@ void main() {
 		denoised = sanitize_color(mix(denoised, orphan_avg, clamp(orphan_hot, 0.0, 1.0)));
 	}
 
-	denoised = remodulate_radiance(denoised, normal_roughness, albedo_metalness, center_z);
+	if (params.radiance_space_history <= 0.5) {
+		denoised = remodulate_radiance(denoised, normal_roughness, albedo_metalness, center_z);
+	}
 	imageStore(output_image, pos, vec4(denoised, 1.0));
 }
 

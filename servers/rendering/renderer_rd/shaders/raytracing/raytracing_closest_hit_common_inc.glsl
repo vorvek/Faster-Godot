@@ -298,6 +298,8 @@ void write_primary_hit_guides(HitData h, MaterialResult m) {
 	imageStore(rt_normal_roughness_image, pixel, vec4(normal * 0.5 + 0.5, clamp(m.roughness, 0.0, 1.0)));
 	imageStore(rt_albedo_metalness_image, pixel, vec4(max(m.albedo, vec3(0.0)), clamp(m.metalness, 0.0, 1.0)));
 	imageStore(rt_viewz_hitdist_image, pixel, vec4(abs(view_pos.z), max(gl_HitTEXT, 0.0), expected_prev_view_z, 0.0));
+	float specular_risk = max(1.0 - clamp(m.roughness, 0.0, 1.0), clamp(m.metalness, 0.0, 1.0));
+	imageStore(rt_specular_guide_image, pixel, vec4(clamp(m.roughness, 0.0, 1.0), max(gl_HitTEXT, 0.0), specular_risk, 1.0));
 }
 #endif
 
@@ -556,7 +558,11 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	// Emissive contribution.
 	if (!hybrid_primary) {
 		bool secondary_emissive = total_bounces > 0u;
-		ps.radiance += rt_clamp_path_contribution(ps.throughput * m.emissive, m.roughness, m.metalness, secondary_emissive, secondary_emissive);
+		vec3 emissive_contribution = rt_clamp_path_contribution(ps.throughput * m.emissive, m.roughness, m.metalness, secondary_emissive, secondary_emissive);
+		ps.radiance += emissive_contribution;
+		if (total_bounces == 0u || get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {
+			ps.specular_radiance += emissive_contribution;
+		}
 	}
 
 	// Bounce limit check.
@@ -658,9 +664,20 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	if (rt_light_count > 0u && !hybrid_primary) {
 		bool is_indirect = (diffuse_bounces > 0u);
 		uint receiver_layer_mask = geometries[h.geometry_idx].layer_mask;
-		vec3 direct_light = lights_evaluate_direct_lighting(
+		RTDirectLighting direct_light = lights_evaluate_direct_lighting_split(
 				h.hit_pos, h.geometry_normal, N, V, brdf_mat, ps.rng_state, is_indirect, receiver_layer_mask, rt_light_count);
-		ps.radiance += rt_clamp_path_contribution(ps.throughput * direct_light, m.roughness, m.metalness, is_indirect, false);
+		vec3 direct_diffuse = rt_clamp_path_contribution(ps.throughput * direct_light.diffuse, m.roughness, m.metalness, is_indirect, false);
+		vec3 direct_specular = rt_clamp_path_contribution(ps.throughput * direct_light.specular, m.roughness, m.metalness, is_indirect, false);
+		vec3 direct_total = direct_diffuse + direct_specular;
+		if (total_bounces == 0u) {
+			float direct_total_luma = rt_luminance(direct_total);
+			float direct_specular_fraction = direct_total_luma > 1e-5 ? rt_luminance(direct_specular) / direct_total_luma : 0.0;
+			ps.packed_bounces_flags = set_primary_specular_fraction(ps.packed_bounces_flags, direct_specular_fraction);
+			ps.specular_radiance += direct_specular;
+		} else if (get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {
+			ps.specular_radiance += direct_total;
+		}
+		ps.radiance += direct_total;
 	}
 
 	// =================================================================
@@ -711,6 +728,14 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	if (brdfType == DIFFUSE_TYPE) {
 		ps.packed_bounces_flags = inc_diffuse_bounce(ps.packed_bounces_flags);
 	} else {
+		if (total_bounces == 0u) {
+			float primary_roughness = clamp(m.roughness, 0.0, 1.0);
+			float primary_metalness = clamp(m.metalness, 0.0, 1.0);
+			float primary_specular_risk = max(1.0 - primary_roughness, primary_metalness);
+			bool primary_specular_signal = primary_specular_risk > 0.35 && primary_roughness < mix(0.32, 0.14, primary_metalness);
+			float current_specular_fraction = get_primary_specular_fraction(ps.packed_bounces_flags);
+			ps.packed_bounces_flags = set_primary_specular_fraction(ps.packed_bounces_flags, max(current_specular_fraction, primary_specular_signal ? 0.85 : 0.0));
+		}
 		ps.packed_bounces_flags = inc_total_bounce(ps.packed_bounces_flags);
 	}
 

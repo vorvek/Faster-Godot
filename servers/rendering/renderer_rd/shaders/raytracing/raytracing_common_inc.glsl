@@ -33,7 +33,7 @@ global_shader_uniforms;
 #ifndef RT_STAGE_ANY_HIT
 
 layout(set = 0, binding = 6, std140) uniform RaytracingParams {
-	vec4 rt_params[6];
+	vec4 rt_params[7];
 	mat4 prev_vp_unjittered;
 	mat4 curr_vp_unjittered;
 	mat4 inv_projection_unjittered;
@@ -143,6 +143,9 @@ layout(set = 0, binding = 15, r32f) uniform image2D rt_depth_image;
 layout(set = 0, binding = 33, rgba16f) uniform image2D rt_normal_roughness_image;
 layout(set = 0, binding = 34, rgba16f) uniform image2D rt_albedo_metalness_image;
 layout(set = 0, binding = 35, rgba16f) uniform image2D rt_viewz_hitdist_image;
+layout(set = 0, binding = 36, rgba16f) uniform image2D rt_diffuse_radiance_image;
+layout(set = 0, binding = 37, rgba16f) uniform image2D rt_specular_radiance_image;
+layout(set = 0, binding = 38, rgba16f) uniform image2D rt_specular_guide_image;
 
 void rt_store_primary_velocity(ivec2 pixel, vec2 curr_visible_uv, vec2 prev_visible_uv) {
 	vec2 curr_texture_uv = rt_visible_to_texture_uv(curr_visible_uv, rt_current_origin());

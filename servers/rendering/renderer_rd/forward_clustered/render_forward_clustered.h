@@ -173,6 +173,9 @@ public:
 		void rt_ensure_textures();
 		bool rt_has_texture() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING); }
 		RID rt_get_texture() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING); }
+		RID rt_get_diffuse_radiance() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DIFFUSE_RADIANCE); }
+		RID rt_get_specular_radiance() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_RADIANCE); }
+		RID rt_get_specular_guide() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_GUIDE); }
 		bool rt_has_depth_texture() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH); }
 		RID rt_get_depth_texture() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH); }
 		RID rt_ensure_depth_attachment();

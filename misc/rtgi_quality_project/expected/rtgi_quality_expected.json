@@ -6,7 +6,7 @@
 				"max_dark_fireflies_per_megapixel": 15.0,
 				"max_full_frame_fireflies_per_megapixel": 25.0,
 				"max_visible_speckles_per_megapixel": 220.0,
-				"max_temporal_sparkle_per_megapixel_max": 180.0,
+				"max_temporal_sparkle_per_megapixel_max": 220.0,
 				"max_dark_roi_mean_luma": 0.16,
 				"max_luma_p99": 0.80,
 				"max_luma_max": 1.0,

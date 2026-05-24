@@ -51,6 +51,7 @@ void main() {
 
 	// Accumulate multiple samples per pixel
 	vec3 total_radiance = vec3(0.0);
+	vec3 total_specular_radiance = vec3(0.0);
 
 	const uint max_bounces = RT_GET_MAX_BOUNCES();
 
@@ -60,6 +61,7 @@ void main() {
 	[[dont_unroll]] for (uint sample_idx = 0u; sample_idx < samples_per_pixel; sample_idx++) {
 		PathState ps;
 		ps.radiance = vec3(0.0);
+		ps.specular_radiance = vec3(0.0);
 		ps.throughput = vec3(1.0);
 		ps.packed_bounces_flags = (sample_idx == 0u) ? set_sample_zero(0u) : 0u;
 		ps.rng_state = init_rng(rng_pixel, frame_index, sample_idx);
@@ -98,17 +100,25 @@ void main() {
 		}
 
 		if (get_rt_param(RT_PARAM_VIS_MODE) == 0.0) {
-			total_radiance += sanitize_payload_vec3(ps.radiance);
+			vec3 sample_radiance = sanitize_payload_vec3(ps.radiance);
+			total_radiance += sample_radiance;
+			total_specular_radiance += min(sanitize_payload_vec3(ps.specular_radiance), sample_radiance);
 		} else {
 			total_radiance += ps.radiance;
 		}
 	}
 
 	vec3 final_radiance = total_radiance / float(samples_per_pixel);
+	vec3 final_specular = total_specular_radiance / float(samples_per_pixel);
 	final_radiance *= max(0.0, get_rt_param(RT_PARAM_ENERGY));
+	final_specular *= max(0.0, get_rt_param(RT_PARAM_ENERGY));
 	final_radiance = sanitize_payload_vec3(final_radiance);
+	final_specular = min(sanitize_payload_vec3(final_specular), final_radiance);
+	vec3 final_diffuse = sanitize_payload_vec3(max(final_radiance - final_specular, vec3(0.0)));
 
 	imageStore(image, pixel_i, vec4(final_radiance, 1.0));
+	imageStore(rt_diffuse_radiance_image, pixel_i, vec4(final_diffuse, 1.0));
+	imageStore(rt_specular_radiance_image, pixel_i, vec4(final_specular, 1.0));
 }
 
 #[miss]
@@ -185,6 +195,7 @@ void main() {
 				imageStore(rt_normal_roughness_image, pixel, vec4(-sky_direction * 0.5 + 0.5, 1.0));
 				imageStore(rt_albedo_metalness_image, pixel, vec4(1.0, 1.0, 1.0, 0.0));
 				imageStore(rt_viewz_hitdist_image, pixel, vec4(65504.0, 65504.0, 0.0, 0.0));
+				imageStore(rt_specular_guide_image, pixel, vec4(1.0, 65504.0, 0.0, 0.0));
 				if (history_valid > 0.5) {
 					rt_store_primary_velocity(pixel, curr_uv, prev_uv);
 				} else {
@@ -197,6 +208,7 @@ void main() {
 	if (uint(get_rt_param(RT_PARAM_MODE)) == RT_MODE_HYBRID &&
 			get_total_bounces(ps.packed_bounces_flags) == 0u) {
 		ps.radiance = vec3(0.0);
+		ps.specular_radiance = vec3(0.0);
 		path_pack(payload, ps);
 		return;
 	}
@@ -251,7 +263,11 @@ void main() {
 		} else if (VIS_MODE == 0) {
 			uint sky_total_bounces = get_total_bounces(ps.packed_bounces_flags);
 			vec3 sky_contribution = ps.throughput * sky_color;
-			ps.radiance += sky_total_bounces > 0u ? rt_clamp_path_contribution(sky_contribution, 0.0, 1.0, true, true) : sky_contribution;
+			vec3 clamped_sky = sky_total_bounces > 0u ? rt_clamp_path_contribution(sky_contribution, 0.0, 1.0, true, true) : sky_contribution;
+			ps.radiance += clamped_sky;
+			if (sky_total_bounces == 0u || get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {
+				ps.specular_radiance += clamped_sky;
+			}
 		} else {
 			ps.radiance = sky_color;
 		}
@@ -259,7 +275,11 @@ void main() {
 #else
 	uint sky_total_bounces = get_total_bounces(ps.packed_bounces_flags);
 	vec3 sky_contribution = ps.throughput * sky_color;
-	ps.radiance += sky_total_bounces > 0u ? rt_clamp_path_contribution(sky_contribution, 0.0, 1.0, true, true) : sky_contribution;
+	vec3 clamped_sky = sky_total_bounces > 0u ? rt_clamp_path_contribution(sky_contribution, 0.0, 1.0, true, true) : sky_contribution;
+	ps.radiance += clamped_sky;
+	if (sky_total_bounces == 0u || get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {
+		ps.specular_radiance += clamped_sky;
+	}
 #endif // RT_DEBUG_ENABLED
 
 	path_pack(payload, ps);

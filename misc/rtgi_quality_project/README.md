@@ -24,24 +24,31 @@ Useful options:
 
 - `--rtgi-scene=stress|cornell|sponza`
 - `--rtgi-denoise-strength=0.0..1.0`
-- `--rtgi-history-weight=0.0..0.98`
+- `--rtgi-history-weight=0.0..0.98` (default `0.95` for split diffuse)
 - `--rtgi-firefly-suppression=0.0..1.0`
 - `--rtgi-detail-preservation=0.0..1.0`
+- `--rtgi-split-signals=true|false`
+- `--rtgi-specular-history-weight=0.0..0.98` (default `0.95`)
+- `--rtgi-specular-spatial-strength=0.0..1.0` (default `1.0`)
 - `--rtgi-ray-firefly-suppression=0.0..1.0`
 - `--rtgi-ray-max-radiance=0.0..4096.0`
 - `--rtgi-warmup-frames=120`
 - `--rtgi-reference-spp=16`
-- `--rtgi-debug-view=beauty|final|noisy|normal_roughness|viewz_hitdist|motion_vectors|variance|history_length|rejection|disabled`
+- `--rtgi-debug-view=beauty|final|noisy|diffuse_noisy|specular_noisy|diffuse_final|specular_final|specular_guide|normal_roughness|viewz_hitdist|motion_vectors|variance|history_length|rejection|disabled`
+- `--rtgi-gate-profile=strict|smoke`
 - `--rtgi-capture-debug`
 - `--rtgi-capture-comparison`
 - `--rtgi-cornell-compare`
 - `--rtgi-cornell-reference-image=<path>`
 - `--rtgi-sponza-path=<path-to-gltf-or-glb>`
+- `--rtgi-sponza-normal-y=auto|opengl|directx` (default `auto`; `directx`
+  flips imported Sponza normal-map green channels in the harness only)
 - `--rtgi-camera-pan`
 - `--rtgi-write-reference`
 
-`--rtgi-capture-comparison` writes beauty-frame Path Traced, Hybrid RT,
-no-RTGI, and high-SPP reference captures plus a 2x2 comparison grid for visual
+`--rtgi-capture-comparison` writes beauty-frame Path Traced split-signal,
+Path Traced single-beauty fallback, Hybrid RT, no-RTGI, and high-SPP reference
+captures plus a comparison grid for visual
 inspection. `final` is still captured by `--rtgi-capture-debug` as the denoised
 RTGI debug buffer.
 
@@ -75,15 +82,18 @@ the engine. Pass a local path or set `GODOT_RTGI_SPONZA_PATH`:
 D:\dev\faster-godot-4.6.3\bin\faster-godot.windows.editor.dev.x86_64.faster_godot.mono.console.exe --path D:\dev\faster-godot-4.6.3\misc\rtgi_quality_project --scene res://scenes/rtgi_quality_main.tscn --rtgi-scene=sponza --rtgi-sponza-path=D:\dev\rtgi_external_assets\sponza\Sponza.gltf --rtgi-capture-debug --rtgi-capture-comparison
 ```
 
-Preferred source for a modern RT/GI Sponza pass is Intel's Sponza Base Scene,
-which is listed in the Intel GPU Research Samples page as a PBR remake with
-GLTF/USD/FBX formats and Creative Commons Attribution licensing:
-<https://www.intel.com/content/www/us/en/developer/topic-technology/graphics-research/samples.html>
-
-The classic Khronos/Crytek Sponza history has conflicting license metadata. Use
-it only as an external local QA asset after checking the downloaded license.
-When the asset is missing, the harness uses a small procedural atrium smoke test
-and skips Sponza thresholds.
+The canonical Phase 3 source is Khronos glTF Sample Assets Sponza:
+<https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Sponza>.
+Use `Models/Sponza/glTF/Sponza.gltf` from a local checkout or download, for
+example `D:\dev\rtgi_external_assets\sponza\Models\Sponza\glTF\Sponza.gltf`.
+glTF normal maps are expected to use +Y tangent-space. If testing a DirectX
+source texture set or checking normal handedness, pass
+`--rtgi-sponza-normal-y=directx`; this creates temporary flipped normal
+textures inside the QA run and does not modify the source asset or engine
+importer behavior.
+The model license is external to the engine license, so do not vendor it into
+this repository. When the asset is missing, the harness uses a small procedural
+atrium smoke test and skips Sponza thresholds.
 
 `--rtgi-write-reference` updates `res://expected/rtgi_quality_expected.json`
 from the current run. Only use it after reviewing the captures.

@@ -747,6 +747,33 @@ float Environment::get_rtgi_denoiser_detail_preservation() const {
 	return rtgi_denoiser_detail_preservation;
 }
 
+void Environment::set_rtgi_denoiser_split_signals(bool p_enabled) {
+	rtgi_denoiser_split_signals = p_enabled;
+	_update_pathtracing();
+}
+
+bool Environment::is_rtgi_denoiser_split_signals_enabled() const {
+	return rtgi_denoiser_split_signals;
+}
+
+void Environment::set_rtgi_denoiser_specular_history_weight(float p_weight) {
+	rtgi_denoiser_specular_history_weight = CLAMP(p_weight, 0.0f, 0.98f);
+	_update_pathtracing();
+}
+
+float Environment::get_rtgi_denoiser_specular_history_weight() const {
+	return rtgi_denoiser_specular_history_weight;
+}
+
+void Environment::set_rtgi_denoiser_specular_spatial_strength(float p_strength) {
+	rtgi_denoiser_specular_spatial_strength = CLAMP(p_strength, 0.0f, 1.0f);
+	_update_pathtracing();
+}
+
+float Environment::get_rtgi_denoiser_specular_spatial_strength() const {
+	return rtgi_denoiser_specular_spatial_strength;
+}
+
 void Environment::set_rtgi_ray_firefly_suppression(float p_suppression) {
 	rtgi_ray_firefly_suppression = CLAMP(p_suppression, 0.0f, 1.0f);
 	_update_pathtracing();
@@ -833,6 +860,9 @@ void Environment::_update_pathtracing() {
 	params.write[RSE::PT_PARAM_DENOISER_DETAIL_PRESERVATION] = rtgi_denoiser_detail_preservation;
 	params.write[RSE::PT_PARAM_RAY_FIREFLY_SUPPRESSION] = rtgi_ray_firefly_suppression;
 	params.write[RSE::PT_PARAM_RAY_MAX_RADIANCE] = rtgi_ray_max_radiance;
+	params.write[RSE::PT_PARAM_DENOISER_SPLIT_SIGNALS] = rtgi_denoiser_split_signals ? 1.0f : 0.0f;
+	params.write[RSE::PT_PARAM_DENOISER_SPECULAR_HISTORY_WEIGHT] = rtgi_denoiser_specular_history_weight;
+	params.write[RSE::PT_PARAM_DENOISER_SPECULAR_SPATIAL_STRENGTH] = rtgi_denoiser_specular_spatial_strength;
 	RS::get_singleton()->environment_set_pathtracing_params(environment, params);
 }
 
@@ -1696,6 +1726,12 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser_firefly_suppression"), &Environment::get_rtgi_denoiser_firefly_suppression);
 	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser_detail_preservation", "preservation"), &Environment::set_rtgi_denoiser_detail_preservation);
 	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser_detail_preservation"), &Environment::get_rtgi_denoiser_detail_preservation);
+	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser_split_signals", "enabled"), &Environment::set_rtgi_denoiser_split_signals);
+	ClassDB::bind_method(D_METHOD("is_rtgi_denoiser_split_signals_enabled"), &Environment::is_rtgi_denoiser_split_signals_enabled);
+	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser_specular_history_weight", "weight"), &Environment::set_rtgi_denoiser_specular_history_weight);
+	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser_specular_history_weight"), &Environment::get_rtgi_denoiser_specular_history_weight);
+	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser_specular_spatial_strength", "strength"), &Environment::set_rtgi_denoiser_specular_spatial_strength);
+	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser_specular_spatial_strength"), &Environment::get_rtgi_denoiser_specular_spatial_strength);
 	ClassDB::bind_method(D_METHOD("set_rtgi_ray_firefly_suppression", "suppression"), &Environment::set_rtgi_ray_firefly_suppression);
 	ClassDB::bind_method(D_METHOD("get_rtgi_ray_firefly_suppression"), &Environment::get_rtgi_ray_firefly_suppression);
 	ClassDB::bind_method(D_METHOD("set_rtgi_ray_max_radiance", "radiance"), &Environment::set_rtgi_ray_max_radiance);
@@ -1720,6 +1756,9 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_history_weight", PROPERTY_HINT_RANGE, "0,0.98,0.001"), "set_rtgi_denoiser_history_weight", "get_rtgi_denoiser_history_weight");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_firefly_suppression", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_denoiser_firefly_suppression", "get_rtgi_denoiser_firefly_suppression");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_detail_preservation", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_denoiser_detail_preservation", "get_rtgi_denoiser_detail_preservation");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_denoiser_split_signals"), "set_rtgi_denoiser_split_signals", "is_rtgi_denoiser_split_signals_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_specular_history_weight", PROPERTY_HINT_RANGE, "0,0.98,0.001"), "set_rtgi_denoiser_specular_history_weight", "get_rtgi_denoiser_specular_history_weight");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_specular_spatial_strength", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_denoiser_specular_spatial_strength", "get_rtgi_denoiser_specular_spatial_strength");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_ray_firefly_suppression", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_ray_firefly_suppression", "get_rtgi_ray_firefly_suppression");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_ray_max_radiance", PROPERTY_HINT_RANGE, "0,4096,0.1,or_greater"), "set_rtgi_ray_max_radiance", "get_rtgi_ray_max_radiance");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_horizontal", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_horizontal", "get_rtgi_overscan_horizontal");

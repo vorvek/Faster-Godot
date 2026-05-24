@@ -13,7 +13,7 @@
 // ============================================================================
 // RT_PARAMS INDICES - Must match RT_PARAM_* in scene_shader_raytracing.h
 // ============================================================================
-// rt_params is a vec4[6] uniform buffer (24 floats total)
+// rt_params is a vec4[7] uniform buffer (28 floats total)
 // Access: rt_params[idx >> 2][idx & 3] or get_rt_param(idx)
 #define RT_PARAM_VIS_MODE 0 // rt_params[0].x - Debug visualization mode (0 = disabled)
 #define RT_PARAM_SAMPLE_COUNT 1 // rt_params[0].y - Samples per pixel
@@ -37,6 +37,9 @@
 #define RT_PARAM_DENOISER_DETAIL_PRESERVATION 19 // rt_params[4].w - SVGF detail preservation
 #define RT_PARAM_RAY_FIREFLY_SUPPRESSION 20 // rt_params[5].x - Pre-denoiser path contribution clamp strength
 #define RT_PARAM_RAY_MAX_RADIANCE 21 // rt_params[5].y - Pre-denoiser linear HDR luminance limit
+#define RT_PARAM_DENOISER_SPLIT_SIGNALS 22 // rt_params[5].z - Separate diffuse/specular denoising
+#define RT_PARAM_DENOISER_SPECULAR_HISTORY_WEIGHT 23 // rt_params[5].w - Specular SVGF history weight
+#define RT_PARAM_DENOISER_SPECULAR_SPATIAL_STRENGTH 24 // rt_params[6].x - Specular spatial filtering strength
 
 #define RT_MODE_HYBRID 0u // Compatibility name for Simple RT.
 #define RT_MODE_PATH_TRACED 1u
@@ -82,7 +85,8 @@ float rt_alpha_hash_threshold(vec3 object_pos, float hash_scale) {
 
 struct PathPayload {
 	uint packed_rt[3]; // 12 bytes - radiance+throughput interleaved as fp16
-	uint packed_bounces_flags; //  4 bytes - [flags:8][unused:8][diffuse:8][total:8]
+	uint packed_specular[2]; // 8 bytes - specular radiance as fp16 rgb
+	uint packed_bounces_flags; //  4 bytes - [flags:8][primary specular fraction:8][diffuse:8][total:8]
 	uint rng_state; //  4 bytes - RNG state for PCG
 	float hit_t; //  4 bytes - ray distance, used by raygen to rebuild origin
 	uint oct_offset_nrm; //  4 bytes - packUnorm2x16(vec3_to_oct(offset normal))
@@ -92,6 +96,7 @@ struct PathPayload {
 /// Unpacked fp32 working copy of the payload.
 struct PathState {
 	vec3 radiance;
+	vec3 specular_radiance;
 	vec3 throughput;
 	uint packed_bounces_flags;
 	uint rng_state;
@@ -105,7 +110,10 @@ PathState path_unpack(PathPayload p) {
 	vec2 rg = unpackHalf2x16(p.packed_rt[0]);
 	vec2 bR = unpackHalf2x16(p.packed_rt[1]);
 	vec2 GB = unpackHalf2x16(p.packed_rt[2]);
+	vec2 specular_rg = unpackHalf2x16(p.packed_specular[0]);
+	vec2 specular_b = unpackHalf2x16(p.packed_specular[1]);
 	s.radiance = sanitize_payload_vec3(vec3(rg.x, rg.y, bR.x));
+	s.specular_radiance = sanitize_payload_vec3(vec3(specular_rg.x, specular_rg.y, specular_b.x));
 	s.throughput = sanitize_payload_vec3(vec3(bR.y, GB.x, GB.y));
 	s.packed_bounces_flags = p.packed_bounces_flags;
 	s.rng_state = p.rng_state;
@@ -117,10 +125,13 @@ PathState path_unpack(PathPayload p) {
 
 void path_pack(inout PathPayload p, PathState s) {
 	vec3 r = sanitize_payload_vec3(s.radiance);
+	vec3 sr = sanitize_payload_vec3(s.specular_radiance);
 	vec3 t = sanitize_payload_vec3(s.throughput);
 	p.packed_rt[0] = packHalf2x16(vec2(r.r, r.g));
 	p.packed_rt[1] = packHalf2x16(vec2(r.b, t.r));
 	p.packed_rt[2] = packHalf2x16(vec2(t.g, t.b));
+	p.packed_specular[0] = packHalf2x16(vec2(sr.r, sr.g));
+	p.packed_specular[1] = packHalf2x16(vec2(sr.b, 0.0));
 	p.packed_bounces_flags = s.packed_bounces_flags;
 	p.rng_state = s.rng_state;
 	p.hit_t = s.hit_t;
@@ -144,6 +155,15 @@ uint inc_total_bounce(uint packed) {
 uint inc_diffuse_bounce(uint packed) {
 	return packed + 0x101u;
 } // +1 to both total and diffuse
+
+const uint PRIMARY_SPECULAR_FRACTION_MASK = 0x00FF0000u;
+uint set_primary_specular_fraction(uint packed, float fraction) {
+	uint packed_fraction = uint(clamp(fraction, 0.0, 1.0) * 255.0 + 0.5);
+	return (packed & ~PRIMARY_SPECULAR_FRACTION_MASK) | (packed_fraction << 16u);
+}
+float get_primary_specular_fraction(uint packed) {
+	return float((packed & PRIMARY_SPECULAR_FRACTION_MASK) >> 16u) * (1.0 / 255.0);
+}
 
 // Sample 0 flag (bit 24) - only write DLSS RR outputs on first sample
 const uint SAMPLE_ZERO_FLAG = (1u << 24);

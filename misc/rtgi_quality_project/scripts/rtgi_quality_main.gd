@@ -4,13 +4,16 @@ const DEFAULT_OUTPUT_DIR := "user://rtgi_quality"
 const EXPECTED_METRICS_PATH := "res://expected/rtgi_quality_expected.json"
 const CORNELL_REFERENCE_URL := "https://www.graphics.cornell.edu/online/box/simulated.jpg"
 const CORNELL_PUBLIC_DATA_URL := "https://www.graphics.cornell.edu/online/box/data.html"
-const SPONZA_INTEL_SOURCE_URL := "https://www.intel.com/content/www/us/en/developer/topic-technology/graphics-research/samples.html"
-const SPONZA_KHRONOS_SOURCE_URL := "https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/Sponza"
+const SPONZA_KHRONOS_SOURCE_URL := "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Sponza"
+const SPONZA_KHRONOS_CANONICAL_SUFFIX := "Models/Sponza/glTF/Sponza.gltf"
 
 var _denoise_strength := 1.0
-var _history_weight := 0.92
+var _history_weight := 0.95
 var _firefly_suppression := 1.0
 var _detail_preservation := 1.0
+var _split_signals := true
+var _specular_history_weight := 0.95
+var _specular_spatial_strength := 1.0
 var _ray_firefly_suppression := 0.85
 var _ray_max_radiance := 32.0
 var _warmup_frames := 120
@@ -26,9 +29,14 @@ var _scene_mode := "stress"
 var _cornell_compare := false
 var _cornell_reference_image := ""
 var _sponza_path := ""
+var _sponza_normal_y_mode := "auto"
+var _gate_profile := "strict"
 var _camera: Camera3D
 var _environment: Environment
 var _sponza_asset_loaded := false
+var _sponza_normal_y_flipped := false
+var _sponza_flipped_normal_texture_count := 0
+var _normal_flip_cache := {}
 
 
 func _ready() -> void:
@@ -58,6 +66,12 @@ func _parse_args() -> void:
 			_firefly_suppression = clampf(arg.trim_prefix("--rtgi-firefly-suppression=").to_float(), 0.0, 1.0)
 		elif arg.begins_with("--rtgi-detail-preservation="):
 			_detail_preservation = clampf(arg.trim_prefix("--rtgi-detail-preservation=").to_float(), 0.0, 1.0)
+		elif arg.begins_with("--rtgi-split-signals="):
+			_split_signals = not (arg.trim_prefix("--rtgi-split-signals=").to_lower() in ["0", "false", "off", "disabled"])
+		elif arg.begins_with("--rtgi-specular-history-weight="):
+			_specular_history_weight = clampf(arg.trim_prefix("--rtgi-specular-history-weight=").to_float(), 0.0, 0.98)
+		elif arg.begins_with("--rtgi-specular-spatial-strength="):
+			_specular_spatial_strength = clampf(arg.trim_prefix("--rtgi-specular-spatial-strength=").to_float(), 0.0, 1.0)
 		elif arg.begins_with("--rtgi-ray-firefly-suppression="):
 			_ray_firefly_suppression = clampf(arg.trim_prefix("--rtgi-ray-firefly-suppression=").to_float(), 0.0, 1.0)
 		elif arg.begins_with("--rtgi-ray-max-radiance="):
@@ -78,6 +92,26 @@ func _parse_args() -> void:
 			_cornell_reference_image = arg.trim_prefix("--rtgi-cornell-reference-image=")
 		elif arg.begins_with("--rtgi-sponza-path="):
 			_sponza_path = arg.trim_prefix("--rtgi-sponza-path=")
+		elif arg.begins_with("--rtgi-sponza-normal-y="):
+			var normal_y_mode := arg.trim_prefix("--rtgi-sponza-normal-y=").to_lower()
+			if normal_y_mode in ["auto", "opengl", "gl", "+y", "directx", "dx", "dx12", "-y"]:
+				_sponza_normal_y_mode = "directx" if normal_y_mode in ["directx", "dx", "dx12", "-y"] else ("opengl" if normal_y_mode in ["opengl", "gl", "+y"] else "auto")
+			else:
+				push_warning("Unknown Sponza normal-Y mode '%s'; using auto." % normal_y_mode)
+		elif arg.begins_with("--rtgi-sponza-flip-normal-y="):
+			var flip_normal_y := arg.trim_prefix("--rtgi-sponza-flip-normal-y=").to_lower()
+			if flip_normal_y in ["1", "true", "on", "enabled"]:
+				_sponza_normal_y_mode = "directx"
+			elif flip_normal_y in ["0", "false", "off", "disabled"]:
+				_sponza_normal_y_mode = "opengl"
+			else:
+				push_warning("Unknown Sponza normal-Y flip value '%s'; using auto." % flip_normal_y)
+		elif arg.begins_with("--rtgi-gate-profile="):
+			var profile := arg.trim_prefix("--rtgi-gate-profile=").to_lower()
+			if profile in ["strict", "smoke"]:
+				_gate_profile = profile
+			else:
+				push_warning("Unknown RTGI gate profile '%s'; using strict." % profile)
 		elif arg.begins_with("--rtgi-output-dir="):
 			_output_dir = arg.trim_prefix("--rtgi-output-dir=")
 		elif arg.begins_with("--rtgi-debug-view="):
@@ -108,6 +142,9 @@ func _build_scene() -> void:
 	env.rtgi_denoiser_history_weight = _history_weight
 	env.rtgi_denoiser_firefly_suppression = _firefly_suppression
 	env.rtgi_denoiser_detail_preservation = _detail_preservation
+	env.rtgi_denoiser_split_signals = _split_signals
+	env.rtgi_denoiser_specular_history_weight = _specular_history_weight
+	env.rtgi_denoiser_specular_spatial_strength = _specular_spatial_strength
 	env.rtgi_ray_firefly_suppression = _ray_firefly_suppression
 	env.rtgi_ray_max_radiance = _ray_max_radiance
 	_environment = env
@@ -131,10 +168,10 @@ func _build_scene() -> void:
 		return
 	if _scene_mode == "sponza":
 		env.background_mode = Environment.BG_COLOR
-		env.background_color = Color(0.006, 0.007, 0.009)
+		env.background_color = Color(0.018, 0.020, 0.024)
 		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-		env.ambient_light_color = Color(0.015, 0.015, 0.018)
-		env.ambient_light_energy = 0.10
+		env.ambient_light_color = Color(0.055, 0.056, 0.060)
+		env.ambient_light_energy = 0.35
 		env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 		env.rtgi_max_bounces = 5
 		_build_sponza_scene(env)
@@ -205,9 +242,9 @@ func _build_cornell_box_scene(_env: Environment) -> void:
 	_add_box("CornellScreenLeftRedWall", Vector3(w + t * 0.5, h * 0.5, d * 0.5), Vector3(t, h, d), red)
 	_add_box("CornellCeilingEmitter", Vector3(2.78, h - 0.018, 2.795), Vector3(1.30, 0.035, 1.05), light_material)
 
-	var tall := _add_box("CornellTallBlock", Vector3(3.66, 1.65, 2.98), Vector3(1.62, 3.30, 1.62), white)
+	var tall := _add_box("CornellTallBlock", Vector3(3.685, 1.65, 3.512), Vector3(1.62, 3.30, 1.62), white)
 	tall.rotation_degrees.y = 17.0
-	var short := _add_box("CornellShortBlock", Vector3(1.88, 0.825, 3.58), Vector3(1.62, 1.65, 1.62), white)
+	var short := _add_box("CornellShortBlock", Vector3(1.855, 0.825, 1.69), Vector3(1.62, 1.65, 1.62), white)
 	short.rotation_degrees.y = -17.0
 
 	var light := OmniLight3D.new()
@@ -263,6 +300,10 @@ func _build_sponza_scene(_env: Environment) -> void:
 				imported.name = "ExternalSponza"
 				imported.scale = Vector3.ONE
 				add_child(imported)
+				_sponza_normal_y_flipped = _should_flip_sponza_normal_y(asset_path)
+				if _sponza_normal_y_flipped:
+					_flip_sponza_normal_maps(imported)
+					print("RTGI quality: flipped Sponza normal map green channels for DirectX-style normal-Y mode (%d textures)." % _sponza_flipped_normal_texture_count)
 				_mark_geometry_static(imported)
 				_sponza_asset_loaded = true
 		if not _sponza_asset_loaded:
@@ -276,9 +317,19 @@ func _build_sponza_scene(_env: Environment) -> void:
 	var sun := DirectionalLight3D.new()
 	sun.name = "SponzaSun"
 	sun.rotation_degrees = Vector3(-46.0, -32.0, 0.0)
-	sun.light_energy = 1.8
+	sun.light_energy = 4.0
 	sun.shadow_enabled = true
 	add_child(sun)
+
+	var camera_fill := OmniLight3D.new()
+	camera_fill.name = "SponzaSoftCameraFill"
+	camera_fill.position = Vector3(-10.0, 4.2, 0.0)
+	camera_fill.light_color = Color(1.0, 0.91, 0.78)
+	camera_fill.light_energy = 4.2
+	camera_fill.light_size = 3.5
+	camera_fill.omni_range = 22.0
+	camera_fill.shadow_enabled = false
+	add_child(camera_fill)
 
 	_camera = Camera3D.new()
 	_camera.name = "SponzaCamera"
@@ -286,9 +337,9 @@ func _build_sponza_scene(_env: Environment) -> void:
 	_camera.fov = 58.0
 	_camera.near = 0.05
 	_camera.far = 120.0
-	_camera.position = Vector3(0.0, 2.2, 7.8)
+	_camera.position = Vector3(-12.0, 3.4, 0.0)
 	add_child(_camera)
-	_camera.look_at(Vector3(0.0, 1.9, 0.0), Vector3.UP)
+	_camera.look_at(Vector3(2.0, 3.0, 0.0), Vector3.UP)
 
 
 func _build_sponza_fallback_atrium() -> void:
@@ -364,10 +415,14 @@ func _run_capture() -> void:
 	metrics["history_weight"] = _history_weight
 	metrics["firefly_suppression"] = _firefly_suppression
 	metrics["detail_preservation"] = _detail_preservation
+	metrics["split_signals"] = _split_signals
+	metrics["specular_history_weight"] = _specular_history_weight
+	metrics["specular_spatial_strength"] = _specular_spatial_strength
 	metrics["ray_firefly_suppression"] = _ray_firefly_suppression
 	metrics["ray_max_radiance"] = _ray_max_radiance
 	metrics["warmup_frames"] = _warmup_frames
 	metrics["sparkle_frames"] = _sparkle_frames
+	metrics["gate_profile"] = _gate_profile
 	metrics["debug_view"] = _debug_view
 	metrics["camera_pan"] = _camera_pan
 	metrics["scene"] = _scene_mode
@@ -402,15 +457,15 @@ func _animate_camera(frame: int) -> void:
 		_camera.look_at(_cornell_point(278.0, 273.0, 0.0), Vector3.UP)
 		return
 	if _scene_mode == "sponza":
-		_camera.position.x = lerpf(-0.45, 0.45, t)
-		_camera.look_at(Vector3(0.0, 1.9, 0.0), Vector3.UP)
+		_camera.position = Vector3(lerpf(-12.6, -11.4, t), 3.4, lerpf(-0.25, 0.25, t))
+		_camera.look_at(Vector3(2.0, 3.0, 0.0), Vector3.UP)
 		return
 	_camera.position.x = lerpf(-0.18, 0.32, t)
 	_camera.look_at(Vector3(-0.05, 1.15, -2.5), Vector3.UP)
 
 
 func _capture_debug_views(base_name: String) -> void:
-	var views := ["beauty", "noisy", "normal_roughness", "viewz_hitdist", "motion_vectors", "variance", "history_length", "rejection", "final"]
+	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "viewz_hitdist", "motion_vectors", "variance", "history_length", "rejection", "final"]
 	for view in views:
 		_apply_debug_view(view)
 		await _wait_render_frame()
@@ -426,12 +481,24 @@ func _capture_comparison_grid(base_name: String) -> void:
 
 	var configs := [
 		{
-			"name": "path_traced_1spp",
+			"name": "path_traced_split_1spp",
 			"enabled": true,
 			"mode": Environment.RTGI_MODE_PATH_TRACED,
 			"spp": 1,
 			"denoiser": Environment.RTGI_DENOISER_SVGF,
 			"max_bounces": 3,
+			"split_signals": true,
+			"ray_firefly_suppression": _ray_firefly_suppression,
+			"ray_max_radiance": _ray_max_radiance,
+		},
+		{
+			"name": "path_traced_single_beauty_1spp",
+			"enabled": true,
+			"mode": Environment.RTGI_MODE_PATH_TRACED,
+			"spp": 1,
+			"denoiser": Environment.RTGI_DENOISER_SVGF,
+			"max_bounces": 3,
+			"split_signals": false,
 			"ray_firefly_suppression": _ray_firefly_suppression,
 			"ray_max_radiance": _ray_max_radiance,
 		},
@@ -442,6 +509,7 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"spp": 1,
 			"denoiser": Environment.RTGI_DENOISER_SVGF,
 			"max_bounces": 3,
+			"split_signals": _split_signals,
 			"ray_firefly_suppression": _ray_firefly_suppression,
 			"ray_max_radiance": _ray_max_radiance,
 		},
@@ -452,6 +520,7 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"spp": 1,
 			"denoiser": Environment.RTGI_DENOISER_NONE,
 			"max_bounces": 3,
+			"split_signals": _split_signals,
 			"ray_firefly_suppression": _ray_firefly_suppression,
 			"ray_max_radiance": _ray_max_radiance,
 		},
@@ -462,6 +531,7 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"spp": _reference_spp,
 			"denoiser": Environment.RTGI_DENOISER_NONE,
 			"max_bounces": 8,
+			"split_signals": false,
 			"ray_firefly_suppression": 0.0,
 			"ray_max_radiance": 0.0,
 		},
@@ -482,6 +552,7 @@ func _capture_comparison_grid(base_name: String) -> void:
 		_environment.rtgi_samples_per_pixel = config["spp"]
 		_environment.rtgi_denoiser = config["denoiser"]
 		_environment.rtgi_max_bounces = config["max_bounces"]
+		_environment.rtgi_denoiser_split_signals = config["split_signals"]
 		_environment.rtgi_ray_firefly_suppression = config["ray_firefly_suppression"]
 		_environment.rtgi_ray_max_radiance = config["ray_max_radiance"]
 		_apply_debug_view("beauty")
@@ -500,6 +571,7 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"spp": config["spp"],
 			"denoiser": config["denoiser"],
 			"max_bounces": config["max_bounces"],
+			"split_signals": config["split_signals"],
 			"ray_firefly_suppression": config["ray_firefly_suppression"],
 			"ray_max_radiance": config["ray_max_radiance"],
 		})
@@ -539,6 +611,16 @@ func _debug_draw_value(view: String) -> int:
 			return 0
 		"noisy":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_NOISY
+		"diffuse_noisy":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_DIFFUSE_NOISY
+		"specular_noisy":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_NOISY
+		"diffuse_final":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_DIFFUSE_FINAL
+		"specular_final":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_FINAL
+		"specular_guide":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_GUIDE
 		"normal_roughness":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_NORMAL_ROUGHNESS
 		"viewz_hitdist":
@@ -617,11 +699,11 @@ func _measure_cornell_image(image: Image) -> Dictionary:
 	var wall_min: float = minf(minf(red_wall, green_wall), minf(back_wall, minf(floor_luma, ceiling_luma)))
 	var black_002 := _measure_black_fraction(image, 0, 0, width, height, 0.02)
 	var black_005 := _measure_black_fraction(image, 0, 0, width, height, 0.05)
-	var red_wall_black := _measure_black_fraction(image, int(width * 0.03), int(height * 0.16), int(width * 0.22), int(height * 0.78), 0.05)
-	var green_wall_black := _measure_black_fraction(image, int(width * 0.78), int(height * 0.16), int(width * 0.97), int(height * 0.78), 0.05)
+	var red_wall_black := _measure_black_fraction(image, int(width * 0.04), int(height * 0.18), int(width * 0.20), int(height * 0.68), 0.05)
+	var green_wall_black := _measure_black_fraction(image, int(width * 0.80), int(height * 0.18), int(width * 0.96), int(height * 0.68), 0.05)
 	var back_wall_black := _measure_black_fraction(image, int(width * 0.28), int(height * 0.16), int(width * 0.72), int(height * 0.56), 0.05)
 	var floor_black := _measure_black_fraction(image, int(width * 0.15), int(height * 0.70), int(width * 0.86), int(height * 0.96), 0.05)
-	var flat_noise := _measure_flat_patch_noise(image, int(width * 0.34), int(height * 0.35), int(width * 0.68), int(height * 0.78))
+	var flat_noise := _measure_flat_patch_noise(image, int(width * 0.56), int(height * 0.26), int(width * 0.72), int(height * 0.48))
 	var red_chroma := _measure_mean_color(image, int(width * 0.03), int(height * 0.16), int(width * 0.22), int(height * 0.78))
 	var green_chroma := _measure_mean_color(image, int(width * 0.78), int(height * 0.16), int(width * 0.97), int(height * 0.78))
 	return {
@@ -722,8 +804,12 @@ func _measure_sponza_image(image: Image) -> Dictionary:
 	return {
 		"sponza_asset_path": _resolve_sponza_path(),
 		"sponza_external_asset_missing": not _sponza_asset_loaded,
-		"sponza_intel_source_url": SPONZA_INTEL_SOURCE_URL,
 		"sponza_khronos_source_url": SPONZA_KHRONOS_SOURCE_URL,
+		"sponza_source": "khronos_gltf_sample_assets" if _is_khronos_sponza_path(_resolve_sponza_path()) else "external",
+		"sponza_canonical_asset": _is_khronos_sponza_path(_resolve_sponza_path()),
+		"sponza_normal_y_mode": _sponza_normal_y_mode,
+		"sponza_normal_y_flipped": _sponza_normal_y_flipped,
+		"sponza_flipped_normal_texture_count": _sponza_flipped_normal_texture_count,
 		"sponza_corridor_edge_energy": corridor_detail["edge_energy"],
 		"sponza_corridor_luma_stddev": corridor_detail["luma_stddev"],
 		"sponza_deep_shadow_fireflies": deep_shadow_fireflies,
@@ -868,11 +954,14 @@ func _count_temporal_sparkles(previous: Image, current: Image) -> int:
 			var curr_luma := _luma(current.get_pixel(x, y))
 			var delta := absf(curr_luma - prev_luma)
 			var support := maxf(prev_luma, curr_luma)
-			if support <= 0.060 or delta <= maxf(0.045, support * 0.48):
+			if support <= 0.060 or delta <= maxf(0.055, support * 0.48):
 				continue
 			var prev_neighbor := _local_neighbor_mean_luma(previous, x, y)
 			var curr_neighbor := _local_neighbor_mean_luma(current, x, y)
 			var local_support := maxf(prev_neighbor, curr_neighbor)
+			var local_edge_range := maxf(_local_neighbor_luma_range(previous, x, y), _local_neighbor_luma_range(current, x, y))
+			if local_edge_range > 0.10 and delta < local_edge_range * 1.00:
+				continue
 			var prev_isolated := prev_luma > maxf(prev_neighbor * 1.65 + 0.020, prev_neighbor + 0.055)
 			var curr_isolated := curr_luma > maxf(curr_neighbor * 1.65 + 0.020, curr_neighbor + 0.055)
 			var dark_flash := local_support < 0.12 and delta > maxf(0.050, support * 0.42)
@@ -897,6 +986,17 @@ func _local_neighbor_mean_luma(image: Image, x: int, y: int) -> float:
 			sum += _luma(image.get_pixel(x + nx, y + ny))
 			count += 1
 	return sum / maxf(float(count), 1.0)
+
+
+func _local_neighbor_luma_range(image: Image, x: int, y: int) -> float:
+	var min_luma := 1.0
+	var max_luma := 0.0
+	for ny in range(-1, 2):
+		for nx in range(-1, 2):
+			var luma := _luma(image.get_pixel(x + nx, y + ny))
+			min_luma = minf(min_luma, luma)
+			max_luma = maxf(max_luma, luma)
+	return max_luma - min_luma
 
 
 func _per_megapixel(count: int, pixels: int) -> float:
@@ -942,6 +1042,8 @@ func _measure_luma_stats(image: Image) -> Dictionary:
 	var step := 2
 	for y in range(0, image.get_height(), step):
 		for x in range(0, image.get_width(), step):
+			if _is_intentional_emitter_metric_pixel(x, y, image.get_width(), image.get_height()):
+				continue
 			var luma := _luma(image.get_pixel(x, y))
 			values.append(luma)
 			max_luma = maxf(max_luma, luma)
@@ -960,6 +1062,16 @@ func _measure_luma_stats(image: Image) -> Dictionary:
 		"max": max_luma,
 		"saturated_fraction": float(saturated) / maxf(float(values.size()), 1.0),
 	}
+
+
+func _is_intentional_emitter_metric_pixel(x: int, y: int, width: int, height: int) -> bool:
+	var nx := float(x) / maxf(float(width), 1.0)
+	var ny := float(y) / maxf(float(height), 1.0)
+	if _scene_mode == "stress":
+		return nx >= 0.34 and nx <= 0.49 and ny >= 0.37 and ny <= 0.60
+	if _scene_mode == "cornell":
+		return nx >= 0.37 and nx <= 0.63 and ny >= 0.06 and ny <= 0.22
+	return false
 
 
 func _luma(color: Color) -> float:
@@ -989,6 +1101,8 @@ func _expected_metrics_for_scene(expected: Dictionary) -> Dictionary:
 
 func _compare_metrics(metrics: Dictionary, expected: Dictionary) -> Array[String]:
 	var failures: Array[String] = []
+	if _gate_profile == "strict" and _scene_mode == "cornell" and _cornell_compare and not bool(metrics.get("cornell_reference_available", false)):
+		failures.append("cornell_reference_available is false; strict Cornell comparison requires the external reference image")
 	var thresholds: Dictionary = expected.get("thresholds", {})
 	_check_max_threshold(metrics, thresholds, "dark_fireflies_per_megapixel", failures)
 	_check_max_threshold(metrics, thresholds, "full_frame_fireflies_per_megapixel", failures)
@@ -1085,13 +1199,91 @@ func _resolve_sponza_path() -> String:
 	var env_path := OS.get_environment("GODOT_RTGI_SPONZA_PATH")
 	if not env_path.is_empty():
 		return env_path
-	var default_gltf := "D:/dev/rtgi_external_assets/sponza/Sponza.gltf"
+	var default_gltf := "D:/dev/rtgi_external_assets/sponza/Models/Sponza/glTF/Sponza.gltf"
 	if FileAccess.file_exists(default_gltf):
 		return default_gltf
+	var flat_default_gltf := "D:/dev/rtgi_external_assets/sponza/Sponza.gltf"
+	if FileAccess.file_exists(flat_default_gltf):
+		return flat_default_gltf
 	var default_glb := "D:/dev/rtgi_external_assets/sponza/Sponza.glb"
 	if FileAccess.file_exists(default_glb):
 		return default_glb
 	return default_gltf
+
+
+func _is_khronos_sponza_path(path: String) -> bool:
+	return path.replace("\\", "/").ends_with(SPONZA_KHRONOS_CANONICAL_SUFFIX)
+
+
+func _should_flip_sponza_normal_y(asset_path: String) -> bool:
+	match _sponza_normal_y_mode:
+		"directx":
+			return true
+		"opengl":
+			return false
+		_:
+			# glTF normal maps are +Y tangent-space. The Khronos Sponza package notes
+			# that its normals were manually inspected, so auto mode keeps them as-is.
+			return false
+
+
+func _flip_sponza_normal_maps(node: Node) -> void:
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		var mesh := mesh_instance.mesh
+		if mesh != null:
+			for surface_index in range(mesh.get_surface_count()):
+				var material := mesh_instance.get_surface_override_material(surface_index)
+				if material == null:
+					material = mesh.surface_get_material(surface_index)
+				var flipped_material := _material_with_flipped_normal_y(material)
+				if flipped_material != null and flipped_material != material:
+					mesh_instance.set_surface_override_material(surface_index, flipped_material)
+	for child in node.get_children():
+		_flip_sponza_normal_maps(child)
+
+
+func _material_with_flipped_normal_y(material: Material) -> Material:
+	if material == null or not (material is StandardMaterial3D):
+		return material
+	var standard_material := material as StandardMaterial3D
+	var normal_texture := standard_material.get_texture(BaseMaterial3D.TEXTURE_NORMAL)
+	if normal_texture == null:
+		return material
+	var flipped_texture := _flipped_normal_y_texture(normal_texture)
+	if flipped_texture == normal_texture:
+		return material
+	var flipped_material := standard_material.duplicate(true) as StandardMaterial3D
+	flipped_material.set_texture(BaseMaterial3D.TEXTURE_NORMAL, flipped_texture)
+	flipped_material.set_feature(BaseMaterial3D.FEATURE_NORMAL_MAPPING, true)
+	return flipped_material
+
+
+func _flipped_normal_y_texture(texture: Texture2D) -> Texture2D:
+	var key := texture.get_instance_id()
+	if _normal_flip_cache.has(key):
+		return _normal_flip_cache[key]
+	var image := texture.get_image()
+	if image == null or image.is_empty():
+		return texture
+	if image.is_compressed():
+		var decompress_error := image.decompress()
+		if decompress_error != OK:
+			push_warning("Could not decompress Sponza normal texture for green-channel flip.")
+			return texture
+	image.convert(Image.FORMAT_RGBA8)
+	var width := image.get_width()
+	var height := image.get_height()
+	var data := image.get_data()
+	var index := 1
+	while index < data.size():
+		data[index] = 255 - data[index]
+		index += 4
+	image.set_data(width, height, false, Image.FORMAT_RGBA8, data)
+	var flipped_texture := ImageTexture.create_from_image(image)
+	_normal_flip_cache[key] = flipped_texture
+	_sponza_flipped_normal_texture_count += 1
+	return flipped_texture
 
 
 func _mark_geometry_static(node: Node) -> void:

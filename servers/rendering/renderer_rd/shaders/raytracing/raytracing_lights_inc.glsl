@@ -246,6 +246,7 @@ bool lights_trace_shadow_ray(vec3 origin, vec3 direction, float max_dist, uint s
 
 	PathState shadow_ps;
 	shadow_ps.radiance = vec3(0.0);
+	shadow_ps.specular_radiance = vec3(0.0);
 	shadow_ps.throughput = vec3(0.0);
 	shadow_ps.packed_bounces_flags = set_shadow_ray(0u);
 	shadow_ps.rng_state = shadow_caster_mask;
@@ -271,6 +272,7 @@ bool lights_trace_shadow_ray(vec3 origin, vec3 direction, float max_dist, uint s
 
 	PathState shadow_ps;
 	shadow_ps.radiance = vec3(0.0);
+	shadow_ps.specular_radiance = vec3(0.0);
 	shadow_ps.throughput = vec3(0.0);
 	shadow_ps.packed_bounces_flags = set_shadow_ray(0u);
 	shadow_ps.rng_state = shadow_caster_mask;
@@ -338,7 +340,23 @@ float lights_selection_weight(vec3 hit_pos, vec3 N, RTLightData light, bool is_i
 
 const uint RTGI_DETERMINISTIC_DIRECT_LIGHT_LIMIT = 12u;
 
-vec3 lights_evaluate_single_direct_light(
+struct RTDirectLighting {
+	vec3 diffuse;
+	vec3 specular;
+};
+
+RTDirectLighting rt_direct_lighting_zero() {
+	RTDirectLighting result;
+	result.diffuse = vec3(0.0);
+	result.specular = vec3(0.0);
+	return result;
+}
+
+vec3 rt_direct_lighting_sum(RTDirectLighting lighting) {
+	return lighting.diffuse + lighting.specular;
+}
+
+RTDirectLighting lights_evaluate_single_direct_light_split(
 		RTLightData light,
 		float light_select_pdf,
 		vec3 hit_pos,
@@ -357,7 +375,7 @@ vec3 lights_evaluate_single_direct_light(
 
 		// Early out: outside max range.
 		if (light.max_range_squared != 0.0 && dist_sq > light.max_range_squared) {
-			return vec3(0.0);
+			return rt_direct_lighting_zero();
 		}
 
 		float dist = sqrt(dist_sq);
@@ -385,7 +403,7 @@ vec3 lights_evaluate_single_direct_light(
 		if (light.type == RT_LIGHT_TYPE_SPOT) {
 			float scos = dot(-L, light.spot_direction);
 			if (scos <= light.cos_spot_angle) {
-				return vec3(0.0);
+				return rt_direct_lighting_zero();
 			}
 			float spot_rim = max(1e-4, (1.0 - scos) / (1.0 - light.cos_spot_angle));
 			spot_atten = 1.0 - pow(spot_rim, light.inv_spot_attenuation);
@@ -393,7 +411,7 @@ vec3 lights_evaluate_single_direct_light(
 
 		float NdotL = dot(N, L);
 		if (NdotL <= 0.0) {
-			return vec3(0.0);
+			return rt_direct_lighting_zero();
 		}
 
 		if ((light.flags & RT_LIGHT_FLAG_SHADOW) != 0u) {
@@ -401,7 +419,7 @@ vec3 lights_evaluate_single_direct_light(
 			if (!lights_trace_shadow_ray(shadow_origin, L, shadow_dist, light.shadow_caster_mask, rng_state)) {
 				float shadow_visibility = 1.0 - clamp(light.shadow_opacity, 0.0, 1.0);
 				if (shadow_visibility <= 0.001) {
-					return vec3(0.0);
+					return rt_direct_lighting_zero();
 				}
 				spot_atten *= shadow_visibility;
 			}
@@ -417,13 +435,15 @@ vec3 lights_evaluate_single_direct_light(
 		float atten = lights_get_attenuation(ls_atten, light.inv_max_range, light.attenuation) * spot_atten;
 
 		float spec_mul = lights_get_specular_multiplier(light.specular_amount, material.roughness);
-		vec3 brdf_value = brdf_diffuse + brdf_specular * spec_mul;
 
 		float indirect_mul = is_indirect_bounce ? light.indirect_energy : 1.0;
 
 		// NdotL is already included in brdf_value (evalLambertian/evalMicrofacet bake it in).
-		vec3 contribution = brdf_value * light.emission * atten * indirect_mul;
-		return contribution / max(light_select_pdf, 1e-10);
+		RTDirectLighting result;
+		float inv_pdf = 1.0 / max(light_select_pdf, 1e-10);
+		result.diffuse = brdf_diffuse * light.emission * atten * indirect_mul * inv_pdf;
+		result.specular = brdf_specular * spec_mul * light.emission * atten * indirect_mul * inv_pdf;
+		return result;
 	}
 	// === CONE LIGHT PATH (directional) ===
 	else {
@@ -433,7 +453,7 @@ vec3 lights_evaluate_single_direct_light(
 
 		float NdotL = dot(N, L);
 		if (NdotL <= 0.0) {
-			return vec3(0.0);
+			return rt_direct_lighting_zero();
 		}
 
 		if ((light.flags & RT_LIGHT_FLAG_SHADOW) != 0u) {
@@ -441,7 +461,7 @@ vec3 lights_evaluate_single_direct_light(
 			if (!lights_trace_shadow_ray(shadow_origin, L, ls.max_distance, light.shadow_caster_mask, rng_state)) {
 				float shadow_visibility = 1.0 - clamp(light.shadow_opacity, 0.0, 1.0);
 				if (shadow_visibility <= 0.001) {
-					return vec3(0.0);
+					return rt_direct_lighting_zero();
 				}
 				light.emission *= shadow_visibility;
 			}
@@ -451,17 +471,20 @@ vec3 lights_evaluate_single_direct_light(
 		evalCombinedBRDFSeparate(N, L, V, material, brdf_diffuse, brdf_specular);
 
 		float spec_mul = lights_get_specular_multiplier(light.specular_amount, material.roughness);
-		vec3 brdf_value = brdf_diffuse + brdf_specular * spec_mul;
 
 		float indirect_mul = is_indirect_bounce ? light.indirect_energy : 1.0;
 
-		return brdf_value * light.emission * indirect_mul / max(light_select_pdf, 1e-10);
+		RTDirectLighting result;
+		float inv_pdf = 1.0 / max(light_select_pdf, 1e-10);
+		result.diffuse = brdf_diffuse * light.emission * indirect_mul * inv_pdf;
+		result.specular = brdf_specular * spec_mul * light.emission * indirect_mul * inv_pdf;
+		return result;
 	}
 }
 
 // Evaluate direct lighting using NEE. Small light sets are summed explicitly to
 // avoid one-light roulette impulses that are very visible in 1-SPP RTGI.
-vec3 lights_evaluate_direct_lighting(
+RTDirectLighting lights_evaluate_direct_lighting_split(
 		vec3 hit_pos,
 		vec3 geometry_normal,
 		vec3 N,
@@ -472,7 +495,7 @@ vec3 lights_evaluate_direct_lighting(
 		uint receiver_layer_mask,
 		uint light_count) {
 	if (light_count == 0u) {
-		return vec3(0.0);
+		return rt_direct_lighting_zero();
 	}
 
 	uint deterministic_light_limit = is_indirect_bounce ? 4u : RTGI_DETERMINISTIC_DIRECT_LIGHT_LIMIT;
@@ -507,11 +530,11 @@ vec3 lights_evaluate_direct_lighting(
 	}
 
 	if (valid_count == 0u) {
-		return vec3(0.0);
+		return rt_direct_lighting_zero();
 	}
 
 	if (valid_count <= deterministic_light_limit) {
-		vec3 deterministic_sum = vec3(0.0);
+		RTDirectLighting deterministic_sum = rt_direct_lighting_zero();
 		for (uint idx = 0u; idx < light_count; idx++) {
 			RTLightData test_light = rt_lights[idx];
 
@@ -525,7 +548,9 @@ vec3 lights_evaluate_direct_lighting(
 			if (!is_valid || lights_selection_weight(hit_pos, N, test_light, is_indirect_bounce) <= 0.0) {
 				continue;
 			}
-			deterministic_sum += lights_evaluate_single_direct_light(test_light, 1.0, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce);
+			RTDirectLighting light_result = lights_evaluate_single_direct_light_split(test_light, 1.0, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce);
+			deterministic_sum.diffuse += light_result.diffuse;
+			deterministic_sum.specular += light_result.specular;
 		}
 		return deterministic_sum;
 	}
@@ -559,9 +584,22 @@ vec3 lights_evaluate_direct_lighting(
 	}
 
 	if (selected_weight <= 0.0) {
-		return vec3(0.0);
+		return rt_direct_lighting_zero();
 	}
 
 	float light_select_pdf = selected_weight / max(total_weight, 1e-10);
-	return lights_evaluate_single_direct_light(rt_lights[selected_idx], light_select_pdf, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce);
+	return lights_evaluate_single_direct_light_split(rt_lights[selected_idx], light_select_pdf, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce);
+}
+
+vec3 lights_evaluate_direct_lighting(
+		vec3 hit_pos,
+		vec3 geometry_normal,
+		vec3 N,
+		vec3 V,
+		MaterialProperties material,
+		inout uint rng_state,
+		bool is_indirect_bounce,
+		uint receiver_layer_mask,
+		uint light_count) {
+	return rt_direct_lighting_sum(lights_evaluate_direct_lighting_split(hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce, receiver_layer_mask, light_count));
 }
