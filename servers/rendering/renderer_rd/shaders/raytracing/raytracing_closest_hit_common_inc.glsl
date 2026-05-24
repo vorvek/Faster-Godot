@@ -524,6 +524,10 @@ void debug_visualize(
 		} else {
 			ps.radiance = vec3(1.0, 0.0, 0.0);
 		}
+	} else if (vis_mode == 23) {
+		float deviation = clamp(1.0 - max(dot(normalize(geometry_normal), normalize(final_normal)), 0.0), 0.0, 1.0);
+		float tangent_y = clamp(tangent_space_normal.y * 0.5 + 0.5, 0.0, 1.0);
+		ps.radiance = vec3(smoothstep(0.00, 0.45, deviation), tangent_y, 1.0 - smoothstep(0.10, 0.85, deviation));
 	}
 
 	ps.packed_bounces_flags = set_path_terminated(ps.packed_bounces_flags);

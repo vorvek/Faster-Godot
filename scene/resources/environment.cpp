@@ -1764,7 +1764,7 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_horizontal", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_horizontal", "get_rtgi_overscan_horizontal");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_vertical", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_vertical", "get_rtgi_overscan_vertical");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "SVGF (Default):8,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_debug_mode", PROPERTY_HINT_ENUM, "Disabled,Mirror Reflection,Geometry Normals,Final Normals,Normal Map,Tangent,Bitangent,UV,Albedo,ORM,Diffuse Albedo,Specular Albedo,Normal+Roughness,Specular Hit Dist,Metalness,Roughness,View Normals,Diffuse+Specular,Fresnel F0,Front/Back Face,Depth,Emissive,BRDF Rejection"), "set_rtgi_debug_mode", "get_rtgi_debug_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_debug_mode", PROPERTY_HINT_ENUM, "Disabled,Mirror Reflection,Geometry Normals,Final Normals,Normal Map,Tangent,Bitangent,UV,Albedo,ORM,Diffuse Albedo,Specular Albedo,Normal+Roughness,Specular Hit Dist,Metalness,Roughness,View Normals,Diffuse+Specular,Fresnel F0,Front/Back Face,Depth,Emissive,BRDF Rejection,Normal Deviation"), "set_rtgi_debug_mode", "get_rtgi_debug_mode");
 
 	// Glow
 
@@ -1991,6 +1991,7 @@ void Environment::_bind_methods() {
 	BIND_ENUM_CONSTANT(RT_DEBUG_DEPTH);
 	BIND_ENUM_CONSTANT(RT_DEBUG_EMISSIVE);
 	BIND_ENUM_CONSTANT(RT_DEBUG_BRDF_REJECTION);
+	BIND_ENUM_CONSTANT(RT_DEBUG_NORMAL_DEVIATION);
 
 	BIND_ENUM_CONSTANT(FOG_MODE_EXPONENTIAL);
 	BIND_ENUM_CONSTANT(FOG_MODE_DEPTH);

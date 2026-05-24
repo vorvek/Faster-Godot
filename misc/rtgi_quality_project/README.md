@@ -34,7 +34,7 @@ Useful options:
 - `--rtgi-ray-max-radiance=0.0..4096.0`
 - `--rtgi-warmup-frames=120`
 - `--rtgi-reference-spp=16`
-- `--rtgi-debug-view=beauty|final|noisy|diffuse_noisy|specular_noisy|diffuse_final|specular_final|specular_guide|normal_roughness|viewz_hitdist|motion_vectors|variance|history_length|rejection|disabled`
+- `--rtgi-debug-view=beauty|final|noisy|diffuse_noisy|specular_noisy|diffuse_final|specular_final|specular_guide|normal_roughness|normal_deviation|viewz_hitdist|motion_vectors|variance|history_length|rejection|disabled`
 - `--rtgi-gate-profile=strict|smoke`
 - `--rtgi-capture-debug`
 - `--rtgi-capture-comparison`
@@ -65,6 +65,31 @@ LightmapGI probe capture data for a dynamic object. `voxelgi` bakes a small
 procedural VoxelGI during scene setup. `path_traced_sdfgi_exclusive` keeps SDFGI
 enabled in the environment, but expects the Path Traced frame to stay exclusive
 while the temporary raster fallback still shows SDFGI lighting.
+
+## Euphorica RTGI Capture
+
+`scripts/euphorica_rtgi_capture.gd` runs against `D:\dev\euphorica` as the
+active project, so it does not modify or depend on saved changes in the
+Euphorica tree. Use a windowed Vulkan editor build because the harness captures
+the live `GameViewport` and the final RF/post-processed root viewport.
+
+```powershell
+D:\dev\faster-godot-4.6.3\bin\faster-godot.windows.editor.dev.x86_64.faster_godot.mono.console.exe --path D:\dev\euphorica --rendering-driver vulkan --rendering-method forward_plus --script D:\dev\faster-godot-4.6.3\misc\rtgi_quality_project\scripts\euphorica_rtgi_capture.gd --euphorica-output-dir=D:\dev\rtgi_phase4_outputs\euphorica_rtgi --euphorica-profile=compare --euphorica-warmup-frames=180 --euphorica-sparkle-frames=32 --euphorica-capture-debug
+```
+
+Profiles:
+
+- `compare`: no-RTGI baseline plus Simple RT, Path Traced, glow/fog, lantern
+  emissive, shadowed OmniLight, and normal-deviation debug captures.
+- `matrix`: full Simple RT/Path Traced sweep for denoise `0.90`, `0.95`,
+  `0.98`, `1.0`, history `0.95`, `0.98`, `640x360`/`1280x720`, content
+  toggles, and normal-Y A/B.
+- `normal_ab`: OpenGL +Y and runtime DirectX/-Y normal-texture A/B where
+  textures can be read and duplicated at runtime.
+
+Each case writes `_game.png`, `_final.png`, per-case metrics JSON, and
+`euphorica_rtgi_summary.json` with effective RTGI knob values and the renderer
+stage each knob feeds.
 
 ## Cornell Box
 

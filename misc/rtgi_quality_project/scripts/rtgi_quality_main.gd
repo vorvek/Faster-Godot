@@ -652,7 +652,7 @@ func _animate_camera(frame: int) -> void:
 
 
 func _capture_debug_views(base_name: String) -> void:
-	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "viewz_hitdist", "motion_vectors", "variance", "history_length", "rejection", "final"]
+	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "variance", "history_length", "rejection", "final"]
 	for view in views:
 		_apply_debug_view(view)
 		await _wait_render_frame()
@@ -789,6 +789,8 @@ func _wait_render_frame() -> void:
 
 
 func _apply_debug_view(view: String) -> void:
+	if _environment != null:
+		_environment.rtgi_debug_mode = Environment.RT_DEBUG_NORMAL_DEVIATION if view == "normal_deviation" else Environment.RT_DEBUG_DISABLED
 	RenderingServer.viewport_set_debug_draw(get_viewport().get_viewport_rid(), _debug_draw_value(view))
 
 

@@ -74,6 +74,11 @@ float relative_luma_delta(float a, float b) {
 	return abs(a - b) / max(max(a, b), 0.08);
 }
 
+float low_resolution_firefly_boost() {
+	float short_side = min(params.resolution.x, params.resolution.y);
+	return mix(1.75, 1.0, smoothstep(360.0, 720.0, short_side));
+}
+
 float stable_surface_match(float normal_similarity, float albedo_delta, float metalness_delta) {
 	return smoothstep(0.84, 0.97, normal_similarity) *
 			(1.0 - smoothstep(0.12, 0.42, albedo_delta)) *
@@ -429,10 +434,14 @@ void main() {
 	float history_or_neighbor_visible = smoothstep(0.015, 0.10, support_luma);
 	float local_support_visible = smoothstep(0.015, 0.10, local_support_luma);
 	float dark_support = 1.0 - smoothstep(0.018, 0.12, local_support_luma);
+	float lowres_firefly_boost = low_resolution_firefly_boost();
+	float stable_visible_highlight = smoothstep(0.22, 1.20, current_luma) *
+			max(neighborhood_agreement, history_agreement) *
+			smoothstep(0.12, 0.70, max(max(local_support_luma, history_luma), support_luma));
 	float isolated_spike_limit = mix(max(support_luma * 4.0 + 0.25, 0.35), max(local_support_luma * 2.0 + 0.055, 0.08), dark_support);
 	float isolated_spike = smoothstep(isolated_spike_limit, isolated_spike_limit * 2.0 + 0.5, current_luma);
 	float dark_isolated_spike = dark_support * smoothstep(local_support_luma + 0.025, local_support_luma + 0.14, current_luma) * (1.0 - temporal_or_local_agreement);
-	float unsupported_spike = max(isolated_spike * (1.0 - history_or_neighbor_visible), dark_isolated_spike * (1.0 - local_support_visible)) * (1.0 - temporal_or_local_agreement) * params.firefly_suppression;
+	float unsupported_spike = clamp(max(isolated_spike * (1.0 - history_or_neighbor_visible), dark_isolated_spike * (1.0 - local_support_visible)) * (1.0 - temporal_or_local_agreement) * params.firefly_suppression * lowres_firefly_boost, 0.0, 1.0);
 	float neighborhood_light_change = smoothstep(0.015, 0.09, neighborhood_history_change) * mix(0.25, 1.0, neighborhood_agreement) * neighbor_support;
 	float coherent_light_support = max(neighborhood_agreement, history_agreement * 0.65);
 	float center_light_change = smoothstep(0.05, 0.18, center_history_change) * smoothstep(0.16, 0.55, coherent_light_support) * (1.0 - unsupported_spike);
@@ -451,10 +460,12 @@ void main() {
 	float current_limit = mix(neighborhood_limit, min(neighborhood_limit, history_limit), history_trust);
 	float dark_current_limit = max(local_support_luma + 0.12, 0.11);
 	current_limit = mix(current_limit, min(current_limit, dark_current_limit), dark_support * unsupported_spike * (1.0 - light_reactivity));
-	float firefly_strength = smoothstep(current_limit, current_limit * 2.5 + 0.25, current_luma) * params.denoise_strength * params.firefly_suppression * (1.0 - light_reactivity * 0.85);
+	float firefly_strength = smoothstep(current_limit, current_limit * 2.5 + 0.25, current_luma) * params.denoise_strength * params.firefly_suppression * lowres_firefly_boost * (1.0 - light_reactivity * 0.85);
 	float isolated_highlight_protection = smoothstep(0.35, 1.2, current_luma) * (1.0 - surface_firefly_risk) * fast_motion;
 	float unsupported_firefly = unsupported_spike * params.denoise_strength * mix(0.85, 1.0, surface_firefly_risk) * (1.0 - isolated_highlight_protection * 0.45);
 	firefly_strength = max(firefly_strength, unsupported_firefly * (1.0 - light_reactivity * 0.7) * mix(0.85, 1.0, dark_support));
+	firefly_strength *= mix(1.0, 0.18, stable_visible_highlight);
+	firefly_strength = clamp(firefly_strength, 0.0, 1.0);
 	current = mix(current, clamp_luminance(current, current_limit), firefly_strength);
 
 	vec3 temporal = sanitize_color(mix(history_color, current, current_alpha));
@@ -519,6 +530,7 @@ void main() {
 	float same_surface_support = 0.0;
 	float bright_support = 0.0;
 	float surface_albedo_detail = 0.0;
+	float surface_normal_detail = 0.0;
 
 	for (int y = -4; y <= 4; y += 2) {
 		for (int x = -4; x <= 4; x += 2) {
@@ -542,6 +554,7 @@ void main() {
 			}
 			if (abs(x) <= 2 && abs(y) <= 2) {
 				surface_albedo_detail = max(surface_albedo_detail, albedo_delta);
+				surface_normal_detail = max(surface_normal_detail, 1.0 - normal_similarity);
 			}
 
 			vec3 tap_color = sanitize_color(texelFetch(input_buffer, tap_pos, 0).rgb);
@@ -579,8 +592,10 @@ void main() {
 	float unsupported_bright = smoothstep(0.08, 0.28, center_luma - neighborhood_luma) * (1.0 - smoothstep(0.10, 0.45, bright_support_ratio));
 	float blotch_signal = max(smoothstep(0.018, 0.090, local_delta), smoothstep(0.08, 0.38, relative_delta) * 0.75);
 	float albedo_detail_guard = smoothstep(0.055, 0.24, surface_albedo_detail) * rough_diffuse * params.detail_preservation;
+	float normal_detail_guard = smoothstep(0.020, 0.16, surface_normal_detail) * rough_diffuse * params.detail_preservation;
+	float surface_detail_guard = max(albedo_detail_guard, normal_detail_guard);
 	float stabilizer = blotch_signal * variance_gate * support * rough_diffuse * motion_guard * params.denoise_strength * mix(1.0, 0.30, center_reactivity);
-	stabilizer *= mix(1.0, 0.55, albedo_detail_guard);
+	stabilizer *= mix(1.0, 0.42, surface_detail_guard);
 	stabilizer = max(stabilizer, unsupported_bright * support * rough_diffuse * motion_guard * params.denoise_strength * mix(0.40, 0.18, center_reactivity));
 	stabilizer = min(stabilizer, 0.82);
 
@@ -630,10 +645,11 @@ void main() {
 		}
 		vec3 neighbor_color = neighbor_sum / max(neighbor_weight_sum, 1e-5);
 		float neighbor_luma = neighbor_luma_sum / max(neighbor_weight_sum, 1e-5);
+		float stable_bright_support = smoothstep(center_luma * 0.22 + 0.002, center_luma * 0.70 + 0.01, neighbor_luma_max);
 		float unsupported_near_black = smoothstep(max(neighbor_luma * 1.38 + 0.001, neighbor_luma_max * 1.035 + 0.00025), max(neighbor_luma * 1.78 + 0.010, neighbor_luma_max * 1.12 + 0.0025), center_luma);
 		unsupported_near_black *= 1.0 - smoothstep(0.16, 0.42, center_luma);
 		unsupported_near_black *= smoothstep(0.02, 0.45, velocity_pixels(texelFetch(velocity_buffer, pos, 0).xy));
-		unsupported_near_black *= params.denoise_strength * params.firefly_suppression;
+		unsupported_near_black = clamp(unsupported_near_black * params.denoise_strength * params.firefly_suppression * low_resolution_firefly_boost() * mix(1.0, 0.35, stable_bright_support), 0.0, 1.0);
 		output_color = sanitize_color(mix(output_color, neighbor_color, unsupported_near_black * 0.90));
 	}
 	imageStore(output_image, pos, vec4(output_color, 1.0));
@@ -744,7 +760,8 @@ void main() {
 		float outlier = smoothstep(outlier_limit, outlier_limit + 0.08, center_luma);
 		vec3 capped = clamp_luminance(temporal.rgb, max(outlier_limit, neighbor_luma + 0.02));
 		float reactive_detail = center_reactivity;
-		float outlier_strength = outlier * params.denoise_strength * params.firefly_suppression * mix(1.0, 0.35, reactive_detail);
+		float stable_bright_support = smoothstep(center_luma * 0.32 + 0.01, center_luma * 0.82 + 0.02, neighbor_luma);
+		float outlier_strength = clamp(outlier * params.denoise_strength * params.firefly_suppression * low_resolution_firefly_boost() * mix(1.0, 0.35, reactive_detail) * mix(1.0, 0.35, stable_bright_support), 0.0, 1.0);
 		temporal.rgb = sanitize_color(mix(temporal.rgb, mix(capped, neighbor_color, 0.92), outlier_strength));
 	}
 	temporal.a = variance_sum / max(weight_sum, 1e-5);
@@ -814,6 +831,7 @@ void main() {
 	float variance_sum = 0.0;
 	float weight_sum = 0.0;
 	float local_albedo_detail = 0.0;
+	float local_normal_detail = 0.0;
 
 	for (int y = -2; y <= 2; y++) {
 		for (int x = -2; x <= 2; x++) {
@@ -833,6 +851,7 @@ void main() {
 			float metalness_delta = abs(tap_albedo.a - center_albedo.a);
 			if ((x != 0 || y != 0) && abs(x) <= 1 && abs(y) <= 1) {
 				local_albedo_detail = max(local_albedo_detail, albedo_delta + metalness_delta * 0.5);
+				local_normal_detail = max(local_normal_detail, 1.0 - normal_similarity);
 			}
 			float plane_relax = stable_surface_match(normal_similarity, albedo_delta, metalness_delta);
 			float depth_w = exp(-abs(tap_z - center_z) / max(center_z * params.phi_depth * mix(1.0, 3.2, plane_relax), 0.02));
@@ -868,7 +887,9 @@ void main() {
 	vec3 filtered_avg = color_sum / max(weight_sum, 1e-5);
 	float filtered_avg_variance = variance_sum / max(weight_sum * weight_sum, 1e-5);
 	float albedo_detail_guard = smoothstep(0.045, 0.20, local_albedo_detail) * diffuse_demodulation_weight(center_nr, center_albedo, center_z) * params.detail_preservation;
-	spatial_strength *= mix(1.0, 0.66, albedo_detail_guard);
+	float normal_detail_guard = smoothstep(0.018, 0.14, local_normal_detail) * diffuse_demodulation_weight(center_nr, center_albedo, center_z) * params.detail_preservation;
+	float surface_detail_guard = max(albedo_detail_guard, normal_detail_guard);
+	spatial_strength *= mix(1.0, 0.48, surface_detail_guard);
 	vec3 filtered = mix(center.rgb, filtered_avg, spatial_strength);
 	float filtered_variance = mix(center.a, filtered_avg_variance, spatial_strength);
 	imageStore(output_buffer, pos, vec4(sanitize_color(filtered), filtered_variance));
@@ -923,6 +944,7 @@ void main() {
 	float center_final_luma = luminance(denoised);
 	float bright_support_sum = 0.0;
 	float local_albedo_detail = 0.0;
+	float local_normal_detail = 0.0;
 	for (int y = -2; y <= 2; y++) {
 		for (int x = -2; x <= 2; x++) {
 			if (x == 0 && y == 0) {
@@ -949,6 +971,7 @@ void main() {
 			}
 			if (abs(x) <= 1 && abs(y) <= 1) {
 				local_albedo_detail = max(local_albedo_detail, albedo_delta);
+				local_normal_detail = max(local_normal_detail, 1.0 - normal_similarity);
 			}
 
 			vec3 tap_color = texelFetch(filtered_buffer, tap_pos, 0).rgb;
@@ -987,8 +1010,10 @@ void main() {
 		vec3 outlier_reference = mix(neighbor_color, lower_neighbor_color, dark_neighborhood);
 		float reactive_detail = center_reactivity;
 		float albedo_detail_guard = smoothstep(0.045, 0.22, local_albedo_detail) * rough_diffuse_plane * params.detail_preservation;
-		float supported_texture_guard = albedo_detail_guard * (1.0 - dark_neighborhood) * smoothstep(0.12, 0.50, bright_support_sum / neighbor_weight_sum);
-		float final_outlier_strength = outlier * mix(0.85, 1.0, specular_surface) * params.denoise_strength * params.firefly_suppression * mix(1.0, 0.42, reactive_detail);
+		float normal_detail_guard = smoothstep(0.018, 0.16, local_normal_detail) * rough_diffuse_plane * params.detail_preservation;
+		float surface_detail_guard = max(albedo_detail_guard, normal_detail_guard);
+		float supported_texture_guard = surface_detail_guard * (1.0 - dark_neighborhood) * smoothstep(0.12, 0.50, bright_support_sum / neighbor_weight_sum);
+		float final_outlier_strength = clamp(outlier * mix(0.85, 1.0, specular_surface) * params.denoise_strength * params.firefly_suppression * low_resolution_firefly_boost() * mix(1.0, 0.42, reactive_detail), 0.0, 1.0);
 		final_outlier_strength *= mix(1.0, 0.72, supported_texture_guard);
 		denoised = sanitize_color(mix(denoised, mix(capped, outlier_reference, mix(0.55, 0.92, specular_surface)), final_outlier_strength));
 		center_final_luma = luminance(denoised);
@@ -1006,7 +1031,7 @@ void main() {
 				rough_diffuse_plane *
 				smoothstep(0.032, 0.068, max(center_final_luma - temporal_luma, 0.0)) *
 				(1.0 - smoothstep(0.14, 0.46, bright_support)) *
-				(1.0 - albedo_detail_guard * 0.92) *
+				(1.0 - surface_detail_guard * 0.92) *
 				params.denoise_strength * params.firefly_suppression * mix(1.0, 0.45, reactive_detail);
 		suppress = max(suppress, dark_temporal_flash);
 		if (params.radiance_space_history > 0.5) {
@@ -1015,7 +1040,7 @@ void main() {
 					mix(0.55, 1.0, dark_neighborhood);
 			suppress = max(suppress, unsupported_specular_twinkle * params.denoise_strength * params.firefly_suppression * mix(1.0, 0.42, reactive_detail));
 		}
-		suppress = min(suppress * mix(1.0, params.radiance_space_history > 0.5 ? 6.50 : 3.80, dark_neighborhood), 1.0);
+		suppress = min(suppress * low_resolution_firefly_boost() * mix(1.0, params.radiance_space_history > 0.5 ? 6.50 : 3.80, dark_neighborhood), 1.0);
 		suppress *= mix(1.0, 0.80, supported_texture_guard);
 		denoised = sanitize_color(mix(denoised, lower_neighbor_color, suppress));
 		center_final_luma = luminance(denoised);
@@ -1025,14 +1050,15 @@ void main() {
 				smoothstep(0.00008, 0.006, neighbor_variance) *
 				(1.0 - smoothstep(0.35, 0.95, bright_support));
 		float plane_grain_smooth = rough_diffuse_plane * local_grain * params.denoise_strength * mix(1.0, 0.35, reactive_detail);
-		plane_grain_smooth *= mix(1.0, 0.22, albedo_detail_guard);
-		denoised = sanitize_color(mix(denoised, neighbor_color, min(plane_grain_smooth * mix(2.40, 0.72, albedo_detail_guard), 0.88)));
+		plane_grain_smooth *= mix(1.0, 0.16, surface_detail_guard);
+		denoised = sanitize_color(mix(denoised, neighbor_color, min(plane_grain_smooth * mix(2.40, 0.58, surface_detail_guard), 0.88)));
 		center_final_luma = luminance(denoised);
 
 		float dark_flat_noise = dark_neighborhood *
 				rough_diffuse_plane *
 				smoothstep(0.006, 0.050, abs(center_final_luma - neighbor_luma)) *
 				(1.0 - smoothstep(0.018, 0.090, local_albedo_detail)) *
+				(1.0 - smoothstep(0.018, 0.14, local_normal_detail)) *
 				(1.0 - smoothstep(0.18, 0.48, bright_support)) *
 				params.denoise_strength * params.firefly_suppression * mix(1.0, 0.45, reactive_detail);
 		denoised = sanitize_color(mix(denoised, neighbor_color, min(dark_flat_noise * 1.35, 0.84)));
@@ -1043,6 +1069,7 @@ void main() {
 				smoothstep(center_final_luma + 0.018, center_final_luma + 0.16, neighbor_luma) *
 				smoothstep(1.8, 6.0, neighbor_weight_sum) *
 				(1.0 - smoothstep(0.03, 0.12, local_albedo_detail)) *
+				(1.0 - smoothstep(0.018, 0.14, local_normal_detail)) *
 				params.denoise_strength * params.firefly_suppression * mix(1.0, 0.35, reactive_detail);
 		denoised = sanitize_color(mix(denoised, neighbor_color, min(dark_hole * 0.80, 0.70)));
 	}
