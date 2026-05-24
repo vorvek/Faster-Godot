@@ -648,7 +648,7 @@ void main() {
 		float stable_bright_support = smoothstep(center_luma * 0.22 + 0.002, center_luma * 0.70 + 0.01, neighbor_luma_max);
 		float unsupported_near_black = smoothstep(max(neighbor_luma * 1.38 + 0.001, neighbor_luma_max * 1.035 + 0.00025), max(neighbor_luma * 1.78 + 0.010, neighbor_luma_max * 1.12 + 0.0025), center_luma);
 		unsupported_near_black *= 1.0 - smoothstep(0.16, 0.42, center_luma);
-		unsupported_near_black *= smoothstep(0.02, 0.45, velocity_pixels(texelFetch(velocity_buffer, pos, 0).xy));
+		unsupported_near_black *= mix(0.28, 1.0, smoothstep(0.02, 0.45, velocity_pixels(texelFetch(velocity_buffer, pos, 0).xy)));
 		unsupported_near_black = clamp(unsupported_near_black * params.denoise_strength * params.firefly_suppression * low_resolution_firefly_boost() * mix(1.0, 0.35, stable_bright_support), 0.0, 1.0);
 		output_color = sanitize_color(mix(output_color, neighbor_color, unsupported_near_black * 0.90));
 	}

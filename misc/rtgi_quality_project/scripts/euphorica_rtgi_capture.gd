@@ -36,7 +36,13 @@ var _base_history = 0.98
 var _base_mode = "path_traced"
 var _base_resolution = Vector2i(640, 360)
 var _window_size = Vector2i(1920, 1080)
+var _split_signals_mode = "both"
+var _case_filter = ""
+var _list_cases = false
 var _results = []
+var _split_pair_metrics = []
+var _split_pair_images = {}
+var _debug_views = ["diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "variance", "history_length", "rejection", "final"]
 
 
 func _initialize() -> void:
@@ -66,6 +72,14 @@ func _parse_args() -> void:
 			_base_resolution = _parse_resolution(arg.trim_prefix("--euphorica-resolution="), _base_resolution)
 		elif arg.begins_with("--euphorica-window-size="):
 			_window_size = _parse_resolution(arg.trim_prefix("--euphorica-window-size="), _window_size)
+		elif arg.begins_with("--euphorica-split-signals="):
+			var split_mode = arg.trim_prefix("--euphorica-split-signals=").to_lower()
+			if split_mode in ["on", "off", "both"]:
+				_split_signals_mode = split_mode
+		elif arg.begins_with("--euphorica-case-filter="):
+			_case_filter = arg.trim_prefix("--euphorica-case-filter=").to_lower()
+		elif arg == "--euphorica-list-cases":
+			_list_cases = true
 		elif arg == "--euphorica-capture-debug":
 			_capture_debug = true
 		elif arg.begins_with("--euphorica-rtgi="):
@@ -87,11 +101,18 @@ func _run() -> void:
 	if not _ensure_output_dir():
 		quit(2)
 		return
-	var cases = _build_cases()
+	var cases = _filter_cases(_build_cases())
+	if _list_cases:
+		_write_summary(cases)
+		quit(0)
+		return
 	var baseline_game: Image = null
 	var baseline_final: Image = null
 	for test_case in cases:
+		var case_start_msec = Time.get_ticks_msec()
+		print("Euphorica RTGI capture: starting %s" % test_case["name"])
 		var capture = await _run_case(test_case)
+		print("Euphorica RTGI capture: measuring %s" % test_case["name"])
 		if test_case.get("baseline", false):
 			baseline_game = capture["game_image"]
 			baseline_final = capture["final_image"]
@@ -101,50 +122,76 @@ func _run() -> void:
 		metrics["normal_textures_flipped"] = capture["normal_textures_flipped"]
 		_results.append(metrics)
 		_write_json(_output_path("%s_metrics.json" % test_case["name"]), metrics)
+		_record_split_pair(capture["game_image"], capture["final_image"], test_case)
+		_write_summary(cases)
+		print("Euphorica RTGI capture: finished %s in %.2fs" % [test_case["name"], float(Time.get_ticks_msec() - case_start_msec) / 1000.0])
 		_unload_scene(capture["scene"])
 		await process_frame
-	_write_json(_output_path("euphorica_rtgi_summary.json"), {
-		"profile": _profile,
-		"scene": _scene_path,
-		"results": _results,
-		"knob_stages": RTGI_KNOB_STAGES,
-	})
+	_write_summary(cases)
 	quit(0)
 
 
 func _build_cases() -> Array:
 	var cases = []
-	if _profile in ["compare", "matrix"]:
+	if _profile in ["compare", "matrix", "split_ab"]:
 		cases.append(_case("no_rtgi", false, _base_mode, _base_denoise, _base_history, _base_resolution, {}, true))
 	if _profile == "no_rtgi":
 		return [_case("no_rtgi", false, _base_mode, _base_denoise, _base_history, _base_resolution, {}, true)]
 	if _profile == "rtgi_on":
-		return [_case("rtgi_on", true, _base_mode, _base_denoise, _base_history, _base_resolution, {}, false)]
-	if _profile == "normal_ab":
-		return [
-			_case("normal_opengl_y", true, _base_mode, _base_denoise, _base_history, _base_resolution, { "normal_y": "opengl" }, false),
-			_case("normal_directx_y", true, _base_mode, _base_denoise, _base_history, _base_resolution, { "normal_y": "directx" }, false),
-		]
+		var rtgi_cases = []
+		for split_enabled in _split_values():
+			rtgi_cases.append(_split_case("rtgi_on", true, _base_mode, _base_denoise, _base_history, _base_resolution, {}, false, split_enabled))
+		return rtgi_cases
+	if _profile == "split_ab":
+		for resolution in [Vector2i(640, 360), Vector2i(1280, 720)]:
+			for mode in ["simple_rt", "path_traced"]:
+				for split_enabled in _split_values():
+					cases.append(_split_case("%s_d%.2f_h%.2f_%d" % [mode, _base_denoise, _base_history, resolution.x], true, mode, _base_denoise, _base_history, resolution, {}, false, split_enabled))
+		for toggle in ["no_glow_fog", "no_lantern_emission", "no_omni_shadow"]:
+			for split_enabled in _split_values():
+				cases.append(_split_case("path_%s" % toggle, true, "path_traced", _base_denoise, _base_history, _base_resolution, { toggle: true }, false, split_enabled))
+		if _capture_debug:
+			for split_enabled in _split_values():
+				cases.append(_split_case("path_normal_deviation", true, "path_traced", _base_denoise, _base_history, _base_resolution, { "debug_mode": Environment.RT_DEBUG_NORMAL_DEVIATION }, false, split_enabled))
+		return cases
 	if _profile == "matrix":
 		for mode in ["simple_rt", "path_traced"]:
 			for denoise in [0.90, 0.95, 0.98, 1.0]:
 				for history in [0.95, 0.98]:
-					cases.append(_case("%s_d%.2f_h%.2f_640" % [mode, denoise, history], true, mode, denoise, history, Vector2i(640, 360), {}, false))
+					for split_enabled in _split_values():
+						cases.append(_split_case("%s_d%.2f_h%.2f_640" % [mode, denoise, history], true, mode, denoise, history, Vector2i(640, 360), {}, false, split_enabled))
 		for mode in ["simple_rt", "path_traced"]:
-			cases.append(_case("%s_d%.2f_h%.2f_1280" % [mode, _base_denoise, _base_history], true, mode, _base_denoise, _base_history, Vector2i(1280, 720), {}, false))
+			for split_enabled in _split_values():
+				cases.append(_split_case("%s_d%.2f_h%.2f_1280" % [mode, _base_denoise, _base_history], true, mode, _base_denoise, _base_history, Vector2i(1280, 720), {}, false, split_enabled))
 		for toggle in ["no_glow_fog", "no_lantern_emission", "no_omni_shadow"]:
-			cases.append(_case("path_%s" % toggle, true, "path_traced", _base_denoise, _base_history, _base_resolution, { toggle: true }, false))
-		cases.append(_case("normal_opengl_y", true, "path_traced", _base_denoise, _base_history, _base_resolution, { "normal_y": "opengl" }, false))
-		cases.append(_case("normal_directx_y", true, "path_traced", _base_denoise, _base_history, _base_resolution, { "normal_y": "directx" }, false))
+			for split_enabled in _split_values():
+				cases.append(_split_case("path_%s" % toggle, true, "path_traced", _base_denoise, _base_history, _base_resolution, { toggle: true }, false, split_enabled))
 		return cases
-	cases.append(_case("simple_rt_d%.2f_h%.2f" % [_base_denoise, _base_history], true, "simple_rt", _base_denoise, _base_history, _base_resolution, {}, false))
-	cases.append(_case("path_traced_d%.2f_h%.2f" % [_base_denoise, _base_history], true, "path_traced", _base_denoise, _base_history, _base_resolution, {}, false))
-	cases.append(_case("path_no_glow_fog", true, "path_traced", _base_denoise, _base_history, _base_resolution, { "no_glow_fog": true }, false))
-	cases.append(_case("path_no_lantern_emission", true, "path_traced", _base_denoise, _base_history, _base_resolution, { "no_lantern_emission": true }, false))
-	cases.append(_case("path_no_omni_shadow", true, "path_traced", _base_denoise, _base_history, _base_resolution, { "no_omni_shadow": true }, false))
+	for split_enabled in _split_values():
+		cases.append(_split_case("simple_rt_d%.2f_h%.2f" % [_base_denoise, _base_history], true, "simple_rt", _base_denoise, _base_history, _base_resolution, {}, false, split_enabled))
+		cases.append(_split_case("path_traced_d%.2f_h%.2f" % [_base_denoise, _base_history], true, "path_traced", _base_denoise, _base_history, _base_resolution, {}, false, split_enabled))
+		cases.append(_split_case("path_no_glow_fog", true, "path_traced", _base_denoise, _base_history, _base_resolution, { "no_glow_fog": true }, false, split_enabled))
+		cases.append(_split_case("path_no_lantern_emission", true, "path_traced", _base_denoise, _base_history, _base_resolution, { "no_lantern_emission": true }, false, split_enabled))
+		cases.append(_split_case("path_no_omni_shadow", true, "path_traced", _base_denoise, _base_history, _base_resolution, { "no_omni_shadow": true }, false, split_enabled))
 	if _capture_debug:
-		cases.append(_case("path_normal_deviation", true, "path_traced", _base_denoise, _base_history, _base_resolution, { "debug_mode": Environment.RT_DEBUG_NORMAL_DEVIATION }, false))
+		for split_enabled in _split_values():
+			cases.append(_split_case("path_normal_deviation", true, "path_traced", _base_denoise, _base_history, _base_resolution, { "debug_mode": Environment.RT_DEBUG_NORMAL_DEVIATION }, false, split_enabled))
 	return cases
+
+
+func _split_values() -> Array:
+	if _split_signals_mode == "on":
+		return [true]
+	if _split_signals_mode == "off":
+		return [false]
+	return [true, false]
+
+
+func _split_case(name: String, rtgi_enabled: bool, mode: String, denoise: float, history: float, resolution: Vector2i, options: Dictionary, baseline: bool, split_signals: bool) -> Dictionary:
+	var result = _case("%s_split_%s" % [name, "on" if split_signals else "off"], rtgi_enabled, mode, denoise, history, resolution, options, baseline)
+	result["split_signals"] = split_signals
+	result["split_pair_key"] = _split_pair_key(result)
+	return result
 
 
 func _case(name: String, rtgi_enabled: bool, mode: String, denoise: float, history: float, resolution: Vector2i, options: Dictionary, baseline: bool) -> Dictionary:
@@ -156,7 +203,83 @@ func _case(name: String, rtgi_enabled: bool, mode: String, denoise: float, histo
 	result["history"] = history
 	result["resolution"] = resolution
 	result["baseline"] = baseline
+	result["split_signals"] = true
+	result["split_pair_key"] = ""
 	return result
+
+
+func _filter_cases(cases: Array) -> Array:
+	if _case_filter.is_empty():
+		return cases
+	var filtered = []
+	var has_filtered_rtgi_case = false
+	for test_case in cases:
+		if str(test_case["name"]).to_lower().contains(_case_filter):
+			filtered.append(test_case)
+			has_filtered_rtgi_case = has_filtered_rtgi_case or bool(test_case["rtgi_enabled"])
+	if has_filtered_rtgi_case:
+		for test_case in cases:
+			if bool(test_case.get("baseline", false)) and not filtered.has(test_case):
+				filtered.push_front(test_case)
+	return filtered
+
+
+func _split_pair_key(test_case: Dictionary) -> String:
+	var options = []
+	for key in ["no_glow_fog", "no_lantern_emission", "no_omni_shadow", "debug_mode"]:
+		if test_case.has(key):
+			options.append("%s=%s" % [key, str(test_case[key])])
+	options.sort()
+	return "%s|%dx%d|d%.3f|h%.3f|%s" % [
+		test_case["mode"],
+		test_case["resolution"].x,
+		test_case["resolution"].y,
+		float(test_case["denoise"]),
+		float(test_case["history"]),
+		",".join(options),
+	]
+
+
+func _write_summary(cases: Array) -> void:
+	_write_json(_output_path("euphorica_rtgi_summary.json"), {
+		"profile": _profile,
+		"scene": _scene_path,
+		"case_filter": _case_filter,
+		"split_signals": _split_signals_mode,
+		"planned_cases": cases.map(func(test_case): return test_case["name"]),
+		"completed_cases": _results.size(),
+		"results": _results,
+		"split_pair_metrics": _split_pair_metrics,
+		"knob_stages": RTGI_KNOB_STAGES,
+	})
+
+
+func _record_split_pair(game_image: Image, final_image: Image, test_case: Dictionary) -> void:
+	if not bool(test_case.get("rtgi_enabled", false)):
+		return
+	var pair_key = str(test_case.get("split_pair_key", ""))
+	if pair_key.is_empty():
+		return
+	if not _split_pair_images.has(pair_key):
+		_split_pair_images[pair_key] = {}
+	var side = "on" if bool(test_case.get("split_signals", true)) else "off"
+	_split_pair_images[pair_key][side] = {
+		"case_name": test_case["name"],
+		"game_image": game_image,
+		"final_image": final_image,
+	}
+	if _split_pair_images[pair_key].has("on") and _split_pair_images[pair_key].has("off"):
+		var on_case = _split_pair_images[pair_key]["on"]
+		var off_case = _split_pair_images[pair_key]["off"]
+		var metrics = {
+			"pair_key": pair_key,
+			"split_on_case": on_case["case_name"],
+			"split_off_case": off_case["case_name"],
+		}
+		metrics.merge(_diff_metrics(on_case["game_image"], off_case["game_image"], "split_on_vs_off_game"), true)
+		metrics.merge(_diff_metrics(on_case["final_image"], off_case["final_image"], "split_on_vs_off_final"), true)
+		_split_pair_metrics.append(metrics)
+		_split_pair_images.erase(pair_key)
 
 
 func _run_case(test_case: Dictionary) -> Dictionary:
@@ -189,7 +312,7 @@ func _run_case(test_case: Dictionary) -> Dictionary:
 		world_environment.environment = env
 	_apply_environment(test_case, env)
 	_apply_camera_environment(scene, test_case)
-	var flipped_count = _apply_scene_toggles(scene, test_case)
+	_apply_scene_toggles(scene, test_case)
 
 	for i in range(_warmup_frames):
 		await process_frame
@@ -205,6 +328,8 @@ func _run_case(test_case: Dictionary) -> Dictionary:
 	var final_image = _capture_viewport(root)
 	game_image.save_png(_output_path("%s_game.png" % test_case["name"]))
 	final_image.save_png(_output_path("%s_final.png" % test_case["name"]))
+	if _capture_debug and bool(test_case.get("rtgi_enabled", false)):
+		await _capture_debug_views(test_case, game_viewport)
 	return {
 		"scene": scene,
 		"game_viewport": game_viewport,
@@ -212,7 +337,7 @@ func _run_case(test_case: Dictionary) -> Dictionary:
 		"game_image": game_image,
 		"final_image": final_image,
 		"environment": env,
-		"normal_textures_flipped": flipped_count,
+		"normal_textures_flipped": 0,
 	}
 
 
@@ -227,7 +352,7 @@ func _apply_environment(test_case: Dictionary, env: Environment) -> void:
 	env.rtgi_denoiser_history_weight = test_case["history"]
 	env.rtgi_denoiser_firefly_suppression = float(test_case.get("firefly_suppression", 1.0))
 	env.rtgi_denoiser_detail_preservation = float(test_case.get("detail_preservation", 1.0))
-	env.rtgi_denoiser_split_signals = true
+	env.rtgi_denoiser_split_signals = bool(test_case.get("split_signals", true))
 	env.rtgi_denoiser_specular_history_weight = test_case["history"]
 	env.rtgi_denoiser_specular_spatial_strength = float(test_case.get("specular_spatial_strength", 1.0))
 	env.rtgi_ray_firefly_suppression = float(test_case.get("ray_firefly_suppression", 0.85))
@@ -246,7 +371,7 @@ func _apply_camera_environment(scene: Node, test_case: Dictionary) -> void:
 			_apply_environment(test_case, node.environment)
 
 
-func _apply_scene_toggles(scene: Node, test_case: Dictionary) -> int:
+func _apply_scene_toggles(scene: Node, test_case: Dictionary) -> void:
 	if test_case.get("no_omni_shadow", false):
 		for node in _walk(scene):
 			if node is OmniLight3D:
@@ -255,9 +380,47 @@ func _apply_scene_toggles(scene: Node, test_case: Dictionary) -> int:
 		for node in _walk(scene):
 			if node is GeometryInstance3D:
 				_zero_emission_materials(node)
-	if str(test_case.get("normal_y", "opengl")) == "directx":
-		return _flip_normal_textures(scene)
-	return 0
+
+
+func _capture_debug_views(test_case: Dictionary, game_viewport: Viewport) -> void:
+	for view in _debug_views:
+		_apply_debug_view(game_viewport, view)
+		await process_frame
+		await RenderingServer.frame_post_draw
+		_capture_viewport(game_viewport).save_png(_output_path("%s_%s_game.png" % [test_case["name"], view]))
+	_apply_debug_view(game_viewport, "disabled")
+	await process_frame
+	await RenderingServer.frame_post_draw
+
+
+func _apply_debug_view(viewport: Viewport, view: String) -> void:
+	RenderingServer.viewport_set_debug_draw(viewport.get_viewport_rid(), _debug_draw_value(view))
+
+
+func _debug_draw_value(view: String) -> int:
+	match view:
+		"beauty", "disabled":
+			return 0
+		"diffuse_noisy":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_DIFFUSE_NOISY
+		"specular_noisy":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_NOISY
+		"diffuse_final":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_DIFFUSE_FINAL
+		"specular_final":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_FINAL
+		"specular_guide":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_GUIDE
+		"variance":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_VARIANCE
+		"history_length":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_HISTORY_LENGTH
+		"rejection":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_REJECTION
+		"final":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_FINAL
+		_:
+			return 0
 
 
 func _zero_emission_materials(node: GeometryInstance3D) -> void:
@@ -282,37 +445,6 @@ func _zero_emission_material(material: Material) -> Material:
 	return duplicate
 
 
-func _flip_normal_textures(scene: Node) -> int:
-	var flipped = 0
-	for node in _walk(scene):
-		if node is MeshInstance3D and node.mesh != null:
-			for surface in range(node.mesh.get_surface_count()):
-				var material = node.get_surface_override_material(surface)
-				if material == null:
-					material = node.mesh.surface_get_material(surface)
-				if material is BaseMaterial3D and material.normal_texture != null:
-					var duplicated = material.duplicate(true) as BaseMaterial3D
-					var flipped_texture = _create_y_flipped_texture(duplicated.normal_texture)
-					if flipped_texture != null:
-						duplicated.normal_texture = flipped_texture
-						node.set_surface_override_material(surface, duplicated)
-						flipped += 1
-	return flipped
-
-
-func _create_y_flipped_texture(texture: Texture2D) -> Texture2D:
-	var image = texture.get_image()
-	if image == null or image.is_empty():
-		return null
-	image.convert(Image.FORMAT_RGBA8)
-	for y in range(image.get_height()):
-		for x in range(image.get_width()):
-			var color = image.get_pixel(x, y)
-			color.g = 1.0 - color.g
-			image.set_pixel(x, y, color)
-	return ImageTexture.create_from_image(image)
-
-
 func _capture_viewport(viewport: Viewport) -> Image:
 	var image = viewport.get_texture().get_image()
 	image.convert(Image.FORMAT_RGBA8)
@@ -327,6 +459,10 @@ func _measure_case(frames: Array, game_image: Image, final_image: Image, baselin
 	metrics["temporal_sparkle_per_megapixel_max"] = _temporal_sparkle(frames)
 	metrics["temporal_sparkle_per_megapixel_avg"] = _temporal_sparkle_average(frames)
 	metrics["final_to_game_luma_correlation"] = _luma_correlation(game_image, final_image)
+	metrics["final_to_game_visible_speckle_ratio"] = _safe_ratio(metrics["final_visible_speckles_per_megapixel"], metrics["game_visible_speckles_per_megapixel"])
+	metrics["final_to_game_firefly_ratio"] = _safe_ratio(metrics["final_full_frame_fireflies_per_megapixel"], metrics["game_full_frame_fireflies_per_megapixel"])
+	metrics["final_to_game_p99_luma_ratio"] = _safe_ratio(metrics["final_luma_p99"], metrics["game_luma_p99"])
+	metrics["final_to_game_detail_edge_ratio"] = _safe_ratio(metrics["final_detail_edge_energy"], metrics["game_detail_edge_energy"])
 	if baseline_game != null:
 		var diff = _diff_metrics(game_image, baseline_game, "rtgi_vs_no_rtgi")
 		for key in diff.keys():
@@ -546,6 +682,10 @@ func _per_megapixel(count: int, width: int, height: int) -> float:
 	return float(count) / max(float(width * height) / 1000000.0, 1e-6)
 
 
+func _safe_ratio(a: float, b: float) -> float:
+	return a / max(b, 1e-6)
+
+
 func _collect_knobs(env: Environment) -> Dictionary:
 	var knobs = {}
 	for property_name in RTGI_KNOB_STAGES.keys():
@@ -590,6 +730,10 @@ func _ensure_output_dir() -> bool:
 		push_error("Refusing Euphorica capture output under res://; use user:// or an absolute path so the validation fixture remains read-only.")
 		return false
 	var absolute = _absolute_output_dir()
+	var euphorica_root = ProjectSettings.globalize_path("res://")
+	if _is_same_or_child_path(absolute, euphorica_root):
+		push_error("Refusing Euphorica capture output inside the active Euphorica project: %s" % absolute)
+		return false
 	DirAccess.make_dir_recursive_absolute(absolute)
 	return true
 
@@ -602,6 +746,15 @@ func _absolute_output_dir() -> String:
 	if _output_dir.begins_with("user://"):
 		return ProjectSettings.globalize_path(_output_dir)
 	return _output_dir
+
+
+func _is_same_or_child_path(path: String, root_path: String) -> bool:
+	var normalized_path = path.replace("\\", "/").rstrip("/")
+	var normalized_root = root_path.replace("\\", "/").rstrip("/")
+	if OS.has_feature("windows"):
+		normalized_path = normalized_path.to_lower()
+		normalized_root = normalized_root.to_lower()
+	return normalized_path == normalized_root or normalized_path.begins_with(normalized_root + "/")
 
 
 func _write_json(path: String, data: Variant) -> void:

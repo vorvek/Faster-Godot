@@ -81,15 +81,29 @@ Profiles:
 
 - `compare`: no-RTGI baseline plus Simple RT, Path Traced, glow/fog, lantern
   emissive, shadowed OmniLight, and normal-deviation debug captures.
+- `split_ab`: no-RTGI baseline plus split-signal on/off pairs for Simple RT and
+  Path Traced at `640x360` and `1280x720`, plus content toggles.
 - `matrix`: full Simple RT/Path Traced sweep for denoise `0.90`, `0.95`,
   `0.98`, `1.0`, history `0.95`, `0.98`, `640x360`/`1280x720`, content
-  toggles, and normal-Y A/B.
-- `normal_ab`: OpenGL +Y and runtime DirectX/-Y normal-texture A/B where
-  textures can be read and duplicated at runtime.
+  toggles, and split-signal on/off comparisons. For Euphorica-centered RTGI
+  work, use Cornell plus Euphorica validation; Sponza is optional and not part
+  of the default phase gate.
+
+Useful Euphorica split options:
+
+- `--euphorica-split-signals=on|off|both` selects the denoiser topology. The
+  comparison profiles default to `both`.
+- `--euphorica-case-filter=<substring>` runs only matching cases, plus the
+  no-RTGI baseline when needed, so long matrices can be resumed in chunks.
+- `--euphorica-list-cases` writes a summary with the planned case names and
+  exits without rendering.
+- `--euphorica-capture-debug` writes RTGI denoiser debug captures for each RTGI
+  case, including diffuse/specular noisy and final buffers.
 
 Each case writes `_game.png`, `_final.png`, per-case metrics JSON, and
 `euphorica_rtgi_summary.json` with effective RTGI knob values and the renderer
-stage each knob feeds.
+stage each knob feeds. The summary is rewritten after every completed case and
+contains split-on/off pair metrics when both sides of a pair have completed.
 
 ## Cornell Box
 
@@ -125,8 +139,8 @@ The canonical Phase 3 source is Khronos glTF Sample Assets Sponza:
 <https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Sponza>.
 Use `Models/Sponza/glTF/Sponza.gltf` from a local checkout or download, for
 example `D:\dev\rtgi_external_assets\sponza\Models\Sponza\glTF\Sponza.gltf`.
-glTF normal maps are expected to use +Y tangent-space. If testing a DirectX
-source texture set or checking normal handedness, pass
+glTF normal maps are expected to use +Y tangent-space. If testing a
+DirectX-style -Y source texture set or checking normal handedness, pass
 `--rtgi-sponza-normal-y=directx`; this creates temporary flipped normal
 textures inside the QA run and does not modify the source asset or engine
 importer behavior.
