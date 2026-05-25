@@ -4394,6 +4394,13 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		add_uniform_id(u, rb_data->rt_get_signal_confidence());
 		uniforms.push_back(u);
 	}
+	{
+		RD::Uniform u;
+		u.binding = 45;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_source_candidate());
+		uniforms.push_back(u);
+	}
 
 	// Use the pipeline-side shader so UniformSetFormat matches at bind time.
 	RID shader_rd = shader ? shader->get_pipeline_shader_rd(p_rt_flags) : RID();

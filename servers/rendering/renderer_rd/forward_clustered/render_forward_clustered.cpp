@@ -245,6 +245,7 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_clear_textures
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_INDIRECT);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_SKY);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_CONFIDENCE);
+	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_CANDIDATE);
 	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE);
 	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
 	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
@@ -430,6 +431,9 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 	}
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_CONFIDENCE)) {
 		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_CONFIDENCE, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
+	}
+	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_CANDIDATE)) {
+		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_CANDIDATE, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
 	}
 }
 
@@ -3685,6 +3689,10 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_CONFIDENCE && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_CONFIDENCE)) {
 			copy_effects->copy_to_fb_rect(rb_data->rt_get_signal_confidence(), fb, Rect2(Vector2(), rtsize), false, true);
+		}
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_CANDIDATE && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_CANDIDATE)) {
+			copy_effects->copy_to_fb_rect(rb_data->rt_get_source_candidate(), fb, Rect2(Vector2(), rtsize), false, false);
 		}
 
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_RAW_DIFFUSE && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RAW)) {

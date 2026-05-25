@@ -135,6 +135,11 @@ The feature is exposed on `Environment`, so it appears through the same
   - `VIEWPORT_DEBUG_DRAW_RTGI_CACHE_FILTERED_DIFFUSE`: split-signal diffuse
     radiance after the diffuse cache and before SVGF consumes it. This view is
     available only when the RTGI diffuse radiance cache is active.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_CANDIDATE`: source-selection diagnostic
+    for split-signal RTGI. Red marks the selected source class, green marks
+    source confidence, blue marks normalized candidate weight, and alpha stores
+    normalized contribution luminance for harness metrics. It is intended for
+    source-side variance attribution before the diffuse cache and SVGF.
 
 ## Rendering Behavior
 
@@ -310,6 +315,13 @@ firefly-detection region, and a detail-retention region. It can capture final
 and RTGI debug views, then writes JSON metrics for isolated hot pixels, dark
 region luminance, and high-frequency texture detail. Use it for Phase 2 baseline
 captures before enabling experimental direct-light reuse.
+
+The harness and Euphorica capture script also consume the `source_candidate`
+debug view when requested. The reported `rtgi_source_candidate_*` metrics expose
+source-class coverage, confidence, candidate weight percentiles, contribution
+percentiles, and rejected/downweighted source fraction so many-light instability
+can be separated from diffuse-cache and denoiser behavior. The current metrics
+are current-frame diagnostics, not temporal source-id agreement.
 
 ## Pros
 

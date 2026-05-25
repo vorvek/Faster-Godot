@@ -689,6 +689,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		vec3 direct_total = direct_diffuse + direct_specular;
 		rt_signal_add_direct(ivec2(gl_LaunchIDEXT.xy), direct_diffuse, direct_specular,
 				rt_signal_clamp_delta(raw_direct_diffuse, direct_diffuse) + rt_signal_clamp_delta(raw_direct_specular, direct_specular));
+		rt_source_candidate_record(ivec2(gl_LaunchIDEXT.xy), 0.25, 1.0, clamp(rt_luminance(direct_total) / 4.0, 0.0, 1.0), direct_total, 0.0);
 		if (total_bounces == 0u) {
 			float direct_total_luma = rt_luminance(direct_total);
 			float direct_specular_fraction = direct_total_luma > 1e-5 ? rt_luminance(direct_specular) / direct_total_luma : 0.0;
@@ -713,6 +714,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		vec3 explicit_emissive_total = emissive_diffuse + emissive_specular;
 		rt_signal_add_explicit_emissive(ivec2(gl_LaunchIDEXT.xy), explicit_emissive_total, emissive_pdf, emissive_weight,
 				rt_signal_clamp_delta(raw_emissive_diffuse, emissive_diffuse) + rt_signal_clamp_delta(raw_emissive_specular, emissive_specular));
+		rt_source_candidate_record(ivec2(gl_LaunchIDEXT.xy), 0.50, 1.0, clamp(emissive_pdf * 64.0, 0.0, 1.0), explicit_emissive_total, 0.0);
 		if (total_bounces == 0u) {
 			ps.specular_radiance += emissive_specular;
 		} else if (get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {

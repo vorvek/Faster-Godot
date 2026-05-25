@@ -151,6 +151,7 @@ layout(set = 0, binding = 40, rgba16f) uniform image2D rt_signal_emissive_image;
 layout(set = 0, binding = 41, rgba16f) uniform image2D rt_signal_indirect_image;
 layout(set = 0, binding = 42, rgba16f) uniform image2D rt_signal_sky_image;
 layout(set = 0, binding = 43, rgba16f) uniform image2D rt_signal_confidence_image;
+layout(set = 0, binding = 45, rgba16f) uniform image2D rt_source_candidate_image;
 
 struct RTEmissiveCandidate {
 	float object_to_world[12];
@@ -170,9 +171,28 @@ void rt_signal_reset(ivec2 pixel) {
 	imageStore(rt_signal_indirect_image, pixel, vec4(0.0));
 	imageStore(rt_signal_sky_image, pixel, vec4(0.0));
 	imageStore(rt_signal_confidence_image, pixel, vec4(0.0, 0.0, 0.0, 1.0));
+	imageStore(rt_source_candidate_image, pixel, vec4(0.0));
 }
 
 #define RT_SIGNAL_ACCUMULATE(signal_image, pixel, value) imageStore(signal_image, pixel, imageLoad(signal_image, pixel) + (value))
+
+void rt_source_candidate_record(ivec2 pixel, float source_class, float confidence, float normalized_weight, vec3 contribution, float downweight) {
+	vec3 value = sanitize_payload_vec3(contribution);
+	float contribution_luma = rt_luminance(value);
+	vec4 previous = imageLoad(rt_source_candidate_image, pixel);
+	if (contribution_luma >= previous.a) {
+		imageStore(rt_source_candidate_image, pixel, vec4(
+				clamp(source_class, 0.0, 1.0),
+				clamp(confidence, 0.0, 1.0),
+				clamp(normalized_weight, 0.0, 1.0),
+				clamp(contribution_luma, 0.0, 1.0)));
+	}
+	if (downweight > 0.001) {
+		vec4 confidence_signal = imageLoad(rt_signal_confidence_image, pixel);
+		confidence_signal.g = max(confidence_signal.g, clamp(downweight, 0.0, 1.0));
+		imageStore(rt_signal_confidence_image, pixel, confidence_signal);
+	}
+}
 
 float rt_signal_clamp_delta(vec3 raw_value, vec3 clamped_value) {
 	return max(0.0, rt_luminance(sanitize_payload_vec3(raw_value)) - rt_luminance(sanitize_payload_vec3(clamped_value)));

@@ -741,7 +741,7 @@ func _animate_camera(frame: int) -> void:
 
 
 func _capture_debug_views(base_name: String) -> void:
-	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
+	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
 	for view in views:
 		if view.begins_with("cache_") and not _cache_debug_available():
 			continue
@@ -756,7 +756,7 @@ func _capture_debug_views(base_name: String) -> void:
 func _measure_signal_debug_views() -> Dictionary:
 	var result := {}
 	var previous_view := _debug_view
-	var signal_views := ["signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "noisy", "final"]
+	var signal_views := ["signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "noisy", "final"]
 	for view in signal_views:
 		if view.begins_with("cache_") and not _cache_debug_available():
 			continue
@@ -777,6 +777,8 @@ func _measure_signal_debug_views() -> Dictionary:
 			result.merge(_measure_cache_hit_diagnostic(image, "rtgi_cache"), true)
 		elif view == "cache_rejection":
 			result.merge(_measure_cache_rejection_diagnostic(image, "rtgi_cache"), true)
+		elif view == "source_candidate":
+			result.merge(_measure_source_candidate_diagnostic(image), true)
 	_apply_debug_view(previous_view)
 	return result
 
@@ -838,6 +840,42 @@ func _measure_cache_hit_region(image: Image, prefix: String, x0: int, y0: int, x
 		"%s_hit_rate" % prefix: float(hits) / float(count),
 		"%s_confidence_mean" % prefix: confidence_sum / float(count),
 		"%s_age_mean" % prefix: age_sum / float(count),
+	}
+
+
+func _measure_source_candidate_diagnostic(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var count: int = max(width * height, 1)
+	var source_coverage := 0
+	var confidence_sum := 0.0
+	var weight_values: Array[float] = []
+	var contribution_values: Array[float] = []
+	var downweighted := 0
+	for y in range(height):
+		for x in range(width):
+			var c := image.get_pixel(x, y)
+			if c.r > 0.0:
+				source_coverage += 1
+			if c.g < 0.985 and c.r > 0.0:
+				downweighted += 1
+			confidence_sum += c.g
+			weight_values.append(c.b)
+			contribution_values.append(c.a)
+	weight_values.sort()
+	contribution_values.sort()
+	var p95_idx := clampi(int(round(float(count - 1) * 0.95)), 0, count - 1)
+	var p99_idx := clampi(int(round(float(count - 1) * 0.99)), 0, count - 1)
+	return {
+		"rtgi_source_candidate_coverage_rate": float(source_coverage) / float(count),
+		"rtgi_source_candidate_confidence_mean": confidence_sum / float(count),
+		"rtgi_source_candidate_weight_p95": weight_values[p95_idx],
+		"rtgi_source_candidate_weight_p99": weight_values[p99_idx],
+		"rtgi_source_candidate_weight_max": weight_values[count - 1],
+		"rtgi_source_candidate_contribution_p95": contribution_values[p95_idx],
+		"rtgi_source_candidate_contribution_p99": contribution_values[p99_idx],
+		"rtgi_source_candidate_contribution_max": contribution_values[count - 1],
+		"rtgi_source_rejection_fraction": float(downweighted) / float(count),
 	}
 
 
@@ -1115,6 +1153,8 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_SKY
 		"signal_confidence":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_CONFIDENCE
+		"source_candidate":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_CANDIDATE
 		"cache_raw_diffuse":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_RAW_DIFFUSE
 		"cache_filtered_diffuse":

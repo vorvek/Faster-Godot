@@ -199,6 +199,7 @@ public:
 		RID rt_get_signal_indirect() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_INDIRECT); }
 		RID rt_get_signal_sky() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_SKY); }
 		RID rt_get_signal_confidence() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_CONFIDENCE); }
+		RID rt_get_source_candidate() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_CANDIDATE); }
 
 		// DLSS Ray Reconstruction output buffers
 		void dlss_rr_ensure_buffers();

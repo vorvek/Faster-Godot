@@ -691,7 +691,7 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 	for (uint candidate = 0u; candidate < candidate_count; candidate++) {
 		uint selected_idx = 0u;
 		float selected_weight = 0.0;
-		float selected_cdf = rand(rng_state) * total_weight;
+		float selected_cdf = (float(candidate) + rand(rng_state)) * (total_weight / float(candidate_count));
 		float cdf = 0.0;
 		for (uint idx = 0u; idx < light_count; idx++) {
 			RTLightData test_light = rt_lights[idx];

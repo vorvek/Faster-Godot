@@ -59,6 +59,7 @@
 #define RB_TEX_RT_SIGNAL_INDIRECT SNAME("rt_signal_indirect")
 #define RB_TEX_RT_SIGNAL_SKY SNAME("rt_signal_sky")
 #define RB_TEX_RT_SIGNAL_CONFIDENCE SNAME("rt_signal_confidence")
+#define RB_TEX_RT_SOURCE_CANDIDATE SNAME("rt_source_candidate")
 
 #define RB_SCOPE_DLSS_RR SNAME("dlss_rr")
 #define RB_TEX_DLSS_RR_DIFFUSE_ALBEDO SNAME("diffuse_albedo")
