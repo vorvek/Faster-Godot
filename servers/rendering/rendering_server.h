@@ -743,6 +743,7 @@ public:
 	static constexpr PathtracingParamIndex PT_PARAM_DENOISER_SPLIT_SIGNALS = RSE::PT_PARAM_DENOISER_SPLIT_SIGNALS;
 	static constexpr PathtracingParamIndex PT_PARAM_DENOISER_SPECULAR_HISTORY_WEIGHT = RSE::PT_PARAM_DENOISER_SPECULAR_HISTORY_WEIGHT;
 	static constexpr PathtracingParamIndex PT_PARAM_DENOISER_SPECULAR_SPATIAL_STRENGTH = RSE::PT_PARAM_DENOISER_SPECULAR_SPATIAL_STRENGTH;
+	static constexpr PathtracingParamIndex PT_PARAM_RTGI_SAMPLING_CONTROLS = RSE::PT_PARAM_RTGI_SAMPLING_CONTROLS;
 	static constexpr PathtracingParamIndex PT_PARAM_MAX = RSE::PT_PARAM_MAX;
 
 	using SubSurfaceScatteringQuality = RSE::SubSurfaceScatteringQuality;

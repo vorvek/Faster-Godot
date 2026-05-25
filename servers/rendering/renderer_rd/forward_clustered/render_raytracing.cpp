@@ -46,6 +46,7 @@
 using namespace RendererSceneRenderImplementation;
 
 static constexpr real_t RT_COMPRESSED_AABB_EPSILON = 0.0001;
+static constexpr uint32_t RTGI_MAX_EMISSIVE_CANDIDATES = 512;
 
 static AABB _rt_make_safe_compressed_aabb(const AABB &p_aabb) {
 	AABB safe_aabb = p_aabb;
@@ -366,6 +367,9 @@ void RenderRaytracing::_free_viewport_state_internal(RTViewportState *p_state) {
 	if (p_state->motion_transform_buffer.is_valid()) {
 		RD::get_singleton()->free_rid(p_state->motion_transform_buffer);
 	}
+	if (p_state->emissive_candidate_buffer.is_valid()) {
+		RD::get_singleton()->free_rid(p_state->emissive_candidate_buffer);
+	}
 	if (p_state->light_buffer.is_valid()) {
 		RD::get_singleton()->free_rid(p_state->light_buffer);
 	}
@@ -615,6 +619,9 @@ void RenderRaytracing::prepare_frame() {
 	deformed_buffer_dependencies.clear();
 	motion_indices.clear();
 	motion_transforms.clear();
+	emissive_candidates.clear();
+	emissive_candidate_total_weight = 0.0f;
+	current_emissive_candidate_signature = _rt_history_mix(0x7274656d69737376ULL, 0);
 
 	// Procedural BLAS/AABB lifetime is on the geometry instance.
 	{
@@ -2337,6 +2344,9 @@ void RenderRaytracing::finalize_buffers(RTViewportState *p_state) {
 			motion_indices.ptr(), motion_indices.size() * sizeof(int32_t));
 	update_or_grow(p_state->motion_transform_buffer, p_state->motion_transform_buffer_capacity,
 			motion_transforms.ptr(), motion_transforms.size() * sizeof(RT_InstanceMotionData));
+	update_or_grow(p_state->emissive_candidate_buffer, p_state->emissive_candidate_buffer_capacity,
+			emissive_candidates.ptr(), emissive_candidates.size() * sizeof(RT_EmissiveCandidate));
+	p_state->emissive_candidate_signature = current_emissive_candidate_signature;
 }
 
 // ---------------------------------------------------------------------------
@@ -2902,6 +2912,57 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 		return RID();
 	};
 
+	auto estimate_emissive_proxy_weight = [](const RT_GeometryData &p_geom, const RT_MaterialData &p_mat) -> float {
+		const float emission_luma = MAX(0.0f, p_mat.emission_color[0] * 0.2126f + p_mat.emission_color[1] * 0.7152f + p_mat.emission_color[2] * 0.0722f) * MAX(p_mat.emission_strength, 0.0f);
+		const float texture_floor = (p_mat.flags & RT_MAT_FLAG_HAS_EMISSION_TEX) != 0 ? 0.20f : 0.0f;
+		const float emissive_luma = MAX(emission_luma, texture_floor);
+		if (emissive_luma <= 0.0f || p_geom.primitive_count == 0) {
+			return 0.0f;
+		}
+		const float sx = MAX(p_geom.aabb_size_x, 0.001f);
+		const float sy = MAX(p_geom.aabb_size_y, 0.001f);
+		const float sz = MAX(p_geom.aabb_size_z, 0.001f);
+		const float proxy_area = MAX(MAX(sx * sy, sy * sz), sx * sz);
+		return emissive_luma * MAX(proxy_area, 0.001f) * MAX((float)p_geom.primitive_count, 1.0f);
+	};
+
+	auto add_emissive_candidate = [&](const Transform3D &p_transform, uint32_t p_geometry_index, const RT_GeometryData &p_geom, const RT_MaterialData &p_mat, uint32_t p_sbt_offset, uint8_t p_instance_mask) {
+		if ((p_instance_mask & RT_INSTANCE_MASK_VISIBLE) == 0 || p_sbt_offset != 0 || emissive_candidates.size() >= RTGI_MAX_EMISSIVE_CANDIDATES) {
+			return;
+		}
+		const uint32_t rejected_geom_flags = RT_GEOM_FLAG_COMPRESSED | RT_GEOM_FLAG_COMPRESSED_ATTRIBUTES | RT_GEOM_FLAG_PROCEDURAL | RT_GEOM_FLAG_DEFORMED | RT_GEOM_FLAG_RASTER_GI_LIGHTMAP | RT_GEOM_FLAG_RASTER_GI_LIGHTMAP_CAPTURE | RT_GEOM_FLAG_RASTER_GI_VOXELGI | RT_GEOM_FLAG_RASTER_GI_SDFGI;
+		if ((p_geom.flags & rejected_geom_flags) != 0 || p_geom.vertex_buffer_address == 0 || p_geom.primitive_count == 0) {
+			return;
+		}
+		const uint32_t rejected_mat_flags = RT_MAT_FLAG_CUSTOM_SHADER | RT_MAT_FLAG_ALPHA_HASH | RT_MAT_FLAG_CUSTOM_ALPHA_CLIP | RT_MAT_FLAG_ALPHA_TEST;
+		if ((p_mat.flags & rejected_mat_flags) != 0) {
+			return;
+		}
+		const float weight = estimate_emissive_proxy_weight(p_geom, p_mat);
+		if (weight <= 0.0f) {
+			return;
+		}
+		RT_EmissiveCandidate candidate = {};
+		RendererRD::MaterialStorage::store_transform_transposed_3x4(p_transform, candidate.object_to_world);
+		candidate.geometry_index = p_geometry_index;
+		candidate.flags = 0;
+		candidate.selection_weight = weight;
+		emissive_candidates.push_back(candidate);
+		geometry_data[p_geometry_index].flags |= RT_GEOM_FLAG_EXPLICIT_EMISSIVE_CANDIDATE;
+		emissive_candidate_total_weight += weight;
+		current_emissive_candidate_signature = _rt_history_mix(current_emissive_candidate_signature, p_geometry_index);
+		current_emissive_candidate_signature = _rt_history_mix(current_emissive_candidate_signature, p_mat.flags);
+		current_emissive_candidate_signature = _rt_history_mix(current_emissive_candidate_signature, p_mat.emission_texture_idx);
+		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, p_mat.emission_color[0]);
+		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, p_mat.emission_color[1]);
+		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, p_mat.emission_color[2]);
+		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, p_mat.emission_strength);
+		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, weight);
+		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, p_transform.origin.x);
+		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, p_transform.origin.y);
+		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, p_transform.origin.z);
+	};
+
 	const PagedArray<RenderGeometryInstance *> &rt_instances = *p_render_data->rt_instances;
 	for (uint32_t i = 0; i < (uint32_t)rt_instances.size(); i++) {
 		const RenderForwardClustered::GeometryInstanceForwardClustered *inst =
@@ -3256,6 +3317,8 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 				if (p_instance_mask == 0) {
 					return;
 				}
+				const uint32_t geometry_index = geometry_data.size();
+				const RT_MaterialData surface_material = get_surface_material_data_with_sbt(surf, mat_data, rt_sbt_offset);
 				blass.push_back(surf_data->blas);
 				blas_transforms.push_back(final_transform);
 				const bool mesh_history_invalid = transform_teleported || deformed_history_invalid || custom_temporal_unsupported;
@@ -3275,9 +3338,10 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 				}
 
 				sbt_offsets.push_back(rt_sbt_offset);
-				material_data.push_back(get_surface_material_data_with_sbt(surf, mat_data, rt_sbt_offset));
+				material_data.push_back(surface_material);
 				instance_flags.push_back(p_inst_flags);
 				instance_masks.push_back(p_instance_mask);
+				add_emissive_candidate(final_transform, geometry_index, rt_geometry, surface_material, rt_sbt_offset, p_instance_mask);
 				pushed_entries++;
 			};
 
@@ -3329,11 +3393,13 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 				if (p_instance_mask == 0) {
 					return;
 				}
+				const uint32_t geometry_index = geometry_data.size();
+				const RT_MaterialData surface_material = get_surface_material_data_with_sbt(pending.mm_surf, pending.mat_data, pending.rt_sbt_offset);
 				blass.push_back(merged_sd.blas);
 				blas_transforms.push_back(pending.instance_transform);
 				geometry_data.push_back(_rt_geometry_with_history_validity(state, merged_geometry, history_key, pending.layer_mask, p_instance_mask, pending.history_invalid));
 				sbt_offsets.push_back(pending.rt_sbt_offset);
-				material_data.push_back(get_surface_material_data_with_sbt(pending.mm_surf, pending.mat_data, pending.rt_sbt_offset));
+				material_data.push_back(surface_material);
 				if (pending.transform_moved) {
 					motion_indices.push_back((int32_t)motion_transforms.size());
 					RT_InstanceMotionData motion = {};
@@ -3344,6 +3410,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 				}
 				instance_flags.push_back(p_inst_flags);
 				instance_masks.push_back(p_instance_mask);
+				add_emissive_candidate(pending.instance_transform, geometry_index, merged_geometry, surface_material, pending.rt_sbt_offset, p_instance_mask);
 				pushed_entries++;
 			};
 
@@ -3428,11 +3495,13 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 					if (p_instance_mask == 0) {
 						return;
 					}
+					const uint32_t geometry_index = geometry_data.size();
+					const RT_MaterialData surface_material = get_surface_material_data_with_sbt(pending.mm_surf, pending.mat_data, pending.rt_sbt_offset);
 					blass.push_back(surf_data->blas);
 					blas_transforms.push_back(final_transform);
 					geometry_data.push_back(_rt_geometry_with_history_validity(state, rt_geometry, history_key, pending.layer_mask, p_instance_mask, pending.history_invalid));
 					sbt_offsets.push_back(pending.rt_sbt_offset);
-					material_data.push_back(get_surface_material_data_with_sbt(pending.mm_surf, pending.mat_data, pending.rt_sbt_offset));
+					material_data.push_back(surface_material);
 
 					if (pending.transform_moved || pending.mm_uses_motion_vectors) {
 						Transform3D prev_final = pending.prev_instance_transform * prev_mm_xform;
@@ -3449,6 +3518,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 
 					instance_flags.push_back(p_inst_flags);
 					instance_masks.push_back(p_instance_mask);
+					add_emissive_candidate(final_transform, geometry_index, rt_geometry, surface_material, pending.rt_sbt_offset, p_instance_mask);
 				};
 
 				push_mm_instance_entry(pending.visible_instance_mask, pending.visible_inst_flags);
@@ -3907,6 +3977,19 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		uniforms.push_back(u);
 	}
 
+	// Binding 44: bounded emissive surface/proxy candidates for RTGI direct sampling.
+	{
+		RD::Uniform u;
+		u.binding = 44;
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		if (p_state->emissive_candidate_buffer.is_valid()) {
+			add_uniform_id(u, p_state->emissive_candidate_buffer);
+		} else {
+			add_uniform_id(u, default_storage_buffer);
+		}
+		uniforms.push_back(u);
+	}
+
 		// Binding 6: Raytracing params + unjittered VP matrices.
 	{
 		struct {
@@ -4011,8 +4094,11 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		rt_light_count = gather_lights(p_render_data, rt_light_data, RT_LIGHTS_MAX);
 
 		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_LIGHT_COUNT] = float(rt_light_count);
+		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_EMISSIVE_CANDIDATE_COUNT] = float(MIN((uint32_t)emissive_candidates.size(), RTGI_MAX_EMISSIVE_CANDIDATES));
+		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_EMISSIVE_CANDIDATE_TOTAL_WEIGHT] = emissive_candidate_total_weight;
 
 		uint64_t radiance_signature = _rt_radiance_signature(p_rt_flags, p_render_data ? p_render_data->environment : RID(), p_render_data ? p_render_data->camera_attributes : RID(), rt_ubo.params, background_color, background_uses_sky, rt_light_data, rt_light_count);
+		radiance_signature = _rt_history_mix(radiance_signature, p_state->emissive_candidate_signature);
 		if (!p_state->radiance_history_signature_valid) {
 			p_state->radiance_history_signature = radiance_signature;
 			p_state->radiance_history_signature_valid = true;

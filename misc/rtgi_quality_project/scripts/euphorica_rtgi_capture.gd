@@ -20,6 +20,8 @@ const RTGI_KNOB_STAGES = {
 	"rtgi_denoiser_specular_spatial_strength": "SVGF specular spatial strength",
 	"rtgi_ray_firefly_suppression": "RT ray/path contribution clamp",
 	"rtgi_ray_max_radiance": "RT ray/path contribution clamp",
+	"rtgi_analytic_light_sampling_enabled": "RTGI analytic direct source sampling",
+	"rtgi_explicit_emissive_sampling_enabled": "RTGI explicit emissive source sampling",
 	"rtgi_overscan_horizontal": "Path Traced camera pan overscan",
 	"rtgi_overscan_vertical": "Path Traced camera pan overscan",
 	"rtgi_debug_mode": "RT raygen debug visualization",
@@ -40,10 +42,13 @@ var _split_signals_mode = "both"
 var _case_filter = ""
 var _list_cases = false
 var _resume = false
+var _disable_rf_output_effect = false
+var _profile_timings = false
 var _results = []
 var _split_pair_metrics = []
 var _split_pair_images = {}
-var _debug_views = ["noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "variance", "history_length", "rejection", "final"]
+var _all_debug_views = ["noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "variance", "history_length", "rejection", "final"]
+var _debug_views = ["noisy", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "final"]
 
 
 func _initialize() -> void:
@@ -83,6 +88,12 @@ func _parse_args() -> void:
 			_list_cases = true
 		elif arg == "--euphorica-resume":
 			_resume = true
+		elif arg == "--euphorica-disable-rf-output":
+			_disable_rf_output_effect = true
+		elif arg == "--euphorica-profile-timings":
+			_profile_timings = true
+		elif arg.begins_with("--euphorica-debug-views="):
+			_debug_views = _parse_debug_views(arg.trim_prefix("--euphorica-debug-views="))
 		elif arg == "--euphorica-capture-debug":
 			_capture_debug = true
 		elif arg.begins_with("--euphorica-rtgi="):
@@ -96,6 +107,20 @@ func _parse_resolution(text: String, fallback: Vector2i) -> Vector2i:
 	if parts.size() != 2:
 		return fallback
 	return Vector2i(max(1, parts[0].to_int()), max(1, parts[1].to_int()))
+
+
+func _parse_debug_views(text: String) -> Array:
+	var normalized := text.strip_edges().to_lower()
+	if normalized == "all":
+		return _all_debug_views.duplicate()
+	var views := []
+	for part in normalized.split(",", false):
+		var view := part.strip_edges()
+		if view in _all_debug_views and not views.has(view):
+			views.append(view)
+	if views.is_empty():
+		return _debug_views
+	return views
 
 
 func _run() -> void:
@@ -131,8 +156,12 @@ func _run() -> void:
 			baseline_game = capture["game_image"]
 			baseline_final = capture["final_image"]
 		var metrics = _measure_case(capture["game_frames"], capture["game_image"], capture["final_image"], baseline_game, baseline_final)
+		metrics.merge(capture.get("debug_metrics", {}), true)
 		metrics["case"] = test_case.duplicate(true)
 		metrics["rtgi_knobs"] = _collect_knobs(capture["environment"])
+		metrics["rf_output_effect_disabled"] = _disable_rf_output_effect
+		metrics["rf_output_effect_disabled_count"] = capture["rf_output_effect_disabled_count"]
+		metrics["stage_timings_msec"] = capture["stage_timings_msec"]
 		metrics["normal_textures_flipped"] = capture["normal_textures_flipped"]
 		_results.append(metrics)
 		_write_json(_output_path("%s_metrics.json" % test_case["name"]), metrics)
@@ -259,9 +288,12 @@ func _write_summary(cases: Array) -> void:
 		"profile": _profile,
 		"scene": _scene_path,
 		"case_filter": _case_filter,
-		"split_signals": _split_signals_mode,
-		"resume": _resume,
-		"planned_cases": cases.map(func(test_case): return test_case["name"]),
+			"split_signals": _split_signals_mode,
+			"resume": _resume,
+			"rf_output_effect_disabled": _disable_rf_output_effect,
+			"profile_timings": _profile_timings,
+			"debug_views": _debug_views,
+			"planned_cases": cases.map(func(test_case): return test_case["name"]),
 		"completed_cases": _results.size(),
 		"results": _results,
 		"split_pair_metrics": _split_pair_metrics,
@@ -298,14 +330,20 @@ func _record_split_pair(game_image: Image, final_image: Image, test_case: Dictio
 
 
 func _run_case(test_case: Dictionary) -> Dictionary:
+	var timings := {}
+	var stage_start := Time.get_ticks_msec()
 	var packed = load(_scene_path)
+	_record_stage_timing(timings, "load_scene_resource", stage_start)
 	if not (packed is PackedScene):
 		push_error("Unable to load Euphorica scene: %s" % _scene_path)
 		quit(2)
 		return {}
+	stage_start = Time.get_ticks_msec()
 	var scene = (packed as PackedScene).instantiate()
 	root.add_child(scene)
 	await process_frame
+	_record_stage_timing(timings, "instantiate_and_first_frame", stage_start)
+	stage_start = Time.get_ticks_msec()
 	var game_viewport = _find_node(scene, "GameViewport") as SubViewport
 	if game_viewport == null:
 		push_error("Unable to find GameViewport in Euphorica scene.")
@@ -328,32 +366,55 @@ func _run_case(test_case: Dictionary) -> Dictionary:
 	_apply_environment(test_case, env)
 	_apply_camera_environment(scene, test_case)
 	_apply_scene_toggles(scene, test_case)
+	var rf_output_effect_disabled_count := 0
+	if _disable_rf_output_effect:
+		rf_output_effect_disabled_count = _bypass_rf_output_effect(scene)
+	_record_stage_timing(timings, "configure_scene", stage_start)
 
+	stage_start = Time.get_ticks_msec()
 	for i in range(_warmup_frames):
 		await process_frame
 		await RenderingServer.frame_post_draw
+	_record_stage_timing(timings, "warmup_frames", stage_start)
 
 	var frames = []
 	var frame_count = max(1, _sparkle_frames)
+	stage_start = Time.get_ticks_msec()
 	for i in range(frame_count):
 		await process_frame
 		await RenderingServer.frame_post_draw
 		frames.append(_capture_viewport(game_viewport))
+	_record_stage_timing(timings, "sparkle_capture_frames", stage_start)
+	stage_start = Time.get_ticks_msec()
 	var game_image: Image = frames[frames.size() - 1]
 	var final_image = _capture_viewport(root)
 	game_image.save_png(_output_path("%s_game.png" % test_case["name"]))
 	final_image.save_png(_output_path("%s_final.png" % test_case["name"]))
+	_record_stage_timing(timings, "save_primary_images", stage_start)
+	var debug_metrics := {}
 	if _capture_debug and bool(test_case.get("rtgi_enabled", false)):
-		await _capture_debug_views(test_case, game_viewport)
+		stage_start = Time.get_ticks_msec()
+		debug_metrics = await _capture_debug_views(test_case, game_viewport)
+		_record_stage_timing(timings, "debug_capture_views", stage_start)
 	return {
 		"scene": scene,
 		"game_viewport": game_viewport,
 		"game_frames": frames,
 		"game_image": game_image,
 		"final_image": final_image,
+		"debug_metrics": debug_metrics,
 		"environment": env,
 		"normal_textures_flipped": 0,
+		"rf_output_effect_disabled_count": rf_output_effect_disabled_count,
+		"stage_timings_msec": timings,
 	}
+
+
+func _record_stage_timing(timings: Dictionary, stage: String, start_msec: int) -> void:
+	var elapsed := Time.get_ticks_msec() - start_msec
+	timings[stage] = elapsed
+	if _profile_timings:
+		print("Euphorica RTGI capture timing: %s %.2fs" % [stage, float(elapsed) / 1000.0])
 
 
 func _apply_environment(test_case: Dictionary, env: Environment) -> void:
@@ -372,6 +433,8 @@ func _apply_environment(test_case: Dictionary, env: Environment) -> void:
 	env.rtgi_denoiser_specular_spatial_strength = float(test_case.get("specular_spatial_strength", 1.0))
 	env.rtgi_ray_firefly_suppression = float(test_case.get("ray_firefly_suppression", 0.85))
 	env.rtgi_ray_max_radiance = float(test_case.get("ray_max_radiance", 32.0))
+	env.rtgi_analytic_light_sampling_enabled = bool(test_case.get("analytic_light_sampling", true))
+	env.rtgi_explicit_emissive_sampling_enabled = bool(test_case.get("explicit_emissive_sampling", true))
 	env.rtgi_debug_mode = int(test_case.get("debug_mode", Environment.RT_DEBUG_DISABLED))
 	if test_case.get("no_glow_fog", false):
 		env.glow_enabled = false
@@ -397,15 +460,56 @@ func _apply_scene_toggles(scene: Node, test_case: Dictionary) -> void:
 				_zero_emission_materials(node)
 
 
-func _capture_debug_views(test_case: Dictionary, game_viewport: Viewport) -> void:
+func _bypass_rf_output_effect(scene: Node) -> int:
+	var disabled := 0
+	for node in _walk(scene):
+		if node is TextureRect and _is_rf_output_node(node):
+			(node as TextureRect).visible = true
+			(node as TextureRect).mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_neutralize_rf_shader_noise(node as TextureRect)
+			disabled += 1
+	return disabled
+
+
+func _is_rf_output_node(node: TextureRect) -> bool:
+	if String(node.name).to_lower() == "rfoutput":
+		return true
+	var shader_material := node.material as ShaderMaterial
+	if shader_material == null or shader_material.shader == null:
+		return false
+	return shader_material.shader.resource_path.to_lower().contains("rf_tv_output")
+
+
+func _neutralize_rf_shader_noise(node: TextureRect) -> void:
+	var shader_material := node.material as ShaderMaterial
+	if shader_material == null:
+		return
+	var material := shader_material.duplicate(true) as ShaderMaterial
+	material.set_shader_parameter("dot_crawl_strength", 0.0)
+	material.set_shader_parameter("line_jitter_pixels", 0.0)
+	material.set_shader_parameter("ghost_strength", 0.0)
+	material.set_shader_parameter("signal_grain", 0.0)
+	material.set_shader_parameter("dither_strength", 0.0)
+	node.material = material
+
+
+func _capture_debug_views(test_case: Dictionary, game_viewport: Viewport) -> Dictionary:
+	var metrics := {}
 	for view in _debug_views:
 		_apply_debug_view(game_viewport, view)
 		await process_frame
 		await RenderingServer.frame_post_draw
-		_capture_viewport(game_viewport).save_png(_output_path("%s_%s_game.png" % [test_case["name"], view]))
+		var image := _capture_viewport(game_viewport)
+		image.save_png(_output_path("%s_%s_game.png" % [test_case["name"], view]))
+		var view_metrics := _image_metrics(image, "rtgi_%s" % view)
+		view_metrics.merge(_image_roi_metrics(image, "rtgi_%s" % view), true)
+		for key in view_metrics.keys():
+			metrics[key] = view_metrics[key]
 	_apply_debug_view(game_viewport, "disabled")
 	await process_frame
 	await RenderingServer.frame_post_draw
+	metrics["rtgi_instability_attribution"] = _source_attribution_summary(metrics)
+	return metrics
 
 
 func _apply_debug_view(viewport: Viewport, view: String) -> void:
@@ -456,6 +560,29 @@ func _debug_draw_value(view: String) -> int:
 			return 0
 
 
+func _source_attribution_summary(metrics: Dictionary) -> String:
+	var sources := {
+		"analytic direct": _source_score(metrics, "signal_direct"),
+		"visible/secondary emissive": _source_score(metrics, "signal_emissive"),
+		"indirect/throughput": _source_score(metrics, "signal_indirect"),
+		"sky/environment": _source_score(metrics, "signal_sky"),
+		"clamp/weight risk": _source_score(metrics, "signal_confidence"),
+		"final/post amplification": _source_score(metrics, "final"),
+	}
+	var best_name := "unknown"
+	var best_score := -1.0
+	for source in sources.keys():
+		var score: float = sources[source]
+		if score > best_score:
+			best_score = score
+			best_name = source
+	return "%s (score %.3f)" % [best_name, best_score]
+
+
+func _source_score(metrics: Dictionary, view: String) -> float:
+	return float(metrics.get("rtgi_%s_visible_speckles_per_megapixel" % view, 0.0)) + float(metrics.get("rtgi_%s_full_frame_fireflies_per_megapixel" % view, 0.0)) + float(metrics.get("rtgi_%s_luma_p99" % view, 0.0)) * 120.0
+
+
 func _zero_emission_materials(node: GeometryInstance3D) -> void:
 	if node.material_override != null:
 		node.material_override = _zero_emission_material(node.material_override)
@@ -485,16 +612,18 @@ func _capture_viewport(viewport: Viewport) -> Image:
 
 
 func _measure_case(frames: Array, game_image: Image, final_image: Image, baseline_game: Image, baseline_final: Image) -> Dictionary:
+	var final_metric_image := _analysis_size_copy(final_image, game_image.get_width(), game_image.get_height())
+	var baseline_final_metric := _analysis_size_copy(baseline_final, game_image.get_width(), game_image.get_height()) if baseline_final != null else null
 	var metrics = _image_metrics(game_image, "game")
-	var final_metrics = _image_metrics(final_image, "final")
+	var final_metrics = _image_metrics(final_metric_image, "final")
 	for key in final_metrics.keys():
 		metrics[key] = final_metrics[key]
 	metrics.merge(_image_roi_metrics(game_image, "game"), true)
-	metrics.merge(_image_roi_metrics(final_image, "final"), true)
+	metrics.merge(_image_roi_metrics(final_metric_image, "final"), true)
 	metrics["temporal_sparkle_per_megapixel_max"] = _temporal_sparkle(frames)
 	metrics["temporal_sparkle_per_megapixel_avg"] = _temporal_sparkle_average(frames)
 	metrics["game_convergence_curve"] = _convergence_curve(frames)
-	metrics["final_to_game_luma_correlation"] = _luma_correlation(game_image, final_image)
+	metrics["final_to_game_luma_correlation"] = _luma_correlation(game_image, final_metric_image)
 	metrics["final_to_game_visible_speckle_ratio"] = _safe_ratio(metrics["final_visible_speckles_per_megapixel"], metrics["game_visible_speckles_per_megapixel"])
 	metrics["final_to_game_firefly_ratio"] = _safe_ratio(metrics["final_full_frame_fireflies_per_megapixel"], metrics["game_full_frame_fireflies_per_megapixel"])
 	metrics["final_to_game_p99_luma_ratio"] = _safe_ratio(metrics["final_luma_p99"], metrics["game_luma_p99"])
@@ -504,17 +633,51 @@ func _measure_case(frames: Array, game_image: Image, final_image: Image, baselin
 		for key in diff.keys():
 			metrics[key] = diff[key]
 	if baseline_final != null:
-		var final_diff = _diff_metrics(final_image, baseline_final, "final_rtgi_vs_no_rtgi")
+		var final_diff = _diff_metrics(final_metric_image, baseline_final_metric, "final_rtgi_vs_no_rtgi")
 		for key in final_diff.keys():
 			metrics[key] = final_diff[key]
 	return metrics
 
 
+func _analysis_size_copy(image: Image, width: int, height: int) -> Image:
+	var result := image.duplicate()
+	result.convert(Image.FORMAT_RGBA8)
+	if result.get_width() != width or result.get_height() != height:
+		result.resize(width, height, Image.INTERPOLATE_LANCZOS)
+	return result
+
+
 func _image_metrics(image: Image, prefix: String) -> Dictionary:
 	var width = image.get_width()
 	var height = image.get_height()
-	var count = max(1, width * height)
-	var lum_values = []
+	var luma_buffer := _make_luma_buffer(image)
+	return _image_metrics_luma(luma_buffer, width, height, prefix, 0, 0, width, height, true)
+
+
+func _make_luma_buffer(image: Image) -> PackedFloat32Array:
+	var source := image
+	if source.get_format() != Image.FORMAT_RGBA8:
+		source = image.duplicate()
+		source.convert(Image.FORMAT_RGBA8)
+	var width := source.get_width()
+	var height := source.get_height()
+	var data := source.get_data()
+	var count: int = maxi(1, width * height)
+	var luma_buffer := PackedFloat32Array()
+	luma_buffer.resize(count)
+	for i in range(count):
+		var offset := i * 4
+		luma_buffer[i] = maxf((float(data[offset]) * 0.2126 + float(data[offset + 1]) * 0.7152 + float(data[offset + 2]) * 0.0722) / 255.0, 0.0)
+	return luma_buffer
+
+
+func _image_metrics_luma(luma_buffer: PackedFloat32Array, width: int, height: int, prefix: String, x0: int, y0: int, x1: int, y1: int, include_nonblack: bool) -> Dictionary:
+	x0 = clampi(x0, 0, width - 1)
+	y0 = clampi(y0, 0, height - 1)
+	x1 = clampi(x1, x0 + 1, width)
+	y1 = clampi(y1, y0 + 1, height)
+	var count = max(1, (x1 - x0) * (y1 - y0))
+	var lum_values := PackedFloat32Array()
 	lum_values.resize(count)
 	var sum = 0.0
 	var sum_sq = 0.0
@@ -522,14 +685,15 @@ func _image_metrics(image: Image, prefix: String) -> Dictionary:
 	var saturated = 0
 	var nonblack = 0
 	var index = 0
-	for y in range(height):
-		for x in range(width):
-			var luma = _luma(image.get_pixel(x, y))
+	for y in range(y0, y1):
+		var row := y * width
+		for x in range(x0, x1):
+			var luma := luma_buffer[row + x]
 			lum_values[index] = luma
 			index += 1
 			sum += luma
 			sum_sq += luma * luma
-			max_luma = max(max_luma, luma)
+			max_luma = maxf(max_luma, luma)
 			if luma > 0.98:
 				saturated += 1
 			if luma > 0.003:
@@ -539,25 +703,37 @@ func _image_metrics(image: Image, prefix: String) -> Dictionary:
 	var variance = max(sum_sq / count - mean * mean, 0.0)
 	var p95 = lum_values[clampi(roundi(float(count - 1) * 0.95), 0, count - 1)]
 	var p99 = lum_values[clampi(roundi(float(count - 1) * 0.99), 0, count - 1)]
-	return {
+	var metrics := {
 		"%s_luma_mean" % prefix: mean,
 		"%s_luma_stddev" % prefix: sqrt(variance),
 		"%s_luma_p95" % prefix: p95,
 		"%s_luma_p99" % prefix: p99,
 		"%s_luma_max" % prefix: max_luma,
 		"%s_saturated_luma_fraction" % prefix: float(saturated) / float(count),
-		"%s_nonblack_fraction" % prefix: float(nonblack) / float(count),
-		"%s_detail_edge_energy" % prefix: _edge_energy(image),
-		"%s_visible_speckles_per_megapixel" % prefix: _visible_speckles(image),
-		"%s_full_frame_fireflies_per_megapixel" % prefix: _fireflies(image),
+		"%s_detail_edge_energy" % prefix: _edge_energy_luma(luma_buffer, width, height, x0, y0, x1, y1),
+		"%s_visible_speckles_per_megapixel" % prefix: _visible_speckles_luma(luma_buffer, width, height, x0, y0, x1, y1),
+		"%s_full_frame_fireflies_per_megapixel" % prefix: _fireflies_luma(luma_buffer, width, height, x0, y0, x1, y1),
 	}
+	if include_nonblack:
+		metrics["%s_nonblack_fraction" % prefix] = float(nonblack) / float(count)
+	return metrics
 
 
 func _image_roi_metrics(image: Image, prefix: String) -> Dictionary:
 	var metrics = {}
+	var luma_buffer := _make_luma_buffer(image)
+	var width := image.get_width()
+	var height := image.get_height()
 	for roi_name in _roi_rects(image).keys():
 		var rect: Rect2i = _roi_rects(image)[roi_name]
-		metrics.merge(_image_metrics_region(image, "%s_%s_roi" % [prefix, roi_name], rect), true)
+		var x0 = clampi(rect.position.x, 0, width - 1)
+		var y0 = clampi(rect.position.y, 0, height - 1)
+		var x1 = clampi(rect.position.x + rect.size.x, x0 + 1, width)
+		var y1 = clampi(rect.position.y + rect.size.y, y0 + 1, height)
+		var roi_metrics := _image_metrics_luma(luma_buffer, width, height, "%s_%s_roi" % [prefix, roi_name], x0, y0, x1, y1, false)
+		roi_metrics["%s_%s_roi_fireflies_per_megapixel" % [prefix, roi_name]] = roi_metrics.get("%s_%s_roi_full_frame_fireflies_per_megapixel" % [prefix, roi_name], 0.0)
+		roi_metrics.erase("%s_%s_roi_full_frame_fireflies_per_megapixel" % [prefix, roi_name])
+		metrics.merge(roi_metrics, true)
 	return metrics
 
 
@@ -577,40 +753,10 @@ func _image_metrics_region(image: Image, prefix: String, rect: Rect2i) -> Dictio
 	var y0 = clampi(rect.position.y, 0, image.get_height() - 1)
 	var x1 = clampi(rect.position.x + rect.size.x, x0 + 1, image.get_width())
 	var y1 = clampi(rect.position.y + rect.size.y, y0 + 1, image.get_height())
-	var count = max(1, (x1 - x0) * (y1 - y0))
-	var lum_values = []
-	lum_values.resize(count)
-	var sum = 0.0
-	var sum_sq = 0.0
-	var max_luma = 0.0
-	var saturated = 0
-	var index = 0
-	for y in range(y0, y1):
-		for x in range(x0, x1):
-			var luma = _luma(image.get_pixel(x, y))
-			lum_values[index] = luma
-			index += 1
-			sum += luma
-			sum_sq += luma * luma
-			max_luma = max(max_luma, luma)
-			if luma > 0.98:
-				saturated += 1
-	lum_values.sort()
-	var mean = sum / count
-	var variance = max(sum_sq / count - mean * mean, 0.0)
-	var p95 = lum_values[clampi(roundi(float(count - 1) * 0.95), 0, count - 1)]
-	var p99 = lum_values[clampi(roundi(float(count - 1) * 0.99), 0, count - 1)]
-	return {
-		"%s_luma_mean" % prefix: mean,
-		"%s_luma_stddev" % prefix: sqrt(variance),
-		"%s_luma_p95" % prefix: p95,
-		"%s_luma_p99" % prefix: p99,
-		"%s_luma_max" % prefix: max_luma,
-		"%s_saturated_luma_fraction" % prefix: float(saturated) / float(count),
-		"%s_detail_edge_energy" % prefix: _edge_energy_region(image, x0, y0, x1, y1),
-		"%s_visible_speckles_per_megapixel" % prefix: _visible_speckles_region(image, x0, y0, x1, y1),
-		"%s_fireflies_per_megapixel" % prefix: _fireflies_region(image, x0, y0, x1, y1),
-	}
+	var metrics := _image_metrics_luma(_make_luma_buffer(image), image.get_width(), image.get_height(), prefix, x0, y0, x1, y1, false)
+	metrics["%s_fireflies_per_megapixel" % prefix] = metrics.get("%s_full_frame_fireflies_per_megapixel" % prefix, 0.0)
+	metrics.erase("%s_full_frame_fireflies_per_megapixel" % prefix)
+	return metrics
 
 
 func _convergence_curve(frames: Array) -> Array:
@@ -652,161 +798,157 @@ func _temporal_sparkle_average(frames: Array) -> float:
 
 
 func _frame_delta_speckles(a: Image, b: Image) -> float:
-	var width = min(a.get_width(), b.get_width())
-	var height = min(a.get_height(), b.get_height())
-	var hits = 0
-	for y in range(height):
-		for x in range(width):
-			var delta = abs(_luma(a.get_pixel(x, y)) - _luma(b.get_pixel(x, y)))
-			if delta > 0.08:
-				hits += 1
-	return _per_megapixel(hits, width, height)
+	var width = mini(a.get_width(), b.get_width())
+	var height = mini(a.get_height(), b.get_height())
+	return _frame_delta_speckles_luma(_make_luma_buffer(a), _make_luma_buffer(b), width, height)
 
 
 func _visible_speckles(image: Image) -> float:
 	var width = image.get_width()
 	var height = image.get_height()
+	return _visible_speckles_luma(_make_luma_buffer(image), width, height, 0, 0, width, height)
+
+
+func _visible_speckles_luma(luma_buffer: PackedFloat32Array, width: int, height: int, x0: int, y0: int, x1: int, y1: int) -> float:
 	var hits = 0
-	for y in range(1, height - 1):
-		for x in range(1, width - 1):
-			var center = _luma(image.get_pixel(x, y))
+	var sx0 = maxi(1, x0)
+	var sy0 = maxi(1, y0)
+	var sx1 = mini(width - 1, x1)
+	var sy1 = mini(height - 1, y1)
+	for y in range(sy0, sy1):
+		var row := y * width
+		for x in range(sx0, sx1):
+			var center := luma_buffer[row + x]
 			var neighborhood = 0.0
 			for oy in range(-1, 2):
+				var nrow := (y + oy) * width
 				for ox in range(-1, 2):
 					if ox != 0 or oy != 0:
-						neighborhood += _luma(image.get_pixel(x + ox, y + oy))
+						neighborhood += luma_buffer[nrow + x + ox]
 			neighborhood /= 8.0
-			if center > max(neighborhood * 2.2 + 0.04, 0.10):
+			if center > maxf(neighborhood * 2.2 + 0.04, 0.10):
 				hits += 1
-	return _per_megapixel(hits, width, height)
+	return _per_megapixel(hits, max(1, x1 - x0), max(1, y1 - y0))
 
 
 func _fireflies(image: Image) -> float:
 	var width = image.get_width()
 	var height = image.get_height()
+	return _fireflies_luma(_make_luma_buffer(image), width, height, 0, 0, width, height)
+
+
+func _fireflies_luma(luma_buffer: PackedFloat32Array, width: int, height: int, x0: int, y0: int, x1: int, y1: int) -> float:
 	var hits = 0
-	for y in range(2, height - 2):
-		for x in range(2, width - 2):
-			var center = _luma(image.get_pixel(x, y))
+	var sx0 = maxi(2, x0)
+	var sy0 = maxi(2, y0)
+	var sx1 = mini(width - 2, x1)
+	var sy1 = mini(height - 2, y1)
+	for y in range(sy0, sy1):
+		var row := y * width
+		for x in range(sx0, sx1):
+			var center := luma_buffer[row + x]
 			var max_neighbor = 0.0
 			var sum_neighbor = 0.0
 			var samples = 0
 			for oy in range(-2, 3):
+				var nrow := (y + oy) * width
 				for ox in range(-2, 3):
 					if ox == 0 and oy == 0:
 						continue
-					var luma = _luma(image.get_pixel(x + ox, y + oy))
-					max_neighbor = max(max_neighbor, luma)
+					var luma := luma_buffer[nrow + x + ox]
+					max_neighbor = maxf(max_neighbor, luma)
 					sum_neighbor += luma
 					samples += 1
-			var avg_neighbor = sum_neighbor / max(1, samples)
-			if center > max(max_neighbor * 1.45 + 0.03, avg_neighbor * 3.0 + 0.08):
+			var avg_neighbor = sum_neighbor / maxf(1.0, float(samples))
+			if center > maxf(max_neighbor * 1.45 + 0.03, avg_neighbor * 3.0 + 0.08):
 				hits += 1
-	return _per_megapixel(hits, width, height)
+	return _per_megapixel(hits, max(1, x1 - x0), max(1, y1 - y0))
 
 
 func _visible_speckles_region(image: Image, x0: int, y0: int, x1: int, y1: int) -> float:
-	var hits = 0
-	var sx0 = max(1, x0)
-	var sy0 = max(1, y0)
-	var sx1 = min(image.get_width() - 1, x1)
-	var sy1 = min(image.get_height() - 1, y1)
-	for y in range(sy0, sy1):
-		for x in range(sx0, sx1):
-			var center = _luma(image.get_pixel(x, y))
-			var neighborhood = 0.0
-			for oy in range(-1, 2):
-				for ox in range(-1, 2):
-					if ox != 0 or oy != 0:
-						neighborhood += _luma(image.get_pixel(x + ox, y + oy))
-			neighborhood /= 8.0
-			if center > max(neighborhood * 2.2 + 0.04, 0.10):
-				hits += 1
-	return _per_megapixel(hits, max(1, x1 - x0), max(1, y1 - y0))
+	return _visible_speckles_luma(_make_luma_buffer(image), image.get_width(), image.get_height(), x0, y0, x1, y1)
 
 
 func _fireflies_region(image: Image, x0: int, y0: int, x1: int, y1: int) -> float:
-	var hits = 0
-	var sx0 = max(2, x0)
-	var sy0 = max(2, y0)
-	var sx1 = min(image.get_width() - 2, x1)
-	var sy1 = min(image.get_height() - 2, y1)
-	for y in range(sy0, sy1):
-		for x in range(sx0, sx1):
-			var center = _luma(image.get_pixel(x, y))
-			var max_neighbor = 0.0
-			var sum_neighbor = 0.0
-			var samples = 0
-			for oy in range(-2, 3):
-				for ox in range(-2, 3):
-					if ox == 0 and oy == 0:
-						continue
-					var luma = _luma(image.get_pixel(x + ox, y + oy))
-					max_neighbor = max(max_neighbor, luma)
-					sum_neighbor += luma
-					samples += 1
-			var avg_neighbor = sum_neighbor / max(1, samples)
-			if center > max(max_neighbor * 1.45 + 0.03, avg_neighbor * 3.0 + 0.08):
-				hits += 1
-	return _per_megapixel(hits, max(1, x1 - x0), max(1, y1 - y0))
+	return _fireflies_luma(_make_luma_buffer(image), image.get_width(), image.get_height(), x0, y0, x1, y1)
 
 
 func _edge_energy(image: Image) -> float:
 	var width = image.get_width()
 	var height = image.get_height()
+	return _edge_energy_luma(_make_luma_buffer(image), width, height, 0, 0, width, height)
+
+
+func _edge_energy_luma(luma_buffer: PackedFloat32Array, width: int, height: int, x0: int, y0: int, x1: int, y1: int) -> float:
 	var sum = 0.0
 	var count = 0
-	for y in range(1, height - 1):
-		for x in range(1, width - 1):
-			var gx = _luma(image.get_pixel(x + 1, y)) - _luma(image.get_pixel(x - 1, y))
-			var gy = _luma(image.get_pixel(x, y + 1)) - _luma(image.get_pixel(x, y - 1))
+	var sx0 = maxi(1, x0)
+	var sy0 = maxi(1, y0)
+	var sx1 = mini(width - 1, x1)
+	var sy1 = mini(height - 1, y1)
+	for y in range(sy0, sy1):
+		var row := y * width
+		for x in range(sx0, sx1):
+			var gx := luma_buffer[row + x + 1] - luma_buffer[row + x - 1]
+			var gy := luma_buffer[row + width + x] - luma_buffer[row - width + x]
 			sum += sqrt(gx * gx + gy * gy)
 			count += 1
 	return sum / max(1, count)
 
 
 func _edge_energy_region(image: Image, x0: int, y0: int, x1: int, y1: int) -> float:
-	var sum = 0.0
-	var count = 0
-	var sx0 = max(1, x0)
-	var sy0 = max(1, y0)
-	var sx1 = min(image.get_width() - 1, x1)
-	var sy1 = min(image.get_height() - 1, y1)
-	for y in range(sy0, sy1):
-		for x in range(sx0, sx1):
-			var gx = _luma(image.get_pixel(x + 1, y)) - _luma(image.get_pixel(x - 1, y))
-			var gy = _luma(image.get_pixel(x, y + 1)) - _luma(image.get_pixel(x, y - 1))
-			sum += sqrt(gx * gx + gy * gy)
-			count += 1
-	return sum / max(1, count)
+	return _edge_energy_luma(_make_luma_buffer(image), image.get_width(), image.get_height(), x0, y0, x1, y1)
+
+
+func _frame_delta_speckles_luma(a_luma: PackedFloat32Array, b_luma: PackedFloat32Array, width: int, height: int) -> float:
+	var hits := 0
+	var count: int = maxi(1, width * height)
+	for i in range(count):
+		if absf(a_luma[i] - b_luma[i]) > 0.08:
+			hits += 1
+	return _per_megapixel(hits, width, height)
 
 
 func _diff_metrics(a: Image, b: Image, prefix: String) -> Dictionary:
 	var width = min(a.get_width(), b.get_width())
 	var height = min(a.get_height(), b.get_height())
 	var count = max(1, width * height)
+	var aa := _analysis_size_copy(a, width, height)
+	var bb := _analysis_size_copy(b, width, height)
+	var adata := aa.get_data()
+	var bdata := bb.get_data()
 	var luma_abs = 0.0
 	var luma_sq = 0.0
 	var rgb_abs = 0.0
 	var rgb_sq = 0.0
-	for y in range(height):
-		for x in range(width):
-			var ca = a.get_pixel(x, y)
-			var cb = b.get_pixel(x, y)
-			var dl = _luma(ca) - _luma(cb)
-			luma_abs += abs(dl)
-			luma_sq += dl * dl
-			var dr = ca.r - cb.r
-			var dg = ca.g - cb.g
-			var db = ca.b - cb.b
-			rgb_abs += (abs(dr) + abs(dg) + abs(db)) / 3.0
-			rgb_sq += (dr * dr + dg * dg + db * db) / 3.0
+	var luma_a_sum = 0.0
+	var luma_b_sum = 0.0
+	for i in range(count):
+		var offset := i * 4
+		var ar := float(adata[offset]) / 255.0
+		var ag := float(adata[offset + 1]) / 255.0
+		var ab := float(adata[offset + 2]) / 255.0
+		var br := float(bdata[offset]) / 255.0
+		var bg := float(bdata[offset + 1]) / 255.0
+		var bbv := float(bdata[offset + 2]) / 255.0
+		var la := maxf(ar * 0.2126 + ag * 0.7152 + ab * 0.0722, 0.0)
+		var lb := maxf(br * 0.2126 + bg * 0.7152 + bbv * 0.0722, 0.0)
+		var dl := la - lb
+		luma_abs += absf(dl)
+		luma_sq += dl * dl
+		luma_a_sum += la
+		luma_b_sum += lb
+		var dr := ar - br
+		var dg := ag - bg
+		var db := ab - bbv
+		rgb_abs += (absf(dr) + absf(dg) + absf(db)) / 3.0
+		rgb_sq += (dr * dr + dg * dg + db * db) / 3.0
 	var metrics = {
 		"%s_luma_mae" % prefix: luma_abs / count,
 		"%s_luma_rmse" % prefix: sqrt(luma_sq / count),
 		"%s_rgb_mae" % prefix: rgb_abs / count,
 		"%s_rgb_rmse" % prefix: sqrt(rgb_sq / count),
-		"%s_contribution_mean_luma_delta" % prefix: (_mean_luma(a) - _mean_luma(b)),
+		"%s_contribution_mean_luma_delta" % prefix: (luma_a_sum - luma_b_sum) / count,
 	}
 	metrics.merge(_downsampled_diff_metrics(a, b, prefix, 2), true)
 	metrics.merge(_downsampled_diff_metrics(a, b, prefix, 4), true)
@@ -838,17 +980,19 @@ func _luma_correlation(game_image: Image, final_image: Image) -> float:
 	var width = game_image.get_width()
 	var height = game_image.get_height()
 	var count = max(1, width * height)
+	var game_luma_buffer := _make_luma_buffer(game_image)
+	var final_luma_buffer := _make_luma_buffer(final_image)
 	var game_sum = 0.0
 	var final_sum = 0.0
-	var samples = []
+	var samples := PackedVector2Array()
 	samples.resize(count)
 	var index = 0
 	for y in range(height):
 		for x in range(width):
-			var game_luma = _luma(game_image.get_pixel(x, y))
+			var game_luma := game_luma_buffer[y * width + x]
 			var fx = int(float(x) / max(1.0, float(width - 1)) * float(final_image.get_width() - 1))
 			var fy = int(float(y) / max(1.0, float(height - 1)) * float(final_image.get_height() - 1))
-			var final_luma = _luma(final_image.get_pixel(fx, fy))
+			var final_luma := final_luma_buffer[fy * final_image.get_width() + fx]
 			samples[index] = Vector2(game_luma, final_luma)
 			index += 1
 			game_sum += game_luma

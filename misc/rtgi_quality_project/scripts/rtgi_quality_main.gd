@@ -16,6 +16,8 @@ var _specular_history_weight := 0.95
 var _specular_spatial_strength := 1.0
 var _ray_firefly_suppression := 0.85
 var _ray_max_radiance := 32.0
+var _analytic_light_sampling := true
+var _explicit_emissive_sampling := true
 var _warmup_frames := 120
 var _output_dir := DEFAULT_OUTPUT_DIR
 var _debug_view := "beauty"
@@ -79,6 +81,10 @@ func _parse_args() -> void:
 			_ray_firefly_suppression = clampf(arg.trim_prefix("--rtgi-ray-firefly-suppression=").to_float(), 0.0, 1.0)
 		elif arg.begins_with("--rtgi-ray-max-radiance="):
 			_ray_max_radiance = maxf(arg.trim_prefix("--rtgi-ray-max-radiance=").to_float(), 0.0)
+		elif arg.begins_with("--rtgi-analytic-light-sampling="):
+			_analytic_light_sampling = not (arg.trim_prefix("--rtgi-analytic-light-sampling=").to_lower() in ["0", "false", "off", "disabled"])
+		elif arg.begins_with("--rtgi-explicit-emissive-sampling="):
+			_explicit_emissive_sampling = not (arg.trim_prefix("--rtgi-explicit-emissive-sampling=").to_lower() in ["0", "false", "off", "disabled"])
 		elif arg.begins_with("--rtgi-warmup-frames="):
 			_warmup_frames = max(1, arg.trim_prefix("--rtgi-warmup-frames=").to_int())
 		elif arg.begins_with("--rtgi-reference-spp="):
@@ -89,7 +95,7 @@ func _parse_args() -> void:
 			_convergence_frames = clampi(arg.trim_prefix("--rtgi-convergence-frames=").to_int(), 0, 128)
 		elif arg.begins_with("--rtgi-scene="):
 			var requested_scene := arg.trim_prefix("--rtgi-scene=").to_lower()
-			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive"]:
+			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive"]:
 				_scene_mode = requested_scene
 			else:
 				push_warning("Unknown RTGI quality scene '%s'; using stress scene." % requested_scene)
@@ -152,6 +158,8 @@ func _build_scene() -> void:
 	env.rtgi_denoiser_specular_spatial_strength = _specular_spatial_strength
 	env.rtgi_ray_firefly_suppression = _ray_firefly_suppression
 	env.rtgi_ray_max_radiance = _ray_max_radiance
+	env.rtgi_analytic_light_sampling_enabled = _analytic_light_sampling
+	env.rtgi_explicit_emissive_sampling_enabled = _explicit_emissive_sampling
 	_environment = env
 
 	var world_environment := WorldEnvironment.new()
@@ -183,6 +191,9 @@ func _build_scene() -> void:
 		return
 	if _is_coexistence_scene():
 		_build_coexistence_scene(env)
+		return
+	if _scene_mode == "many_light_emissive":
+		_build_many_light_emissive_scene(env)
 		return
 
 	env.background_mode = Environment.BG_COLOR
@@ -229,6 +240,66 @@ func _build_scene() -> void:
 	_camera.position = Vector3(0.15, 1.45, 2.5)
 	add_child(_camera)
 	_camera.look_at(Vector3(-0.15, 1.15, -2.5), Vector3.UP)
+
+
+func _build_many_light_emissive_scene(env: Environment) -> void:
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.002, 0.002, 0.003)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.004, 0.004, 0.005)
+	env.ambient_light_energy = 0.05
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.tonemap_exposure = 0.9
+	env.rtgi_max_bounces = 5
+
+	var wall := _make_flat_material(Color(0.032, 0.034, 0.038), 0.86, 0.0)
+	var dark := _make_flat_material(Color(0.010, 0.011, 0.013), 0.92, 0.0)
+	var detail := _make_flat_material(Color(0.34, 0.31, 0.27), 0.68, 0.0)
+	var metal := _make_flat_material(Color(0.70, 0.72, 0.74), 0.10, 1.0)
+	var emitter_a := _make_emissive_material(Color(1.0, 0.50, 0.18), 9.0)
+	var emitter_b := _make_emissive_material(Color(0.30, 0.68, 1.0), 6.5)
+	var emitter_c := _make_emissive_material(Color(0.55, 1.0, 0.45), 5.0)
+
+	_add_box("ManyLightFloor", Vector3(0.0, -0.05, -2.0), Vector3(8.0, 0.10, 8.0), dark)
+	_add_box("ManyLightBackWall", Vector3(0.0, 1.9, -5.9), Vector3(8.0, 4.0, 0.12), wall)
+	_add_box("ManyLightLeftWall", Vector3(-4.0, 1.9, -2.0), Vector3(0.12, 4.0, 8.0), wall)
+	_add_box("ManyLightRightWall", Vector3(4.0, 1.9, -2.0), Vector3(0.12, 4.0, 8.0), wall)
+	_add_box("ManyLightCeiling", Vector3(0.0, 3.85, -2.0), Vector3(8.0, 0.12, 8.0), wall)
+	_add_box("ManyLightDarkROI", Vector3(2.65, 1.05, -5.82), Vector3(1.8, 1.45, 0.06), dark)
+	_add_box("ManyLightDetailROI", Vector3(-2.35, 0.8, -5.80), Vector3(1.5, 1.1, 0.06), detail)
+	_add_box("ManyLightSpecularStrip", Vector3(0.55, 0.35, -3.35), Vector3(1.5, 0.08, 0.70), metal)
+	_add_sphere("ManyLightSpecularSphere", Vector3(1.55, 0.52, -3.70), 0.34, metal)
+
+	var emitter_positions := [
+		Vector3(-2.9, 1.45, -5.76), Vector3(-1.55, 2.15, -5.76), Vector3(0.15, 1.35, -5.76),
+		Vector3(1.85, 2.35, -5.76), Vector3(3.05, 1.55, -5.76), Vector3(-3.88, 1.8, -2.9),
+		Vector3(3.88, 2.05, -2.1), Vector3(-0.60, 3.78, -2.8)
+	]
+	for i in range(emitter_positions.size()):
+		var mat := emitter_a if i % 3 == 0 else (emitter_b if i % 3 == 1 else emitter_c)
+		_add_box("ManyLightEmitter_%02d" % i, emitter_positions[i], Vector3(0.18, 0.18, 0.05), mat)
+
+	for i in range(36):
+		var col := i % 9
+		var row := int(i / 9)
+		var light := OmniLight3D.new()
+		light.name = "ManyAnalytic_%02d" % i
+		light.position = Vector3(-3.2 + float(col) * 0.8, 0.85 + float(row) * 0.55, -4.6 + sin(float(i) * 1.7) * 0.28)
+		light.light_color = Color.from_hsv(fposmod(float(i) * 0.071, 1.0), 0.36, 1.0)
+		light.light_energy = 0.22 + 0.08 * float(i % 4)
+		light.omni_range = 2.7
+		light.shadow_enabled = true
+		add_child(light)
+
+	_camera = Camera3D.new()
+	_camera.name = "ManyLightCamera"
+	_camera.current = true
+	_camera.fov = 57.0
+	_camera.near = 0.05
+	_camera.far = 70.0
+	_camera.position = Vector3(0.0, 1.55, 1.95)
+	add_child(_camera)
+	_camera.look_at(Vector3(0.0, 1.55, -4.4), Vector3.UP)
 
 
 func _is_coexistence_scene() -> bool:
@@ -620,10 +691,15 @@ func _run_capture() -> void:
 	metrics["camera_pan"] = _camera_pan
 	metrics["scene"] = _scene_mode
 	metrics["sponza_asset_loaded"] = _sponza_asset_loaded
+	metrics["analytic_light_sampling_enabled"] = _analytic_light_sampling
+	metrics["explicit_emissive_sampling_enabled"] = _explicit_emissive_sampling
 	if _sparkle_frames > 1 and DisplayServer.get_name().to_lower() != "headless":
 		metrics.merge(await _measure_temporal_sparkle(base_name), true)
 	if _convergence_frames > 1 and DisplayServer.get_name().to_lower() != "headless":
 		metrics.merge(await _measure_convergence_curve(base_name), true)
+	if DisplayServer.get_name().to_lower() != "headless":
+		metrics.merge(await _measure_signal_debug_views(), true)
+		metrics["rtgi_instability_attribution"] = _source_attribution_summary(metrics)
 
 	var expected := _expected_metrics_for_scene(_load_expected_metrics())
 	var failures := _compare_metrics(metrics, expected)
@@ -670,11 +746,91 @@ func _capture_debug_views(base_name: String) -> void:
 	_apply_debug_view(_debug_view)
 
 
+func _measure_signal_debug_views() -> Dictionary:
+	var result := {}
+	var previous_view := _debug_view
+	var signal_views := ["signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "noisy", "final"]
+	for view in signal_views:
+		_apply_debug_view(view)
+		await _wait_render_frame()
+		var image := get_viewport().get_texture().get_image()
+		if image == null:
+			continue
+		image.convert(Image.FORMAT_RGBA8)
+		var view_metrics := _measure_image(image)
+		for key in view_metrics.keys():
+			result["rtgi_%s_%s" % [view, key]] = view_metrics[key]
+	_apply_debug_view(previous_view)
+	return result
+
+
+func _source_attribution_summary(metrics: Dictionary) -> String:
+	var sources := {
+		"analytic direct": _source_score(metrics, "signal_direct"),
+		"visible/secondary emissive": _source_score(metrics, "signal_emissive"),
+		"indirect/throughput": _source_score(metrics, "signal_indirect"),
+		"sky/environment": _source_score(metrics, "signal_sky"),
+		"clamp/weight risk": _source_score(metrics, "signal_confidence"),
+		"final/post amplification": float(metrics.get("rtgi_final_visible_speckles_per_megapixel", 0.0)) + float(metrics.get("rtgi_final_luma_p99", 0.0)) * 120.0,
+	}
+	var best_name := "unknown"
+	var best_score := -1.0
+	for source in sources.keys():
+		var score: float = sources[source]
+		if score > best_score:
+			best_score = score
+			best_name = source
+	return "%s (score %.3f)" % [best_name, best_score]
+
+
+func _source_score(metrics: Dictionary, view: String) -> float:
+	return float(metrics.get("rtgi_%s_visible_speckles_per_megapixel" % view, 0.0)) + float(metrics.get("rtgi_%s_full_frame_fireflies_per_megapixel" % view, 0.0)) + float(metrics.get("rtgi_%s_luma_p99" % view, 0.0)) * 120.0
+
+
 func _capture_comparison_grid(base_name: String) -> void:
 	if _environment == null or DisplayServer.get_name().to_lower() == "headless":
 		return
 
 	var configs := [
+		{
+			"name": "random_emissive_discovery_raw",
+			"enabled": true,
+			"mode": Environment.RTGI_MODE_PATH_TRACED,
+			"spp": 1,
+			"denoiser": Environment.RTGI_DENOISER_NONE,
+			"max_bounces": 5,
+			"split_signals": _split_signals,
+			"analytic_light_sampling": false,
+			"explicit_emissive_sampling": false,
+			"ray_firefly_suppression": _ray_firefly_suppression,
+			"ray_max_radiance": _ray_max_radiance,
+		},
+		{
+			"name": "analytic_direct_only_raw",
+			"enabled": true,
+			"mode": Environment.RTGI_MODE_PATH_TRACED,
+			"spp": 1,
+			"denoiser": Environment.RTGI_DENOISER_NONE,
+			"max_bounces": 5,
+			"split_signals": _split_signals,
+			"analytic_light_sampling": true,
+			"explicit_emissive_sampling": false,
+			"ray_firefly_suppression": _ray_firefly_suppression,
+			"ray_max_radiance": _ray_max_radiance,
+		},
+		{
+			"name": "analytic_explicit_emissive_raw",
+			"enabled": true,
+			"mode": Environment.RTGI_MODE_PATH_TRACED,
+			"spp": 1,
+			"denoiser": Environment.RTGI_DENOISER_NONE,
+			"max_bounces": 5,
+			"split_signals": _split_signals,
+			"analytic_light_sampling": true,
+			"explicit_emissive_sampling": true,
+			"ray_firefly_suppression": _ray_firefly_suppression,
+			"ray_max_radiance": _ray_max_radiance,
+		},
 		{
 			"name": "path_traced_split_1spp",
 			"enabled": true,
@@ -683,6 +839,8 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"denoiser": Environment.RTGI_DENOISER_SVGF,
 			"max_bounces": 3,
 			"split_signals": true,
+			"analytic_light_sampling": _analytic_light_sampling,
+			"explicit_emissive_sampling": _explicit_emissive_sampling,
 			"ray_firefly_suppression": _ray_firefly_suppression,
 			"ray_max_radiance": _ray_max_radiance,
 		},
@@ -694,6 +852,8 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"denoiser": Environment.RTGI_DENOISER_SVGF,
 			"max_bounces": 3,
 			"split_signals": false,
+			"analytic_light_sampling": _analytic_light_sampling,
+			"explicit_emissive_sampling": _explicit_emissive_sampling,
 			"ray_firefly_suppression": _ray_firefly_suppression,
 			"ray_max_radiance": _ray_max_radiance,
 		},
@@ -705,6 +865,8 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"denoiser": Environment.RTGI_DENOISER_SVGF,
 			"max_bounces": 3,
 			"split_signals": _split_signals,
+			"analytic_light_sampling": _analytic_light_sampling,
+			"explicit_emissive_sampling": _explicit_emissive_sampling,
 			"ray_firefly_suppression": _ray_firefly_suppression,
 			"ray_max_radiance": _ray_max_radiance,
 		},
@@ -716,6 +878,8 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"denoiser": Environment.RTGI_DENOISER_NONE,
 			"max_bounces": 3,
 			"split_signals": _split_signals,
+			"analytic_light_sampling": false,
+			"explicit_emissive_sampling": false,
 			"ray_firefly_suppression": _ray_firefly_suppression,
 			"ray_max_radiance": _ray_max_radiance,
 		},
@@ -725,9 +889,11 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"mode": Environment.RTGI_MODE_PATH_TRACED,
 			"spp": _reference_spp,
 			"denoiser": Environment.RTGI_DENOISER_NONE,
-			"max_bounces": 8,
-			"split_signals": false,
-			"ray_firefly_suppression": 0.0,
+				"max_bounces": 8,
+				"split_signals": false,
+				"analytic_light_sampling": true,
+				"explicit_emissive_sampling": false,
+				"ray_firefly_suppression": 0.0,
 			"ray_max_radiance": 0.0,
 		},
 	]
@@ -748,6 +914,8 @@ func _capture_comparison_grid(base_name: String) -> void:
 		_environment.rtgi_denoiser = config["denoiser"]
 		_environment.rtgi_max_bounces = config["max_bounces"]
 		_environment.rtgi_denoiser_split_signals = config["split_signals"]
+		_environment.rtgi_analytic_light_sampling_enabled = config["analytic_light_sampling"]
+		_environment.rtgi_explicit_emissive_sampling_enabled = config["explicit_emissive_sampling"]
 		_environment.rtgi_ray_firefly_suppression = config["ray_firefly_suppression"]
 		_environment.rtgi_ray_max_radiance = config["ray_max_radiance"]
 		_apply_debug_view("beauty")
@@ -767,6 +935,8 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"denoiser": config["denoiser"],
 			"max_bounces": config["max_bounces"],
 			"split_signals": config["split_signals"],
+			"analytic_light_sampling": config["analytic_light_sampling"],
+			"explicit_emissive_sampling": config["explicit_emissive_sampling"],
 			"ray_firefly_suppression": config["ray_firefly_suppression"],
 			"ray_max_radiance": config["ray_max_radiance"],
 		})
@@ -1407,6 +1577,8 @@ func _expected_metrics_for_scene(expected: Dictionary) -> Dictionary:
 		if typeof(scenes) == TYPE_DICTIONARY and scenes.has(_scene_mode):
 			var scene_expected = scenes[_scene_mode]
 			return scene_expected if typeof(scene_expected) == TYPE_DICTIONARY else {}
+		if _scene_mode == "many_light_emissive":
+			return {}
 	return expected
 
 

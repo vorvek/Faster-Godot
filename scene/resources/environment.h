@@ -219,6 +219,8 @@ private:
 	float rtgi_denoiser_specular_spatial_strength = 1.0f;
 	float rtgi_ray_firefly_suppression = 0.85f;
 	float rtgi_ray_max_radiance = 32.0f;
+	bool rtgi_analytic_light_sampling_enabled = true;
+	bool rtgi_explicit_emissive_sampling_enabled = true;
 	float rtgi_overscan_horizontal = 0.0f;
 	float rtgi_overscan_vertical = 0.0f;
 	RTGIDenoiser rtgi_denoiser = RTGI_DENOISER_SVGF;
@@ -453,6 +455,10 @@ public:
 	float get_rtgi_ray_firefly_suppression() const;
 	void set_rtgi_ray_max_radiance(float p_radiance);
 	float get_rtgi_ray_max_radiance() const;
+	void set_rtgi_analytic_light_sampling_enabled(bool p_enabled);
+	bool is_rtgi_analytic_light_sampling_enabled() const;
+	void set_rtgi_explicit_emissive_sampling_enabled(bool p_enabled);
+	bool is_rtgi_explicit_emissive_sampling_enabled() const;
 	void set_rtgi_overscan_horizontal(float p_overscan);
 	float get_rtgi_overscan_horizontal() const;
 	void set_rtgi_overscan_vertical(float p_overscan);

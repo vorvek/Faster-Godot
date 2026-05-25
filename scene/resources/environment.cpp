@@ -792,6 +792,24 @@ float Environment::get_rtgi_ray_max_radiance() const {
 	return rtgi_ray_max_radiance;
 }
 
+void Environment::set_rtgi_analytic_light_sampling_enabled(bool p_enabled) {
+	rtgi_analytic_light_sampling_enabled = p_enabled;
+	_update_pathtracing();
+}
+
+bool Environment::is_rtgi_analytic_light_sampling_enabled() const {
+	return rtgi_analytic_light_sampling_enabled;
+}
+
+void Environment::set_rtgi_explicit_emissive_sampling_enabled(bool p_enabled) {
+	rtgi_explicit_emissive_sampling_enabled = p_enabled;
+	_update_pathtracing();
+}
+
+bool Environment::is_rtgi_explicit_emissive_sampling_enabled() const {
+	return rtgi_explicit_emissive_sampling_enabled;
+}
+
 void Environment::set_rtgi_overscan_horizontal(float p_overscan) {
 	rtgi_overscan_horizontal = CLAMP(p_overscan, 0.0f, 0.25f);
 	_update_pathtracing();
@@ -863,6 +881,10 @@ void Environment::_update_pathtracing() {
 	params.write[RSE::PT_PARAM_DENOISER_SPLIT_SIGNALS] = rtgi_denoiser_split_signals ? 1.0f : 0.0f;
 	params.write[RSE::PT_PARAM_DENOISER_SPECULAR_HISTORY_WEIGHT] = rtgi_denoiser_specular_history_weight;
 	params.write[RSE::PT_PARAM_DENOISER_SPECULAR_SPATIAL_STRENGTH] = rtgi_denoiser_specular_spatial_strength;
+	uint32_t rtgi_sampling_controls = 0;
+	rtgi_sampling_controls |= rtgi_analytic_light_sampling_enabled ? 1u : 0u;
+	rtgi_sampling_controls |= rtgi_explicit_emissive_sampling_enabled ? 2u : 0u;
+	params.write[RSE::PT_PARAM_RTGI_SAMPLING_CONTROLS] = (float)rtgi_sampling_controls;
 	RS::get_singleton()->environment_set_pathtracing_params(environment, params);
 }
 
@@ -1736,6 +1758,10 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_rtgi_ray_firefly_suppression"), &Environment::get_rtgi_ray_firefly_suppression);
 	ClassDB::bind_method(D_METHOD("set_rtgi_ray_max_radiance", "radiance"), &Environment::set_rtgi_ray_max_radiance);
 	ClassDB::bind_method(D_METHOD("get_rtgi_ray_max_radiance"), &Environment::get_rtgi_ray_max_radiance);
+	ClassDB::bind_method(D_METHOD("set_rtgi_analytic_light_sampling_enabled", "enabled"), &Environment::set_rtgi_analytic_light_sampling_enabled);
+	ClassDB::bind_method(D_METHOD("is_rtgi_analytic_light_sampling_enabled"), &Environment::is_rtgi_analytic_light_sampling_enabled);
+	ClassDB::bind_method(D_METHOD("set_rtgi_explicit_emissive_sampling_enabled", "enabled"), &Environment::set_rtgi_explicit_emissive_sampling_enabled);
+	ClassDB::bind_method(D_METHOD("is_rtgi_explicit_emissive_sampling_enabled"), &Environment::is_rtgi_explicit_emissive_sampling_enabled);
 	ClassDB::bind_method(D_METHOD("set_rtgi_overscan_horizontal", "overscan"), &Environment::set_rtgi_overscan_horizontal);
 	ClassDB::bind_method(D_METHOD("get_rtgi_overscan_horizontal"), &Environment::get_rtgi_overscan_horizontal);
 	ClassDB::bind_method(D_METHOD("set_rtgi_overscan_vertical", "overscan"), &Environment::set_rtgi_overscan_vertical);
@@ -1761,6 +1787,8 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_specular_spatial_strength", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_denoiser_specular_spatial_strength", "get_rtgi_denoiser_specular_spatial_strength");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_ray_firefly_suppression", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_ray_firefly_suppression", "get_rtgi_ray_firefly_suppression");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_ray_max_radiance", PROPERTY_HINT_RANGE, "0,4096,0.1,or_greater"), "set_rtgi_ray_max_radiance", "get_rtgi_ray_max_radiance");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_analytic_light_sampling_enabled"), "set_rtgi_analytic_light_sampling_enabled", "is_rtgi_analytic_light_sampling_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_explicit_emissive_sampling_enabled"), "set_rtgi_explicit_emissive_sampling_enabled", "is_rtgi_explicit_emissive_sampling_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_horizontal", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_horizontal", "get_rtgi_overscan_horizontal");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_vertical", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_vertical", "get_rtgi_overscan_vertical");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "SVGF (Default):8,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");

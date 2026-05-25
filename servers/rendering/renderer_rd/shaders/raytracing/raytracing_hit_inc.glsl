@@ -67,6 +67,18 @@ void get_triangle_indices(in GeometryData geom, out uint i0, out uint i1, out ui
 	get_triangle_indices_ex(geom, gl_PrimitiveID, i0, i1, i2);
 }
 
+vec3 fetch_position_uncompressed(in GeometryData geom, uint idx) {
+	if (geom.vertex_address == 0ul || (geom.flags & FLAG_COMPRESSED) != 0u) {
+		return vec3(0.0);
+	}
+	FloatBuffer vb = FloatBuffer(geom.vertex_address);
+	uint stride_floats = max(geom.position_stride >> 2, 3u);
+	return vec3(
+			vb.v[idx * stride_floats],
+			vb.v[idx * stride_floats + 1u],
+			vb.v[idx * stride_floats + 2u]);
+}
+
 // ============================================================================
 // UV FETCHING
 // ============================================================================

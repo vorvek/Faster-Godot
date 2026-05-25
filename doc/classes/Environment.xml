@@ -229,6 +229,12 @@
 		<member name="rtgi_ray_max_radiance" type="float" setter="set_rtgi_ray_max_radiance" getter="get_rtgi_ray_max_radiance" default="32.0">
 			Sets the approximate linear HDR luminance limit used by [member rtgi_ray_firefly_suppression]. A value of [code]0.0[/code] disables this pre-denoiser ray contribution clamp.
 		</member>
+		<member name="rtgi_analytic_light_sampling_enabled" type="bool" setter="set_rtgi_analytic_light_sampling_enabled" getter="is_rtgi_analytic_light_sampling_enabled" default="true">
+			Enables RTGI next-event sampling for analytic lights before denoising.
+		</member>
+		<member name="rtgi_explicit_emissive_sampling_enabled" type="bool" setter="set_rtgi_explicit_emissive_sampling_enabled" getter="is_rtgi_explicit_emissive_sampling_enabled" default="true">
+			Enables RTGI bounded emissive surface candidate sampling before denoising.
+		</member>
 		<member name="rtgi_overscan_horizontal" type="float" setter="set_rtgi_overscan_horizontal" getter="get_rtgi_overscan_horizontal" default="0.0">
 			Sets the extra horizontal path-traced RTGI margin as a fraction of the viewport width. The renderer allocates this margin on both sides, then shifts the visible crop using camera motion so pixels are traced just outside the leading edge of the view. For example, [code]0.05[/code] allows up to 10% extra pixels on one horizontal edge and 0% on the other. Higher values can reduce edge speckles from newly revealed pixels while moving, but increase RT cost and do not add samples to the interior of the image.
 		</member>

@@ -40,6 +40,12 @@
 #define RT_PARAM_DENOISER_SPLIT_SIGNALS 22 // rt_params[5].z - Separate diffuse/specular denoising
 #define RT_PARAM_DENOISER_SPECULAR_HISTORY_WEIGHT 23 // rt_params[5].w - Specular SVGF history weight
 #define RT_PARAM_DENOISER_SPECULAR_SPATIAL_STRENGTH 24 // rt_params[6].x - Specular spatial filtering strength
+#define RT_PARAM_RTGI_SAMPLING_CONTROLS 25 // rt_params[6].y - Bitfield for analytic/emissive sampling controls
+#define RT_PARAM_EMISSIVE_CANDIDATE_COUNT 26 // rt_params[6].z - Renderer-selected emissive candidate count
+#define RT_PARAM_EMISSIVE_CANDIDATE_TOTAL_WEIGHT 27 // rt_params[6].w - Sum of emissive candidate selection weights
+
+#define RTGI_SAMPLING_ANALYTIC_LIGHTS_BIT 1u
+#define RTGI_SAMPLING_EXPLICIT_EMISSIVE_BIT 2u
 
 #define RT_MODE_HYBRID 0u // Compatibility name for Simple RT.
 #define RT_MODE_PATH_TRACED 1u

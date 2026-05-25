@@ -139,6 +139,16 @@ struct alignas(16) RT_MaterialData {
 };
 static_assert(sizeof(RT_MaterialData) == 112, "RT_MaterialData must be 112 bytes for std430");
 
+// Must match GLSL RTEmissiveCandidate (std430, 64 bytes).
+struct alignas(16) RT_EmissiveCandidate {
+	float object_to_world[12];
+	uint32_t geometry_index;
+	uint32_t flags;
+	float selection_weight;
+	float _pad;
+};
+static_assert(sizeof(RT_EmissiveCandidate) == 64, "RT_EmissiveCandidate must be 64 bytes for std430");
+
 // Light types for raytracing (matches GLSL RT_LIGHT_TYPE_* defines).
 enum RTLightType : uint32_t {
 	RT_LIGHT_TYPE_OMNI = 0,
@@ -228,6 +238,7 @@ enum {
 	RT_GEOM_FLAG_COMPRESSED_ATTRIBUTES = 16u,
 	// Fold gl_PrimitiveID into the guide history ID for merged BLASes.
 	RT_GEOM_FLAG_PRIMITIVE_HISTORY_ID = 32u,
+	RT_GEOM_FLAG_EXPLICIT_EMISSIVE_CANDIDATE = 1024u,
 	// Primary hit belongs to a raster GI owner in Simple RT. The shader uses
 	// these to suppress diffuse RTGI while keeping RT specular/reflections.
 	RT_GEOM_FLAG_RASTER_GI_LIGHTMAP = 64u,
@@ -363,6 +374,8 @@ struct RTViewportState {
 	uint32_t motion_index_buffer_capacity = 0;
 	RID motion_transform_buffer;
 	uint32_t motion_transform_buffer_capacity = 0;
+	RID emissive_candidate_buffer;
+	uint32_t emissive_candidate_buffer_capacity = 0;
 
 	RID light_buffer;
 	RID params_buffer;
@@ -378,6 +391,7 @@ struct RTViewportState {
 	uint64_t radiance_history_signature = 0;
 	bool radiance_history_signature_valid = false;
 	bool radiance_history_invalidated = false;
+	uint64_t emissive_candidate_signature = 0;
 	RT_LightData previous_light_data[RT_LIGHTS_MAX] = {};
 	uint32_t previous_light_count = 0;
 	bool previous_light_data_valid = false;
@@ -440,6 +454,9 @@ class RenderRaytracing {
 	HashSet<RID> buffer_dependency_dedupe_scratch;
 	LocalVector<int32_t> motion_indices; ///< Per-instance: index into motion_transforms[], or -1.
 	LocalVector<RT_InstanceMotionData> motion_transforms; ///< Compact: only moving instances.
+	LocalVector<RT_EmissiveCandidate> emissive_candidates;
+	float emissive_candidate_total_weight = 0.0f;
+	uint64_t current_emissive_candidate_signature = 0;
 	LocalVector<RID> blass;
 	LocalVector<Transform3D> blas_transforms;
 	LocalVector<uint32_t> instance_flags;

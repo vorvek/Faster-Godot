@@ -356,6 +356,138 @@ vec3 rt_direct_lighting_sum(RTDirectLighting lighting) {
 	return lighting.diffuse + lighting.specular;
 }
 
+vec3 rt_emissive_candidate_transform_point(RTEmissiveCandidate candidate, vec3 p) {
+	return vec3(
+			dot(vec4(p, 1.0), vec4(candidate.object_to_world[0], candidate.object_to_world[1], candidate.object_to_world[2], candidate.object_to_world[3])),
+			dot(vec4(p, 1.0), vec4(candidate.object_to_world[4], candidate.object_to_world[5], candidate.object_to_world[6], candidate.object_to_world[7])),
+			dot(vec4(p, 1.0), vec4(candidate.object_to_world[8], candidate.object_to_world[9], candidate.object_to_world[10], candidate.object_to_world[11])));
+}
+
+vec3 rt_emissive_candidate_transform_vector(RTEmissiveCandidate candidate, vec3 v) {
+	return vec3(
+			dot(v, vec3(candidate.object_to_world[0], candidate.object_to_world[1], candidate.object_to_world[2])),
+			dot(v, vec3(candidate.object_to_world[4], candidate.object_to_world[5], candidate.object_to_world[6])),
+			dot(v, vec3(candidate.object_to_world[8], candidate.object_to_world[9], candidate.object_to_world[10])));
+}
+
+RTDirectLighting lights_evaluate_explicit_emissive_candidate_split(
+		vec3 hit_pos,
+		vec3 geometry_normal,
+		vec3 N,
+		vec3 V,
+		MaterialProperties material,
+		inout uint rng_state,
+		uint receiver_layer_mask,
+		out float out_pdf,
+		out float out_selected_weight) {
+	out_pdf = 0.0;
+	out_selected_weight = 0.0;
+	if ((uint(get_rt_param(RT_PARAM_RTGI_SAMPLING_CONTROLS)) & RTGI_SAMPLING_EXPLICIT_EMISSIVE_BIT) == 0u) {
+		return rt_direct_lighting_zero();
+	}
+
+	uint candidate_count = min(uint(get_rt_param(RT_PARAM_EMISSIVE_CANDIDATE_COUNT)), 512u);
+	float total_weight = get_rt_param(RT_PARAM_EMISSIVE_CANDIDATE_TOTAL_WEIGHT);
+	if (candidate_count == 0u || total_weight <= 1e-6) {
+		return rt_direct_lighting_zero();
+	}
+
+	float roulette = rand(rng_state) * total_weight;
+	uint selected = candidate_count - 1u;
+	float cumulative = 0.0;
+	for (uint i = 0u; i < 512u; i++) {
+		if (i >= candidate_count) {
+			break;
+		}
+		float weight = max(rt_emissive_candidates[i].selection_weight, 0.0);
+		cumulative += weight;
+		if (roulette <= cumulative) {
+			selected = i;
+			break;
+		}
+	}
+
+	RTEmissiveCandidate candidate = rt_emissive_candidates[selected];
+	out_selected_weight = max(candidate.selection_weight, 0.0);
+	float select_pdf = out_selected_weight / total_weight;
+	if (select_pdf <= 1e-8) {
+		return rt_direct_lighting_zero();
+	}
+
+	GeometryData geom = geometries[candidate.geometry_index];
+	if ((geom.layer_mask & receiver_layer_mask) == 0u || geom.primitive_count == 0u || geom.vertex_address == 0ul || (geom.flags & FLAG_COMPRESSED) != 0u) {
+		return rt_direct_lighting_zero();
+	}
+
+	MaterialData light_mat = materials[candidate.geometry_index];
+	vec3 emission = max(light_mat.emission_color * light_mat.emission_strength, vec3(0.0));
+
+	uint primitive_id = min(uint(rand(rng_state) * float(geom.primitive_count)), geom.primitive_count - 1u);
+	float su = sqrt(rand(rng_state));
+	float bv = rand(rng_state);
+	vec3 bary = vec3(1.0 - su, su * (1.0 - bv), su * bv);
+
+	uint i0, i1, i2;
+	get_triangle_indices_ex(geom, primitive_id, i0, i1, i2);
+	vec3 p0 = fetch_position_uncompressed(geom, i0);
+	vec3 p1 = fetch_position_uncompressed(geom, i1);
+	vec3 p2 = fetch_position_uncompressed(geom, i2);
+	vec3 wp0 = rt_emissive_candidate_transform_point(candidate, p0);
+	vec3 wp1 = rt_emissive_candidate_transform_point(candidate, p1);
+	vec3 wp2 = rt_emissive_candidate_transform_point(candidate, p2);
+	vec3 light_pos = bary.x * wp0 + bary.y * wp1 + bary.z * wp2;
+	vec3 area_vec = cross(wp1 - wp0, wp2 - wp0);
+	float tri_area = length(area_vec) * 0.5;
+	if (tri_area <= 1e-8) {
+		return rt_direct_lighting_zero();
+	}
+
+	if ((light_mat.flags & RT_MAT_FLAG_HAS_EMISSION_TEX) != 0u) {
+		vec2 uv = fetch_uv(geom, i0, i1, i2, bary);
+		uv = uv * light_mat.uv1_scale + light_mat.uv1_offset;
+		emission *= sample_material_texture(light_mat.emission_texture_idx, uv, light_mat.flags).rgb;
+	}
+	emission *= scene_data_block.data.emissive_exposure_normalization;
+	if (luminance(emission) <= 1e-6) {
+		return rt_direct_lighting_zero();
+	}
+
+	vec3 to_light = light_pos - hit_pos;
+	float dist_sq = dot(to_light, to_light);
+	if (dist_sq <= 1e-8) {
+		return rt_direct_lighting_zero();
+	}
+	float dist = sqrt(dist_sq);
+	vec3 L = to_light / dist;
+	float NdotL = dot(N, L);
+	if (NdotL <= 0.0) {
+		return rt_direct_lighting_zero();
+	}
+
+	vec3 light_normal = normalize(area_vec);
+	float light_cos = max(dot(light_normal, -L), 0.0);
+	if (light_cos <= 0.0) {
+		return rt_direct_lighting_zero();
+	}
+
+	vec3 shadow_origin = offset_ray_origin(hit_pos, dot(geometry_normal, L) >= 0.0 ? geometry_normal : -geometry_normal);
+	if (!lights_trace_shadow_ray(shadow_origin, L, max(dist - 0.002, 0.001), 0xFFFFFFFFu, rng_state)) {
+		return rt_direct_lighting_zero();
+	}
+
+	vec3 brdf_diffuse, brdf_specular;
+	evalCombinedBRDFSeparate(N, L, V, material, brdf_diffuse, brdf_specular);
+	float pdf_area = select_pdf / max(float(geom.primitive_count) * tri_area, 1e-8);
+	out_pdf = pdf_area;
+	float geom_term = light_cos / max(dist_sq, 1e-6);
+	float inv_pdf = 1.0 / max(pdf_area, 1e-8);
+
+	RTDirectLighting result;
+	result.diffuse = brdf_diffuse * emission * geom_term * inv_pdf;
+	result.specular = brdf_specular * emission * geom_term * inv_pdf;
+	return result;
+}
+
 RTDirectLighting lights_evaluate_single_direct_light_split(
 		RTLightData light,
 		float light_select_pdf,

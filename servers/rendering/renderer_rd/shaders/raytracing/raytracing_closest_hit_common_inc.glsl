@@ -553,6 +553,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 
 	uint total_bounces = get_total_bounces(ps.packed_bounces_flags);
 	uint diffuse_bounces = get_diffuse_bounces(ps.packed_bounces_flags);
+	uint rtgi_sampling_controls = uint(get_rt_param(RT_PARAM_RTGI_SAMPLING_CONTROLS));
 	bool hybrid_primary = uint(get_rt_param(RT_PARAM_MODE)) == RT_MODE_HYBRID && total_bounces == 0u;
 	if (hybrid_primary && (geometries[h.geometry_idx].flags & RT_GEOM_FLAG_RASTER_GI_OWNER) != 0u) {
 		ps.packed_bounces_flags = set_primary_raster_gi_owner(ps.packed_bounces_flags);
@@ -566,12 +567,17 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	// Emissive contribution.
 	if (!hybrid_primary) {
 		bool secondary_emissive = total_bounces > 0u;
-		vec3 raw_emissive_contribution = ps.throughput * m.emissive;
-		vec3 emissive_contribution = rt_clamp_path_contribution(raw_emissive_contribution, m.roughness, m.metalness, secondary_emissive, secondary_emissive);
-		rt_signal_add_emissive(ivec2(gl_LaunchIDEXT.xy), emissive_contribution, secondary_emissive, rt_signal_clamp_delta(raw_emissive_contribution, emissive_contribution));
-		ps.radiance += emissive_contribution;
-		if (total_bounces == 0u || get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {
-			ps.specular_radiance += emissive_contribution;
+		bool explicit_emissive_candidate = (geometries[h.geometry_idx].flags & RT_GEOM_FLAG_EXPLICIT_EMISSIVE_CANDIDATE) != 0u;
+		bool suppress_diffuse_path_emissive = secondary_emissive && diffuse_bounces > 0u && explicit_emissive_candidate &&
+				(rtgi_sampling_controls & RTGI_SAMPLING_EXPLICIT_EMISSIVE_BIT) != 0u;
+		if (!suppress_diffuse_path_emissive) {
+			vec3 raw_emissive_contribution = ps.throughput * m.emissive;
+			vec3 emissive_contribution = rt_clamp_path_contribution(raw_emissive_contribution, m.roughness, m.metalness, secondary_emissive, secondary_emissive);
+			rt_signal_add_emissive(ivec2(gl_LaunchIDEXT.xy), emissive_contribution, secondary_emissive, rt_signal_clamp_delta(raw_emissive_contribution, emissive_contribution));
+			ps.radiance += emissive_contribution;
+			if (total_bounces == 0u || get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {
+				ps.specular_radiance += emissive_contribution;
+			}
 		}
 	}
 
@@ -671,7 +677,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	path_pack(payload, ps);
 
 	uint rt_light_count = uint(get_rt_param(RT_PARAM_LIGHT_COUNT));
-	if (rt_light_count > 0u && !hybrid_primary) {
+	if (rt_light_count > 0u && !hybrid_primary && (rtgi_sampling_controls & RTGI_SAMPLING_ANALYTIC_LIGHTS_BIT) != 0u) {
 		bool is_indirect = (diffuse_bounces > 0u);
 		uint receiver_layer_mask = geometries[h.geometry_idx].layer_mask;
 		RTDirectLighting direct_light = lights_evaluate_direct_lighting_split(
@@ -692,6 +698,27 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 			ps.specular_radiance += direct_total;
 		}
 		ps.radiance += direct_total;
+	}
+	if (!hybrid_primary && (rtgi_sampling_controls & RTGI_SAMPLING_EXPLICIT_EMISSIVE_BIT) != 0u) {
+		bool is_indirect = (diffuse_bounces > 0u);
+		uint receiver_layer_mask = geometries[h.geometry_idx].layer_mask;
+		float emissive_pdf = 0.0;
+		float emissive_weight = 0.0;
+		RTDirectLighting emissive_light = lights_evaluate_explicit_emissive_candidate_split(
+				h.hit_pos, h.geometry_normal, N, V, brdf_mat, ps.rng_state, receiver_layer_mask, emissive_pdf, emissive_weight);
+		vec3 raw_emissive_diffuse = ps.throughput * emissive_light.diffuse;
+		vec3 raw_emissive_specular = ps.throughput * emissive_light.specular;
+		vec3 emissive_diffuse = rt_clamp_path_contribution(raw_emissive_diffuse, m.roughness, m.metalness, is_indirect, true);
+		vec3 emissive_specular = rt_clamp_path_contribution(raw_emissive_specular, m.roughness, m.metalness, is_indirect, true);
+		vec3 explicit_emissive_total = emissive_diffuse + emissive_specular;
+		rt_signal_add_explicit_emissive(ivec2(gl_LaunchIDEXT.xy), explicit_emissive_total, emissive_pdf, emissive_weight,
+				rt_signal_clamp_delta(raw_emissive_diffuse, emissive_diffuse) + rt_signal_clamp_delta(raw_emissive_specular, emissive_specular));
+		if (total_bounces == 0u) {
+			ps.specular_radiance += emissive_specular;
+		} else if (get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {
+			ps.specular_radiance += explicit_emissive_total;
+		}
+		ps.radiance += explicit_emissive_total;
 	}
 
 	// =================================================================

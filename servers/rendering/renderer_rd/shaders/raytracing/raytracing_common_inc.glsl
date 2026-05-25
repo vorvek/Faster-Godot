@@ -152,6 +152,18 @@ layout(set = 0, binding = 41, rgba16f) uniform image2D rt_signal_indirect_image;
 layout(set = 0, binding = 42, rgba16f) uniform image2D rt_signal_sky_image;
 layout(set = 0, binding = 43, rgba16f) uniform image2D rt_signal_confidence_image;
 
+struct RTEmissiveCandidate {
+	float object_to_world[12];
+	uint geometry_index;
+	uint flags;
+	float selection_weight;
+	float _pad;
+};
+
+layout(set = 0, binding = 44, std430) readonly buffer RTEmissiveCandidateBuffer {
+	RTEmissiveCandidate rt_emissive_candidates[];
+};
+
 void rt_signal_reset(ivec2 pixel) {
 	imageStore(rt_signal_direct_light_image, pixel, vec4(0.0));
 	imageStore(rt_signal_emissive_image, pixel, vec4(0.0));
@@ -178,6 +190,13 @@ void rt_signal_add_emissive(ivec2 pixel, vec3 contribution, bool secondary_emiss
 	vec3 value = sanitize_payload_vec3(contribution);
 	RT_SIGNAL_ACCUMULATE(rt_signal_emissive_image, pixel, vec4(value, secondary_emissive ? rt_luminance(value) : 0.0));
 	RT_SIGNAL_ACCUMULATE(rt_signal_confidence_image, pixel, vec4(clamp_delta, 0.0, 0.0, 0.0));
+}
+
+void rt_signal_add_explicit_emissive(ivec2 pixel, vec3 contribution, float pdf, float selected_weight, float clamp_delta) {
+	vec3 value = sanitize_payload_vec3(contribution);
+	float risk = clamp(rt_luminance(value) / max(selected_weight, 1e-4), 0.0, 1.0);
+	RT_SIGNAL_ACCUMULATE(rt_signal_emissive_image, pixel, vec4(value, rt_luminance(value)));
+	RT_SIGNAL_ACCUMULATE(rt_signal_confidence_image, pixel, vec4(clamp_delta, max(risk, clamp(pdf * 32.0, 0.0, 1.0)), 0.0, 0.0));
 }
 
 void rt_signal_add_indirect(ivec2 pixel, vec3 throughput, uint total_bounces, int brdf_type, float clamp_delta) {
