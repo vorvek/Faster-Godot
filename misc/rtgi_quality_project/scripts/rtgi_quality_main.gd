@@ -25,6 +25,7 @@ var _write_reference := false
 var _camera_pan := false
 var _reference_spp := 16
 var _sparkle_frames := 16
+var _convergence_frames := 0
 var _scene_mode := "stress"
 var _cornell_compare := false
 var _cornell_reference_image := ""
@@ -41,6 +42,8 @@ var _normal_flip_cache := {}
 
 func _ready() -> void:
 	_parse_args()
+	if _scene_mode == "convergence" and _convergence_frames <= 0:
+		_convergence_frames = 48
 	if _scene_mode == "cornell":
 		_force_square_viewport()
 	_build_scene()
@@ -82,9 +85,11 @@ func _parse_args() -> void:
 			_reference_spp = clampi(arg.trim_prefix("--rtgi-reference-spp=").to_int(), 1, 128)
 		elif arg.begins_with("--rtgi-sparkle-frames="):
 			_sparkle_frames = clampi(arg.trim_prefix("--rtgi-sparkle-frames=").to_int(), 0, 64)
+		elif arg.begins_with("--rtgi-convergence-frames="):
+			_convergence_frames = clampi(arg.trim_prefix("--rtgi-convergence-frames=").to_int(), 0, 128)
 		elif arg.begins_with("--rtgi-scene="):
 			var requested_scene := arg.trim_prefix("--rtgi-scene=").to_lower()
-			if requested_scene in ["stress", "cornell", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive"]:
+			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive"]:
 				_scene_mode = requested_scene
 			else:
 				push_warning("Unknown RTGI quality scene '%s'; using stress scene." % requested_scene)
@@ -609,6 +614,7 @@ func _run_capture() -> void:
 	metrics["ray_max_radiance"] = _ray_max_radiance
 	metrics["warmup_frames"] = _warmup_frames
 	metrics["sparkle_frames"] = _sparkle_frames
+	metrics["convergence_frames"] = _convergence_frames
 	metrics["gate_profile"] = _gate_profile
 	metrics["debug_view"] = _debug_view
 	metrics["camera_pan"] = _camera_pan
@@ -616,6 +622,8 @@ func _run_capture() -> void:
 	metrics["sponza_asset_loaded"] = _sponza_asset_loaded
 	if _sparkle_frames > 1 and DisplayServer.get_name().to_lower() != "headless":
 		metrics.merge(await _measure_temporal_sparkle(base_name), true)
+	if _convergence_frames > 1 and DisplayServer.get_name().to_lower() != "headless":
+		metrics.merge(await _measure_convergence_curve(base_name), true)
 
 	var expected := _expected_metrics_for_scene(_load_expected_metrics())
 	var failures := _compare_metrics(metrics, expected)
@@ -652,7 +660,7 @@ func _animate_camera(frame: int) -> void:
 
 
 func _capture_debug_views(base_name: String) -> void:
-	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "variance", "history_length", "rejection", "final"]
+	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "variance", "history_length", "rejection", "final"]
 	for view in views:
 		_apply_debug_view(view)
 		await _wait_render_frame()
@@ -816,6 +824,16 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_VIEWZ_HITDIST
 		"motion_vectors":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_MOTION_VECTORS
+		"signal_direct":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_DIRECT_LIGHT
+		"signal_emissive":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_EMISSIVE
+		"signal_indirect":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_INDIRECT
+		"signal_sky":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_SKY
+		"signal_confidence":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_CONFIDENCE
 		"variance":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_VARIANCE
 		"history_length":
@@ -1028,6 +1046,64 @@ func _measure_temporal_sparkle(base_name: String) -> Dictionary:
 		"temporal_sparkle_pixels_avg": float(total_sparkle_pixels) / maxf(float(_sparkle_frames - 1), 1.0),
 		"temporal_sparkle_per_megapixel_max": _per_megapixel(max_sparkle_pixels, sampled_pixels),
 		"temporal_sparkle_per_megapixel_avg": _per_megapixel(total_sparkle_pixels, sampled_pixels * maxi(_sparkle_frames - 1, 1)),
+	}
+
+
+func _measure_convergence_curve(base_name: String) -> Dictionary:
+	_apply_debug_view("beauty")
+	var previous_enabled := false
+	if _environment != null:
+		previous_enabled = _environment.rtgi_enabled
+		_environment.rtgi_enabled = false
+		await _wait_render_frame()
+		_environment.rtgi_enabled = previous_enabled
+	var previous: Image = null
+	var first: Image = null
+	var last: Image = null
+	var curve := []
+	for frame in range(_convergence_frames):
+		await _wait_render_frame()
+		var current := get_viewport().get_texture().get_image()
+		current.convert(Image.FORMAT_RGBA8)
+		if first == null:
+			first = current.duplicate()
+		last = current.duplicate()
+		var frame_metrics := _measure_image(current)
+		var sampled_pixels := int(current.get_width() / 2) * int(current.get_height() / 2)
+		var delta_sparkles := 0
+		if previous != null:
+			delta_sparkles = _count_temporal_sparkles(previous, current)
+		curve.append({
+			"frame": frame,
+			"luma_p95": frame_metrics["luma_p95"],
+			"luma_p99": frame_metrics["luma_p99"],
+			"luma_max": frame_metrics["luma_max"],
+			"full_frame_fireflies_per_megapixel": frame_metrics["full_frame_fireflies_per_megapixel"],
+			"visible_speckles_per_megapixel": frame_metrics["visible_speckles_per_megapixel"],
+			"frame_delta_sparkle_per_megapixel": _per_megapixel(delta_sparkles, sampled_pixels),
+		})
+		previous = current
+	var first_path := "%s/%s_convergence_first.png" % [_output_dir, base_name]
+	var last_path := "%s/%s_convergence_last.png" % [_output_dir, base_name]
+	if first != null:
+		first.save_png(first_path)
+	if last != null:
+		last.save_png(last_path)
+	var curve_path := "%s/%s_convergence_curve.json" % [_output_dir, base_name]
+	var payload := {
+		"frames": _convergence_frames,
+		"curve": curve,
+		"first_path": ProjectSettings.globalize_path(first_path),
+		"last_path": ProjectSettings.globalize_path(last_path),
+	}
+	_write_json(curve_path, payload)
+	return {
+		"convergence_curve_path": ProjectSettings.globalize_path(curve_path),
+		"convergence_first_path": ProjectSettings.globalize_path(first_path),
+		"convergence_last_path": ProjectSettings.globalize_path(last_path),
+		"convergence_last_luma_p99": curve.back()["luma_p99"] if not curve.is_empty() else 0.0,
+		"convergence_last_fireflies_per_megapixel": curve.back()["full_frame_fireflies_per_megapixel"] if not curve.is_empty() else 0.0,
+		"convergence_last_frame_delta_sparkle_per_megapixel": curve.back()["frame_delta_sparkle_per_megapixel"] if not curve.is_empty() else 0.0,
 	}
 
 
@@ -1302,7 +1378,7 @@ func _measure_luma_stats(image: Image) -> Dictionary:
 func _is_intentional_emitter_metric_pixel(x: int, y: int, width: int, height: int) -> bool:
 	var nx := float(x) / maxf(float(width), 1.0)
 	var ny := float(y) / maxf(float(height), 1.0)
-	if _scene_mode == "stress":
+	if _scene_mode == "stress" or _scene_mode == "convergence":
 		return nx >= 0.34 and nx <= 0.49 and ny >= 0.37 and ny <= 0.60
 	if _scene_mode == "cornell":
 		return nx >= 0.37 and nx <= 0.63 and ny >= 0.06 and ny <= 0.22

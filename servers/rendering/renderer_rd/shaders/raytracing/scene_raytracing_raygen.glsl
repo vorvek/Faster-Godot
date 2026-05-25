@@ -52,6 +52,7 @@ void main() {
 	// Accumulate multiple samples per pixel
 	vec3 total_radiance = vec3(0.0);
 	vec3 total_specular_radiance = vec3(0.0);
+	rt_signal_reset(pixel_i);
 
 	const uint max_bounces = RT_GET_MAX_BOUNCES();
 
@@ -114,6 +115,12 @@ void main() {
 
 	vec3 final_radiance = total_radiance / float(samples_per_pixel);
 	vec3 final_specular = total_specular_radiance / float(samples_per_pixel);
+	float inv_samples = 1.0 / float(samples_per_pixel);
+	imageStore(rt_signal_direct_light_image, pixel_i, imageLoad(rt_signal_direct_light_image, pixel_i) * inv_samples);
+	imageStore(rt_signal_emissive_image, pixel_i, imageLoad(rt_signal_emissive_image, pixel_i) * inv_samples);
+	imageStore(rt_signal_indirect_image, pixel_i, imageLoad(rt_signal_indirect_image, pixel_i) * inv_samples);
+	imageStore(rt_signal_sky_image, pixel_i, imageLoad(rt_signal_sky_image, pixel_i) * inv_samples);
+	imageStore(rt_signal_confidence_image, pixel_i, imageLoad(rt_signal_confidence_image, pixel_i) * vec4(inv_samples, 1.0, 1.0, 1.0));
 	final_radiance *= max(0.0, get_rt_param(RT_PARAM_ENERGY));
 	final_specular *= max(0.0, get_rt_param(RT_PARAM_ENERGY));
 	final_radiance = sanitize_payload_vec3(final_radiance);
@@ -200,6 +207,7 @@ void main() {
 				imageStore(rt_albedo_metalness_image, pixel, vec4(1.0, 1.0, 1.0, 0.0));
 				imageStore(rt_viewz_hitdist_image, pixel, vec4(65504.0, 65504.0, 0.0, 0.0));
 				imageStore(rt_specular_guide_image, pixel, vec4(1.0, 65504.0, 0.0, 0.0));
+				rt_signal_set_primary_confidence(pixel, 0.0, 1.0, history_valid);
 				if (history_valid > 0.5) {
 					rt_store_primary_velocity(pixel, curr_uv, prev_uv);
 				} else {
@@ -268,6 +276,7 @@ void main() {
 			uint sky_total_bounces = get_total_bounces(ps.packed_bounces_flags);
 			vec3 sky_contribution = ps.throughput * sky_color;
 			vec3 clamped_sky = sky_total_bounces > 0u ? rt_clamp_path_contribution(sky_contribution, 0.0, 1.0, true, true) : sky_contribution;
+			rt_signal_add_sky(ivec2(gl_LaunchIDEXT.xy), clamped_sky, sky_total_bounces > 0u, rt_signal_clamp_delta(sky_contribution, clamped_sky));
 			ps.radiance += clamped_sky;
 			if (sky_total_bounces == 0u || get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {
 				ps.specular_radiance += clamped_sky;
@@ -280,6 +289,7 @@ void main() {
 	uint sky_total_bounces = get_total_bounces(ps.packed_bounces_flags);
 	vec3 sky_contribution = ps.throughput * sky_color;
 	vec3 clamped_sky = sky_total_bounces > 0u ? rt_clamp_path_contribution(sky_contribution, 0.0, 1.0, true, true) : sky_contribution;
+	rt_signal_add_sky(ivec2(gl_LaunchIDEXT.xy), clamped_sky, sky_total_bounces > 0u, rt_signal_clamp_delta(sky_contribution, clamped_sky));
 	ps.radiance += clamped_sky;
 	if (sky_total_bounces == 0u || get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {
 		ps.specular_radiance += clamped_sky;

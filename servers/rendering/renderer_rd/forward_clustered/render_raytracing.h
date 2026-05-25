@@ -54,6 +54,11 @@
 #define RB_TEX_RT_NORMAL_ROUGHNESS SNAME("rt_normal_roughness")
 #define RB_TEX_RT_ALBEDO_METALNESS SNAME("rt_albedo_metalness")
 #define RB_TEX_RT_VIEWZ_HITDIST SNAME("rt_viewz_hitdist")
+#define RB_TEX_RT_SIGNAL_DIRECT_LIGHT SNAME("rt_signal_direct_light")
+#define RB_TEX_RT_SIGNAL_EMISSIVE SNAME("rt_signal_emissive")
+#define RB_TEX_RT_SIGNAL_INDIRECT SNAME("rt_signal_indirect")
+#define RB_TEX_RT_SIGNAL_SKY SNAME("rt_signal_sky")
+#define RB_TEX_RT_SIGNAL_CONFIDENCE SNAME("rt_signal_confidence")
 
 #define RB_SCOPE_DLSS_RR SNAME("dlss_rr")
 #define RB_TEX_DLSS_RR_DIFFUSE_ALBEDO SNAME("diffuse_albedo")

@@ -39,10 +39,11 @@ var _window_size = Vector2i(1920, 1080)
 var _split_signals_mode = "both"
 var _case_filter = ""
 var _list_cases = false
+var _resume = false
 var _results = []
 var _split_pair_metrics = []
 var _split_pair_images = {}
-var _debug_views = ["diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "variance", "history_length", "rejection", "final"]
+var _debug_views = ["noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "variance", "history_length", "rejection", "final"]
 
 
 func _initialize() -> void:
@@ -80,6 +81,8 @@ func _parse_args() -> void:
 			_case_filter = arg.trim_prefix("--euphorica-case-filter=").to_lower()
 		elif arg == "--euphorica-list-cases":
 			_list_cases = true
+		elif arg == "--euphorica-resume":
+			_resume = true
 		elif arg == "--euphorica-capture-debug":
 			_capture_debug = true
 		elif arg.begins_with("--euphorica-rtgi="):
@@ -106,9 +109,20 @@ func _run() -> void:
 		_write_summary(cases)
 		quit(0)
 		return
+	var completed_cases = _load_resume_results(cases) if _resume else {}
 	var baseline_game: Image = null
 	var baseline_final: Image = null
 	for test_case in cases:
+		if completed_cases.has(test_case["name"]):
+			print("Euphorica RTGI capture: skipping completed %s" % test_case["name"])
+			var resumed_game = _load_png_or_null(_output_path("%s_game.png" % test_case["name"]))
+			var resumed_final = _load_png_or_null(_output_path("%s_final.png" % test_case["name"]))
+			if test_case.get("baseline", false):
+				baseline_game = resumed_game
+				baseline_final = resumed_final
+			if resumed_game != null and resumed_final != null:
+				_record_split_pair(resumed_game, resumed_final, test_case)
+			continue
 		var case_start_msec = Time.get_ticks_msec()
 		print("Euphorica RTGI capture: starting %s" % test_case["name"])
 		var capture = await _run_case(test_case)
@@ -246,6 +260,7 @@ func _write_summary(cases: Array) -> void:
 		"scene": _scene_path,
 		"case_filter": _case_filter,
 		"split_signals": _split_signals_mode,
+		"resume": _resume,
 		"planned_cases": cases.map(func(test_case): return test_case["name"]),
 		"completed_cases": _results.size(),
 		"results": _results,
@@ -411,6 +426,24 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_FINAL
 		"specular_guide":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_GUIDE
+		"noisy":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_NOISY
+		"normal_roughness":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_NORMAL_ROUGHNESS
+		"viewz_hitdist":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_VIEWZ_HITDIST
+		"motion_vectors":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_MOTION_VECTORS
+		"signal_direct":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_DIRECT_LIGHT
+		"signal_emissive":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_EMISSIVE
+		"signal_indirect":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_INDIRECT
+		"signal_sky":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_SKY
+		"signal_confidence":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_CONFIDENCE
 		"variance":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_VARIANCE
 		"history_length":
@@ -456,8 +489,11 @@ func _measure_case(frames: Array, game_image: Image, final_image: Image, baselin
 	var final_metrics = _image_metrics(final_image, "final")
 	for key in final_metrics.keys():
 		metrics[key] = final_metrics[key]
+	metrics.merge(_image_roi_metrics(game_image, "game"), true)
+	metrics.merge(_image_roi_metrics(final_image, "final"), true)
 	metrics["temporal_sparkle_per_megapixel_max"] = _temporal_sparkle(frames)
 	metrics["temporal_sparkle_per_megapixel_avg"] = _temporal_sparkle_average(frames)
+	metrics["game_convergence_curve"] = _convergence_curve(frames)
 	metrics["final_to_game_luma_correlation"] = _luma_correlation(game_image, final_image)
 	metrics["final_to_game_visible_speckle_ratio"] = _safe_ratio(metrics["final_visible_speckles_per_megapixel"], metrics["game_visible_speckles_per_megapixel"])
 	metrics["final_to_game_firefly_ratio"] = _safe_ratio(metrics["final_full_frame_fireflies_per_megapixel"], metrics["game_full_frame_fireflies_per_megapixel"])
@@ -515,6 +551,86 @@ func _image_metrics(image: Image, prefix: String) -> Dictionary:
 		"%s_visible_speckles_per_megapixel" % prefix: _visible_speckles(image),
 		"%s_full_frame_fireflies_per_megapixel" % prefix: _fireflies(image),
 	}
+
+
+func _image_roi_metrics(image: Image, prefix: String) -> Dictionary:
+	var metrics = {}
+	for roi_name in _roi_rects(image).keys():
+		var rect: Rect2i = _roi_rects(image)[roi_name]
+		metrics.merge(_image_metrics_region(image, "%s_%s_roi" % [prefix, roi_name], rect), true)
+	return metrics
+
+
+func _roi_rects(image: Image) -> Dictionary:
+	var width = image.get_width()
+	var height = image.get_height()
+	return {
+		"lantern_emissive": Rect2i(Vector2i(int(width * 0.40), int(height * 0.12)), Vector2i(max(4, int(width * 0.28)), max(4, int(height * 0.34)))),
+		"dark_wall_floor": Rect2i(Vector2i(int(width * 0.58), int(height * 0.42)), Vector2i(max(4, int(width * 0.34)), max(4, int(height * 0.44)))),
+		"normal_detail": Rect2i(Vector2i(int(width * 0.08), int(height * 0.25)), Vector2i(max(4, int(width * 0.34)), max(4, int(height * 0.52)))),
+		"final_post": Rect2i(Vector2i(int(width * 0.18), int(height * 0.12)), Vector2i(max(4, int(width * 0.64)), max(4, int(height * 0.72)))),
+	}
+
+
+func _image_metrics_region(image: Image, prefix: String, rect: Rect2i) -> Dictionary:
+	var x0 = clampi(rect.position.x, 0, image.get_width() - 1)
+	var y0 = clampi(rect.position.y, 0, image.get_height() - 1)
+	var x1 = clampi(rect.position.x + rect.size.x, x0 + 1, image.get_width())
+	var y1 = clampi(rect.position.y + rect.size.y, y0 + 1, image.get_height())
+	var count = max(1, (x1 - x0) * (y1 - y0))
+	var lum_values = []
+	lum_values.resize(count)
+	var sum = 0.0
+	var sum_sq = 0.0
+	var max_luma = 0.0
+	var saturated = 0
+	var index = 0
+	for y in range(y0, y1):
+		for x in range(x0, x1):
+			var luma = _luma(image.get_pixel(x, y))
+			lum_values[index] = luma
+			index += 1
+			sum += luma
+			sum_sq += luma * luma
+			max_luma = max(max_luma, luma)
+			if luma > 0.98:
+				saturated += 1
+	lum_values.sort()
+	var mean = sum / count
+	var variance = max(sum_sq / count - mean * mean, 0.0)
+	var p95 = lum_values[clampi(roundi(float(count - 1) * 0.95), 0, count - 1)]
+	var p99 = lum_values[clampi(roundi(float(count - 1) * 0.99), 0, count - 1)]
+	return {
+		"%s_luma_mean" % prefix: mean,
+		"%s_luma_stddev" % prefix: sqrt(variance),
+		"%s_luma_p95" % prefix: p95,
+		"%s_luma_p99" % prefix: p99,
+		"%s_luma_max" % prefix: max_luma,
+		"%s_saturated_luma_fraction" % prefix: float(saturated) / float(count),
+		"%s_detail_edge_energy" % prefix: _edge_energy_region(image, x0, y0, x1, y1),
+		"%s_visible_speckles_per_megapixel" % prefix: _visible_speckles_region(image, x0, y0, x1, y1),
+		"%s_fireflies_per_megapixel" % prefix: _fireflies_region(image, x0, y0, x1, y1),
+	}
+
+
+func _convergence_curve(frames: Array) -> Array:
+	var curve = []
+	var previous: Image = null
+	for i in range(frames.size()):
+		var image: Image = frames[i]
+		var full = _image_metrics_region(image, "frame", Rect2i(Vector2i.ZERO, Vector2i(image.get_width(), image.get_height())))
+		var delta = 0.0 if previous == null else _frame_delta_speckles(previous, image)
+		curve.append({
+			"frame": i,
+			"luma_mean": full["frame_luma_mean"],
+			"luma_p99": full["frame_luma_p99"],
+			"luma_max": full["frame_luma_max"],
+			"fireflies_per_megapixel": full["frame_fireflies_per_megapixel"],
+			"visible_speckles_per_megapixel": full["frame_visible_speckles_per_megapixel"],
+			"frame_delta_sparkle_per_megapixel": delta,
+		})
+		previous = image
+	return curve
 
 
 func _temporal_sparkle(frames: Array) -> float:
@@ -589,6 +705,52 @@ func _fireflies(image: Image) -> float:
 	return _per_megapixel(hits, width, height)
 
 
+func _visible_speckles_region(image: Image, x0: int, y0: int, x1: int, y1: int) -> float:
+	var hits = 0
+	var sx0 = max(1, x0)
+	var sy0 = max(1, y0)
+	var sx1 = min(image.get_width() - 1, x1)
+	var sy1 = min(image.get_height() - 1, y1)
+	for y in range(sy0, sy1):
+		for x in range(sx0, sx1):
+			var center = _luma(image.get_pixel(x, y))
+			var neighborhood = 0.0
+			for oy in range(-1, 2):
+				for ox in range(-1, 2):
+					if ox != 0 or oy != 0:
+						neighborhood += _luma(image.get_pixel(x + ox, y + oy))
+			neighborhood /= 8.0
+			if center > max(neighborhood * 2.2 + 0.04, 0.10):
+				hits += 1
+	return _per_megapixel(hits, max(1, x1 - x0), max(1, y1 - y0))
+
+
+func _fireflies_region(image: Image, x0: int, y0: int, x1: int, y1: int) -> float:
+	var hits = 0
+	var sx0 = max(2, x0)
+	var sy0 = max(2, y0)
+	var sx1 = min(image.get_width() - 2, x1)
+	var sy1 = min(image.get_height() - 2, y1)
+	for y in range(sy0, sy1):
+		for x in range(sx0, sx1):
+			var center = _luma(image.get_pixel(x, y))
+			var max_neighbor = 0.0
+			var sum_neighbor = 0.0
+			var samples = 0
+			for oy in range(-2, 3):
+				for ox in range(-2, 3):
+					if ox == 0 and oy == 0:
+						continue
+					var luma = _luma(image.get_pixel(x + ox, y + oy))
+					max_neighbor = max(max_neighbor, luma)
+					sum_neighbor += luma
+					samples += 1
+			var avg_neighbor = sum_neighbor / max(1, samples)
+			if center > max(max_neighbor * 1.45 + 0.03, avg_neighbor * 3.0 + 0.08):
+				hits += 1
+	return _per_megapixel(hits, max(1, x1 - x0), max(1, y1 - y0))
+
+
 func _edge_energy(image: Image) -> float:
 	var width = image.get_width()
 	var height = image.get_height()
@@ -596,6 +758,22 @@ func _edge_energy(image: Image) -> float:
 	var count = 0
 	for y in range(1, height - 1):
 		for x in range(1, width - 1):
+			var gx = _luma(image.get_pixel(x + 1, y)) - _luma(image.get_pixel(x - 1, y))
+			var gy = _luma(image.get_pixel(x, y + 1)) - _luma(image.get_pixel(x, y - 1))
+			sum += sqrt(gx * gx + gy * gy)
+			count += 1
+	return sum / max(1, count)
+
+
+func _edge_energy_region(image: Image, x0: int, y0: int, x1: int, y1: int) -> float:
+	var sum = 0.0
+	var count = 0
+	var sx0 = max(1, x0)
+	var sy0 = max(1, y0)
+	var sx1 = min(image.get_width() - 1, x1)
+	var sy1 = min(image.get_height() - 1, y1)
+	for y in range(sy0, sy1):
+		for x in range(sx0, sx1):
 			var gx = _luma(image.get_pixel(x + 1, y)) - _luma(image.get_pixel(x - 1, y))
 			var gy = _luma(image.get_pixel(x, y + 1)) - _luma(image.get_pixel(x, y - 1))
 			sum += sqrt(gx * gx + gy * gy)
@@ -623,12 +801,36 @@ func _diff_metrics(a: Image, b: Image, prefix: String) -> Dictionary:
 			var db = ca.b - cb.b
 			rgb_abs += (abs(dr) + abs(dg) + abs(db)) / 3.0
 			rgb_sq += (dr * dr + dg * dg + db * db) / 3.0
-	return {
+	var metrics = {
 		"%s_luma_mae" % prefix: luma_abs / count,
 		"%s_luma_rmse" % prefix: sqrt(luma_sq / count),
 		"%s_rgb_mae" % prefix: rgb_abs / count,
 		"%s_rgb_rmse" % prefix: sqrt(rgb_sq / count),
 		"%s_contribution_mean_luma_delta" % prefix: (_mean_luma(a) - _mean_luma(b)),
+	}
+	metrics.merge(_downsampled_diff_metrics(a, b, prefix, 2), true)
+	metrics.merge(_downsampled_diff_metrics(a, b, prefix, 4), true)
+	return metrics
+
+
+func _downsampled_diff_metrics(a: Image, b: Image, prefix: String, factor: int) -> Dictionary:
+	var da = a.duplicate()
+	var db = b.duplicate()
+	var width = max(1, int(min(a.get_width(), b.get_width()) / factor))
+	var height = max(1, int(min(a.get_height(), b.get_height()) / factor))
+	da.resize(width, height, Image.INTERPOLATE_LANCZOS)
+	db.resize(width, height, Image.INTERPOLATE_LANCZOS)
+	var count = max(1, width * height)
+	var luma_abs = 0.0
+	var luma_sq = 0.0
+	for y in range(height):
+		for x in range(width):
+			var dl = _luma(da.get_pixel(x, y)) - _luma(db.get_pixel(x, y))
+			luma_abs += abs(dl)
+			luma_sq += dl * dl
+	return {
+		"%s_downsample_%dx_luma_mae" % [prefix, factor]: luma_abs / count,
+		"%s_downsample_%dx_luma_rmse" % [prefix, factor]: sqrt(luma_sq / count),
 	}
 
 
@@ -723,6 +925,57 @@ func _walk(node: Node) -> Array:
 func _unload_scene(scene: Node) -> void:
 	if scene != null and is_instance_valid(scene):
 		scene.queue_free()
+
+
+func _load_resume_results(cases: Array) -> Dictionary:
+	var completed = {}
+	var planned = {}
+	for test_case in cases:
+		planned[test_case["name"]] = test_case
+	var summary_path = _output_path("euphorica_rtgi_summary.json")
+	if not FileAccess.file_exists(summary_path):
+		return completed
+	var file = FileAccess.open(summary_path, FileAccess.READ)
+	if file == null:
+		return completed
+	var parsed = JSON.parse_string(file.get_as_text())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return completed
+	var prior_results = parsed.get("results", [])
+	if typeof(prior_results) != TYPE_ARRAY:
+		return completed
+	for metrics in prior_results:
+		if typeof(metrics) != TYPE_DICTIONARY or not metrics.has("case"):
+			continue
+		var test_case = metrics["case"]
+		if typeof(test_case) != TYPE_DICTIONARY or not test_case.has("name"):
+			continue
+		var case_name = str(test_case["name"])
+		if planned.has(case_name) and _case_outputs_complete(planned[case_name]):
+			completed[case_name] = true
+			_results.append(metrics)
+	return completed
+
+
+func _case_outputs_complete(test_case: Dictionary) -> bool:
+	var case_name = str(test_case["name"])
+	if not (FileAccess.file_exists(_output_path("%s_metrics.json" % case_name)) and FileAccess.file_exists(_output_path("%s_game.png" % case_name)) and FileAccess.file_exists(_output_path("%s_final.png" % case_name))):
+		return false
+	if _capture_debug and bool(test_case.get("rtgi_enabled", false)):
+		for view in _debug_views:
+			if not FileAccess.file_exists(_output_path("%s_%s_game.png" % [case_name, view])):
+				return false
+	return true
+
+
+func _load_png_or_null(path: String) -> Image:
+	if not FileAccess.file_exists(path):
+		return null
+	var image = Image.new()
+	if image.load(path) != OK:
+		return null
+	image.convert(Image.FORMAT_RGBA8)
+	return image
 
 
 func _ensure_output_dir() -> bool:

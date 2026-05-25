@@ -191,6 +191,11 @@ public:
 		RID rt_get_normal_roughness() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_NORMAL_ROUGHNESS); }
 		RID rt_get_albedo_metalness() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_ALBEDO_METALNESS); }
 		RID rt_get_viewz_hitdist() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_VIEWZ_HITDIST); }
+		RID rt_get_signal_direct_light() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_DIRECT_LIGHT); }
+		RID rt_get_signal_emissive() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_EMISSIVE); }
+		RID rt_get_signal_indirect() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_INDIRECT); }
+		RID rt_get_signal_sky() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_SKY); }
+		RID rt_get_signal_confidence() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_CONFIDENCE); }
 
 		// DLSS Ray Reconstruction output buffers
 		void dlss_rr_ensure_buffers();

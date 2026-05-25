@@ -146,6 +146,60 @@ layout(set = 0, binding = 35, rgba16f) uniform image2D rt_viewz_hitdist_image;
 layout(set = 0, binding = 36, rgba16f) uniform image2D rt_diffuse_radiance_image;
 layout(set = 0, binding = 37, rgba16f) uniform image2D rt_specular_radiance_image;
 layout(set = 0, binding = 38, rgba16f) uniform image2D rt_specular_guide_image;
+layout(set = 0, binding = 39, rgba16f) uniform image2D rt_signal_direct_light_image;
+layout(set = 0, binding = 40, rgba16f) uniform image2D rt_signal_emissive_image;
+layout(set = 0, binding = 41, rgba16f) uniform image2D rt_signal_indirect_image;
+layout(set = 0, binding = 42, rgba16f) uniform image2D rt_signal_sky_image;
+layout(set = 0, binding = 43, rgba16f) uniform image2D rt_signal_confidence_image;
+
+void rt_signal_reset(ivec2 pixel) {
+	imageStore(rt_signal_direct_light_image, pixel, vec4(0.0));
+	imageStore(rt_signal_emissive_image, pixel, vec4(0.0));
+	imageStore(rt_signal_indirect_image, pixel, vec4(0.0));
+	imageStore(rt_signal_sky_image, pixel, vec4(0.0));
+	imageStore(rt_signal_confidence_image, pixel, vec4(0.0, 0.0, 0.0, 1.0));
+}
+
+#define RT_SIGNAL_ACCUMULATE(signal_image, pixel, value) imageStore(signal_image, pixel, imageLoad(signal_image, pixel) + (value))
+
+float rt_signal_clamp_delta(vec3 raw_value, vec3 clamped_value) {
+	return max(0.0, rt_luminance(sanitize_payload_vec3(raw_value)) - rt_luminance(sanitize_payload_vec3(clamped_value)));
+}
+
+void rt_signal_add_direct(ivec2 pixel, vec3 diffuse_value, vec3 specular_value, float clamp_delta) {
+	vec3 total = sanitize_payload_vec3(diffuse_value + specular_value);
+	float total_luma = rt_luminance(total);
+	float specular_fraction = total_luma > 1e-5 ? rt_luminance(specular_value) / total_luma : 0.0;
+	RT_SIGNAL_ACCUMULATE(rt_signal_direct_light_image, pixel, vec4(total, clamp(specular_fraction, 0.0, 1.0)));
+	RT_SIGNAL_ACCUMULATE(rt_signal_confidence_image, pixel, vec4(clamp_delta, 0.0, 0.0, 0.0));
+}
+
+void rt_signal_add_emissive(ivec2 pixel, vec3 contribution, bool secondary_emissive, float clamp_delta) {
+	vec3 value = sanitize_payload_vec3(contribution);
+	RT_SIGNAL_ACCUMULATE(rt_signal_emissive_image, pixel, vec4(value, secondary_emissive ? rt_luminance(value) : 0.0));
+	RT_SIGNAL_ACCUMULATE(rt_signal_confidence_image, pixel, vec4(clamp_delta, 0.0, 0.0, 0.0));
+}
+
+void rt_signal_add_indirect(ivec2 pixel, vec3 throughput, uint total_bounces, int brdf_type, float clamp_delta) {
+	vec3 value = sanitize_payload_vec3(throughput);
+	float encoded_type = brdf_type == 2 ? 2.0 : 1.0;
+	RT_SIGNAL_ACCUMULATE(rt_signal_indirect_image, pixel, vec4(value, encoded_type + float(min(total_bounces, 30u)) / 32.0));
+	RT_SIGNAL_ACCUMULATE(rt_signal_confidence_image, pixel, vec4(clamp_delta, 0.0, 0.0, 0.0));
+}
+
+void rt_signal_add_sky(ivec2 pixel, vec3 contribution, bool secondary_miss, float clamp_delta) {
+	vec3 value = sanitize_payload_vec3(contribution);
+	RT_SIGNAL_ACCUMULATE(rt_signal_sky_image, pixel, vec4(value, secondary_miss ? rt_luminance(value) : 0.0));
+	RT_SIGNAL_ACCUMULATE(rt_signal_confidence_image, pixel, vec4(clamp_delta, 0.0, 0.0, 0.0));
+}
+
+void rt_signal_set_primary_confidence(ivec2 pixel, float specular_risk, float material_id, float validity) {
+	vec4 confidence = imageLoad(rt_signal_confidence_image, pixel);
+	confidence.b = material_id;
+	confidence.a = validity;
+	confidence.g = max(confidence.g, clamp(specular_risk, 0.0, 1.0));
+	imageStore(rt_signal_confidence_image, pixel, confidence);
+}
 
 void rt_store_primary_velocity(ivec2 pixel, vec2 curr_visible_uv, vec2 prev_visible_uv) {
 	vec2 curr_texture_uv = rt_visible_to_texture_uv(curr_visible_uv, rt_current_origin());
