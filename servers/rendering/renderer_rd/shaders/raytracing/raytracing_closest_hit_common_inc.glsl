@@ -680,8 +680,10 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	if (rt_light_count > 0u && !hybrid_primary && (rtgi_sampling_controls & RTGI_SAMPLING_ANALYTIC_LIGHTS_BIT) != 0u) {
 		bool is_indirect = (diffuse_bounces > 0u);
 		uint receiver_layer_mask = geometries[h.geometry_idx].layer_mask;
+		uint direct_source_key = 0u;
 		RTDirectLighting direct_light = lights_evaluate_direct_lighting_split(
-				h.hit_pos, h.geometry_normal, N, V, brdf_mat, ps.rng_state, is_indirect, receiver_layer_mask, rt_light_count);
+				h.hit_pos, h.geometry_normal, N, V, brdf_mat, ps.rng_state, is_indirect, receiver_layer_mask, rt_light_count,
+				direct_source_key);
 		vec3 raw_direct_diffuse = ps.throughput * direct_light.diffuse;
 		vec3 raw_direct_specular = ps.throughput * direct_light.specular;
 		vec3 direct_diffuse = rt_clamp_path_contribution(raw_direct_diffuse, m.roughness, m.metalness, is_indirect, false);
@@ -689,7 +691,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		vec3 direct_total = direct_diffuse + direct_specular;
 		rt_signal_add_direct(ivec2(gl_LaunchIDEXT.xy), direct_diffuse, direct_specular,
 				rt_signal_clamp_delta(raw_direct_diffuse, direct_diffuse) + rt_signal_clamp_delta(raw_direct_specular, direct_specular));
-		rt_source_candidate_record(ivec2(gl_LaunchIDEXT.xy), 0.25, 1.0, clamp(rt_luminance(direct_total) / 4.0, 0.0, 1.0), direct_total, 0.0);
+		rt_source_candidate_record(ivec2(gl_LaunchIDEXT.xy), 0.25, 1.0, clamp(rt_luminance(direct_total) / 4.0, 0.0, 1.0), direct_total, 0.0, direct_source_key);
 		if (total_bounces == 0u) {
 			float direct_total_luma = rt_luminance(direct_total);
 			float direct_specular_fraction = direct_total_luma > 1e-5 ? rt_luminance(direct_specular) / direct_total_luma : 0.0;
@@ -705,8 +707,9 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		uint receiver_layer_mask = geometries[h.geometry_idx].layer_mask;
 		float emissive_pdf = 0.0;
 		float emissive_weight = 0.0;
+		uint emissive_source_key = 0u;
 		RTDirectLighting emissive_light = lights_evaluate_explicit_emissive_candidate_split(
-				h.hit_pos, h.geometry_normal, N, V, brdf_mat, ps.rng_state, receiver_layer_mask, emissive_pdf, emissive_weight);
+				h.hit_pos, h.geometry_normal, N, V, brdf_mat, ps.rng_state, receiver_layer_mask, emissive_pdf, emissive_weight, emissive_source_key);
 		vec3 raw_emissive_diffuse = ps.throughput * emissive_light.diffuse;
 		vec3 raw_emissive_specular = ps.throughput * emissive_light.specular;
 		vec3 emissive_diffuse = rt_clamp_path_contribution(raw_emissive_diffuse, m.roughness, m.metalness, is_indirect, true);
@@ -714,7 +717,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		vec3 explicit_emissive_total = emissive_diffuse + emissive_specular;
 		rt_signal_add_explicit_emissive(ivec2(gl_LaunchIDEXT.xy), explicit_emissive_total, emissive_pdf, emissive_weight,
 				rt_signal_clamp_delta(raw_emissive_diffuse, emissive_diffuse) + rt_signal_clamp_delta(raw_emissive_specular, emissive_specular));
-		rt_source_candidate_record(ivec2(gl_LaunchIDEXT.xy), 0.50, 1.0, clamp(emissive_pdf * 64.0, 0.0, 1.0), explicit_emissive_total, 0.0);
+		rt_source_candidate_record(ivec2(gl_LaunchIDEXT.xy), 0.50, 1.0, clamp(emissive_pdf * 64.0, 0.0, 1.0), explicit_emissive_total, 0.0, emissive_source_key);
 		if (total_bounces == 0u) {
 			ps.specular_radiance += emissive_specular;
 		} else if (get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {

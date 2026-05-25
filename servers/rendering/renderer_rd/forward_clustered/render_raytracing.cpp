@@ -92,6 +92,14 @@ static uint64_t _rt_signature_mix_rid(uint64_t p_hash, RID p_rid) {
 	return _rt_history_mix_rid(p_hash, p_rid);
 }
 
+static uint32_t _rt_light_source_id(RID p_light_instance, RSE::LightType p_type) {
+	uint64_t h = 0x9e3779b97f4a7c15ULL;
+	h = _rt_history_mix_rid(h, p_light_instance);
+	h = _rt_history_mix(h, uint64_t(p_type));
+	uint32_t id = uint32_t((h ^ (h >> 32)) & 0x0FFFFFFFULL);
+	return id != 0 ? id : 1u;
+}
+
 static uint64_t _rt_history_mix_float(uint64_t p_hash, float p_value) {
 	uint32_t bits = 0;
 	memcpy(&bits, &p_value, sizeof(bits));
@@ -3749,6 +3757,7 @@ uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, RT_L
 		ld.spot_direction[2] = 0.0f;
 		ld.cull_mask = ls->light_get_cull_mask(base);
 		ld.shadow_caster_mask = ls->light_get_shadow_caster_mask(base);
+		ld.source_id = _rt_light_source_id(light_instance, RSE::LIGHT_DIRECTIONAL);
 		rt_light_count++;
 	}
 
@@ -3846,6 +3855,7 @@ uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, RT_L
 		}
 		ld.cull_mask = ls->light_get_cull_mask(base);
 		ld.shadow_caster_mask = ls->light_get_shadow_caster_mask(base);
+		ld.source_id = _rt_light_source_id(light_instance, type);
 		rt_light_count++;
 	}
 
@@ -4399,6 +4409,76 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		u.binding = 45;
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
 		add_uniform_id(u, rb_data->rt_get_source_candidate());
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 46;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_source_candidate_prev());
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 47;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_source_candidate_key());
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 48;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_source_candidate_key_prev());
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 49;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_source_history());
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 50;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_source_temporal_delta());
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 51;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_prev_history_validity());
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 52;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_prev_history_id());
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 53;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_source_normal_roughness_prev());
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 54;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_source_viewz_hitdist_prev());
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 55;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_source_rejection());
 		uniforms.push_back(u);
 	}
 

@@ -38,7 +38,7 @@ struct RTLightData {
 	uint shadow_caster_mask;
 	float shadow_opacity;
 	float shadow_max_distance;
-	uint _pad1;
+	uint source_id; // Run-local stable diagnostic ID, derived from the light instance RID.
 };
 
 // Light buffer SSBO (binding provided by the including shader via RT_LIGHT_BUFFER_BINDING).
@@ -379,9 +379,11 @@ RTDirectLighting lights_evaluate_explicit_emissive_candidate_split(
 		inout uint rng_state,
 		uint receiver_layer_mask,
 		out float out_pdf,
-		out float out_selected_weight) {
+		out float out_selected_weight,
+		out uint out_source_key) {
 	out_pdf = 0.0;
 	out_selected_weight = 0.0;
+	out_source_key = 0u;
 	if ((uint(get_rt_param(RT_PARAM_RTGI_SAMPLING_CONTROLS)) & RTGI_SAMPLING_EXPLICIT_EMISSIVE_BIT) == 0u) {
 		return rt_direct_lighting_zero();
 	}
@@ -485,6 +487,7 @@ RTDirectLighting lights_evaluate_explicit_emissive_candidate_split(
 	RTDirectLighting result;
 	result.diffuse = brdf_diffuse * emission * geom_term * inv_pdf;
 	result.specular = brdf_specular * emission * geom_term * inv_pdf;
+	out_source_key = rt_source_make_key(RT_SOURCE_CLASS_EMISSIVE, geom.history_id);
 	return result;
 }
 
@@ -625,7 +628,9 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		inout uint rng_state,
 		bool is_indirect_bounce,
 		uint receiver_layer_mask,
-		uint light_count) {
+		uint light_count,
+		out uint out_source_key) {
+	out_source_key = 0u;
 	if (light_count == 0u) {
 		return rt_direct_lighting_zero();
 	}
@@ -665,6 +670,7 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 
 	if (valid_count <= deterministic_light_limit) {
 		RTDirectLighting deterministic_sum = rt_direct_lighting_zero();
+		float dominant_luma = 0.0;
 		for (uint idx = 0u; idx < light_count; idx++) {
 			RTLightData test_light = rt_lights[idx];
 
@@ -681,6 +687,11 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 			RTDirectLighting light_result = lights_evaluate_single_direct_light_split(test_light, 1.0, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce);
 			deterministic_sum.diffuse += light_result.diffuse;
 			deterministic_sum.specular += light_result.specular;
+			float light_luma = rt_luminance(rt_direct_lighting_sum(light_result));
+			if (light_luma > max(dominant_luma, 1e-6)) {
+				dominant_luma = light_luma;
+				out_source_key = rt_source_make_key(RT_SOURCE_CLASS_DIRECT, test_light.source_id);
+			}
 		}
 		return deterministic_sum;
 	}
@@ -688,6 +699,7 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 	uint candidate_count = min(valid_count, is_indirect_bounce ? 2u : 3u);
 	RTDirectLighting candidate_sum = rt_direct_lighting_zero();
 	uint accepted_candidates = 0u;
+	float dominant_luma = 0.0;
 	for (uint candidate = 0u; candidate < candidate_count; candidate++) {
 		uint selected_idx = 0u;
 		float selected_weight = 0.0;
@@ -727,6 +739,11 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		RTDirectLighting light_result = lights_evaluate_single_direct_light_split(rt_lights[selected_idx], light_select_pdf, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce);
 		candidate_sum.diffuse += light_result.diffuse;
 		candidate_sum.specular += light_result.specular;
+		float light_luma = rt_luminance(rt_direct_lighting_sum(light_result));
+		if (light_luma > max(dominant_luma, 1e-6)) {
+			dominant_luma = light_luma;
+			out_source_key = rt_source_make_key(RT_SOURCE_CLASS_DIRECT, rt_lights[selected_idx].source_id);
+		}
 		accepted_candidates++;
 	}
 
@@ -746,5 +763,6 @@ vec3 lights_evaluate_direct_lighting(
 		bool is_indirect_bounce,
 		uint receiver_layer_mask,
 		uint light_count) {
-	return rt_direct_lighting_sum(lights_evaluate_direct_lighting_split(hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce, receiver_layer_mask, light_count));
+	uint source_key;
+	return rt_direct_lighting_sum(lights_evaluate_direct_lighting_split(hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce, receiver_layer_mask, light_count, source_key));
 }

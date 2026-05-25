@@ -49,8 +49,8 @@ var _profile_timings = false
 var _results = []
 var _split_pair_metrics = []
 var _split_pair_images = {}
-var _all_debug_views = ["noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
-var _debug_views = ["noisy", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_rejection", "final"]
+var _all_debug_views = ["noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
+var _debug_views = ["noisy", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_rejection", "final"]
 
 
 func _initialize() -> void:
@@ -518,6 +518,12 @@ func _capture_debug_views(test_case: Dictionary, game_viewport: Viewport) -> Dic
 			view_metrics.merge(_image_cache_rejection_diagnostic_metrics(image, "rtgi_cache"), true)
 		elif view == "source_candidate":
 			view_metrics.merge(_image_source_candidate_diagnostic_metrics(image), true)
+		elif view == "source_history":
+			view_metrics.merge(_image_source_history_diagnostic_metrics(image), true)
+		elif view == "source_temporal_delta":
+			view_metrics.merge(_image_source_temporal_delta_diagnostic_metrics(image), true)
+		elif view == "source_rejection":
+			view_metrics.merge(_image_source_rejection_diagnostic_metrics(image), true)
 		for key in view_metrics.keys():
 			metrics[key] = view_metrics[key]
 	_apply_debug_view(game_viewport, "disabled")
@@ -592,12 +598,17 @@ func _image_source_candidate_diagnostic_metrics(image: Image) -> Dictionary:
 	var confidence_sum := 0.0
 	var weight_values: Array[float] = []
 	var contribution_values: Array[float] = []
+	var emissive_weight_values: Array[float] = []
+	var emissive_contribution_values: Array[float] = []
 	var downweighted := 0
 	for y in range(height):
 		for x in range(width):
 			var c := image.get_pixel(x, y)
 			if c.r > 0.0:
 				source_coverage += 1
+			if _source_class_name(c.r) == "emissive":
+				emissive_weight_values.append(c.b)
+				emissive_contribution_values.append(c.a)
 			if c.g < 0.985 and c.r > 0.0:
 				downweighted += 1
 			confidence_sum += c.g
@@ -605,9 +616,14 @@ func _image_source_candidate_diagnostic_metrics(image: Image) -> Dictionary:
 			contribution_values.append(c.a)
 	weight_values.sort()
 	contribution_values.sort()
+	emissive_weight_values.sort()
+	emissive_contribution_values.sort()
 	var p95_idx := clampi(int(round(float(count - 1) * 0.95)), 0, count - 1)
 	var p99_idx := clampi(int(round(float(count - 1) * 0.99)), 0, count - 1)
-	return {
+	var emissive_count := emissive_weight_values.size()
+	var emissive_p95_idx := clampi(int(round(float(max(emissive_count - 1, 0)) * 0.95)), 0, max(emissive_count - 1, 0))
+	var emissive_p99_idx := clampi(int(round(float(max(emissive_count - 1, 0)) * 0.99)), 0, max(emissive_count - 1, 0))
+	var metrics := {
 		"rtgi_source_candidate_coverage_rate": float(source_coverage) / float(count),
 		"rtgi_source_candidate_confidence_mean": confidence_sum / float(count),
 		"rtgi_source_candidate_weight_p95": weight_values[p95_idx],
@@ -617,6 +633,221 @@ func _image_source_candidate_diagnostic_metrics(image: Image) -> Dictionary:
 		"rtgi_source_candidate_contribution_p99": contribution_values[p99_idx],
 		"rtgi_source_candidate_contribution_max": contribution_values[count - 1],
 		"rtgi_source_rejection_fraction": float(downweighted) / float(count),
+	}
+	if emissive_count > 0:
+		metrics["rtgi_source_emissive_candidate_weight_p95"] = emissive_weight_values[emissive_p95_idx]
+		metrics["rtgi_source_emissive_candidate_weight_p99"] = emissive_weight_values[emissive_p99_idx]
+		metrics["rtgi_source_emissive_candidate_weight_max"] = emissive_weight_values[emissive_count - 1]
+		metrics["rtgi_source_emissive_candidate_contribution_p95"] = emissive_contribution_values[emissive_p95_idx]
+		metrics["rtgi_source_emissive_candidate_contribution_p99"] = emissive_contribution_values[emissive_p99_idx]
+	else:
+		metrics["rtgi_source_emissive_candidate_weight_p95"] = 0.0
+		metrics["rtgi_source_emissive_candidate_weight_p99"] = 0.0
+		metrics["rtgi_source_emissive_candidate_weight_max"] = 0.0
+		metrics["rtgi_source_emissive_candidate_contribution_p95"] = 0.0
+		metrics["rtgi_source_emissive_candidate_contribution_p99"] = 0.0
+	return metrics
+
+
+func _source_class_name(encoded_class: float) -> String:
+	if encoded_class < 0.375:
+		return "direct"
+	if encoded_class < 0.625:
+		return "emissive"
+	if encoded_class < 0.875:
+		return "indirect"
+	return "sky"
+
+
+func _image_source_history_diagnostic_metrics(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var count: int = max(width * height, 1)
+	var current_source := 0
+	var eligible := 0
+	var class_agree := 0
+	var class_counts := {"direct": [0, 0], "emissive": [0, 0], "indirect": [0, 0], "sky": [0, 0]}
+	for y in range(height):
+		for x in range(width):
+			var c := image.get_pixel(x, y)
+			if c.r <= 0.0:
+				continue
+			current_source += 1
+			var source_class_name := _source_class_name(c.r)
+			if c.g > 0.5:
+				eligible += 1
+				class_counts[source_class_name][0] += 1
+				if c.b > 0.5:
+					class_agree += 1
+					class_counts[source_class_name][1] += 1
+	var denom := maxf(float(eligible), 1.0)
+	var metrics := {
+		"rtgi_source_candidate_temporal_eligible_fraction": float(eligible) / float(count),
+		"rtgi_source_candidate_class_agreement_rate": float(class_agree) / denom,
+		"rtgi_source_candidate_current_coverage_rate": float(current_source) / float(count),
+	}
+	for source_label in class_counts.keys():
+		var values: Array = class_counts[source_label]
+		var class_denom := maxf(float(values[0]), 1.0)
+		metrics["rtgi_source_%s_candidate_class_agreement_rate" % source_label] = float(values[1]) / class_denom
+		if source_label == "emissive":
+			metrics["rtgi_source_emissive_candidate_class_agreement_rate"] = float(values[1]) / class_denom
+	return metrics
+
+
+func _image_source_temporal_delta_diagnostic_metrics(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var count: int = max(width * height, 1)
+	var accepted_values: Array[float] = []
+	var rejected_values: Array[float] = []
+	var class_delta_counts := {"direct": 0, "emissive": 0, "indirect": 0, "sky": 0}
+	var class_id_counts := {"direct": [0, 0], "emissive": [0, 0], "indirect": [0, 0], "sky": [0, 0]}
+	var class_accepted_deltas := {"direct": [], "emissive": [], "indirect": [], "sky": []}
+	var class_rejected_deltas := {"direct": [], "emissive": [], "indirect": [], "sky": []}
+	var delta_threshold := 0.10
+	for y in range(height):
+		for x in range(width):
+			var c := image.get_pixel(x, y)
+			if c.r <= 0.0:
+				continue
+			var delta := c.b
+			var source_label := _source_class_name(c.r)
+			class_id_counts[source_label][0] += 1
+			if c.g > 0.5:
+				accepted_values.append(delta)
+				class_accepted_deltas[source_label].append(delta)
+				class_id_counts[source_label][1] += 1
+			else:
+				rejected_values.append(delta)
+				class_rejected_deltas[source_label].append(delta)
+			if delta > delta_threshold:
+				class_delta_counts[source_label] += 1
+	accepted_values.sort()
+	rejected_values.sort()
+	var accepted_count := accepted_values.size()
+	var rejected_count := rejected_values.size()
+	var eligible_count := accepted_count + rejected_count
+	var eligible_denom := maxf(float(eligible_count), 1.0)
+	var p95_idx := clampi(int(round(float(maxi(accepted_count - 1, 0)) * 0.95)), 0, maxi(accepted_count - 1, 0))
+	var p99_idx := clampi(int(round(float(maxi(accepted_count - 1, 0)) * 0.99)), 0, maxi(accepted_count - 1, 0))
+	var rejected_p99_idx := clampi(int(round(float(maxi(rejected_count - 1, 0)) * 0.99)), 0, maxi(rejected_count - 1, 0))
+	var emissive_accepted: Array = class_accepted_deltas["emissive"]
+	var direct_accepted: Array = class_accepted_deltas["direct"]
+	var direct_rejected: Array = class_rejected_deltas["direct"]
+	var indirect_accepted: Array = class_accepted_deltas["indirect"]
+	emissive_accepted.sort()
+	direct_accepted.sort()
+	direct_rejected.sort()
+	indirect_accepted.sort()
+	var emissive_p99_idx := clampi(int(round(float(maxi(emissive_accepted.size() - 1, 0)) * 0.99)), 0, maxi(emissive_accepted.size() - 1, 0))
+	var direct_p95_idx := clampi(int(round(float(maxi(direct_accepted.size() - 1, 0)) * 0.95)), 0, maxi(direct_accepted.size() - 1, 0))
+	var direct_p99_idx := clampi(int(round(float(maxi(direct_accepted.size() - 1, 0)) * 0.99)), 0, maxi(direct_accepted.size() - 1, 0))
+	var direct_rejected_p99_idx := clampi(int(round(float(maxi(direct_rejected.size() - 1, 0)) * 0.99)), 0, maxi(direct_rejected.size() - 1, 0))
+	var indirect_p95_idx := clampi(int(round(float(maxi(indirect_accepted.size() - 1, 0)) * 0.95)), 0, maxi(indirect_accepted.size() - 1, 0))
+	var indirect_p99_idx := clampi(int(round(float(maxi(indirect_accepted.size() - 1, 0)) * 0.99)), 0, maxi(indirect_accepted.size() - 1, 0))
+	var metrics := {
+		"rtgi_source_candidate_history_accept_rate": float(accepted_count) / eligible_denom,
+		"rtgi_source_candidate_history_reject_rate": float(rejected_count) / eligible_denom,
+		"rtgi_source_candidate_temporal_agreement_rate": float(accepted_count) / eligible_denom,
+		"rtgi_source_candidate_id_reuse_rate": float(accepted_count) / eligible_denom,
+		"rtgi_source_candidate_temporal_delta_p95": accepted_values[p95_idx] if accepted_count > 0 else 0.0,
+		"rtgi_source_candidate_temporal_delta_p99": accepted_values[p99_idx] if accepted_count > 0 else 0.0,
+		"rtgi_source_candidate_rejected_temporal_delta_p99": rejected_values[rejected_p99_idx] if rejected_count > 0 else 0.0,
+		"rtgi_source_direct_delta_fireflies_per_mp": _per_megapixel(class_delta_counts["direct"], width, height),
+		"rtgi_source_direct_candidate_temporal_delta_p95": direct_accepted[direct_p95_idx] if not direct_accepted.is_empty() else 0.0,
+		"rtgi_source_direct_candidate_temporal_delta_p99": direct_accepted[direct_p99_idx] if not direct_accepted.is_empty() else 0.0,
+		"rtgi_source_direct_candidate_rejected_temporal_delta_p99": direct_rejected[direct_rejected_p99_idx] if not direct_rejected.is_empty() else 0.0,
+		"rtgi_source_emissive_delta_fireflies_per_mp": _per_megapixel(class_delta_counts["emissive"], width, height),
+		"rtgi_source_indirect_delta_fireflies_per_mp": _per_megapixel(class_delta_counts["indirect"], width, height),
+		"rtgi_source_sky_delta_fireflies_per_mp": _per_megapixel(class_delta_counts["sky"], width, height),
+		"rtgi_source_emissive_candidate_temporal_delta_p99": emissive_accepted[emissive_p99_idx] if not emissive_accepted.is_empty() else 0.0,
+		"rtgi_source_indirect_temporal_delta_p95": indirect_accepted[indirect_p95_idx] if not indirect_accepted.is_empty() else 0.0,
+		"rtgi_source_indirect_temporal_delta_p99": indirect_accepted[indirect_p99_idx] if not indirect_accepted.is_empty() else 0.0,
+	}
+	for source_label in class_id_counts.keys():
+		var values: Array = class_id_counts[source_label]
+		var source_denom := maxf(float(values[0]), 1.0)
+		metrics["rtgi_source_%s_candidate_id_reuse_rate" % source_label] = float(values[1]) / source_denom
+		if source_label == "emissive":
+			metrics["rtgi_source_emissive_candidate_id_reuse_rate"] = float(values[1]) / source_denom
+	return metrics
+
+
+func _image_source_rejection_diagnostic_metrics(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var count: int = max(width * height, 1)
+	var direct_current := 0
+	var direct_eligible := 0
+	var direct_accept := 0
+	var direct_reject := 0
+	var direct_reject_buckets := {
+		"prev_uv": 0,
+		"current_history": 0,
+		"previous_history": 0,
+		"history_id": 0,
+		"depth": 0,
+		"normal": 0,
+		"hit_distance": 0,
+		"source_class": 0,
+		"source_id": 0,
+		"pdf_weight": 0,
+		"low_confidence": 0,
+	}
+	for y in range(height):
+		for x in range(width):
+			var c := image.get_pixel(x, y)
+			if c.r <= 0.0:
+				continue
+			direct_current += 1
+			var reason := clampi(int(round(c.b * 15.0)), 0, 15)
+			if c.g > 0.5:
+				direct_eligible += 1
+			if reason == 0 and c.g > 0.5:
+				direct_accept += 1
+			else:
+				direct_reject += 1
+				match reason:
+					1:
+						direct_reject_buckets["prev_uv"] += 1
+					2:
+						direct_reject_buckets["current_history"] += 1
+					3:
+						direct_reject_buckets["previous_history"] += 1
+					4:
+						direct_reject_buckets["history_id"] += 1
+					5:
+						direct_reject_buckets["depth"] += 1
+					6:
+						direct_reject_buckets["normal"] += 1
+					7:
+						direct_reject_buckets["hit_distance"] += 1
+					8:
+						direct_reject_buckets["source_class"] += 1
+					9:
+						direct_reject_buckets["source_id"] += 1
+					10, 12:
+						direct_reject_buckets["pdf_weight"] += 1
+					13:
+						direct_reject_buckets["low_confidence"] += 1
+	var direct_history_denom := maxf(float(direct_accept + direct_reject), 1.0)
+	return {
+		"rtgi_source_direct_history_coverage_rate": float(direct_current) / float(count),
+		"rtgi_source_direct_history_eligible_fraction": float(direct_eligible) / float(maxi(direct_current, 1)),
+		"rtgi_source_direct_history_accept_rate": float(direct_accept) / direct_history_denom,
+		"rtgi_source_direct_history_reject_rate": float(direct_reject) / direct_history_denom,
+		"rtgi_source_direct_history_reject_prev_uv_fraction": float(direct_reject_buckets["prev_uv"]) / direct_history_denom,
+		"rtgi_source_direct_history_reject_current_history_fraction": float(direct_reject_buckets["current_history"]) / direct_history_denom,
+		"rtgi_source_direct_history_reject_previous_history_fraction": float(direct_reject_buckets["previous_history"]) / direct_history_denom,
+		"rtgi_source_direct_history_reject_history_id_fraction": float(direct_reject_buckets["history_id"]) / direct_history_denom,
+		"rtgi_source_direct_history_reject_depth_fraction": float(direct_reject_buckets["depth"]) / direct_history_denom,
+		"rtgi_source_direct_history_reject_normal_fraction": float(direct_reject_buckets["normal"]) / direct_history_denom,
+		"rtgi_source_direct_history_reject_hit_distance_fraction": float(direct_reject_buckets["hit_distance"]) / direct_history_denom,
+		"rtgi_source_direct_history_reject_source_class_fraction": float(direct_reject_buckets["source_class"]) / direct_history_denom,
+		"rtgi_source_direct_history_reject_source_id_fraction": float(direct_reject_buckets["source_id"]) / direct_history_denom,
+		"rtgi_source_direct_history_reject_pdf_weight_fraction": float(direct_reject_buckets["pdf_weight"]) / direct_history_denom,
+		"rtgi_source_direct_history_reject_low_confidence_fraction": float(direct_reject_buckets["low_confidence"]) / direct_history_denom,
 	}
 
 
@@ -689,6 +920,12 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_CONFIDENCE
 		"source_candidate":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_CANDIDATE
+		"source_history":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_HISTORY
+		"source_temporal_delta":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_TEMPORAL_DELTA
+		"source_rejection":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_REJECTION
 		"cache_raw_diffuse":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_RAW_DIFFUSE
 		"cache_filtered_diffuse":

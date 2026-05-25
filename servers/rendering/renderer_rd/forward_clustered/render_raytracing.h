@@ -52,14 +52,22 @@
 #define RB_TEX_RT_HISTORY_ID SNAME("rt_history_id")
 #define RB_TEX_RT_HISTORY_ID_PREV SNAME("rt_history_id_prev")
 #define RB_TEX_RT_NORMAL_ROUGHNESS SNAME("rt_normal_roughness")
+#define RB_TEX_RT_SOURCE_NORMAL_ROUGHNESS_PREV SNAME("rt_source_normal_roughness_prev")
 #define RB_TEX_RT_ALBEDO_METALNESS SNAME("rt_albedo_metalness")
 #define RB_TEX_RT_VIEWZ_HITDIST SNAME("rt_viewz_hitdist")
+#define RB_TEX_RT_SOURCE_VIEWZ_HITDIST_PREV SNAME("rt_source_viewz_hitdist_prev")
 #define RB_TEX_RT_SIGNAL_DIRECT_LIGHT SNAME("rt_signal_direct_light")
 #define RB_TEX_RT_SIGNAL_EMISSIVE SNAME("rt_signal_emissive")
 #define RB_TEX_RT_SIGNAL_INDIRECT SNAME("rt_signal_indirect")
 #define RB_TEX_RT_SIGNAL_SKY SNAME("rt_signal_sky")
 #define RB_TEX_RT_SIGNAL_CONFIDENCE SNAME("rt_signal_confidence")
 #define RB_TEX_RT_SOURCE_CANDIDATE SNAME("rt_source_candidate")
+#define RB_TEX_RT_SOURCE_CANDIDATE_PREV SNAME("rt_source_candidate_prev")
+#define RB_TEX_RT_SOURCE_CANDIDATE_KEY SNAME("rt_source_candidate_key")
+#define RB_TEX_RT_SOURCE_CANDIDATE_KEY_PREV SNAME("rt_source_candidate_key_prev")
+#define RB_TEX_RT_SOURCE_HISTORY SNAME("rt_source_history")
+#define RB_TEX_RT_SOURCE_TEMPORAL_DELTA SNAME("rt_source_temporal_delta")
+#define RB_TEX_RT_SOURCE_REJECTION SNAME("rt_source_rejection")
 
 #define RB_SCOPE_DLSS_RR SNAME("dlss_rr")
 #define RB_TEX_DLSS_RR_DIFFUSE_ALBEDO SNAME("diffuse_albedo")
@@ -180,7 +188,7 @@ struct alignas(16) RT_LightData {
 	uint32_t shadow_caster_mask;
 	float shadow_opacity;
 	float shadow_max_distance;
-	uint32_t _pad1;
+	uint32_t source_id;
 };
 static_assert(sizeof(RT_LightData) == 96, "RT_LightData must be 96 bytes for std430");
 

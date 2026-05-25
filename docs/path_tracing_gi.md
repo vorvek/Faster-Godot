@@ -136,10 +136,22 @@ The feature is exposed on `Environment`, so it appears through the same
     radiance after the diffuse cache and before SVGF consumes it. This view is
     available only when the RTGI diffuse radiance cache is active.
   - `VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_CANDIDATE`: source-selection diagnostic
-    for split-signal RTGI. Red marks the selected source class, green marks
+    for RTGI. Red marks the selected source class, green marks
     source confidence, blue marks normalized candidate weight, and alpha stores
     normalized contribution luminance for harness metrics. It is intended for
     source-side variance attribution before the diffuse cache and SVGF.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_HISTORY`: source-history diagnostic for
+    RTGI. Red marks the current selected source class, green marks
+    whether previous source history exists for the pixel, and blue marks source
+    class agreement with the previous frame.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_TEMPORAL_DELTA`: source temporal-delta
+    diagnostic for RTGI. Red marks pixels eligible for temporal
+    comparison by source class, green marks exact source-key reuse, and blue
+    stores normalized contribution-luminance delta.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_REJECTION`: direct source-history
+    validation diagnostic for RTGI. Red marks direct analytic candidates, green
+    marks dominant-source history eligibility, and blue stores the primary
+    rejection reason bucket.
 
 ## Rendering Behavior
 
@@ -316,12 +328,34 @@ and RTGI debug views, then writes JSON metrics for isolated hot pixels, dark
 region luminance, and high-frequency texture detail. Use it for Phase 2 baseline
 captures before enabling experimental direct-light reuse.
 
-The harness and Euphorica capture script also consume the `source_candidate`
-debug view when requested. The reported `rtgi_source_candidate_*` metrics expose
-source-class coverage, confidence, candidate weight percentiles, contribution
-percentiles, and rejected/downweighted source fraction so many-light instability
-can be separated from diffuse-cache and denoiser behavior. The current metrics
-are current-frame diagnostics, not temporal source-id agreement.
+The harness and Euphorica capture script also consume the `source_candidate`,
+`source_history`, `source_temporal_delta`, and `source_rejection` debug views
+when requested. The reported `rtgi_source_candidate_*` metrics expose
+source-class coverage,
+confidence, candidate weight percentiles, contribution percentiles, temporal
+eligible fraction, class agreement, exact source-key reuse, direct dominant-key
+accepted/rejected history rates, and contribution-delta percentiles so
+many-light instability can be separated from diffuse-cache and denoiser
+behavior. Direct lighting attribution still stores one dominant analytic source
+key alongside the aggregate direct contribution, so temporal deltas are
+diagnostics for dominant-source stability rather than proof of source-specific
+radiance reuse safety.
+
+The temporal source-key metrics are diagnostics-only in this phase. Analytic
+lights use a 28-bit run-local hash of the light instance RID and light type.
+Explicit emissive candidates use geometry history IDs for source keys. These
+keys are stable enough for within-run diagnostics, but they are not persistent
+collision-safe radiance reuse keys. The `source_rejection` view records
+reprojected previous-surface validation reasons for direct analytic source
+history; it currently validates against the dominant previous source candidate,
+not a dedicated direct-only source history surface.
+Indirect contributions are included in the current source-class diagnostic, but
+not in exact source-id reuse metrics because this phase does not yet carry a
+stable secondary-path source identity. Non-direct source-history deltas remain
+same-pixel diagnostics in this phase; only the direct rejection view uses
+reprojected previous-surface validation. Radiance-affecting source reuse must
+first add a direct-only history surface and document the replacement slot
+PDF/weight accounting.
 
 ## Pros
 
