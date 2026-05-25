@@ -164,6 +164,8 @@ public:
 		Vector2i rt_visible_origin;
 		Vector2i rt_prev_visible_origin;
 		bool rt_overscan_initialized = false;
+		uint64_t rt_diffuse_cache_signature = 0;
+		bool rt_diffuse_cache_signature_valid = false;
 
 		bool rt_update_overscan(const Size2i &p_visible_size, float p_horizontal, float p_vertical, const Vector2 &p_motion_pixels);
 		void rt_clear_textures();

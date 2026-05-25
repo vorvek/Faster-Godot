@@ -98,6 +98,40 @@ static Vector2 _estimate_rt_overscan_motion_pixels(const RenderDataRD *p_render_
 	return best_velocity;
 }
 
+static uint64_t _rtgi_diffuse_cache_signature_mix(uint64_t p_signature, uint64_t p_value) {
+	return p_signature ^ (p_value + 0x9e3779b97f4a7c15ull + (p_signature << 6) + (p_signature >> 2));
+}
+
+static uint64_t _rtgi_diffuse_cache_signature_mix_float(uint64_t p_signature, float p_value) {
+	union {
+		float f;
+		uint32_t u;
+	} value;
+	value.f = p_value;
+	return _rtgi_diffuse_cache_signature_mix(p_signature, value.u);
+}
+
+static uint64_t _rtgi_diffuse_cache_signature(uint32_t p_rt_flags, const float *p_rt_env_params, const Size2i &p_size, uint32_t p_view_count) {
+	uint64_t signature = 0xcbf29ce484222325ull;
+	signature = _rtgi_diffuse_cache_signature_mix(signature, p_rt_flags);
+	signature = _rtgi_diffuse_cache_signature_mix(signature, (uint64_t)(uint32_t)p_size.x);
+	signature = _rtgi_diffuse_cache_signature_mix(signature, (uint64_t)(uint32_t)p_size.y);
+	signature = _rtgi_diffuse_cache_signature_mix(signature, p_view_count);
+
+	if (p_rt_env_params) {
+		signature = _rtgi_diffuse_cache_signature_mix_float(signature, p_rt_env_params[RSE::PT_PARAM_MODE]);
+		signature = _rtgi_diffuse_cache_signature_mix_float(signature, p_rt_env_params[RSE::PT_PARAM_DENOISER_STRENGTH]);
+		signature = _rtgi_diffuse_cache_signature_mix_float(signature, p_rt_env_params[RSE::PT_PARAM_DENOISER_HISTORY_WEIGHT]);
+		signature = _rtgi_diffuse_cache_signature_mix_float(signature, p_rt_env_params[RSE::PT_PARAM_RAY_FIREFLY_SUPPRESSION]);
+		signature = _rtgi_diffuse_cache_signature_mix_float(signature, p_rt_env_params[RSE::PT_PARAM_RAY_MAX_RADIANCE]);
+		signature = _rtgi_diffuse_cache_signature_mix_float(signature, p_rt_env_params[RSE::PT_PARAM_DENOISER_SPLIT_SIGNALS]);
+		signature = _rtgi_diffuse_cache_signature_mix_float(signature, p_rt_env_params[RSE::PT_PARAM_RTGI_SAMPLING_CONTROLS]);
+		signature = _rtgi_diffuse_cache_signature_mix_float(signature, p_rt_env_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED]);
+	}
+
+	return signature != 0 ? signature : 1;
+}
+
 static bool _rt_camera_history_cut_detected(const RenderDataRD *p_render_data) {
 	if (!p_render_data || !p_render_data->scene_data) {
 		return false;
@@ -215,6 +249,8 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_clear_textures
 	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
 	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
 	render_buffers->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
+	rt_diffuse_cache_signature = 0;
+	rt_diffuse_cache_signature_valid = false;
 }
 
 void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_textures() {
@@ -2530,6 +2566,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			rt_uniform_set = raytracing->update_uniform_set(rt_state, p_render_data, rt_flags);
 			if (rt_state->radiance_history_invalidated) {
 				reject_rt_previous_history();
+				rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
+				if (rb_data.is_valid()) {
+					rb_data->rt_diffuse_cache_signature_valid = false;
+				}
 				rt_state->radiance_history_invalidated = false;
 			}
 		}
@@ -3092,9 +3132,17 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					rb->clear_context(RB_SCOPE_RTGI_DENOISE);
 					rtgi_denoise->capture_noisy(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, RB_SCOPE_RTGI_DENOISE, rb_data->rt_get_size(), 0);
 					if (rt_diffuse_cache_enabled && rt_history_weight > 0.001f && rtgi_diffuse_cache) {
+						const uint64_t cache_signature = _rtgi_diffuse_cache_signature(rt_flags, rt_env_params, rb_data->rt_get_size(), rb->get_view_count());
+						if (!rb_data->rt_diffuse_cache_signature_valid || rb_data->rt_diffuse_cache_signature != cache_signature) {
+							rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
+							rb_data->rt_diffuse_cache_signature = cache_signature;
+							rb_data->rt_diffuse_cache_signature_valid = true;
+						}
 						rtgi_diffuse_cache->process(rb, rb_data->rt_get_diffuse_radiance(), rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rb_data->rt_get_signal_confidence(), rb_data->rt_get_size(), 0);
 					} else {
 						rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
+						rb_data->rt_diffuse_cache_signature = 0;
+						rb_data->rt_diffuse_cache_signature_valid = false;
 					}
 					rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DIFFUSE_RADIANCE, RB_SCOPE_RTGI_DENOISE_DIFFUSE, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), RID(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight, rt_denoise_strength, rt_firefly_suppression, rt_detail_preservation, false, true, false, rb_data->rt_get_size(), 0, 5);
 					const float specular_denoise_strength = rt_denoise_strength * rt_specular_spatial_strength;
@@ -3653,6 +3701,10 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_REJECTION && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_REJECTION)) {
 			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_REJECTION), fb, Rect2(Vector2(), rtsize), false, true);
+		}
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_FILTERED_DIFFUSE && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_OUTPUT)) {
+			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_OUTPUT), fb, Rect2(Vector2(), rtsize), false, false);
 		}
 	}
 

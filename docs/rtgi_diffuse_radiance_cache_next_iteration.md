@@ -100,3 +100,13 @@ Acceptance requires measurable raw diffuse variance reduction before SVGF, not j
 - VoxelGI, SDFGI, lightmap, and lightprobe paths need explicit coexistence coverage.
 - Path-traced SDFGI exclusive mode must keep its current isolation and invalidation behavior.
 - Cache signatures should include raster GI ownership bits and the emissive candidate/light signatures used for the current frame.
+
+## v2 Validation Notes
+
+The v2 implementation keeps the cache screen-space, full resolution, per viewport, and limited to split-signal RTGI diffuse before SVGF. It adds a post-cache pre-SVGF debug draw named `cache_filtered_diffuse`, diagnostic metric extraction for cache hit/confidence/age/rejection buckets, and a per-render-buffer signature that clears the cache when relevant RTGI mode, quality, sampling, render-size, view-count, or RT radiance-history state changes.
+
+Reuse remains primary-reprojection first. Stable-neighborhood recovery is limited to a five-tap cross after geometric or reprojection failure, and candidates must pass history-id, previous-validity, normal, depth, hit-distance, variance, confidence, age, and radiance-delta checks. The variance-guided weighting is dynamic: the stricter firefly-control path only engages for mature, high-confidence history when the current diffuse sample is a local bright outlier over stable darker history. This avoids a scene-specific cutoff while preserving Cornell's broad bright wall energy.
+
+The current many-light fixture remains source-attributed to confidence/clamp-risk with visible emissive and indirect source involvement. The cache hit rate is very low in that scene, and cache-on/cache-off temporal max remains `61.73/MP`; forcing broader diffuse clamping would risk visible emissive surfaces. This phase therefore documents the bottleneck rather than adding a broad emissive/direct clamp.
+
+The procedural raster-GI history-key caveat remains: mesh and multimesh history ids carry raster ownership, but procedural or atypical paths should continue to be treated conservatively until a cheap local ownership signature is available.

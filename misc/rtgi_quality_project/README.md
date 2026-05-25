@@ -98,7 +98,8 @@ Useful Euphorica split options:
 - `--euphorica-list-cases` writes a summary with the planned case names and
   exits without rendering.
 - `--euphorica-capture-debug` writes RTGI denoiser debug captures for each RTGI
-  case, including diffuse/specular noisy and final buffers.
+  case, including source attribution, cache diagnostics, cache raw diffuse,
+  cache filtered diffuse, and final buffers when those views are available.
 
 Each case writes `_game.png`, `_final.png`, per-case metrics JSON, and
 `euphorica_rtgi_summary.json` with effective RTGI knob values and the renderer

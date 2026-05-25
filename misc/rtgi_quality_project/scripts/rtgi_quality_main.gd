@@ -741,7 +741,7 @@ func _animate_camera(frame: int) -> void:
 
 
 func _capture_debug_views(base_name: String) -> void:
-	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "cache_raw_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
+	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
 	for view in views:
 		if view.begins_with("cache_") and not _cache_debug_available():
 			continue
@@ -756,7 +756,7 @@ func _capture_debug_views(base_name: String) -> void:
 func _measure_signal_debug_views() -> Dictionary:
 	var result := {}
 	var previous_view := _debug_view
-	var signal_views := ["signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "cache_raw_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "noisy", "final"]
+	var signal_views := ["signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "noisy", "final"]
 	for view in signal_views:
 		if view.begins_with("cache_") and not _cache_debug_available():
 			continue
@@ -773,6 +773,10 @@ func _measure_signal_debug_views() -> Dictionary:
 			var channel_means := _measure_channel_means(image)
 			for key in channel_means.keys():
 				result["rtgi_%s_%s" % [view, key]] = channel_means[key]
+		if view == "cache_hit_confidence":
+			result.merge(_measure_cache_hit_diagnostic(image, "rtgi_cache"), true)
+		elif view == "cache_rejection":
+			result.merge(_measure_cache_rejection_diagnostic(image, "rtgi_cache"), true)
 	_apply_debug_view(previous_view)
 	return result
 
@@ -801,6 +805,73 @@ func _measure_channel_means(image: Image) -> Dictionary:
 		"mean_g": sum_g / float(count),
 		"mean_b": sum_b / float(count),
 		"mean_a": sum_a / float(count),
+	}
+
+
+func _measure_cache_hit_diagnostic(image: Image, prefix: String) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var metrics := _measure_cache_hit_region(image, prefix, 0, 0, width, height)
+	metrics.merge(_measure_cache_hit_region(image, "%s_dark_roi" % prefix, int(width * 0.62), int(height * 0.18), int(width * 0.94), int(height * 0.84)), true)
+	metrics.merge(_measure_cache_hit_region(image, "%s_detail_roi" % prefix, int(width * 0.07), int(height * 0.30), int(width * 0.42), int(height * 0.76)), true)
+	metrics.merge(_measure_cache_hit_region(image, "%s_specular_roi" % prefix, int(width * 0.48), int(height * 0.46), int(width * 0.78), int(height * 0.75)), true)
+	return metrics
+
+
+func _measure_cache_hit_region(image: Image, prefix: String, x0: int, y0: int, x1: int, y1: int) -> Dictionary:
+	x0 = clampi(x0, 0, image.get_width() - 1)
+	y0 = clampi(y0, 0, image.get_height() - 1)
+	x1 = clampi(x1, x0 + 1, image.get_width())
+	y1 = clampi(y1, y0 + 1, image.get_height())
+	var count := maxi((x1 - x0) * (y1 - y0), 1)
+	var hits := 0
+	var confidence_sum := 0.0
+	var age_sum := 0.0
+	for y in range(y0, y1):
+		for x in range(x0, x1):
+			var c := image.get_pixel(x, y)
+			if c.r > 0.5:
+				hits += 1
+			confidence_sum += c.g
+			age_sum += c.b
+	return {
+		"%s_hit_rate" % prefix: float(hits) / float(count),
+		"%s_confidence_mean" % prefix: confidence_sum / float(count),
+		"%s_age_mean" % prefix: age_sum / float(count),
+	}
+
+
+func _measure_cache_rejection_diagnostic(image: Image, prefix: String) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var metrics := _measure_cache_rejection_region(image, prefix, 0, 0, width, height)
+	metrics.merge(_measure_cache_rejection_region(image, "%s_dark_roi" % prefix, int(width * 0.62), int(height * 0.18), int(width * 0.94), int(height * 0.84)), true)
+	metrics.merge(_measure_cache_rejection_region(image, "%s_detail_roi" % prefix, int(width * 0.07), int(height * 0.30), int(width * 0.42), int(height * 0.76)), true)
+	metrics.merge(_measure_cache_rejection_region(image, "%s_specular_roi" % prefix, int(width * 0.48), int(height * 0.46), int(width * 0.78), int(height * 0.75)), true)
+	return metrics
+
+
+func _measure_cache_rejection_region(image: Image, prefix: String, x0: int, y0: int, x1: int, y1: int) -> Dictionary:
+	x0 = clampi(x0, 0, image.get_width() - 1)
+	y0 = clampi(y0, 0, image.get_height() - 1)
+	x1 = clampi(x1, x0 + 1, image.get_width())
+	y1 = clampi(y1, y0 + 1, image.get_height())
+	var count := maxi((x1 - x0) * (y1 - y0), 1)
+	var buckets := []
+	for i in range(10):
+		buckets.append(0)
+	for y in range(y0, y1):
+		for x in range(x0, x1):
+			var bucket := clampi(int(round(image.get_pixel(x, y).r * 8.0)), 0, 9)
+			buckets[bucket] += 1
+	return {
+		"%s_rejection_low_confidence_fraction" % prefix: float(buckets[1]) / float(count),
+		"%s_rejection_disocclusion_fraction" % prefix: float(buckets[2] + buckets[3]) / float(count),
+		"%s_rejection_history_id_fraction" % prefix: float(buckets[4]) / float(count),
+		"%s_rejection_normal_fraction" % prefix: float(buckets[5]) / float(count),
+		"%s_rejection_depth_fraction" % prefix: float(buckets[6]) / float(count),
+		"%s_rejection_radiance_delta_fraction" % prefix: float(buckets[7]) / float(count),
+		"%s_rejection_variance_fraction" % prefix: float(buckets[8]) / float(count),
 	}
 
 
@@ -1046,6 +1117,8 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_CONFIDENCE
 		"cache_raw_diffuse":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_RAW_DIFFUSE
+		"cache_filtered_diffuse":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_FILTERED_DIFFUSE
 		"cache_hit_confidence":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_HIT_CONFIDENCE
 		"cache_age":

@@ -49,8 +49,8 @@ var _profile_timings = false
 var _results = []
 var _split_pair_metrics = []
 var _split_pair_images = {}
-var _all_debug_views = ["noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "cache_raw_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
-var _debug_views = ["noisy", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "cache_hit_confidence", "final"]
+var _all_debug_views = ["noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
+var _debug_views = ["noisy", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_rejection", "final"]
 
 
 func _initialize() -> void:
@@ -512,6 +512,10 @@ func _capture_debug_views(test_case: Dictionary, game_viewport: Viewport) -> Dic
 		view_metrics.merge(_image_roi_metrics(image, "rtgi_%s" % view), true)
 		if view.begins_with("cache_"):
 			view_metrics.merge(_image_channel_means(image, "rtgi_%s" % view), true)
+		if view == "cache_hit_confidence":
+			view_metrics.merge(_image_cache_hit_diagnostic_metrics(image, "rtgi_cache"), true)
+		elif view == "cache_rejection":
+			view_metrics.merge(_image_cache_rejection_diagnostic_metrics(image, "rtgi_cache"), true)
 		for key in view_metrics.keys():
 			metrics[key] = view_metrics[key]
 	_apply_debug_view(game_viewport, "disabled")
@@ -545,6 +549,67 @@ func _image_channel_means(image: Image, prefix: String) -> Dictionary:
 		"%s_mean_g" % prefix: sum_g / float(count),
 		"%s_mean_b" % prefix: sum_b / float(count),
 		"%s_mean_a" % prefix: sum_a / float(count),
+	}
+
+
+func _image_cache_hit_diagnostic_metrics(image: Image, prefix: String) -> Dictionary:
+	var metrics := _image_cache_hit_region(image, prefix, Rect2i(Vector2i.ZERO, Vector2i(image.get_width(), image.get_height())))
+	for roi_name in _roi_rects(image).keys():
+		metrics.merge(_image_cache_hit_region(image, "%s_%s_roi" % [prefix, roi_name], _roi_rects(image)[roi_name]), true)
+	return metrics
+
+
+func _image_cache_hit_region(image: Image, prefix: String, rect: Rect2i) -> Dictionary:
+	var x0 = clampi(rect.position.x, 0, image.get_width() - 1)
+	var y0 = clampi(rect.position.y, 0, image.get_height() - 1)
+	var x1 = clampi(rect.position.x + rect.size.x, x0 + 1, image.get_width())
+	var y1 = clampi(rect.position.y + rect.size.y, y0 + 1, image.get_height())
+	var count := maxi((x1 - x0) * (y1 - y0), 1)
+	var hits := 0
+	var confidence_sum := 0.0
+	var age_sum := 0.0
+	for y in range(y0, y1):
+		for x in range(x0, x1):
+			var c := image.get_pixel(x, y)
+			if c.r > 0.5:
+				hits += 1
+			confidence_sum += c.g
+			age_sum += c.b
+	return {
+		"%s_hit_rate" % prefix: float(hits) / float(count),
+		"%s_confidence_mean" % prefix: confidence_sum / float(count),
+		"%s_age_mean" % prefix: age_sum / float(count),
+	}
+
+
+func _image_cache_rejection_diagnostic_metrics(image: Image, prefix: String) -> Dictionary:
+	var metrics := _image_cache_rejection_region(image, prefix, Rect2i(Vector2i.ZERO, Vector2i(image.get_width(), image.get_height())))
+	for roi_name in _roi_rects(image).keys():
+		metrics.merge(_image_cache_rejection_region(image, "%s_%s_roi" % [prefix, roi_name], _roi_rects(image)[roi_name]), true)
+	return metrics
+
+
+func _image_cache_rejection_region(image: Image, prefix: String, rect: Rect2i) -> Dictionary:
+	var x0 = clampi(rect.position.x, 0, image.get_width() - 1)
+	var y0 = clampi(rect.position.y, 0, image.get_height() - 1)
+	var x1 = clampi(rect.position.x + rect.size.x, x0 + 1, image.get_width())
+	var y1 = clampi(rect.position.y + rect.size.y, y0 + 1, image.get_height())
+	var count := maxi((x1 - x0) * (y1 - y0), 1)
+	var buckets := []
+	for i in range(10):
+		buckets.append(0)
+	for y in range(y0, y1):
+		for x in range(x0, x1):
+			var bucket := clampi(int(round(image.get_pixel(x, y).r * 8.0)), 0, 9)
+			buckets[bucket] += 1
+	return {
+		"%s_rejection_low_confidence_fraction" % prefix: float(buckets[1]) / float(count),
+		"%s_rejection_disocclusion_fraction" % prefix: float(buckets[2] + buckets[3]) / float(count),
+		"%s_rejection_history_id_fraction" % prefix: float(buckets[4]) / float(count),
+		"%s_rejection_normal_fraction" % prefix: float(buckets[5]) / float(count),
+		"%s_rejection_depth_fraction" % prefix: float(buckets[6]) / float(count),
+		"%s_rejection_radiance_delta_fraction" % prefix: float(buckets[7]) / float(count),
+		"%s_rejection_variance_fraction" % prefix: float(buckets[8]) / float(count),
 	}
 
 
@@ -586,6 +651,8 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_CONFIDENCE
 		"cache_raw_diffuse":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_RAW_DIFFUSE
+		"cache_filtered_diffuse":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_FILTERED_DIFFUSE
 		"cache_hit_confidence":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_HIT_CONFIDENCE
 		"cache_age":

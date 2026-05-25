@@ -63,6 +63,71 @@ float relative_delta(float a, float b, float floor_value) {
 	return abs(a - b) / max(max(a, b), floor_value);
 }
 
+float variance_ratio_from_stats(vec4 stats_sample) {
+	float mean_value = max(stats_sample.y, 0.0);
+	float second_value = max(stats_sample.z, 0.0);
+	float variance_value = max(second_value - mean_value * mean_value, 0.0);
+	return sqrt(variance_value) / max(mean_value, 0.08);
+}
+
+bool load_neighborhood_candidate(ivec2 candidate_pos, vec4 current_history_id, vec3 current_normal, float current_viewz, float current_hitdist, float current_luma, out vec4 candidate_radiance, out vec4 candidate_meta, out vec4 candidate_stats, out float candidate_quality) {
+	candidate_quality = 0.0;
+	if (candidate_pos.x < 0 || candidate_pos.y < 0 || candidate_pos.x >= int(params.resolution.x) || candidate_pos.y >= int(params.resolution.y)) {
+		return false;
+	}
+	if (texelFetch(prev_history_validity_buffer, candidate_pos, 0).r < 0.5) {
+		return false;
+	}
+	if (!history_id_matches(current_history_id, texelFetch(prev_history_id_buffer, candidate_pos, 0))) {
+		return false;
+	}
+
+	candidate_radiance = texelFetch(previous_radiance, candidate_pos, 0);
+	candidate_meta = texelFetch(previous_meta, candidate_pos, 0);
+	candidate_stats = texelFetch(previous_stats, candidate_pos, 0);
+
+	float candidate_age = candidate_stats.w;
+	float candidate_confidence = candidate_radiance.a;
+	if (candidate_age < 2.0 || candidate_confidence <= 0.08) {
+		return false;
+	}
+	float candidate_luma_cap = max(0.08, current_luma * 0.72);
+	if (candidate_stats.y > candidate_luma_cap) {
+		return false;
+	}
+
+	vec3 candidate_normal = decode_normal(candidate_meta);
+	float normal_dot = dot(current_normal, candidate_normal);
+	if (normal_dot < 0.93) {
+		return false;
+	}
+
+	float depth_delta = relative_delta(current_viewz, candidate_meta.w, 0.25);
+	float hit_delta = relative_delta(current_hitdist, candidate_stats.x, 0.25);
+	if (depth_delta > 0.045 || hit_delta > 0.12) {
+		return false;
+	}
+
+	vec3 candidate = sanitize_color(candidate_radiance.rgb);
+	float candidate_luma = luminance(candidate);
+	float radiance_delta = relative_delta(current_luma, candidate_luma, 0.08);
+	if (radiance_delta > 1.85) {
+		return false;
+	}
+
+	float variance_ratio = variance_ratio_from_stats(candidate_stats);
+	if (variance_ratio > 1.15) {
+		return false;
+	}
+
+	float normal_weight = smoothstep(0.93, 0.995, normal_dot);
+	float delta_weight = 1.0 - smoothstep(0.55, 1.85, radiance_delta);
+	float variance_weight = 1.0 - smoothstep(0.35, 1.15, variance_ratio);
+	float age_weight = smoothstep(2.0, 18.0, candidate_age);
+	candidate_quality = candidate_confidence * normal_weight * delta_weight * variance_weight * mix(0.45, 1.0, age_weight);
+	return candidate_quality > 0.08;
+}
+
 void main() {
 	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
 	if (pos.x >= int(params.resolution.x) || pos.y >= int(params.resolution.y)) {
@@ -84,10 +149,12 @@ void main() {
 	float out_confidence = current_confidence * 0.5;
 	float rejection = 0.0;
 	float hit = 0.0;
+	bool recovered = false;
 
 	vec2 uv = (vec2(pos) + vec2(0.5)) / params.resolution;
 	vec2 prev_uv = uv + texelFetch(velocity_buffer, pos, 0).xy;
 	ivec2 prev_pos = ivec2(floor(prev_uv * params.resolution));
+	vec4 current_history_id = texelFetch(history_id_buffer, pos, 0);
 
 	bool reusable = true;
 	if (current_confidence <= 0.05) {
@@ -103,7 +170,7 @@ void main() {
 		reusable = false;
 		rejection = 3.0;
 	}
-	if (reusable && !history_id_matches(texelFetch(history_id_buffer, pos, 0), texelFetch(prev_history_id_buffer, prev_pos, 0))) {
+	if (reusable && !history_id_matches(current_history_id, texelFetch(prev_history_id_buffer, prev_pos, 0))) {
 		reusable = false;
 		rejection = 4.0;
 	}
@@ -152,15 +219,68 @@ void main() {
 		}
 	}
 
+	if (!reusable && current_confidence > 0.96 && rejection >= 2.0 && rejection <= 6.0) {
+		ivec2 center_pos = clamp(prev_pos, ivec2(0), ivec2(params.resolution) - ivec2(1));
+		const ivec2 offsets[5] = ivec2[](
+				ivec2(0, 0),
+				ivec2(-1, 0),
+				ivec2(1, 0),
+				ivec2(0, -1),
+				ivec2(0, 1));
+		vec3 current_normal = decode_normal(current_normal_roughness);
+		float best_quality = 0.0;
+		vec4 candidate_radiance;
+		vec4 candidate_meta;
+		vec4 candidate_stats;
+		float candidate_quality = 0.0;
+		for (int i = 0; i < 5; i++) {
+			if (load_neighborhood_candidate(center_pos + offsets[i], current_history_id, current_normal, current_viewz_hitdist.x, current_viewz_hitdist.y, current_luma, candidate_radiance, candidate_meta, candidate_stats, candidate_quality) && candidate_quality > best_quality) {
+				best_quality = candidate_quality;
+				previous_radiance_sample = candidate_radiance;
+				previous_meta_sample = candidate_meta;
+				previous_stats_sample = candidate_stats;
+			}
+		}
+		if (best_quality > 0.0) {
+			reusable = true;
+			recovered = true;
+			rejection = 0.0;
+			previous_age = previous_stats_sample.w;
+			previous_confidence = previous_radiance_sample.a;
+			previous = sanitize_color(previous_radiance_sample.rgb);
+			previous_luma = luminance(previous);
+			previous_mean = max(previous_stats_sample.y, 0.0);
+			previous_second = max(previous_stats_sample.z, 0.0);
+			previous_variance = max(previous_second - previous_mean * previous_mean, 0.0);
+			previous_sigma = sqrt(previous_variance);
+		}
+	}
+
 	if (reusable) {
 		hit = 1.0;
 		float radiance_delta = relative_delta(current_luma, previous_luma, 0.08);
 		float normal_weight = smoothstep(0.88, 0.98, dot(decode_normal(current_normal_roughness), decode_normal(previous_meta_sample)));
 		float delta_weight = 1.0 - smoothstep(0.75, 2.25, radiance_delta);
-		float age_weight = smoothstep(1.0, 12.0, previous_age);
-		float confidence = clamp(min(current_confidence, previous_confidence) * normal_weight * delta_weight, 0.0, 1.0);
-		float history_weight = min(0.93, mix(0.50, 0.88, age_weight) * confidence);
-		float max_previous_luma = max(current_luma * 3.15 + 0.08, previous_mean + previous_sigma * 2.50 + 0.05);
+		float variance_ratio = previous_sigma / max(previous_mean, 0.08);
+		float variance_weight = 1.0 - smoothstep(0.35, 1.65, variance_ratio);
+		float base_age_weight = smoothstep(1.0, 12.0, previous_age);
+		float base_confidence = clamp(min(current_confidence, previous_confidence) * normal_weight * delta_weight, 0.0, 1.0);
+		float age_weight = smoothstep(1.0, 18.0, previous_age);
+		float confidence = clamp(min(current_confidence, previous_confidence) * normal_weight * delta_weight * mix(0.60, 1.0, variance_weight), 0.0, 1.0);
+		float max_history_weight = recovered ? 0.78 : 0.94;
+		float legacy_history_weight = min(0.93, mix(0.50, 0.88, base_age_weight) * base_confidence);
+		float v2_history_weight = min(max_history_weight, mix(recovered ? 0.28 : 0.48, recovered ? 0.68 : 0.91, age_weight) * confidence);
+		float previous_brighter = max(previous_luma - current_luma, 0.0) / max(max(previous_luma, current_luma), 0.08);
+		float current_brighter = max(current_luma - previous_luma, 0.0) / max(max(previous_luma, current_luma), 0.08);
+		float brighten_guard = 1.0 - smoothstep(recovered ? 0.08 : 0.12, recovered ? 0.45 : 0.65, previous_brighter);
+		float spike_reuse_boost = mix(1.0, recovered ? 1.04 : 1.16, smoothstep(0.12, 0.75, current_brighter) * variance_weight * age_weight);
+		float dark_history_weight = 1.0 - smoothstep(0.07, 0.18, previous_mean);
+		float spike_signal = smoothstep(0.18, 0.75, current_brighter);
+		float directional_strength = smoothstep(0.96, 0.995, min(current_confidence, previous_confidence)) * smoothstep(8.0, 18.0, previous_age) * variance_weight * dark_history_weight * spike_signal;
+		float history_weight = mix(legacy_history_weight, min(max_history_weight, v2_history_weight * brighten_guard * spike_reuse_boost), directional_strength);
+		float base_max_previous_luma = max(current_luma * 3.15 + 0.08, previous_mean + previous_sigma * 2.50 + 0.05);
+		float tight_max_previous_luma = max(current_luma * (recovered ? 1.55 : 2.10) + 0.05, previous_mean + previous_sigma * (recovered ? 1.35 : 1.85) + 0.035);
+		float max_previous_luma = mix(base_max_previous_luma, tight_max_previous_luma, directional_strength);
 		vec3 clamped_previous = clamp_luminance(previous, max_previous_luma);
 		filtered = sanitize_color(mix(current, clamped_previous, history_weight));
 		out_age = min(previous_age + 1.0, params.max_history);

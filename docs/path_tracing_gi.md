@@ -132,6 +132,9 @@ The feature is exposed on `Environment`, so it appears through the same
   - `VIEWPORT_DEBUG_DRAW_RTGI_REJECTION`: disocclusion/history rejection mask.
   - `VIEWPORT_DEBUG_DRAW_RTGI_FINAL`: final denoised RTGI texture before crop or
     composition.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_CACHE_FILTERED_DIFFUSE`: split-signal diffuse
+    radiance after the diffuse cache and before SVGF consumes it. This view is
+    available only when the RTGI diffuse radiance cache is active.
 
 ## Rendering Behavior
 
