@@ -35,6 +35,7 @@
 #include "servers/rendering/renderer_rd/cluster_builder_rd.h"
 #include "servers/rendering/renderer_rd/effects/fsr2.h"
 #include "servers/rendering/renderer_rd/effects/motion_vectors_store.h"
+#include "servers/rendering/renderer_rd/effects/rtgi_diffuse_cache.h"
 #include "servers/rendering/renderer_rd/effects/rtgi_denoise.h"
 #include "servers/rendering/renderer_rd/effects/ss_effects.h"
 #include "servers/rendering/renderer_rd/effects/taa.h"
@@ -847,6 +848,7 @@ private:
 	/* Effects */
 
 	RendererRD::TAA *taa = nullptr;
+	RendererRD::RTGIDiffuseCache *rtgi_diffuse_cache = nullptr;
 	RendererRD::RTGIDenoise *rtgi_denoise = nullptr;
 	RendererRD::FSR2Effect *fsr2_effect = nullptr;
 	RendererRD::SSEffects *ss_effects = nullptr;

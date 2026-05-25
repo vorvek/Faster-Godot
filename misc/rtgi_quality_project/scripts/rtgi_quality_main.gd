@@ -18,6 +18,7 @@ var _ray_firefly_suppression := 0.85
 var _ray_max_radiance := 32.0
 var _analytic_light_sampling := true
 var _explicit_emissive_sampling := true
+var _diffuse_cache := true
 var _warmup_frames := 120
 var _output_dir := DEFAULT_OUTPUT_DIR
 var _debug_view := "beauty"
@@ -85,6 +86,8 @@ func _parse_args() -> void:
 			_analytic_light_sampling = not (arg.trim_prefix("--rtgi-analytic-light-sampling=").to_lower() in ["0", "false", "off", "disabled"])
 		elif arg.begins_with("--rtgi-explicit-emissive-sampling="):
 			_explicit_emissive_sampling = not (arg.trim_prefix("--rtgi-explicit-emissive-sampling=").to_lower() in ["0", "false", "off", "disabled"])
+		elif arg.begins_with("--rtgi-diffuse-cache="):
+			_diffuse_cache = not (arg.trim_prefix("--rtgi-diffuse-cache=").to_lower() in ["0", "false", "off", "disabled"])
 		elif arg.begins_with("--rtgi-warmup-frames="):
 			_warmup_frames = max(1, arg.trim_prefix("--rtgi-warmup-frames=").to_int())
 		elif arg.begins_with("--rtgi-reference-spp="):
@@ -160,6 +163,7 @@ func _build_scene() -> void:
 	env.rtgi_ray_max_radiance = _ray_max_radiance
 	env.rtgi_analytic_light_sampling_enabled = _analytic_light_sampling
 	env.rtgi_explicit_emissive_sampling_enabled = _explicit_emissive_sampling
+	env.rtgi_diffuse_radiance_cache_enabled = _diffuse_cache
 	_environment = env
 
 	var world_environment := WorldEnvironment.new()
@@ -693,6 +697,7 @@ func _run_capture() -> void:
 	metrics["sponza_asset_loaded"] = _sponza_asset_loaded
 	metrics["analytic_light_sampling_enabled"] = _analytic_light_sampling
 	metrics["explicit_emissive_sampling_enabled"] = _explicit_emissive_sampling
+	metrics["diffuse_radiance_cache_enabled"] = _diffuse_cache
 	if _sparkle_frames > 1 and DisplayServer.get_name().to_lower() != "headless":
 		metrics.merge(await _measure_temporal_sparkle(base_name), true)
 	if _convergence_frames > 1 and DisplayServer.get_name().to_lower() != "headless":
@@ -736,8 +741,10 @@ func _animate_camera(frame: int) -> void:
 
 
 func _capture_debug_views(base_name: String) -> void:
-	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "variance", "history_length", "rejection", "final"]
+	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "cache_raw_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
 	for view in views:
+		if view.begins_with("cache_") and not _cache_debug_available():
+			continue
 		_apply_debug_view(view)
 		await _wait_render_frame()
 		var image := get_viewport().get_texture().get_image()
@@ -749,8 +756,10 @@ func _capture_debug_views(base_name: String) -> void:
 func _measure_signal_debug_views() -> Dictionary:
 	var result := {}
 	var previous_view := _debug_view
-	var signal_views := ["signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "noisy", "final"]
+	var signal_views := ["signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "cache_raw_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "noisy", "final"]
 	for view in signal_views:
+		if view.begins_with("cache_") and not _cache_debug_available():
+			continue
 		_apply_debug_view(view)
 		await _wait_render_frame()
 		var image := get_viewport().get_texture().get_image()
@@ -760,8 +769,39 @@ func _measure_signal_debug_views() -> Dictionary:
 		var view_metrics := _measure_image(image)
 		for key in view_metrics.keys():
 			result["rtgi_%s_%s" % [view, key]] = view_metrics[key]
+		if view.begins_with("cache_"):
+			var channel_means := _measure_channel_means(image)
+			for key in channel_means.keys():
+				result["rtgi_%s_%s" % [view, key]] = channel_means[key]
 	_apply_debug_view(previous_view)
 	return result
+
+
+func _cache_debug_available() -> bool:
+	return _diffuse_cache and _split_signals and _denoise_strength > 0.001 and _history_weight > 0.001
+
+
+func _measure_channel_means(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var count: int = max(width * height, 1)
+	var sum_r := 0.0
+	var sum_g := 0.0
+	var sum_b := 0.0
+	var sum_a := 0.0
+	for y in range(height):
+		for x in range(width):
+			var c := image.get_pixel(x, y)
+			sum_r += c.r
+			sum_g += c.g
+			sum_b += c.b
+			sum_a += c.a
+	return {
+		"mean_r": sum_r / float(count),
+		"mean_g": sum_g / float(count),
+		"mean_b": sum_b / float(count),
+		"mean_a": sum_a / float(count),
+	}
 
 
 func _source_attribution_summary(metrics: Dictionary) -> String:
@@ -1004,6 +1044,14 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_SKY
 		"signal_confidence":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_CONFIDENCE
+		"cache_raw_diffuse":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_RAW_DIFFUSE
+		"cache_hit_confidence":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_HIT_CONFIDENCE
+		"cache_age":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_AGE
+		"cache_rejection":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_REJECTION
 		"variance":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_VARIANCE
 		"history_length":

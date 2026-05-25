@@ -235,6 +235,9 @@
 		<member name="rtgi_explicit_emissive_sampling_enabled" type="bool" setter="set_rtgi_explicit_emissive_sampling_enabled" getter="is_rtgi_explicit_emissive_sampling_enabled" default="true">
 			Enables RTGI bounded emissive surface candidate sampling before denoising.
 		</member>
+		<member name="rtgi_diffuse_radiance_cache_enabled" type="bool" setter="set_rtgi_diffuse_radiance_cache_enabled" getter="is_rtgi_diffuse_radiance_cache_enabled" default="true">
+			Enables the pre-SVGF RTGI diffuse radiance cache for split-signal RTGI denoising. The cache reuses valid screen-space diffuse radiance before the SVGF denoiser and rejects history on disocclusion, guide mismatch, low confidence, high variance, or large radiance changes. It is inactive when [member rtgi_denoiser_split_signals] is disabled, [member rtgi_denoiser_history_weight] is [code]0.0[/code], or [member rtgi_denoiser_strength] is effectively disabled.
+		</member>
 		<member name="rtgi_overscan_horizontal" type="float" setter="set_rtgi_overscan_horizontal" getter="get_rtgi_overscan_horizontal" default="0.0">
 			Sets the extra horizontal path-traced RTGI margin as a fraction of the viewport width. The renderer allocates this margin on both sides, then shifts the visible crop using camera motion so pixels are traced just outside the leading edge of the view. For example, [code]0.05[/code] allows up to 10% extra pixels on one horizontal edge and 0% on the other. Higher values can reduce edge speckles from newly revealed pixels while moving, but increase RT cost and do not add samples to the interior of the image.
 		</member>

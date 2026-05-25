@@ -810,6 +810,15 @@ bool Environment::is_rtgi_explicit_emissive_sampling_enabled() const {
 	return rtgi_explicit_emissive_sampling_enabled;
 }
 
+void Environment::set_rtgi_diffuse_radiance_cache_enabled(bool p_enabled) {
+	rtgi_diffuse_radiance_cache_enabled = p_enabled;
+	_update_pathtracing();
+}
+
+bool Environment::is_rtgi_diffuse_radiance_cache_enabled() const {
+	return rtgi_diffuse_radiance_cache_enabled;
+}
+
 void Environment::set_rtgi_overscan_horizontal(float p_overscan) {
 	rtgi_overscan_horizontal = CLAMP(p_overscan, 0.0f, 0.25f);
 	_update_pathtracing();
@@ -876,6 +885,7 @@ void Environment::_update_pathtracing() {
 	params.write[RSE::PT_PARAM_DENOISER_HISTORY_WEIGHT] = rtgi_denoiser_history_weight;
 	params.write[RSE::PT_PARAM_DENOISER_FIREFLY_SUPPRESSION] = rtgi_denoiser_firefly_suppression;
 	params.write[RSE::PT_PARAM_DENOISER_DETAIL_PRESERVATION] = rtgi_denoiser_detail_preservation;
+	params.write[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED] = rtgi_diffuse_radiance_cache_enabled ? 1.0f : 0.0f;
 	params.write[RSE::PT_PARAM_RAY_FIREFLY_SUPPRESSION] = rtgi_ray_firefly_suppression;
 	params.write[RSE::PT_PARAM_RAY_MAX_RADIANCE] = rtgi_ray_max_radiance;
 	params.write[RSE::PT_PARAM_DENOISER_SPLIT_SIGNALS] = rtgi_denoiser_split_signals ? 1.0f : 0.0f;
@@ -1762,6 +1772,8 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_rtgi_analytic_light_sampling_enabled"), &Environment::is_rtgi_analytic_light_sampling_enabled);
 	ClassDB::bind_method(D_METHOD("set_rtgi_explicit_emissive_sampling_enabled", "enabled"), &Environment::set_rtgi_explicit_emissive_sampling_enabled);
 	ClassDB::bind_method(D_METHOD("is_rtgi_explicit_emissive_sampling_enabled"), &Environment::is_rtgi_explicit_emissive_sampling_enabled);
+	ClassDB::bind_method(D_METHOD("set_rtgi_diffuse_radiance_cache_enabled", "enabled"), &Environment::set_rtgi_diffuse_radiance_cache_enabled);
+	ClassDB::bind_method(D_METHOD("is_rtgi_diffuse_radiance_cache_enabled"), &Environment::is_rtgi_diffuse_radiance_cache_enabled);
 	ClassDB::bind_method(D_METHOD("set_rtgi_overscan_horizontal", "overscan"), &Environment::set_rtgi_overscan_horizontal);
 	ClassDB::bind_method(D_METHOD("get_rtgi_overscan_horizontal"), &Environment::get_rtgi_overscan_horizontal);
 	ClassDB::bind_method(D_METHOD("set_rtgi_overscan_vertical", "overscan"), &Environment::set_rtgi_overscan_vertical);
@@ -1789,6 +1801,7 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_ray_max_radiance", PROPERTY_HINT_RANGE, "0,4096,0.1,or_greater"), "set_rtgi_ray_max_radiance", "get_rtgi_ray_max_radiance");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_analytic_light_sampling_enabled"), "set_rtgi_analytic_light_sampling_enabled", "is_rtgi_analytic_light_sampling_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_explicit_emissive_sampling_enabled"), "set_rtgi_explicit_emissive_sampling_enabled", "is_rtgi_explicit_emissive_sampling_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_diffuse_radiance_cache_enabled"), "set_rtgi_diffuse_radiance_cache_enabled", "is_rtgi_diffuse_radiance_cache_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_horizontal", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_horizontal", "get_rtgi_overscan_horizontal");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_vertical", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_vertical", "get_rtgi_overscan_vertical");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "SVGF (Default):8,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");

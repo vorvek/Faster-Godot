@@ -22,6 +22,7 @@ const RTGI_KNOB_STAGES = {
 	"rtgi_ray_max_radiance": "RT ray/path contribution clamp",
 	"rtgi_analytic_light_sampling_enabled": "RTGI analytic direct source sampling",
 	"rtgi_explicit_emissive_sampling_enabled": "RTGI explicit emissive source sampling",
+	"rtgi_diffuse_radiance_cache_enabled": "RTGI pre-SVGF diffuse radiance cache",
 	"rtgi_overscan_horizontal": "Path Traced camera pan overscan",
 	"rtgi_overscan_vertical": "Path Traced camera pan overscan",
 	"rtgi_debug_mode": "RT raygen debug visualization",
@@ -43,12 +44,13 @@ var _case_filter = ""
 var _list_cases = false
 var _resume = false
 var _disable_rf_output_effect = false
+var _diffuse_cache = true
 var _profile_timings = false
 var _results = []
 var _split_pair_metrics = []
 var _split_pair_images = {}
-var _all_debug_views = ["noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "variance", "history_length", "rejection", "final"]
-var _debug_views = ["noisy", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "final"]
+var _all_debug_views = ["noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "cache_raw_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
+var _debug_views = ["noisy", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "cache_hit_confidence", "final"]
 
 
 func _initialize() -> void:
@@ -90,6 +92,8 @@ func _parse_args() -> void:
 			_resume = true
 		elif arg == "--euphorica-disable-rf-output":
 			_disable_rf_output_effect = true
+		elif arg.begins_with("--euphorica-diffuse-cache="):
+			_diffuse_cache = not (arg.trim_prefix("--euphorica-diffuse-cache=").to_lower() in ["0", "false", "off", "disabled"])
 		elif arg == "--euphorica-profile-timings":
 			_profile_timings = true
 		elif arg.begins_with("--euphorica-debug-views="):
@@ -435,6 +439,7 @@ func _apply_environment(test_case: Dictionary, env: Environment) -> void:
 	env.rtgi_ray_max_radiance = float(test_case.get("ray_max_radiance", 32.0))
 	env.rtgi_analytic_light_sampling_enabled = bool(test_case.get("analytic_light_sampling", true))
 	env.rtgi_explicit_emissive_sampling_enabled = bool(test_case.get("explicit_emissive_sampling", true))
+	env.rtgi_diffuse_radiance_cache_enabled = bool(test_case.get("diffuse_cache", _diffuse_cache))
 	env.rtgi_debug_mode = int(test_case.get("debug_mode", Environment.RT_DEBUG_DISABLED))
 	if test_case.get("no_glow_fog", false):
 		env.glow_enabled = false
@@ -496,6 +501,8 @@ func _neutralize_rf_shader_noise(node: TextureRect) -> void:
 func _capture_debug_views(test_case: Dictionary, game_viewport: Viewport) -> Dictionary:
 	var metrics := {}
 	for view in _debug_views:
+		if view.begins_with("cache_") and not _cache_debug_available(test_case):
+			continue
 		_apply_debug_view(game_viewport, view)
 		await process_frame
 		await RenderingServer.frame_post_draw
@@ -503,6 +510,8 @@ func _capture_debug_views(test_case: Dictionary, game_viewport: Viewport) -> Dic
 		image.save_png(_output_path("%s_%s_game.png" % [test_case["name"], view]))
 		var view_metrics := _image_metrics(image, "rtgi_%s" % view)
 		view_metrics.merge(_image_roi_metrics(image, "rtgi_%s" % view), true)
+		if view.begins_with("cache_"):
+			view_metrics.merge(_image_channel_means(image, "rtgi_%s" % view), true)
 		for key in view_metrics.keys():
 			metrics[key] = view_metrics[key]
 	_apply_debug_view(game_viewport, "disabled")
@@ -510,6 +519,33 @@ func _capture_debug_views(test_case: Dictionary, game_viewport: Viewport) -> Dic
 	await RenderingServer.frame_post_draw
 	metrics["rtgi_instability_attribution"] = _source_attribution_summary(metrics)
 	return metrics
+
+
+func _cache_debug_available(test_case: Dictionary) -> bool:
+	return bool(test_case.get("rtgi_enabled", false)) and bool(test_case.get("split_signals", true)) and bool(test_case.get("diffuse_cache", _diffuse_cache)) and float(test_case.get("denoise", 0.0)) > 0.001 and float(test_case.get("history", 0.0)) > 0.001
+
+
+func _image_channel_means(image: Image, prefix: String) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var count: int = max(width * height, 1)
+	var sum_r := 0.0
+	var sum_g := 0.0
+	var sum_b := 0.0
+	var sum_a := 0.0
+	for y in range(height):
+		for x in range(width):
+			var c := image.get_pixel(x, y)
+			sum_r += c.r
+			sum_g += c.g
+			sum_b += c.b
+			sum_a += c.a
+	return {
+		"%s_mean_r" % prefix: sum_r / float(count),
+		"%s_mean_g" % prefix: sum_g / float(count),
+		"%s_mean_b" % prefix: sum_b / float(count),
+		"%s_mean_a" % prefix: sum_a / float(count),
+	}
 
 
 func _apply_debug_view(viewport: Viewport, view: String) -> void:
@@ -548,6 +584,14 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_SKY
 		"signal_confidence":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_CONFIDENCE
+		"cache_raw_diffuse":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_RAW_DIFFUSE
+		"cache_hit_confidence":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_HIT_CONFIDENCE
+		"cache_age":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_AGE
+		"cache_rejection":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_REJECTION
 		"variance":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_VARIANCE
 		"history_length":

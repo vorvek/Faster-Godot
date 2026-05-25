@@ -214,6 +214,7 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_clear_textures
 	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE);
 	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
 	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
+	render_buffers->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
 }
 
 void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_textures() {
@@ -2463,6 +2464,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		rb->clear_context(RB_SCOPE_RTGI_DENOISE);
 		rb->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
 		rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
+		rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
 	};
 	auto reject_rt_previous_history = [&]() {
 		if (!rb_data.is_valid()) {
@@ -2520,6 +2522,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE);
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
+			rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
 		}
 
 		RTViewportState *rt_state = raytracing->build_tlas(p_render_data, rt_flags);
@@ -3073,6 +3076,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			const float rt_firefly_suppression = CLAMP(rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_FIREFLY_SUPPRESSION] : 1.0f, 0.0f, 1.0f);
 			const float rt_detail_preservation = CLAMP(rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_DETAIL_PRESERVATION] : 1.0f, 0.0f, 1.0f);
 			const bool rt_split_signals = rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_SPLIT_SIGNALS] > 0.5f : true;
+			const bool rt_diffuse_cache_enabled = rt_env_params ? rt_env_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED] > 0.5f : true;
 			float rt_specular_history_weight = CLAMP(rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_SPECULAR_HISTORY_WEIGHT] : 0.95f, 0.0f, 0.98f);
 			const float rt_specular_spatial_strength = CLAMP(rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_SPECULAR_SPATIAL_STRENGTH] : 1.0f, 0.0f, 1.0f);
 			float rt_history_weight = rt_denoise_strength <= 0.001f ? 0.0f : CLAMP(rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_HISTORY_WEIGHT] : 0.95f, 0.0f, 0.98f);
@@ -3087,6 +3091,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				if (rt_split_signals) {
 					rb->clear_context(RB_SCOPE_RTGI_DENOISE);
 					rtgi_denoise->capture_noisy(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, RB_SCOPE_RTGI_DENOISE, rb_data->rt_get_size(), 0);
+					if (rt_diffuse_cache_enabled && rt_history_weight > 0.001f && rtgi_diffuse_cache) {
+						rtgi_diffuse_cache->process(rb, rb_data->rt_get_diffuse_radiance(), rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rb_data->rt_get_signal_confidence(), rb_data->rt_get_size(), 0);
+					} else {
+						rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
+					}
 					rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DIFFUSE_RADIANCE, RB_SCOPE_RTGI_DENOISE_DIFFUSE, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), RID(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight, rt_denoise_strength, rt_firefly_suppression, rt_detail_preservation, false, true, false, rb_data->rt_get_size(), 0, 5);
 					const float specular_denoise_strength = rt_denoise_strength * rt_specular_spatial_strength;
 					rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_RADIANCE, RB_SCOPE_RTGI_DENOISE_SPECULAR, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_specular_guide(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_specular_history_weight, specular_denoise_strength, rt_firefly_suppression, rt_detail_preservation, true, false, false, rb_data->rt_get_size(), 0, 5);
@@ -3094,6 +3103,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					RD::get_singleton()->texture_copy(rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), Vector3(), Vector3(), Vector3(rb_data->rt_get_size().x, rb_data->rt_get_size().y, 1), 0, 0, 0, 0);
 					RD::get_singleton()->texture_copy(rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), Vector3(), Vector3(), Vector3(rb_data->rt_get_size().x, rb_data->rt_get_size().y, 1), 0, 0, 0, 0);
 				} else {
+					rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
 					rb->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
 					rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
 					rtgi_denoise->process(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight, rt_denoise_strength, rt_firefly_suppression, rt_detail_preservation, rb_data->rt_get_size(), 0, 5);
@@ -3110,6 +3120,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE);
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
+			rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
 			taa->process_texture(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, SNAME("rtgi_taa"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, rb_data->rt_get_velocity_texture(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, false, rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), 0.94f, rb_data->rt_get_size(), rb_data->rt_get_depth_texture());
 			composite_rt_volumetric_fog();
 			raytracing->copy_output_texture(p_render_data);
@@ -3120,6 +3131,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE);
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
+			rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
 			if (rt_replaces_opaque) {
 				composite_rt_volumetric_fog();
 				raytracing->copy_output_texture(p_render_data);
@@ -3625,6 +3637,22 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_CONFIDENCE && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_CONFIDENCE)) {
 			copy_effects->copy_to_fb_rect(rb_data->rt_get_signal_confidence(), fb, Rect2(Vector2(), rtsize), false, true);
+		}
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_RAW_DIFFUSE && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RAW)) {
+			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RAW), fb, Rect2(Vector2(), rtsize), false, false);
+		}
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_HIT_CONFIDENCE && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_DIAGNOSTIC)) {
+			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_DIAGNOSTIC), fb, Rect2(Vector2(), rtsize), false, false);
+		}
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_AGE && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_AGE)) {
+			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_AGE), fb, Rect2(Vector2(), rtsize), false, true);
+		}
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_REJECTION && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_REJECTION)) {
+			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_REJECTION), fb, Rect2(Vector2(), rtsize), false, true);
 		}
 	}
 
@@ -6337,6 +6365,7 @@ RenderForwardClustered::RenderForwardClustered() {
 	_update_global_pipeline_data_requirements_from_project();
 
 	taa = memnew(RendererRD::TAA);
+	rtgi_diffuse_cache = memnew(RendererRD::RTGIDiffuseCache);
 	rtgi_denoise = memnew(RendererRD::RTGIDenoise);
 	fsr2_effect = memnew(RendererRD::FSR2Effect);
 	ss_effects = memnew(RendererRD::SSEffects);
@@ -6362,6 +6391,11 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (rtgi_denoise != nullptr) {
 		memdelete(rtgi_denoise);
 		rtgi_denoise = nullptr;
+	}
+
+	if (rtgi_diffuse_cache != nullptr) {
+		memdelete(rtgi_diffuse_cache);
+		rtgi_diffuse_cache = nullptr;
 	}
 
 	if (fsr2_effect) {
