@@ -218,7 +218,7 @@ private:
 	float rtgi_denoiser_firefly_suppression = 1.0f;
 	float rtgi_denoiser_detail_preservation = 1.0f;
 	bool rtgi_denoiser_split_signals = true;
-	float rtgi_denoiser_specular_history_weight = 0.95f;
+	float rtgi_denoiser_specular_history_weight = 0.90f;
 	float rtgi_denoiser_specular_spatial_strength = 1.0f;
 	float rtgi_ray_firefly_suppression = 0.85f;
 	float rtgi_ray_max_radiance = 32.0f;

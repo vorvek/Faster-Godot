@@ -28,7 +28,7 @@ Useful options:
 - `--rtgi-firefly-suppression=0.0..1.0`
 - `--rtgi-detail-preservation=0.0..1.0`
 - `--rtgi-split-signals=true|false`
-- `--rtgi-specular-history-weight=0.0..0.98` (default `0.95`)
+- `--rtgi-specular-history-weight=0.0..0.98` (default `0.90`)
 - `--rtgi-specular-spatial-strength=0.0..1.0` (default `1.0`)
 - `--rtgi-ray-firefly-suppression=0.0..1.0`
 - `--rtgi-ray-max-radiance=0.0..4096.0`
