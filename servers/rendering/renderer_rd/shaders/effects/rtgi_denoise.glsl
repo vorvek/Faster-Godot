@@ -382,7 +382,8 @@ void main() {
 	float specular_history_guard = smoothstep(0.30, 0.95, early_specular_surface);
 	float motion_history_cap = mix(params.max_history, 7.0, fast_motion);
 	motion_history_cap = mix(motion_history_cap, 2.0, extreme_motion);
-	motion_history_cap = min(motion_history_cap, mix(params.max_history, 10.0, specular_history_guard));
+	float specular_history_cap = mix(params.max_history, 10.0, specular_history_guard * (1.0 - guide_history_stability));
+	motion_history_cap = min(motion_history_cap, specular_history_cap);
 	float history_len = history_valid ? min(min(prev_history_len * history_confidence + 1.0, params.max_history), motion_history_cap) : 1.0;
 	float base_alpha = max(pow(max(1.0 - params.history_weight, 0.001), 1.15), 0.025);
 	if (params.radiance_space_history > 0.5) {
@@ -390,7 +391,7 @@ void main() {
 	}
 	float current_alpha = history_valid ? max(1.0 / history_len, base_alpha) : 1.0;
 	current_alpha = history_valid ? mix(0.72, current_alpha, smoothstep(0.08, 0.65, history_confidence)) : current_alpha;
-	float specular_min_alpha = params.radiance_space_history > 0.5 ? 0.07 : 0.16;
+	float specular_min_alpha = params.radiance_space_history > 0.5 ? 0.07 : mix(0.16, 0.055, guide_history_stability);
 	current_alpha = history_valid ? max(current_alpha, mix(0.0, specular_min_alpha, specular_history_guard)) : current_alpha;
 	current_alpha = history_valid ? max(current_alpha, mix(base_alpha, 0.90, fast_motion)) : current_alpha;
 	current_alpha = history_valid ? max(current_alpha, mix(0.90, 1.0, extreme_motion)) : current_alpha;

@@ -13,6 +13,7 @@
 #define RB_SCOPE_RTGI_DENOISE SNAME("rtgi_denoise")
 #define RB_SCOPE_RTGI_DENOISE_DIFFUSE SNAME("rtgi_denoise_diffuse")
 #define RB_SCOPE_RTGI_DENOISE_SPECULAR SNAME("rtgi_denoise_specular")
+#define RB_SCOPE_RTGI_DENOISE_COMPOSITE SNAME("rtgi_denoise_composite")
 #define RB_TEX_RTGI_DENOISE_HISTORY SNAME("history")
 #define RB_TEX_RTGI_DENOISE_NOISY SNAME("noisy")
 #define RB_TEX_RTGI_DENOISE_MOMENTS SNAME("moments")
