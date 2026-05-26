@@ -56,8 +56,7 @@ came mostly from the narrower renderer profile and CPU-side hot-path changes:
   occlusion path stays enabled for fixed-camera rooms, corridors, and dense
   static scenes.
 - Hardware RTGI and path tracing: Forward+ Vulkan can use a hardware ray
-  tracing global illumination path exposed through `Environment`, intended for
-  dark 3D scenes where moving local lights need real bounce lighting. RT
+  tracing global illumination path exposed through `Environment`.RT
   denoising uses the in-engine GPU SVGF path before transparent particles are
   composited. Particle instances stay out of the TLAS, and the RT guide buffers
   track velocity, normals, material response, depth, hit distance, and validity
