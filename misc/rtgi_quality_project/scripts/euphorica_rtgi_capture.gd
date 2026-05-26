@@ -49,8 +49,8 @@ var _profile_timings = false
 var _results = []
 var _split_pair_metrics = []
 var _split_pair_images = {}
-var _all_debug_views = ["noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_roughness_bucket", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
-var _debug_views = ["noisy", "specular_noisy", "specular_final", "specular_guide", "specular_roughness_bucket", "normal_roughness", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_rejection", "final"]
+var _all_debug_views = ["noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
+var _debug_views = ["noisy", "specular_noisy", "specular_final", "specular_guide", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_rejection", "final"]
 
 
 func _initialize() -> void:
@@ -1164,6 +1164,10 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_GUIDE
 		"specular_roughness_bucket":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_ROUGHNESS_BUCKET
+		"specular_history_length":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_HISTORY_LENGTH
+		"specular_rejection":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REJECTION
 		"noisy":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_NOISY
 		"normal_roughness":

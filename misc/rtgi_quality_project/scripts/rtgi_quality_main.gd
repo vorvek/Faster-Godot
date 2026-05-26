@@ -848,7 +848,7 @@ func _animate_specular_objects(frame: int) -> void:
 
 
 func _capture_debug_views(base_name: String) -> void:
-	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_roughness_bucket", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
+	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
 	for view in views:
 		if view.begins_with("cache_") and not _cache_debug_available():
 			continue
@@ -1493,6 +1493,10 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_GUIDE
 		"specular_roughness_bucket":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_ROUGHNESS_BUCKET
+		"specular_history_length":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_HISTORY_LENGTH
+		"specular_rejection":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REJECTION
 		"normal_roughness":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_NORMAL_ROUGHNESS
 		"viewz_hitdist":
@@ -1832,6 +1836,15 @@ func _measure_specular_temporal_metrics(base_name: String) -> Dictionary:
 	var mirror_samples := 0
 	var glossy_samples := 0
 	var rough_samples := 0
+	var rejection_samples := 0
+	var rejection_pixels := 0
+	var rejection_sum := 0.0
+	var mirror_rejection_samples := 0
+	var mirror_rejection_pixels := 0
+	var mirror_rejection_sum := 0.0
+	var glossy_rejection_samples := 0
+	var glossy_rejection_pixels := 0
+	var glossy_rejection_sum := 0.0
 	var max_sparkle_pixels := 0
 	var total_sparkle_pixels := 0
 	var max_fireflies_per_mp := 0.0
@@ -1852,12 +1865,26 @@ func _measure_specular_temporal_metrics(base_name: String) -> Dictionary:
 		await _wait_render_frame()
 		var normal_roughness := get_viewport().get_texture().get_image()
 		normal_roughness.convert(Image.FORMAT_RGBA8)
+		_apply_debug_view("specular_rejection")
+		await _wait_render_frame()
+		var rejection := get_viewport().get_texture().get_image()
+		rejection.convert(Image.FORMAT_RGBA8)
 		var surface_metrics := _measure_specular_surface_metrics(current, normal_roughness)
+		var rejection_metrics := _measure_specular_history_rejection_metrics(rejection, normal_roughness)
 		total_specular_samples += int(surface_metrics["specular_samples"])
 		total_sampled_pixels += int(surface_metrics["sampled_pixels"])
 		mirror_samples += int(surface_metrics["mirror_samples"])
 		glossy_samples += int(surface_metrics["glossy_samples"])
 		rough_samples += int(surface_metrics["rough_samples"])
+		rejection_samples += int(rejection_metrics["specular_samples"])
+		rejection_pixels += int(rejection_metrics["rejection_pixels"])
+		rejection_sum += float(rejection_metrics["rejection_sum"])
+		mirror_rejection_samples += int(rejection_metrics["mirror_samples"])
+		mirror_rejection_pixels += int(rejection_metrics["mirror_rejection_pixels"])
+		mirror_rejection_sum += float(rejection_metrics["mirror_rejection_sum"])
+		glossy_rejection_samples += int(rejection_metrics["glossy_samples"])
+		glossy_rejection_pixels += int(rejection_metrics["glossy_rejection_pixels"])
+		glossy_rejection_sum += float(rejection_metrics["glossy_rejection_sum"])
 		max_fireflies_per_mp = maxf(max_fireflies_per_mp, surface_metrics["highlight_fireflies_per_mp"])
 		max_speckles_per_mp = maxf(max_speckles_per_mp, surface_metrics["visible_speckles_per_mp"])
 		all_luma.append_array(surface_metrics["luma_values"])
@@ -1894,12 +1921,64 @@ func _measure_specular_temporal_metrics(base_name: String) -> Dictionary:
 		"rtgi_specular_mirror_pixel_fraction": float(mirror_samples) / maxf(float(total_sampled_pixels), 1.0),
 		"rtgi_specular_glossy_pixel_fraction": float(glossy_samples) / maxf(float(total_sampled_pixels), 1.0),
 		"rtgi_specular_rough_pixel_fraction": float(rough_samples) / maxf(float(total_sampled_pixels), 1.0),
+		"rtgi_specular_history_rejection_fraction": float(rejection_pixels) / maxf(float(rejection_samples), 1.0),
+		"rtgi_specular_history_rejection_mean": rejection_sum / maxf(float(rejection_samples), 1.0),
+		"rtgi_specular_mirror_history_rejection_fraction": float(mirror_rejection_pixels) / maxf(float(mirror_rejection_samples), 1.0),
+		"rtgi_specular_mirror_history_rejection_mean": mirror_rejection_sum / maxf(float(mirror_rejection_samples), 1.0),
+		"rtgi_specular_glossy_history_rejection_fraction": float(glossy_rejection_pixels) / maxf(float(glossy_rejection_samples), 1.0),
+		"rtgi_specular_glossy_history_rejection_mean": glossy_rejection_sum / maxf(float(glossy_rejection_samples), 1.0),
 	}
 	for key in bin_deltas.keys():
 		var values: Array = bin_deltas[key]
 		values.sort()
 		metrics["rtgi_specular_roughness_%s_delta_p99" % key] = _percentile_sorted(values, 0.99)
 	return metrics
+
+
+func _measure_specular_history_rejection_metrics(rejection_image: Image, normal_roughness_image: Image) -> Dictionary:
+	var width := mini(rejection_image.get_width(), normal_roughness_image.get_width())
+	var height := mini(rejection_image.get_height(), normal_roughness_image.get_height())
+	var specular := 0
+	var rejected := 0
+	var rejection_sum := 0.0
+	var mirror := 0
+	var mirror_rejected := 0
+	var mirror_rejection_sum := 0.0
+	var glossy := 0
+	var glossy_rejected := 0
+	var glossy_rejection_sum := 0.0
+	for y in range(2, height - 2, 2):
+		for x in range(2, width - 2, 2):
+			var roughness := _roughness_from_normal_roughness_pixel(normal_roughness_image.get_pixel(x, y))
+			if roughness > 0.60:
+				continue
+			specular += 1
+			var rejection := rejection_image.get_pixel(x, y).r
+			rejection_sum += rejection
+			var is_rejected := rejection > 0.05
+			if is_rejected:
+				rejected += 1
+			if roughness <= 0.05:
+				mirror += 1
+				mirror_rejection_sum += rejection
+				if is_rejected:
+					mirror_rejected += 1
+			elif roughness <= 0.30:
+				glossy += 1
+				glossy_rejection_sum += rejection
+				if is_rejected:
+					glossy_rejected += 1
+	return {
+		"specular_samples": specular,
+		"rejection_pixels": rejected,
+		"rejection_sum": rejection_sum,
+		"mirror_samples": mirror,
+		"mirror_rejection_pixels": mirror_rejected,
+		"mirror_rejection_sum": mirror_rejection_sum,
+		"glossy_samples": glossy,
+		"glossy_rejection_pixels": glossy_rejected,
+		"glossy_rejection_sum": glossy_rejection_sum,
+	}
 
 
 func _measure_specular_surface_metrics(specular_image: Image, normal_roughness_image: Image) -> Dictionary:
