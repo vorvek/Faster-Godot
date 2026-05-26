@@ -146,6 +146,7 @@ layout(set = 0, binding = 35, rgba16f) uniform image2D rt_viewz_hitdist_image;
 layout(set = 0, binding = 36, rgba16f) uniform image2D rt_diffuse_radiance_image;
 layout(set = 0, binding = 37, rgba16f) uniform image2D rt_specular_radiance_image;
 layout(set = 0, binding = 38, rgba16f) uniform image2D rt_specular_guide_image;
+layout(set = 0, binding = 60, rgba16f) uniform image2D rt_specular_reflection_direction_image;
 layout(set = 0, binding = 39, rgba16f) uniform image2D rt_signal_direct_light_image;
 layout(set = 0, binding = 40, rgba16f) uniform image2D rt_signal_emissive_image;
 layout(set = 0, binding = 41, rgba16f) uniform image2D rt_signal_indirect_image;
@@ -166,6 +167,8 @@ layout(set = 0, binding = 56, rgba16f) uniform image2D rt_source_direct_candidat
 layout(set = 0, binding = 57, rgba16f) uniform image2D rt_source_direct_candidate_prev_image;
 layout(set = 0, binding = 58, r32ui) uniform uimage2D rt_source_direct_candidate_key_image;
 layout(set = 0, binding = 59, r32ui) uniform uimage2D rt_source_direct_candidate_key_prev_image;
+
+#define RT_VIS_MODE_SPECULAR_REFLECTION_DIRECTION 24
 
 #define RT_SOURCE_CLASS_DIRECT 1u
 #define RT_SOURCE_CLASS_EMISSIVE 2u

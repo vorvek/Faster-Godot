@@ -300,6 +300,11 @@ void write_primary_hit_guides(HitData h, MaterialResult m) {
 	imageStore(rt_viewz_hitdist_image, pixel, vec4(abs(view_pos.z), max(gl_HitTEXT, 0.0), expected_prev_view_z, 0.0));
 	float specular_risk = max(1.0 - clamp(m.roughness, 0.0, 1.0), clamp(m.metalness, 0.0, 1.0));
 	imageStore(rt_specular_guide_image, pixel, vec4(clamp(m.roughness, 0.0, 1.0), max(gl_HitTEXT, 0.0), specular_risk, 1.0));
+	if (int(get_rt_param(RT_PARAM_VIS_MODE)) == RT_VIS_MODE_SPECULAR_REFLECTION_DIRECTION) {
+		vec3 view_dir = normalize(-gl_WorldRayDirectionEXT);
+		vec3 reflection_dir = normalize(reflect(-view_dir, normal));
+		imageStore(rt_specular_reflection_direction_image, pixel, vec4(reflection_dir * 0.5 + 0.5, specular_risk));
+	}
 	rt_signal_set_primary_confidence(pixel, specular_risk, float(geom_idx & 1023u) / 1023.0, 1.0);
 }
 #endif
@@ -529,6 +534,9 @@ void debug_visualize(
 		float deviation = clamp(1.0 - max(dot(normalize(geometry_normal), normalize(final_normal)), 0.0), 0.0, 1.0);
 		float tangent_y = clamp(tangent_space_normal.y * 0.5 + 0.5, 0.0, 1.0);
 		ps.radiance = vec3(smoothstep(0.00, 0.45, deviation), tangent_y, 1.0 - smoothstep(0.10, 0.85, deviation));
+	} else if (vis_mode == RT_VIS_MODE_SPECULAR_REFLECTION_DIRECTION) {
+		vec3 reflection_dir = normalize(reflect(-V, normalize(final_normal)));
+		ps.radiance = reflection_dir * 0.5 + 0.5;
 	}
 
 	ps.packed_bounces_flags = set_path_terminated(ps.packed_bounces_flags);

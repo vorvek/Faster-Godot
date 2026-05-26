@@ -4368,6 +4368,15 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		uniforms.push_back(u);
 	}
 
+	// Binding 60: RTGI specular reflection-direction diagnostic output.
+	{
+		RD::Uniform u;
+		u.binding = 60;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_specular_reflection_direction());
+		uniforms.push_back(u);
+	}
+
 	// Bindings 39-43: RTGI source-signal audit outputs.
 	{
 		RD::Uniform u;

@@ -49,8 +49,9 @@ var _profile_timings = false
 var _results = []
 var _split_pair_metrics = []
 var _split_pair_images = {}
-var _all_debug_views = ["noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
-var _debug_views = ["noisy", "specular_noisy", "specular_final", "specular_guide", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_rejection", "final"]
+var _debug_environments: Array[Environment] = []
+var _all_debug_views = ["noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_reflection_direction", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
+var _debug_views = ["noisy", "specular_noisy", "specular_final", "specular_guide", "specular_reflection_direction", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_rejection", "final"]
 
 
 func _initialize() -> void:
@@ -346,6 +347,7 @@ func _run_case(test_case: Dictionary) -> Dictionary:
 	var scene = (packed as PackedScene).instantiate()
 	root.add_child(scene)
 	await process_frame
+	_debug_environments.clear()
 	_record_stage_timing(timings, "instantiate_and_first_frame", stage_start)
 	stage_start = Time.get_ticks_msec()
 	var game_viewport = _find_node(scene, "GameViewport") as SubViewport
@@ -368,6 +370,7 @@ func _run_case(test_case: Dictionary) -> Dictionary:
 			game_viewport.add_child(world_environment)
 		world_environment.environment = env
 	_apply_environment(test_case, env)
+	_debug_environments.append(env)
 	_apply_camera_environment(scene, test_case)
 	_apply_scene_toggles(scene, test_case)
 	var rf_output_effect_disabled_count := 0
@@ -453,6 +456,7 @@ func _apply_camera_environment(scene: Node, test_case: Dictionary) -> void:
 		if node is Camera3D and node.environment != null:
 			node.environment = node.environment.duplicate(true)
 			_apply_environment(test_case, node.environment)
+			_debug_environments.append(node.environment)
 
 
 func _apply_scene_toggles(scene: Node, test_case: Dictionary) -> void:
@@ -546,12 +550,21 @@ func _capture_specular_temporal_debug(test_case: Dictionary, game_viewport: View
 	if _sparkle_frames < 2:
 		return {}
 	var previous: Image = null
+	var previous_reflection_direction: Image = null
 	var first: Image = null
 	var last: Image = null
 	var all_deltas: Array[float] = []
 	var all_edge_deltas: Array[float] = []
+	var all_reflection_direction_deltas: Array[float] = []
 	var all_luma: Array[float] = []
 	var bin_deltas := {
+		"00_05": [],
+		"05_15": [],
+		"15_30": [],
+		"30_60": [],
+		"60_100": [],
+	}
+	var bin_reflection_direction_deltas := {
 		"00_05": [],
 		"05_15": [],
 		"15_30": [],
@@ -579,6 +592,10 @@ func _capture_specular_temporal_debug(test_case: Dictionary, game_viewport: View
 		await process_frame
 		await RenderingServer.frame_post_draw
 		var normal_roughness := _capture_viewport(game_viewport)
+		_apply_debug_view(game_viewport, "specular_reflection_direction")
+		await process_frame
+		await RenderingServer.frame_post_draw
+		var reflection_direction := _capture_viewport(game_viewport)
 		var surface_metrics := _image_specular_surface_samples(current, normal_roughness)
 		total_specular_samples += int(surface_metrics["specular_samples"])
 		total_sampled_pixels += int(surface_metrics["sampled_pixels"])
@@ -596,13 +613,20 @@ func _capture_specular_temporal_debug(test_case: Dictionary, game_viewport: View
 				bin_deltas[key].append_array(delta_metrics["bin_deltas"][key])
 			max_sparkle_pixels = maxi(max_sparkle_pixels, int(delta_metrics["sparkle_pixels"]))
 			total_sparkle_pixels += int(delta_metrics["sparkle_pixels"])
+		if previous_reflection_direction != null:
+			var direction_metrics := _image_specular_reflection_direction_samples(previous_reflection_direction, reflection_direction, normal_roughness)
+			all_reflection_direction_deltas.append_array(direction_metrics["deltas"])
+			for key in bin_reflection_direction_deltas.keys():
+				bin_reflection_direction_deltas[key].append_array(direction_metrics["bin_deltas"][key])
 		previous = current
+		previous_reflection_direction = reflection_direction
 	if first != null:
 		first.save_png(_output_path("%s_specular_temporal_first_game.png" % test_case["name"]))
 	if last != null:
 		last.save_png(_output_path("%s_specular_temporal_last_game.png" % test_case["name"]))
 	all_deltas.sort()
 	all_edge_deltas.sort()
+	all_reflection_direction_deltas.sort()
 	all_luma.sort()
 	var pair_count := maxi(_sparkle_frames - 1, 1)
 	var metrics := {
@@ -614,6 +638,8 @@ func _capture_specular_temporal_debug(test_case: Dictionary, game_viewport: View
 		"rtgi_specular_visible_speckles_per_mp": max_speckles_per_mp,
 		"rtgi_specular_reflection_edge_delta_p95": _percentile_sorted(all_edge_deltas, 0.95),
 		"rtgi_specular_reflection_edge_delta_p99": _percentile_sorted(all_edge_deltas, 0.99),
+		"rtgi_specular_reflection_direction_delta_p95": _percentile_sorted(all_reflection_direction_deltas, 0.95),
+		"rtgi_specular_reflection_direction_delta_p99": _percentile_sorted(all_reflection_direction_deltas, 0.99),
 		"rtgi_specular_luma_p95": _percentile_sorted(all_luma, 0.95),
 		"rtgi_specular_luma_p99": _percentile_sorted(all_luma, 0.99),
 		"rtgi_specular_luma_max": all_luma.back() if not all_luma.is_empty() else 0.0,
@@ -626,6 +652,9 @@ func _capture_specular_temporal_debug(test_case: Dictionary, game_viewport: View
 		var values: Array = bin_deltas[key]
 		values.sort()
 		metrics["rtgi_specular_roughness_%s_delta_p99" % key] = _percentile_sorted(values, 0.99)
+		var direction_values: Array = bin_reflection_direction_deltas[key]
+		direction_values.sort()
+		metrics["rtgi_specular_roughness_%s_reflection_direction_delta_p99" % key] = _percentile_sorted(direction_values, 0.99)
 	return metrics
 
 
@@ -731,6 +760,35 @@ func _image_specular_delta_samples(previous: Image, current: Image, normal_rough
 	}
 
 
+func _image_specular_reflection_direction_samples(previous: Image, current: Image, normal_roughness_image: Image) -> Dictionary:
+	var width := mini(mini(previous.get_width(), current.get_width()), normal_roughness_image.get_width())
+	var height := mini(mini(previous.get_height(), current.get_height()), normal_roughness_image.get_height())
+	var deltas: Array[float] = []
+	var bin_deltas := {
+		"00_05": [],
+		"05_15": [],
+		"15_30": [],
+		"30_60": [],
+		"60_100": [],
+	}
+	for y in range(2, height - 2, 2):
+		for x in range(2, width - 2, 2):
+			var roughness := _roughness_from_normal_roughness_pixel(normal_roughness_image.get_pixel(x, y))
+			if roughness > 0.60:
+				continue
+			var prev_dir := _reflection_direction_from_pixel(previous.get_pixel(x, y))
+			var curr_dir := _reflection_direction_from_pixel(current.get_pixel(x, y))
+			var delta := 1.0 - clampf(prev_dir.dot(curr_dir), -1.0, 1.0)
+			deltas.append(delta)
+			var bucket := _roughness_delta_bucket(roughness)
+			if not bucket.is_empty():
+				bin_deltas[bucket].append(delta)
+	return {
+		"deltas": deltas,
+		"bin_deltas": bin_deltas,
+	}
+
+
 func _roughness_from_normal_roughness_pixel(pixel: Color) -> float:
 	return clampf(pixel.r, 0.0, 1.0)
 
@@ -747,6 +805,14 @@ func _roughness_delta_bucket(roughness: float) -> String:
 	if roughness <= 1.0:
 		return "60_100"
 	return ""
+
+
+func _reflection_direction_from_pixel(pixel: Color) -> Vector3:
+	var direction := Vector3(pixel.r * 2.0 - 1.0, pixel.g * 2.0 - 1.0, pixel.b * 2.0 - 1.0)
+	var length := direction.length()
+	if length <= 0.0001:
+		return Vector3(0.0, 0.0, 1.0)
+	return direction / length
 
 
 func _percentile_sorted(values: Array, percentile: float) -> float:
@@ -1145,6 +1211,11 @@ func _image_cache_rejection_region(image: Image, prefix: String, rect: Rect2i) -
 
 
 func _apply_debug_view(viewport: Viewport, view: String) -> void:
+	for env in _debug_environments:
+		if view == "specular_reflection_direction":
+			env.rtgi_debug_mode = Environment.RT_DEBUG_SPECULAR_REFLECTION_DIRECTION
+		else:
+			env.rtgi_debug_mode = Environment.RT_DEBUG_DISABLED
 	RenderingServer.viewport_set_debug_draw(viewport.get_viewport_rid(), _debug_draw_value(view))
 
 
@@ -1162,6 +1233,8 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_FINAL
 		"specular_guide":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_GUIDE
+		"specular_reflection_direction":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTION_DIRECTION
 		"specular_roughness_bucket":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_ROUGHNESS_BUCKET
 		"specular_history_length":

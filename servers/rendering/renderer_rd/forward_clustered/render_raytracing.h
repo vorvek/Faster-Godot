@@ -44,6 +44,7 @@
 #define RB_TEX_RT_DIFFUSE_RADIANCE SNAME("rt_diffuse_radiance")
 #define RB_TEX_RT_SPECULAR_RADIANCE SNAME("rt_specular_radiance")
 #define RB_TEX_RT_SPECULAR_GUIDE SNAME("rt_specular_guide")
+#define RB_TEX_RT_SPECULAR_REFLECTION_DIRECTION SNAME("rt_specular_reflection_direction")
 #define RB_TEX_RT_DEPTH SNAME("rt_depth")
 #define RB_TEX_RT_DEPTH_ATTACHMENT SNAME("rt_depth_attachment")
 #define RB_TEX_RT_VELOCITY SNAME("rt_velocity")

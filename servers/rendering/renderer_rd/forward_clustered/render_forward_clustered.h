@@ -179,6 +179,7 @@ public:
 		RID rt_get_diffuse_radiance() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DIFFUSE_RADIANCE); }
 		RID rt_get_specular_radiance() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_RADIANCE); }
 		RID rt_get_specular_guide() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_GUIDE); }
+		RID rt_get_specular_reflection_direction() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_REFLECTION_DIRECTION); }
 		bool rt_has_depth_texture() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH); }
 		RID rt_get_depth_texture() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH); }
 		RID rt_ensure_depth_attachment();

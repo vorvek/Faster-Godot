@@ -207,6 +207,9 @@ void main() {
 				imageStore(rt_albedo_metalness_image, pixel, vec4(1.0, 1.0, 1.0, 0.0));
 				imageStore(rt_viewz_hitdist_image, pixel, vec4(65504.0, 65504.0, 0.0, 0.0));
 				imageStore(rt_specular_guide_image, pixel, vec4(1.0, 65504.0, 0.0, 0.0));
+				if (int(get_rt_param(RT_PARAM_VIS_MODE)) == RT_VIS_MODE_SPECULAR_REFLECTION_DIRECTION) {
+					imageStore(rt_specular_reflection_direction_image, pixel, vec4(sky_direction * 0.5 + 0.5, 0.0));
+				}
 				rt_signal_set_primary_confidence(pixel, 0.0, 1.0, history_valid);
 				if (history_valid > 0.5) {
 					rt_store_primary_velocity(pixel, curr_uv, prev_uv);

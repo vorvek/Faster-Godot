@@ -848,7 +848,7 @@ func _animate_specular_objects(frame: int) -> void:
 
 
 func _capture_debug_views(base_name: String) -> void:
-	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
+	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_reflection_direction", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
 	for view in views:
 		if view.begins_with("cache_") and not _cache_debug_available():
 			continue
@@ -1471,7 +1471,12 @@ func _wait_render_frame() -> void:
 
 func _apply_debug_view(view: String) -> void:
 	if _environment != null:
-		_environment.rtgi_debug_mode = Environment.RT_DEBUG_NORMAL_DEVIATION if view == "normal_deviation" else Environment.RT_DEBUG_DISABLED
+		if view == "normal_deviation":
+			_environment.rtgi_debug_mode = Environment.RT_DEBUG_NORMAL_DEVIATION
+		elif view == "specular_reflection_direction":
+			_environment.rtgi_debug_mode = Environment.RT_DEBUG_SPECULAR_REFLECTION_DIRECTION
+		else:
+			_environment.rtgi_debug_mode = Environment.RT_DEBUG_DISABLED
 	RenderingServer.viewport_set_debug_draw(get_viewport().get_viewport_rid(), _debug_draw_value(view))
 
 
@@ -1491,6 +1496,8 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_FINAL
 		"specular_guide":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_GUIDE
+		"specular_reflection_direction":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTION_DIRECTION
 		"specular_roughness_bucket":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_ROUGHNESS_BUCKET
 		"specular_history_length":
@@ -1819,12 +1826,21 @@ func _measure_convergence_curve(base_name: String) -> Dictionary:
 
 func _measure_specular_temporal_metrics(base_name: String) -> Dictionary:
 	var previous: Image = null
+	var previous_reflection_direction: Image = null
 	var first: Image = null
 	var last: Image = null
 	var all_deltas: Array[float] = []
 	var all_edge_deltas: Array[float] = []
+	var all_reflection_direction_deltas: Array[float] = []
 	var all_luma: Array[float] = []
 	var bin_deltas := {
+		"00_05": [],
+		"05_15": [],
+		"15_30": [],
+		"30_60": [],
+		"60_100": [],
+	}
+	var bin_reflection_direction_deltas := {
 		"00_05": [],
 		"05_15": [],
 		"15_30": [],
@@ -1869,6 +1885,10 @@ func _measure_specular_temporal_metrics(base_name: String) -> Dictionary:
 		await _wait_render_frame()
 		var rejection := get_viewport().get_texture().get_image()
 		rejection.convert(Image.FORMAT_RGBA8)
+		_apply_debug_view("specular_reflection_direction")
+		await _wait_render_frame()
+		var reflection_direction := get_viewport().get_texture().get_image()
+		reflection_direction.convert(Image.FORMAT_RGBA8)
 		var surface_metrics := _measure_specular_surface_metrics(current, normal_roughness)
 		var rejection_metrics := _measure_specular_history_rejection_metrics(rejection, normal_roughness)
 		total_specular_samples += int(surface_metrics["specular_samples"])
@@ -1896,13 +1916,20 @@ func _measure_specular_temporal_metrics(base_name: String) -> Dictionary:
 				bin_deltas[key].append_array(delta_metrics["bin_deltas"][key])
 			max_sparkle_pixels = maxi(max_sparkle_pixels, int(delta_metrics["sparkle_pixels"]))
 			total_sparkle_pixels += int(delta_metrics["sparkle_pixels"])
+		if previous_reflection_direction != null:
+			var direction_metrics := _measure_specular_reflection_direction_metrics(previous_reflection_direction, reflection_direction, normal_roughness)
+			all_reflection_direction_deltas.append_array(direction_metrics["deltas"])
+			for key in bin_reflection_direction_deltas.keys():
+				bin_reflection_direction_deltas[key].append_array(direction_metrics["bin_deltas"][key])
 		previous = current
+		previous_reflection_direction = reflection_direction
 	if first != null:
 		first.save_png("%s/%s_specular_temporal_first.png" % [_output_dir, base_name])
 	if last != null:
 		last.save_png("%s/%s_specular_temporal_last.png" % [_output_dir, base_name])
 	all_deltas.sort()
 	all_edge_deltas.sort()
+	all_reflection_direction_deltas.sort()
 	all_luma.sort()
 	var pair_count := maxi(_sparkle_frames - 1, 1)
 	var metrics := {
@@ -1914,6 +1941,8 @@ func _measure_specular_temporal_metrics(base_name: String) -> Dictionary:
 		"rtgi_specular_visible_speckles_per_mp": max_speckles_per_mp,
 		"rtgi_specular_reflection_edge_delta_p95": _percentile_sorted(all_edge_deltas, 0.95),
 		"rtgi_specular_reflection_edge_delta_p99": _percentile_sorted(all_edge_deltas, 0.99),
+		"rtgi_specular_reflection_direction_delta_p95": _percentile_sorted(all_reflection_direction_deltas, 0.95),
+		"rtgi_specular_reflection_direction_delta_p99": _percentile_sorted(all_reflection_direction_deltas, 0.99),
 		"rtgi_specular_luma_p95": _percentile_sorted(all_luma, 0.95),
 		"rtgi_specular_luma_p99": _percentile_sorted(all_luma, 0.99),
 		"rtgi_specular_luma_max": all_luma.back() if not all_luma.is_empty() else 0.0,
@@ -1932,6 +1961,9 @@ func _measure_specular_temporal_metrics(base_name: String) -> Dictionary:
 		var values: Array = bin_deltas[key]
 		values.sort()
 		metrics["rtgi_specular_roughness_%s_delta_p99" % key] = _percentile_sorted(values, 0.99)
+		var direction_values: Array = bin_reflection_direction_deltas[key]
+		direction_values.sort()
+		metrics["rtgi_specular_roughness_%s_reflection_direction_delta_p99" % key] = _percentile_sorted(direction_values, 0.99)
 	return metrics
 
 
@@ -2059,6 +2091,35 @@ func _measure_specular_delta_metrics(previous: Image, current: Image, normal_rou
 		"edge_deltas": edge_deltas,
 		"bin_deltas": bin_deltas,
 		"sparkle_pixels": sparkles,
+	}
+
+
+func _measure_specular_reflection_direction_metrics(previous: Image, current: Image, normal_roughness_image: Image) -> Dictionary:
+	var width := mini(mini(previous.get_width(), current.get_width()), normal_roughness_image.get_width())
+	var height := mini(mini(previous.get_height(), current.get_height()), normal_roughness_image.get_height())
+	var deltas: Array[float] = []
+	var bin_deltas := {
+		"00_05": [],
+		"05_15": [],
+		"15_30": [],
+		"30_60": [],
+		"60_100": [],
+	}
+	for y in range(2, height - 2, 2):
+		for x in range(2, width - 2, 2):
+			var roughness := _roughness_from_normal_roughness_pixel(normal_roughness_image.get_pixel(x, y))
+			if roughness > 0.60:
+				continue
+			var prev_dir := _reflection_direction_from_pixel(previous.get_pixel(x, y))
+			var curr_dir := _reflection_direction_from_pixel(current.get_pixel(x, y))
+			var delta := 1.0 - clampf(prev_dir.dot(curr_dir), -1.0, 1.0)
+			deltas.append(delta)
+			var bucket := _roughness_delta_bucket(roughness)
+			if not bucket.is_empty():
+				bin_deltas[bucket].append(delta)
+	return {
+		"deltas": deltas,
+		"bin_deltas": bin_deltas,
 	}
 
 
@@ -2285,6 +2346,14 @@ func _roughness_delta_bucket(roughness: float) -> String:
 	if roughness <= 1.0:
 		return "60_100"
 	return ""
+
+
+func _reflection_direction_from_pixel(pixel: Color) -> Vector3:
+	var direction := Vector3(pixel.r * 2.0 - 1.0, pixel.g * 2.0 - 1.0, pixel.b * 2.0 - 1.0)
+	var length := direction.length()
+	if length <= 0.0001:
+		return Vector3(0.0, 0.0, 1.0)
+	return direction / length
 
 
 func _percentile_sorted(values: Array, percentile: float) -> float:
