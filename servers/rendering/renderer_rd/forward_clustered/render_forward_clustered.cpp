@@ -3734,6 +3734,10 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 			copy_effects->copy_to_fb_rect(rb_data->rt_get_normal_roughness(), fb, Rect2(Vector2(), rtsize), false, false, false, false, RID(), false, false, false, true);
 		}
 
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_ROUGHNESS_BUCKET && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_NORMAL_ROUGHNESS)) {
+			copy_effects->copy_to_fb_rect(rb_data->rt_get_normal_roughness(), fb, Rect2(Vector2(), rtsize), false, false, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_ALPHA_TO_LUMINANCE);
+		}
+
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_VIEWZ_HITDIST && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_VIEWZ_HITDIST)) {
 			copy_effects->copy_to_fb_rect(rb_data->rt_get_viewz_hitdist(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
 		}

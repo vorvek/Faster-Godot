@@ -49,8 +49,8 @@ var _profile_timings = false
 var _results = []
 var _split_pair_metrics = []
 var _split_pair_images = {}
-var _all_debug_views = ["noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
-var _debug_views = ["noisy", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_rejection", "final"]
+var _all_debug_views = ["noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_roughness_bucket", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
+var _debug_views = ["noisy", "specular_noisy", "specular_final", "specular_guide", "specular_roughness_bucket", "normal_roughness", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_rejection", "final"]
 
 
 func _initialize() -> void:
@@ -399,6 +399,7 @@ func _run_case(test_case: Dictionary) -> Dictionary:
 	if _capture_debug and bool(test_case.get("rtgi_enabled", false)):
 		stage_start = Time.get_ticks_msec()
 		debug_metrics = await _capture_debug_views(test_case, game_viewport)
+		debug_metrics.merge(await _capture_specular_temporal_debug(test_case, game_viewport), true)
 		_record_stage_timing(timings, "debug_capture_views", stage_start)
 	return {
 		"scene": scene,
@@ -500,6 +501,8 @@ func _neutralize_rf_shader_noise(node: TextureRect) -> void:
 
 func _capture_debug_views(test_case: Dictionary, game_viewport: Viewport) -> Dictionary:
 	var metrics := {}
+	var specular_image: Image = null
+	var normal_roughness_image: Image = null
 	for view in _debug_views:
 		if view.begins_with("cache_") and not _cache_debug_available(test_case):
 			continue
@@ -508,6 +511,10 @@ func _capture_debug_views(test_case: Dictionary, game_viewport: Viewport) -> Dic
 		await RenderingServer.frame_post_draw
 		var image := _capture_viewport(game_viewport)
 		image.save_png(_output_path("%s_%s_game.png" % [test_case["name"], view]))
+		if view == "specular_final":
+			specular_image = image.duplicate()
+		elif view == "specular_roughness_bucket":
+			normal_roughness_image = image.duplicate()
 		var view_metrics := _image_metrics(image, "rtgi_%s" % view)
 		view_metrics.merge(_image_roi_metrics(image, "rtgi_%s" % view), true)
 		if view.begins_with("cache_"):
@@ -526,6 +533,8 @@ func _capture_debug_views(test_case: Dictionary, game_viewport: Viewport) -> Dic
 			view_metrics.merge(_image_source_rejection_diagnostic_metrics(image), true)
 		for key in view_metrics.keys():
 			metrics[key] = view_metrics[key]
+	if specular_image != null and normal_roughness_image != null:
+		metrics.merge(_image_specular_surface_diagnostic_metrics(specular_image, normal_roughness_image), true)
 	_apply_debug_view(game_viewport, "disabled")
 	await process_frame
 	await RenderingServer.frame_post_draw
@@ -533,8 +542,245 @@ func _capture_debug_views(test_case: Dictionary, game_viewport: Viewport) -> Dic
 	return metrics
 
 
+func _capture_specular_temporal_debug(test_case: Dictionary, game_viewport: Viewport) -> Dictionary:
+	if _sparkle_frames < 2:
+		return {}
+	var previous: Image = null
+	var first: Image = null
+	var last: Image = null
+	var all_deltas: Array[float] = []
+	var all_edge_deltas: Array[float] = []
+	var all_luma: Array[float] = []
+	var bin_deltas := {
+		"00_05": [],
+		"05_15": [],
+		"15_30": [],
+		"30_60": [],
+		"60_100": [],
+	}
+	var total_specular_samples := 0
+	var total_sampled_pixels := 0
+	var mirror_samples := 0
+	var glossy_samples := 0
+	var rough_samples := 0
+	var max_sparkle_pixels := 0
+	var total_sparkle_pixels := 0
+	var max_fireflies_per_mp := 0.0
+	var max_speckles_per_mp := 0.0
+	for frame in range(_sparkle_frames):
+		_apply_debug_view(game_viewport, "specular_final")
+		await process_frame
+		await RenderingServer.frame_post_draw
+		var current := _capture_viewport(game_viewport)
+		if first == null:
+			first = current.duplicate()
+		last = current.duplicate()
+		_apply_debug_view(game_viewport, "specular_roughness_bucket")
+		await process_frame
+		await RenderingServer.frame_post_draw
+		var normal_roughness := _capture_viewport(game_viewport)
+		var surface_metrics := _image_specular_surface_samples(current, normal_roughness)
+		total_specular_samples += int(surface_metrics["specular_samples"])
+		total_sampled_pixels += int(surface_metrics["sampled_pixels"])
+		mirror_samples += int(surface_metrics["mirror_samples"])
+		glossy_samples += int(surface_metrics["glossy_samples"])
+		rough_samples += int(surface_metrics["rough_samples"])
+		max_fireflies_per_mp = maxf(max_fireflies_per_mp, surface_metrics["highlight_fireflies_per_mp"])
+		max_speckles_per_mp = maxf(max_speckles_per_mp, surface_metrics["visible_speckles_per_mp"])
+		all_luma.append_array(surface_metrics["luma_values"])
+		if previous != null:
+			var delta_metrics := _image_specular_delta_samples(previous, current, normal_roughness)
+			all_deltas.append_array(delta_metrics["deltas"])
+			all_edge_deltas.append_array(delta_metrics["edge_deltas"])
+			for key in bin_deltas.keys():
+				bin_deltas[key].append_array(delta_metrics["bin_deltas"][key])
+			max_sparkle_pixels = maxi(max_sparkle_pixels, int(delta_metrics["sparkle_pixels"]))
+			total_sparkle_pixels += int(delta_metrics["sparkle_pixels"])
+		previous = current
+	if first != null:
+		first.save_png(_output_path("%s_specular_temporal_first_game.png" % test_case["name"]))
+	if last != null:
+		last.save_png(_output_path("%s_specular_temporal_last_game.png" % test_case["name"]))
+	all_deltas.sort()
+	all_edge_deltas.sort()
+	all_luma.sort()
+	var pair_count := maxi(_sparkle_frames - 1, 1)
+	var metrics := {
+		"rtgi_specular_temporal_sparkle_per_mp": _per_megapixel_pixels(total_sparkle_pixels, total_specular_samples),
+		"rtgi_specular_temporal_sparkle_max_per_mp": _per_megapixel_pixels(max_sparkle_pixels, maxi(int(ceil(float(total_specular_samples) / float(pair_count))), 1)),
+		"rtgi_specular_temporal_delta_p95": _percentile_sorted(all_deltas, 0.95),
+		"rtgi_specular_temporal_delta_p99": _percentile_sorted(all_deltas, 0.99),
+		"rtgi_specular_highlight_fireflies_per_mp": max_fireflies_per_mp,
+		"rtgi_specular_visible_speckles_per_mp": max_speckles_per_mp,
+		"rtgi_specular_reflection_edge_delta_p95": _percentile_sorted(all_edge_deltas, 0.95),
+		"rtgi_specular_reflection_edge_delta_p99": _percentile_sorted(all_edge_deltas, 0.99),
+		"rtgi_specular_luma_p95": _percentile_sorted(all_luma, 0.95),
+		"rtgi_specular_luma_p99": _percentile_sorted(all_luma, 0.99),
+		"rtgi_specular_luma_max": all_luma.back() if not all_luma.is_empty() else 0.0,
+		"rtgi_specular_pixel_fraction": float(total_specular_samples) / maxf(float(total_sampled_pixels), 1.0),
+		"rtgi_specular_mirror_pixel_fraction": float(mirror_samples) / maxf(float(total_sampled_pixels), 1.0),
+		"rtgi_specular_glossy_pixel_fraction": float(glossy_samples) / maxf(float(total_sampled_pixels), 1.0),
+		"rtgi_specular_rough_pixel_fraction": float(rough_samples) / maxf(float(total_sampled_pixels), 1.0),
+	}
+	for key in bin_deltas.keys():
+		var values: Array = bin_deltas[key]
+		values.sort()
+		metrics["rtgi_specular_roughness_%s_delta_p99" % key] = _percentile_sorted(values, 0.99)
+	return metrics
+
+
 func _cache_debug_available(test_case: Dictionary) -> bool:
 	return bool(test_case.get("rtgi_enabled", false)) and bool(test_case.get("split_signals", true)) and bool(test_case.get("diffuse_cache", _diffuse_cache)) and float(test_case.get("denoise", 0.0)) > 0.001 and float(test_case.get("history", 0.0)) > 0.001
+
+
+func _image_specular_surface_diagnostic_metrics(specular_image: Image, normal_roughness_image: Image) -> Dictionary:
+	var samples := _image_specular_surface_samples(specular_image, normal_roughness_image)
+	var luma_values: Array = samples["luma_values"]
+	luma_values.sort()
+	return {
+		"rtgi_specular_highlight_fireflies_per_mp": samples["highlight_fireflies_per_mp"],
+		"rtgi_specular_visible_speckles_per_mp": samples["visible_speckles_per_mp"],
+		"rtgi_specular_luma_p95": _percentile_sorted(luma_values, 0.95),
+		"rtgi_specular_luma_p99": _percentile_sorted(luma_values, 0.99),
+		"rtgi_specular_luma_max": luma_values.back() if not luma_values.is_empty() else 0.0,
+		"rtgi_specular_pixel_fraction": float(samples["specular_samples"]) / maxf(float(samples["sampled_pixels"]), 1.0),
+		"rtgi_specular_mirror_pixel_fraction": float(samples["mirror_samples"]) / maxf(float(samples["sampled_pixels"]), 1.0),
+		"rtgi_specular_glossy_pixel_fraction": float(samples["glossy_samples"]) / maxf(float(samples["sampled_pixels"]), 1.0),
+		"rtgi_specular_rough_pixel_fraction": float(samples["rough_samples"]) / maxf(float(samples["sampled_pixels"]), 1.0),
+	}
+
+
+func _image_specular_surface_samples(specular_image: Image, normal_roughness_image: Image) -> Dictionary:
+	var width := mini(specular_image.get_width(), normal_roughness_image.get_width())
+	var height := mini(specular_image.get_height(), normal_roughness_image.get_height())
+	var sampled := 0
+	var specular := 0
+	var mirror := 0
+	var glossy := 0
+	var rough := 0
+	var fireflies := 0
+	var speckles := 0
+	var luma_values: Array[float] = []
+	for y in range(2, height - 2, 2):
+		for x in range(2, width - 2, 2):
+			sampled += 1
+			var roughness := _roughness_from_normal_roughness_pixel(normal_roughness_image.get_pixel(x, y))
+			if roughness > 0.60:
+				continue
+			specular += 1
+			if roughness <= 0.05:
+				mirror += 1
+			elif roughness <= 0.30:
+				glossy += 1
+			else:
+				rough += 1
+			var center := _luma(specular_image.get_pixel(x, y))
+			luma_values.append(center)
+			var neighbor := _local_neighbor_mean_luma(specular_image, x, y)
+			var range := _local_neighbor_luma_range(specular_image, x, y)
+			if center > maxf(neighbor * 3.0 + 0.030, 0.10):
+				fireflies += 1
+			if center > maxf(neighbor * 2.0 + 0.020, range * 1.55 + 0.030):
+				speckles += 1
+	return {
+		"sampled_pixels": sampled,
+		"specular_samples": specular,
+		"mirror_samples": mirror,
+		"glossy_samples": glossy,
+		"rough_samples": rough,
+		"highlight_fireflies_per_mp": _per_megapixel_pixels(fireflies, specular),
+		"visible_speckles_per_mp": _per_megapixel_pixels(speckles, specular),
+		"luma_values": luma_values,
+	}
+
+
+func _image_specular_delta_samples(previous: Image, current: Image, normal_roughness_image: Image) -> Dictionary:
+	var width := mini(mini(previous.get_width(), current.get_width()), normal_roughness_image.get_width())
+	var height := mini(mini(previous.get_height(), current.get_height()), normal_roughness_image.get_height())
+	var deltas: Array[float] = []
+	var edge_deltas: Array[float] = []
+	var bin_deltas := {
+		"00_05": [],
+		"05_15": [],
+		"15_30": [],
+		"30_60": [],
+		"60_100": [],
+	}
+	var sparkles := 0
+	for y in range(2, height - 2, 2):
+		for x in range(2, width - 2, 2):
+			var roughness := _roughness_from_normal_roughness_pixel(normal_roughness_image.get_pixel(x, y))
+			var prev_luma := _luma(previous.get_pixel(x, y))
+			var curr_luma := _luma(current.get_pixel(x, y))
+			var delta := absf(curr_luma - prev_luma)
+			if roughness <= 0.60:
+				deltas.append(delta)
+				var support := maxf(prev_luma, curr_luma)
+				if support > 0.04 and delta > maxf(0.035, support * 0.36):
+					sparkles += 1
+				if maxf(_local_neighbor_luma_range(previous, x, y), _local_neighbor_luma_range(current, x, y)) > 0.055:
+					edge_deltas.append(delta)
+			var bucket := _roughness_delta_bucket(roughness)
+			if not bucket.is_empty():
+				bin_deltas[bucket].append(delta)
+	return {
+		"deltas": deltas,
+		"edge_deltas": edge_deltas,
+		"bin_deltas": bin_deltas,
+		"sparkle_pixels": sparkles,
+	}
+
+
+func _roughness_from_normal_roughness_pixel(pixel: Color) -> float:
+	return clampf(pixel.r, 0.0, 1.0)
+
+
+func _roughness_delta_bucket(roughness: float) -> String:
+	if roughness <= 0.05:
+		return "00_05"
+	if roughness <= 0.15:
+		return "05_15"
+	if roughness <= 0.30:
+		return "15_30"
+	if roughness <= 0.60:
+		return "30_60"
+	if roughness <= 1.0:
+		return "60_100"
+	return ""
+
+
+func _percentile_sorted(values: Array, percentile: float) -> float:
+	if values.is_empty():
+		return 0.0
+	var idx := clampi(int(round(float(values.size() - 1) * percentile)), 0, values.size() - 1)
+	return float(values[idx])
+
+
+func _local_neighbor_mean_luma(image: Image, x: int, y: int) -> float:
+	var sum := 0.0
+	var count := 0
+	for ny in range(-1, 2):
+		for nx in range(-1, 2):
+			if nx == 0 and ny == 0:
+				continue
+			sum += _luma(image.get_pixel(x + nx, y + ny))
+			count += 1
+	return sum / maxf(float(count), 1.0)
+
+
+func _local_neighbor_luma_range(image: Image, x: int, y: int) -> float:
+	var min_luma := 1.0
+	var max_luma := 0.0
+	for ny in range(-1, 2):
+		for nx in range(-1, 2):
+			var luma := _luma(image.get_pixel(x + nx, y + ny))
+			min_luma = minf(min_luma, luma)
+			max_luma = maxf(max_luma, luma)
+	return max_luma - min_luma
+
+
+func _per_megapixel_pixels(count: int, pixels: int) -> float:
+	return float(count) / maxf(float(pixels) / 1000000.0, 1e-6)
 
 
 func _image_channel_means(image: Image, prefix: String) -> Dictionary:
@@ -916,6 +1162,8 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_FINAL
 		"specular_guide":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_GUIDE
+		"specular_roughness_bucket":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_ROUGHNESS_BUCKET
 		"noisy":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_NOISY
 		"normal_roughness":

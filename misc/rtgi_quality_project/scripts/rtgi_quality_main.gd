@@ -26,6 +26,8 @@ var _capture_all_debug_views := true
 var _capture_comparison := false
 var _write_reference := false
 var _camera_pan := false
+var _specular_object_motion := false
+var _specular_motion_nodes: Array[Node3D] = []
 var _reference_spp := 16
 var _sparkle_frames := 16
 var _convergence_frames := 0
@@ -98,7 +100,7 @@ func _parse_args() -> void:
 			_convergence_frames = clampi(arg.trim_prefix("--rtgi-convergence-frames=").to_int(), 0, 128)
 		elif arg.begins_with("--rtgi-scene="):
 			var requested_scene := arg.trim_prefix("--rtgi-scene=").to_lower()
-			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive"]:
+			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability"]:
 				_scene_mode = requested_scene
 			else:
 				push_warning("Unknown RTGI quality scene '%s'; using stress scene." % requested_scene)
@@ -140,6 +142,8 @@ func _parse_args() -> void:
 			_write_reference = true
 		elif arg == "--rtgi-camera-pan":
 			_camera_pan = true
+		elif arg == "--rtgi-specular-object-motion":
+			_specular_object_motion = true
 
 
 func _build_scene() -> void:
@@ -198,6 +202,9 @@ func _build_scene() -> void:
 		return
 	if _scene_mode == "many_light_emissive":
 		_build_many_light_emissive_scene(env)
+		return
+	if _scene_mode == "specular_stability":
+		_build_specular_stability_scene(env)
 		return
 
 	env.background_mode = Environment.BG_COLOR
@@ -304,6 +311,83 @@ func _build_many_light_emissive_scene(env: Environment) -> void:
 	_camera.position = Vector3(0.0, 1.55, 1.95)
 	add_child(_camera)
 	_camera.look_at(Vector3(0.0, 1.55, -4.4), Vector3.UP)
+
+
+func _build_specular_stability_scene(env: Environment) -> void:
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.0015, 0.0018, 0.0024)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.004, 0.004, 0.005)
+	env.ambient_light_energy = 0.03
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.tonemap_exposure = 0.72
+	env.tonemap_white = 8.0
+	env.rtgi_max_bounces = 5
+
+	var wall := _make_flat_material(Color(0.018, 0.020, 0.024), 0.82, 0.0)
+	var dark := _make_flat_material(Color(0.006, 0.006, 0.007), 0.92, 0.0)
+	var glossy_floor := _make_flat_material(Color(0.34, 0.36, 0.38), 0.055, 0.0)
+	var mirror := _make_flat_material(Color(0.86, 0.88, 0.90), 0.012, 1.0)
+	var brushed := _make_flat_material(Color(0.70, 0.68, 0.62), 0.11, 1.0)
+	var matte_detail := _make_flat_material(Color(0.26, 0.23, 0.20), 0.64, 0.0)
+	var normal_gloss := _make_normal_mapped_glossy_material()
+	var red_emitter := _make_emissive_material(Color(1.0, 0.16, 0.08), 13.0)
+	var cyan_emitter := _make_emissive_material(Color(0.12, 0.70, 1.0), 9.5)
+	var warm_emitter := _make_emissive_material(Color(1.0, 0.74, 0.32), 10.5)
+
+	_add_box("SpecularFloor", Vector3(0.0, -0.05, -2.2), Vector3(9.5, 0.10, 8.8), glossy_floor)
+	_add_box("SpecularBackWall", Vector3(0.0, 2.05, -6.35), Vector3(9.5, 4.2, 0.12), wall)
+	_add_box("SpecularLeftWall", Vector3(-4.75, 2.05, -2.2), Vector3(0.12, 4.2, 8.8), wall)
+	_add_box("SpecularRightWall", Vector3(4.75, 2.05, -2.2), Vector3(0.12, 4.2, 8.8), wall)
+	_add_box("SpecularCeiling", Vector3(0.0, 4.10, -2.2), Vector3(9.5, 0.12, 8.8), dark)
+
+	_add_box("SpecularRedPanel", Vector3(-2.7, 1.75, -6.27), Vector3(0.42, 0.42, 0.05), red_emitter)
+	_add_box("SpecularCyanPanel", Vector3(2.85, 2.35, -6.27), Vector3(0.58, 0.34, 0.05), cyan_emitter)
+	_add_box("SpecularWarmPanel", Vector3(0.1, 3.25, -4.8), Vector3(1.1, 0.07, 0.46), warm_emitter)
+
+	var mirror_sphere := _add_sphere("SpecularMirrorSphere", Vector3(-1.45, 0.62, -3.25), 0.46, mirror)
+	mirror_sphere.gi_mode = GeometryInstance3D.GI_MODE_DYNAMIC
+	_specular_motion_nodes.append(mirror_sphere)
+	var glossy_sphere := _add_sphere("SpecularGlossySphere", Vector3(1.35, 0.50, -3.85), 0.38, brushed)
+	glossy_sphere.gi_mode = GeometryInstance3D.GI_MODE_DYNAMIC
+	_specular_motion_nodes.append(glossy_sphere)
+	var normal_panel := _add_box("SpecularNormalMappedGlossyPanel", Vector3(-3.10, 0.84, -4.15), Vector3(1.15, 1.25, 0.08), normal_gloss)
+	normal_panel.rotation_degrees.y = -18.0
+
+	var ramp_roughness := [0.02, 0.08, 0.20, 0.42, 0.72]
+	for i in range(ramp_roughness.size()):
+		var roughness: float = ramp_roughness[i]
+		var ramp_material := _make_flat_material(Color(0.44, 0.45, 0.46), roughness, 0.0)
+		var tile := _add_box("SpecularRoughnessRamp_%02d" % i, Vector3(-2.35 + float(i) * 1.15, 0.015, -1.05), Vector3(1.0, 0.05, 1.30), ramp_material)
+		tile.gi_mode = GeometryInstance3D.GI_MODE_STATIC
+
+	for i in range(8):
+		var x := -3.5 + float(i) * 1.0
+		var height := 0.55 + 0.22 * float(i % 3)
+		_add_box("SpecularOccluder_%02d" % i, Vector3(x, height * 0.5, -4.75 + sin(float(i)) * 0.42), Vector3(0.16, height, 0.55), matte_detail)
+
+	for i in range(28):
+		var col := i % 7
+		var row := int(i / 7)
+		var light := OmniLight3D.new()
+		light.name = "SpecularAnalytic_%02d" % i
+		light.position = Vector3(-3.45 + float(col) * 1.15, 0.95 + float(row) * 0.48, -4.90 + cos(float(i) * 1.37) * 0.35)
+		light.light_color = Color.from_hsv(fposmod(float(i) * 0.113, 1.0), 0.52, 1.0)
+		light.light_energy = 0.34 + 0.14 * float(i % 4)
+		light.light_size = 0.035
+		light.omni_range = 3.1
+		light.shadow_enabled = true
+		add_child(light)
+
+	_camera = Camera3D.new()
+	_camera.name = "SpecularStabilityCamera"
+	_camera.current = true
+	_camera.fov = 54.0
+	_camera.near = 0.05
+	_camera.far = 80.0
+	_camera.position = Vector3(0.0, 1.38, 1.55)
+	add_child(_camera)
+	_camera.look_at(Vector3(-0.08, 1.05, -4.05), Vector3.UP)
 
 
 func _is_coexistence_scene() -> bool:
@@ -630,6 +714,7 @@ func _run_capture() -> void:
 	for frame in range(_warmup_frames):
 		if _camera_pan:
 			_animate_camera(frame)
+		_animate_specular_objects(frame)
 		await _wait_render_frame()
 
 	var output_dir_error := DirAccess.make_dir_recursive_absolute(_output_dir)
@@ -693,6 +778,7 @@ func _run_capture() -> void:
 	metrics["gate_profile"] = _gate_profile
 	metrics["debug_view"] = _debug_view
 	metrics["camera_pan"] = _camera_pan
+	metrics["specular_object_motion"] = _specular_object_motion
 	metrics["scene"] = _scene_mode
 	metrics["sponza_asset_loaded"] = _sponza_asset_loaded
 	metrics["analytic_light_sampling_enabled"] = _analytic_light_sampling
@@ -736,12 +822,33 @@ func _animate_camera(frame: int) -> void:
 		_camera.position = Vector3(lerpf(-12.6, -11.4, t), 3.4, lerpf(-0.25, 0.25, t))
 		_camera.look_at(Vector3(2.0, 3.0, 0.0), Vector3.UP)
 		return
+	if _scene_mode == "specular_stability":
+		var specular_t := float(frame) / maxf(float(_warmup_frames + maxi(_sparkle_frames, 1) - 1), 1.0)
+		_camera.position = Vector3(lerpf(-0.42, 0.48, specular_t), 1.38, lerpf(1.48, 1.72, specular_t))
+		_camera.look_at(Vector3(lerpf(-0.28, 0.18, specular_t), 1.04, -4.10), Vector3.UP)
+		return
 	_camera.position.x = lerpf(-0.18, 0.32, t)
 	_camera.look_at(Vector3(-0.05, 1.15, -2.5), Vector3.UP)
 
 
+func _animate_specular_objects(frame: int) -> void:
+	if _scene_mode != "specular_stability" or not _specular_object_motion:
+		return
+	var t := float(frame) * 0.045
+	for i in range(_specular_motion_nodes.size()):
+		var node := _specular_motion_nodes[i]
+		if not is_instance_valid(node):
+			continue
+		if i == 0:
+			node.position = Vector3(-1.45 + sin(t) * 0.36, 0.62 + sin(t * 1.7) * 0.045, -3.25 + cos(t * 0.7) * 0.22)
+			node.rotation_degrees.y = fposmod(float(frame) * 2.1, 360.0)
+		else:
+			node.position = Vector3(1.35 + cos(t * 0.8) * 0.22, 0.50, -3.85 + sin(t * 1.1) * 0.28)
+			node.rotation_degrees = Vector3(fposmod(float(frame) * 1.3, 360.0), fposmod(float(frame) * 2.7, 360.0), 0.0)
+
+
 func _capture_debug_views(base_name: String) -> void:
-	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
+	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_roughness_bucket", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
 	for view in views:
 		if view.begins_with("cache_") and not _cache_debug_available():
 			continue
@@ -1384,6 +1491,8 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_FINAL
 		"specular_guide":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_GUIDE
+		"specular_roughness_bucket":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_ROUGHNESS_BUCKET
 		"normal_roughness":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_NORMAL_ROUGHNESS
 		"viewz_hitdist":
@@ -1603,6 +1712,10 @@ func _measure_mean_color(image: Image, x0: int, y0: int, x1: int, y1: int) -> Co
 
 func _measure_temporal_sparkle(base_name: String) -> Dictionary:
 	_apply_debug_view("beauty")
+	if _scene_mode == "specular_stability":
+		if _camera_pan:
+			_animate_camera(_warmup_frames)
+		_animate_specular_objects(_warmup_frames)
 	await _wait_render_frame()
 	var previous := get_viewport().get_texture().get_image()
 	previous.convert(Image.FORMAT_RGBA8)
@@ -1612,6 +1725,11 @@ func _measure_temporal_sparkle(base_name: String) -> Dictionary:
 	var sampled_pixels := 0
 	var last := previous
 	for frame in range(1, _sparkle_frames):
+		if _scene_mode == "specular_stability":
+			var scene_frame := _warmup_frames + frame
+			if _camera_pan:
+				_animate_camera(scene_frame)
+			_animate_specular_objects(scene_frame)
 		await _wait_render_frame()
 		var current := get_viewport().get_texture().get_image()
 		current.convert(Image.FORMAT_RGBA8)
@@ -1625,12 +1743,16 @@ func _measure_temporal_sparkle(base_name: String) -> Dictionary:
 	var last_path := "%s/%s_sparkle_last.png" % [_output_dir, base_name]
 	first.save_png(first_path)
 	last.save_png(last_path)
-	return {
+	var metrics := {
 		"temporal_sparkle_pixels_max": max_sparkle_pixels,
 		"temporal_sparkle_pixels_avg": float(total_sparkle_pixels) / maxf(float(_sparkle_frames - 1), 1.0),
 		"temporal_sparkle_per_megapixel_max": _per_megapixel(max_sparkle_pixels, sampled_pixels),
 		"temporal_sparkle_per_megapixel_avg": _per_megapixel(total_sparkle_pixels, sampled_pixels * maxi(_sparkle_frames - 1, 1)),
 	}
+	if _scene_mode == "specular_stability":
+		metrics.merge(await _measure_specular_temporal_metrics(base_name), true)
+		_apply_debug_view("beauty")
+	return metrics
 
 
 func _measure_convergence_curve(base_name: String) -> Dictionary:
@@ -1688,6 +1810,176 @@ func _measure_convergence_curve(base_name: String) -> Dictionary:
 		"convergence_last_luma_p99": curve.back()["luma_p99"] if not curve.is_empty() else 0.0,
 		"convergence_last_fireflies_per_megapixel": curve.back()["full_frame_fireflies_per_megapixel"] if not curve.is_empty() else 0.0,
 		"convergence_last_frame_delta_sparkle_per_megapixel": curve.back()["frame_delta_sparkle_per_megapixel"] if not curve.is_empty() else 0.0,
+	}
+
+
+func _measure_specular_temporal_metrics(base_name: String) -> Dictionary:
+	var previous: Image = null
+	var first: Image = null
+	var last: Image = null
+	var all_deltas: Array[float] = []
+	var all_edge_deltas: Array[float] = []
+	var all_luma: Array[float] = []
+	var bin_deltas := {
+		"00_05": [],
+		"05_15": [],
+		"15_30": [],
+		"30_60": [],
+		"60_100": [],
+	}
+	var total_specular_samples := 0
+	var total_sampled_pixels := 0
+	var mirror_samples := 0
+	var glossy_samples := 0
+	var rough_samples := 0
+	var max_sparkle_pixels := 0
+	var total_sparkle_pixels := 0
+	var max_fireflies_per_mp := 0.0
+	var max_speckles_per_mp := 0.0
+	for frame in range(_sparkle_frames):
+		var scene_frame := _warmup_frames + _sparkle_frames + frame
+		if _camera_pan:
+			_animate_camera(scene_frame)
+		_animate_specular_objects(scene_frame)
+		_apply_debug_view("specular_final")
+		await _wait_render_frame()
+		var current := get_viewport().get_texture().get_image()
+		current.convert(Image.FORMAT_RGBA8)
+		if first == null:
+			first = current.duplicate()
+		last = current.duplicate()
+		_apply_debug_view("specular_roughness_bucket")
+		await _wait_render_frame()
+		var normal_roughness := get_viewport().get_texture().get_image()
+		normal_roughness.convert(Image.FORMAT_RGBA8)
+		var surface_metrics := _measure_specular_surface_metrics(current, normal_roughness)
+		total_specular_samples += int(surface_metrics["specular_samples"])
+		total_sampled_pixels += int(surface_metrics["sampled_pixels"])
+		mirror_samples += int(surface_metrics["mirror_samples"])
+		glossy_samples += int(surface_metrics["glossy_samples"])
+		rough_samples += int(surface_metrics["rough_samples"])
+		max_fireflies_per_mp = maxf(max_fireflies_per_mp, surface_metrics["highlight_fireflies_per_mp"])
+		max_speckles_per_mp = maxf(max_speckles_per_mp, surface_metrics["visible_speckles_per_mp"])
+		all_luma.append_array(surface_metrics["luma_values"])
+		if previous != null:
+			var delta_metrics := _measure_specular_delta_metrics(previous, current, normal_roughness)
+			all_deltas.append_array(delta_metrics["deltas"])
+			all_edge_deltas.append_array(delta_metrics["edge_deltas"])
+			for key in bin_deltas.keys():
+				bin_deltas[key].append_array(delta_metrics["bin_deltas"][key])
+			max_sparkle_pixels = maxi(max_sparkle_pixels, int(delta_metrics["sparkle_pixels"]))
+			total_sparkle_pixels += int(delta_metrics["sparkle_pixels"])
+		previous = current
+	if first != null:
+		first.save_png("%s/%s_specular_temporal_first.png" % [_output_dir, base_name])
+	if last != null:
+		last.save_png("%s/%s_specular_temporal_last.png" % [_output_dir, base_name])
+	all_deltas.sort()
+	all_edge_deltas.sort()
+	all_luma.sort()
+	var pair_count := maxi(_sparkle_frames - 1, 1)
+	var metrics := {
+		"rtgi_specular_temporal_sparkle_per_mp": _per_megapixel(total_sparkle_pixels, total_specular_samples),
+		"rtgi_specular_temporal_sparkle_max_per_mp": _per_megapixel(max_sparkle_pixels, maxi(int(ceil(float(total_specular_samples) / float(pair_count))), 1)),
+		"rtgi_specular_temporal_delta_p95": _percentile_sorted(all_deltas, 0.95),
+		"rtgi_specular_temporal_delta_p99": _percentile_sorted(all_deltas, 0.99),
+		"rtgi_specular_highlight_fireflies_per_mp": max_fireflies_per_mp,
+		"rtgi_specular_visible_speckles_per_mp": max_speckles_per_mp,
+		"rtgi_specular_reflection_edge_delta_p95": _percentile_sorted(all_edge_deltas, 0.95),
+		"rtgi_specular_reflection_edge_delta_p99": _percentile_sorted(all_edge_deltas, 0.99),
+		"rtgi_specular_luma_p95": _percentile_sorted(all_luma, 0.95),
+		"rtgi_specular_luma_p99": _percentile_sorted(all_luma, 0.99),
+		"rtgi_specular_luma_max": all_luma.back() if not all_luma.is_empty() else 0.0,
+		"rtgi_specular_pixel_fraction": float(total_specular_samples) / maxf(float(total_sampled_pixels), 1.0),
+		"rtgi_specular_mirror_pixel_fraction": float(mirror_samples) / maxf(float(total_sampled_pixels), 1.0),
+		"rtgi_specular_glossy_pixel_fraction": float(glossy_samples) / maxf(float(total_sampled_pixels), 1.0),
+		"rtgi_specular_rough_pixel_fraction": float(rough_samples) / maxf(float(total_sampled_pixels), 1.0),
+	}
+	for key in bin_deltas.keys():
+		var values: Array = bin_deltas[key]
+		values.sort()
+		metrics["rtgi_specular_roughness_%s_delta_p99" % key] = _percentile_sorted(values, 0.99)
+	return metrics
+
+
+func _measure_specular_surface_metrics(specular_image: Image, normal_roughness_image: Image) -> Dictionary:
+	var width := mini(specular_image.get_width(), normal_roughness_image.get_width())
+	var height := mini(specular_image.get_height(), normal_roughness_image.get_height())
+	var sampled := 0
+	var specular := 0
+	var mirror := 0
+	var glossy := 0
+	var rough := 0
+	var fireflies := 0
+	var speckles := 0
+	var luma_values: Array[float] = []
+	for y in range(2, height - 2, 2):
+		for x in range(2, width - 2, 2):
+			sampled += 1
+			var roughness := _roughness_from_normal_roughness_pixel(normal_roughness_image.get_pixel(x, y))
+			if roughness > 0.60:
+				continue
+			specular += 1
+			if roughness <= 0.05:
+				mirror += 1
+			elif roughness <= 0.30:
+				glossy += 1
+			else:
+				rough += 1
+			var center := _luma(specular_image.get_pixel(x, y))
+			luma_values.append(center)
+			var neighbor := _local_neighbor_mean_luma(specular_image, x, y)
+			var range := _local_neighbor_luma_range(specular_image, x, y)
+			if center > maxf(neighbor * 3.0 + 0.030, 0.10):
+				fireflies += 1
+			if center > maxf(neighbor * 2.0 + 0.020, range * 1.55 + 0.030):
+				speckles += 1
+	return {
+		"sampled_pixels": sampled,
+		"specular_samples": specular,
+		"mirror_samples": mirror,
+		"glossy_samples": glossy,
+		"rough_samples": rough,
+		"highlight_fireflies_per_mp": _per_megapixel(fireflies, specular),
+		"visible_speckles_per_mp": _per_megapixel(speckles, specular),
+		"luma_values": luma_values,
+	}
+
+
+func _measure_specular_delta_metrics(previous: Image, current: Image, normal_roughness_image: Image) -> Dictionary:
+	var width := mini(mini(previous.get_width(), current.get_width()), normal_roughness_image.get_width())
+	var height := mini(mini(previous.get_height(), current.get_height()), normal_roughness_image.get_height())
+	var deltas: Array[float] = []
+	var edge_deltas: Array[float] = []
+	var bin_deltas := {
+		"00_05": [],
+		"05_15": [],
+		"15_30": [],
+		"30_60": [],
+		"60_100": [],
+	}
+	var sparkles := 0
+	for y in range(2, height - 2, 2):
+		for x in range(2, width - 2, 2):
+			var roughness := _roughness_from_normal_roughness_pixel(normal_roughness_image.get_pixel(x, y))
+			var prev_luma := _luma(previous.get_pixel(x, y))
+			var curr_luma := _luma(current.get_pixel(x, y))
+			var delta := absf(curr_luma - prev_luma)
+			if roughness <= 0.60:
+				deltas.append(delta)
+				var support := maxf(prev_luma, curr_luma)
+				if support > 0.04 and delta > maxf(0.035, support * 0.36):
+					sparkles += 1
+				if maxf(_local_neighbor_luma_range(previous, x, y), _local_neighbor_luma_range(current, x, y)) > 0.055:
+					edge_deltas.append(delta)
+			var bucket := _roughness_delta_bucket(roughness)
+			if not bucket.is_empty():
+				bin_deltas[bucket].append(delta)
+	return {
+		"deltas": deltas,
+		"edge_deltas": edge_deltas,
+		"bin_deltas": bin_deltas,
+		"sparkle_pixels": sparkles,
 	}
 
 
@@ -1896,6 +2188,31 @@ func _local_neighbor_luma_range(image: Image, x: int, y: int) -> float:
 
 func _per_megapixel(count: int, pixels: int) -> float:
 	return float(count) / maxf(float(pixels) / 1000000.0, 1e-5)
+
+
+func _roughness_from_normal_roughness_pixel(pixel: Color) -> float:
+	return clampf(pixel.r, 0.0, 1.0)
+
+
+func _roughness_delta_bucket(roughness: float) -> String:
+	if roughness <= 0.05:
+		return "00_05"
+	if roughness <= 0.15:
+		return "05_15"
+	if roughness <= 0.30:
+		return "15_30"
+	if roughness <= 0.60:
+		return "30_60"
+	if roughness <= 1.0:
+		return "60_100"
+	return ""
+
+
+func _percentile_sorted(values: Array, percentile: float) -> float:
+	if values.is_empty():
+		return 0.0
+	var idx := clampi(int(round(float(values.size() - 1) * percentile)), 0, values.size() - 1)
+	return float(values[idx])
 
 
 func _measure_detail_region(image: Image, x0: int, y0: int, x1: int, y1: int) -> Dictionary:
@@ -2317,6 +2634,15 @@ func _make_emissive_material(color: Color, energy: float) -> StandardMaterial3D:
 	return material
 
 
+func _make_normal_mapped_glossy_material() -> StandardMaterial3D:
+	var material := _make_flat_material(Color(0.40, 0.43, 0.47), 0.085, 0.0)
+	material.set_feature(BaseMaterial3D.FEATURE_NORMAL_MAPPING, true)
+	material.set_texture(BaseMaterial3D.TEXTURE_NORMAL, _make_wave_normal_texture())
+	material.normal_scale = 1.0
+	material.uv1_scale = Vector3(3.5, 3.5, 1.0)
+	return material
+
+
 func _make_shader_light_material() -> ShaderMaterial:
 	var shader := Shader.new()
 	shader.code = "\n".join(PackedStringArray([
@@ -2351,6 +2677,19 @@ func _make_brick_texture() -> ImageTexture:
 			var base := Color(0.47 + grain * 0.10, 0.29 + grain * 0.055, 0.16 + grain * 0.035)
 			var color := Color(0.10, 0.085, 0.070) if mortar else base
 			image.set_pixel(x, y, color)
+	return ImageTexture.create_from_image(image)
+
+
+func _make_wave_normal_texture() -> ImageTexture:
+	var image := Image.create_empty(256, 256, false, Image.FORMAT_RGBA8)
+	for y in range(256):
+		for x in range(256):
+			var fx := float(x) / 255.0
+			var fy := float(y) / 255.0
+			var sx := sin(fx * TAU * 9.0) * 0.34 + sin((fx + fy) * TAU * 5.0) * 0.20
+			var sy := cos(fy * TAU * 7.0) * 0.32 + sin((fx - fy) * TAU * 4.0) * 0.18
+			var n := Vector3(sx, sy, 1.0).normalized()
+			image.set_pixel(x, y, Color(n.x * 0.5 + 0.5, n.y * 0.5 + 0.5, n.z * 0.5 + 0.5, 1.0))
 	return ImageTexture.create_from_image(image)
 
 
