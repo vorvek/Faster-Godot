@@ -206,6 +206,10 @@ public:
 		RID rt_get_source_candidate_prev() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_CANDIDATE_PREV); }
 		RID rt_get_source_candidate_key() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_CANDIDATE_KEY); }
 		RID rt_get_source_candidate_key_prev() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_CANDIDATE_KEY_PREV); }
+		RID rt_get_source_direct_candidate() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_DIRECT_CANDIDATE); }
+		RID rt_get_source_direct_candidate_prev() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_DIRECT_CANDIDATE_PREV); }
+		RID rt_get_source_direct_candidate_key() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_DIRECT_CANDIDATE_KEY); }
+		RID rt_get_source_direct_candidate_key_prev() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_DIRECT_CANDIDATE_KEY_PREV); }
 		RID rt_get_source_history() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_HISTORY); }
 		RID rt_get_source_temporal_delta() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_TEMPORAL_DELTA); }
 		RID rt_get_source_rejection() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_REJECTION); }

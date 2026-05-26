@@ -1017,6 +1017,8 @@ func _measure_source_temporal_delta_diagnostic(image: Image) -> Dictionary:
 		"rtgi_source_direct_candidate_temporal_delta_p95": direct_accepted[direct_p95_idx] if not direct_accepted.is_empty() else 0.0,
 		"rtgi_source_direct_candidate_temporal_delta_p99": direct_accepted[direct_p99_idx] if not direct_accepted.is_empty() else 0.0,
 		"rtgi_source_direct_candidate_rejected_temporal_delta_p99": direct_rejected[direct_rejected_p99_idx] if not direct_rejected.is_empty() else 0.0,
+		"rtgi_source_direct_reuse_temporal_delta_p95": direct_accepted[direct_p95_idx] if not direct_accepted.is_empty() else 0.0,
+		"rtgi_source_direct_reuse_temporal_delta_p99": direct_accepted[direct_p99_idx] if not direct_accepted.is_empty() else 0.0,
 		"rtgi_source_emissive_delta_fireflies_per_mp": _per_megapixel(class_delta_counts["emissive"], count),
 		"rtgi_source_indirect_delta_fireflies_per_mp": _per_megapixel(class_delta_counts["indirect"], count),
 		"rtgi_source_sky_delta_fireflies_per_mp": _per_megapixel(class_delta_counts["sky"], count),
@@ -1052,6 +1054,7 @@ func _measure_source_rejection_diagnostic(image: Image) -> Dictionary:
 		"source_class": 0,
 		"source_id": 0,
 		"pdf_weight": 0,
+		"weight_ratio": 0,
 		"low_confidence": 0,
 	}
 	for y in range(height):
@@ -1086,8 +1089,10 @@ func _measure_source_rejection_diagnostic(image: Image) -> Dictionary:
 						direct_reject_buckets["source_class"] += 1
 					9:
 						direct_reject_buckets["source_id"] += 1
-					10, 12:
+					10:
 						direct_reject_buckets["pdf_weight"] += 1
+					12:
+						direct_reject_buckets["weight_ratio"] += 1
 					13:
 						direct_reject_buckets["low_confidence"] += 1
 	var direct_history_denom := maxf(float(direct_accept + direct_reject), 1.0)
@@ -1106,7 +1111,18 @@ func _measure_source_rejection_diagnostic(image: Image) -> Dictionary:
 		"rtgi_source_direct_history_reject_source_class_fraction": float(direct_reject_buckets["source_class"]) / direct_history_denom,
 		"rtgi_source_direct_history_reject_source_id_fraction": float(direct_reject_buckets["source_id"]) / direct_history_denom,
 		"rtgi_source_direct_history_reject_pdf_weight_fraction": float(direct_reject_buckets["pdf_weight"]) / direct_history_denom,
+		"rtgi_source_direct_history_reject_weight_ratio_fraction": float(direct_reject_buckets["weight_ratio"]) / direct_history_denom,
 		"rtgi_source_direct_history_reject_low_confidence_fraction": float(direct_reject_buckets["low_confidence"]) / direct_history_denom,
+		"rtgi_source_direct_reuse_attempt_rate": float(direct_accept + direct_reject) / float(count),
+		"rtgi_source_direct_reuse_accept_rate": float(direct_accept) / direct_history_denom,
+		"rtgi_source_direct_reuse_fallback_rate": float(direct_reject) / direct_history_denom,
+		"rtgi_source_direct_reuse_reject_depth_fraction": float(direct_reject_buckets["depth"]) / direct_history_denom,
+		"rtgi_source_direct_reuse_reject_normal_fraction": float(direct_reject_buckets["normal"]) / direct_history_denom,
+		"rtgi_source_direct_reuse_reject_hit_distance_fraction": float(direct_reject_buckets["hit_distance"]) / direct_history_denom,
+		"rtgi_source_direct_reuse_reject_source_id_fraction": float(direct_reject_buckets["source_id"]) / direct_history_denom,
+		"rtgi_source_direct_reuse_reject_pdf_ratio_fraction": float(direct_reject_buckets["pdf_weight"]) / direct_history_denom,
+		"rtgi_source_direct_reuse_reject_weight_ratio_fraction": float(direct_reject_buckets["weight_ratio"]) / direct_history_denom,
+		"rtgi_source_direct_reuse_reject_low_confidence_fraction": float(direct_reject_buckets["low_confidence"]) / direct_history_denom,
 	}
 
 

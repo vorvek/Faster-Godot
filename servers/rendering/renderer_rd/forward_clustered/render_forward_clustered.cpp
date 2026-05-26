@@ -464,6 +464,22 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_CANDIDATE_KEY_PREV, RD::DATA_FORMAT_R32_UINT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
 		source_history_created = true;
 	}
+	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_DIRECT_CANDIDATE)) {
+		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_DIRECT_CANDIDATE, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
+		source_history_created = true;
+	}
+	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_DIRECT_CANDIDATE_PREV)) {
+		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_DIRECT_CANDIDATE_PREV, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
+		source_history_created = true;
+	}
+	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_DIRECT_CANDIDATE_KEY)) {
+		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_DIRECT_CANDIDATE_KEY, RD::DATA_FORMAT_R32_UINT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
+		source_history_created = true;
+	}
+	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_DIRECT_CANDIDATE_KEY_PREV)) {
+		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_DIRECT_CANDIDATE_KEY_PREV, RD::DATA_FORMAT_R32_UINT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
+		source_history_created = true;
+	}
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_HISTORY)) {
 		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_HISTORY, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
 		source_history_created = true;
@@ -483,6 +499,10 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 		RD::get_singleton()->texture_clear(rt_get_source_candidate_prev(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
 		RD::get_singleton()->texture_clear(rt_get_source_candidate_key(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
 		RD::get_singleton()->texture_clear(rt_get_source_candidate_key_prev(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
+		RD::get_singleton()->texture_clear(rt_get_source_direct_candidate(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
+		RD::get_singleton()->texture_clear(rt_get_source_direct_candidate_prev(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
+		RD::get_singleton()->texture_clear(rt_get_source_direct_candidate_key(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
+		RD::get_singleton()->texture_clear(rt_get_source_direct_candidate_key_prev(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
 		RD::get_singleton()->texture_clear(rt_get_source_history(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
 		RD::get_singleton()->texture_clear(rt_get_source_temporal_delta(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
 		RD::get_singleton()->texture_clear(rt_get_source_rejection(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
@@ -2560,6 +2580,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->texture_clear(rb_data->rt_get_source_candidate_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 			RD::get_singleton()->texture_clear(rb_data->rt_get_source_candidate_key(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 			RD::get_singleton()->texture_clear(rb_data->rt_get_source_candidate_key_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
+			RD::get_singleton()->texture_clear(rb_data->rt_get_source_direct_candidate(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
+			RD::get_singleton()->texture_clear(rb_data->rt_get_source_direct_candidate_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
+			RD::get_singleton()->texture_clear(rb_data->rt_get_source_direct_candidate_key(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
+			RD::get_singleton()->texture_clear(rb_data->rt_get_source_direct_candidate_key_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 			RD::get_singleton()->texture_clear(rb_data->rt_get_source_history(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 			RD::get_singleton()->texture_clear(rb_data->rt_get_source_temporal_delta(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 			RD::get_singleton()->texture_clear(rb_data->rt_get_source_rejection(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
@@ -2584,6 +2608,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->texture_clear(rb_data->rt_get_source_viewz_hitdist_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 			RD::get_singleton()->texture_clear(rb_data->rt_get_source_candidate_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 			RD::get_singleton()->texture_clear(rb_data->rt_get_source_candidate_key_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
+			RD::get_singleton()->texture_clear(rb_data->rt_get_source_direct_candidate_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
+			RD::get_singleton()->texture_clear(rb_data->rt_get_source_direct_candidate_key_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 			RD::get_singleton()->texture_clear(rb_data->rt_get_source_rejection(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 		}
 	};
@@ -3149,6 +3175,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		RD::get_singleton()->texture_copy(rb_data->rt_get_source_candidate(), rb_data->rt_get_source_candidate_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
 		RD::get_singleton()->texture_copy(rb_data->rt_get_source_candidate_key(), rb_data->rt_get_source_candidate_key_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
+		RD::get_singleton()->texture_copy(rb_data->rt_get_source_direct_candidate(), rb_data->rt_get_source_direct_candidate_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
+		RD::get_singleton()->texture_copy(rb_data->rt_get_source_direct_candidate_key(), rb_data->rt_get_source_direct_candidate_key_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
 		RD::get_singleton()->texture_copy(rb_data->rt_get_normal_roughness(), rb_data->rt_get_source_normal_roughness_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
 		RD::get_singleton()->texture_copy(rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_source_viewz_hitdist_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
 
@@ -3257,6 +3285,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->texture_clear(rb_data->rt_get_prev_history_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 			RD::get_singleton()->texture_clear(rb_data->rt_get_source_candidate_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 			RD::get_singleton()->texture_clear(rb_data->rt_get_source_candidate_key_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
+			RD::get_singleton()->texture_clear(rb_data->rt_get_source_direct_candidate_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
+			RD::get_singleton()->texture_clear(rb_data->rt_get_source_direct_candidate_key_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE);
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);

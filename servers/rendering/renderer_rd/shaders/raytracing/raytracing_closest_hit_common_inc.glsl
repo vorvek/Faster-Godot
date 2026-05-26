@@ -681,17 +681,29 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		bool is_indirect = (diffuse_bounces > 0u);
 		uint receiver_layer_mask = geometries[h.geometry_idx].layer_mask;
 		uint direct_source_key = 0u;
+		uint direct_slot_source_key = 0u;
+		float direct_slot_pdf = 0.0;
+		RTDirectLighting direct_slot_light = rt_direct_lighting_zero();
+		bool direct_slot_stochastic = false;
 		RTDirectLighting direct_light = lights_evaluate_direct_lighting_split(
 				h.hit_pos, h.geometry_normal, N, V, brdf_mat, ps.rng_state, is_indirect, receiver_layer_mask, rt_light_count,
-				direct_source_key);
+				direct_source_key, direct_slot_source_key, direct_slot_pdf, direct_slot_light, direct_slot_stochastic);
 		vec3 raw_direct_diffuse = ps.throughput * direct_light.diffuse;
 		vec3 raw_direct_specular = ps.throughput * direct_light.specular;
 		vec3 direct_diffuse = rt_clamp_path_contribution(raw_direct_diffuse, m.roughness, m.metalness, is_indirect, false);
 		vec3 direct_specular = rt_clamp_path_contribution(raw_direct_specular, m.roughness, m.metalness, is_indirect, false);
 		vec3 direct_total = direct_diffuse + direct_specular;
+		vec3 raw_direct_slot_diffuse = ps.throughput * direct_slot_light.diffuse;
+		vec3 raw_direct_slot_specular = ps.throughput * direct_slot_light.specular;
+		vec3 direct_slot_total = rt_clamp_path_contribution(raw_direct_slot_diffuse, m.roughness, m.metalness, is_indirect, false) +
+				rt_clamp_path_contribution(raw_direct_slot_specular, m.roughness, m.metalness, is_indirect, false);
 		rt_signal_add_direct(ivec2(gl_LaunchIDEXT.xy), direct_diffuse, direct_specular,
 				rt_signal_clamp_delta(raw_direct_diffuse, direct_diffuse) + rt_signal_clamp_delta(raw_direct_specular, direct_specular));
-		rt_source_candidate_record(ivec2(gl_LaunchIDEXT.xy), 0.25, 1.0, clamp(rt_luminance(direct_total) / 4.0, 0.0, 1.0), direct_total, 0.0, direct_source_key);
+		if (!is_indirect) {
+			float direct_record_confidence = direct_slot_stochastic ? 1.0 : 0.5;
+			rt_source_direct_candidate_record(ivec2(gl_LaunchIDEXT.xy), direct_slot_source_key, direct_record_confidence, direct_slot_pdf, direct_slot_total, direct_slot_stochastic);
+			rt_source_candidate_record(ivec2(gl_LaunchIDEXT.xy), 0.25, direct_record_confidence, direct_slot_pdf, direct_slot_total, 0.0, direct_slot_source_key);
+		}
 		if (total_bounces == 0u) {
 			float direct_total_luma = rt_luminance(direct_total);
 			float direct_specular_fraction = direct_total_luma > 1e-5 ? rt_luminance(direct_specular) / direct_total_luma : 0.0;

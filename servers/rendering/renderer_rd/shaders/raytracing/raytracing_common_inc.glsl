@@ -162,6 +162,10 @@ layout(set = 0, binding = 52, rgba8) uniform image2D rt_prev_history_id_image;
 layout(set = 0, binding = 53, rgba16f) uniform image2D rt_source_normal_roughness_prev_image;
 layout(set = 0, binding = 54, rgba16f) uniform image2D rt_source_viewz_hitdist_prev_image;
 layout(set = 0, binding = 55, rgba16f) uniform image2D rt_source_rejection_image;
+layout(set = 0, binding = 56, rgba16f) uniform image2D rt_source_direct_candidate_image;
+layout(set = 0, binding = 57, rgba16f) uniform image2D rt_source_direct_candidate_prev_image;
+layout(set = 0, binding = 58, r32ui) uniform uimage2D rt_source_direct_candidate_key_image;
+layout(set = 0, binding = 59, r32ui) uniform uimage2D rt_source_direct_candidate_key_prev_image;
 
 #define RT_SOURCE_CLASS_DIRECT 1u
 #define RT_SOURCE_CLASS_EMISSIVE 2u
@@ -216,6 +220,8 @@ void rt_signal_reset(ivec2 pixel) {
 	imageStore(rt_signal_confidence_image, pixel, vec4(0.0, 0.0, 0.0, 1.0));
 	imageStore(rt_source_candidate_image, pixel, vec4(0.0));
 	imageStore(rt_source_candidate_key_image, pixel, uvec4(0u));
+	imageStore(rt_source_direct_candidate_image, pixel, vec4(0.0));
+	imageStore(rt_source_direct_candidate_key_image, pixel, uvec4(0u));
 	imageStore(rt_source_history_image, pixel, vec4(0.0));
 	imageStore(rt_source_temporal_delta_image, pixel, vec4(0.0));
 	imageStore(rt_source_rejection_image, pixel, vec4(0.0));
@@ -250,7 +256,34 @@ bool rt_source_load_reprojected_previous(ivec2 pixel, out ivec2 previous_pixel, 
 	return true;
 }
 
-bool rt_source_direct_history_accept(ivec2 pixel, ivec2 previous_pixel, vec4 previous_candidate, uint current_key, uint previous_key, float current_normalized_weight, out uint reject_reason) {
+bool rt_source_load_reprojected_previous_direct(ivec2 pixel, out ivec2 previous_pixel, out vec4 previous_candidate, out uint previous_key, out uint reject_reason) {
+	vec2 extent = rt_extent();
+	vec2 current_texture_uv = (vec2(pixel) + vec2(0.5)) / extent;
+	vec2 previous_texture_uv = current_texture_uv + imageLoad(rt_velocity_image, pixel).xy;
+	if (any(lessThan(previous_texture_uv, vec2(0.0))) || any(greaterThanEqual(previous_texture_uv, vec2(1.0)))) {
+		previous_pixel = ivec2(0);
+		previous_candidate = vec4(0.0);
+		previous_key = 0u;
+		reject_reason = RT_SOURCE_REJECT_PREV_UV;
+		return false;
+	}
+
+	previous_pixel = ivec2(floor(previous_texture_uv * extent));
+	ivec2 extent_i = ivec2(extent);
+	if (any(lessThan(previous_pixel, ivec2(0))) || any(greaterThanEqual(previous_pixel, extent_i))) {
+		previous_candidate = vec4(0.0);
+		previous_key = 0u;
+		reject_reason = RT_SOURCE_REJECT_PREV_UV;
+		return false;
+	}
+
+	previous_candidate = imageLoad(rt_source_direct_candidate_prev_image, previous_pixel);
+	previous_key = imageLoad(rt_source_direct_candidate_key_prev_image, previous_pixel).r;
+	reject_reason = RT_SOURCE_REJECT_NONE;
+	return true;
+}
+
+bool rt_source_direct_history_accept(ivec2 pixel, ivec2 previous_pixel, vec4 previous_candidate, uint current_key, uint previous_key, float current_normalized_weight, float current_confidence, out uint reject_reason) {
 	if (imageLoad(rt_history_validity_image, pixel).r < 0.5) {
 		reject_reason = RT_SOURCE_REJECT_CURRENT_HISTORY;
 		return false;
@@ -300,7 +333,7 @@ bool rt_source_direct_history_accept(ivec2 pixel, ivec2 previous_pixel, vec4 pre
 		reject_reason = RT_SOURCE_REJECT_SOURCE_ID;
 		return false;
 	}
-	if (previous_candidate.y < 0.75) {
+	if (previous_candidate.y < 0.75 || current_confidence < 0.75) {
 		reject_reason = RT_SOURCE_REJECT_LOW_CONFIDENCE;
 		return false;
 	}
@@ -317,22 +350,41 @@ bool rt_source_direct_history_accept(ivec2 pixel, ivec2 previous_pixel, vec4 pre
 	return true;
 }
 
+void rt_source_direct_candidate_record(ivec2 pixel, uint source_key, float confidence, float normalized_weight, vec3 contribution, bool stochastic_candidate_mode) {
+	vec3 value = sanitize_payload_vec3(contribution);
+	bool valid_source = source_key != 0u && (source_key >> RT_SOURCE_CLASS_SHIFT) == RT_SOURCE_CLASS_DIRECT;
+	float stored_confidence = stochastic_candidate_mode ? confidence : min(confidence, 0.5);
+	float contribution_luma = valid_source ? rt_luminance(value) : 0.0;
+	if (!valid_source) {
+		imageStore(rt_source_direct_candidate_image, pixel, vec4(0.0));
+		imageStore(rt_source_direct_candidate_key_image, pixel, uvec4(0u));
+		return;
+	}
+
+	imageStore(rt_source_direct_candidate_image, pixel, vec4(
+			0.25,
+			clamp(stored_confidence, 0.0, 1.0),
+			clamp(normalized_weight, 0.0, 1.0),
+			clamp(contribution_luma, 0.0, 1.0)));
+	imageStore(rt_source_direct_candidate_key_image, pixel, uvec4(source_key, 0u, 0u, 0u));
+}
+
 void rt_source_candidate_record(ivec2 pixel, float source_class, float confidence, float normalized_weight, vec3 contribution, float downweight, uint source_key) {
 	vec3 value = sanitize_payload_vec3(contribution);
 	float contribution_luma = rt_luminance(value);
 	vec4 previous = imageLoad(rt_source_candidate_image, pixel);
 	if (contribution_luma >= previous.a) {
 		uint current_class_key = source_key >> RT_SOURCE_CLASS_SHIFT;
-		uint previous_key = imageLoad(rt_source_candidate_key_prev_image, pixel).r;
-		vec4 previous_candidate = imageLoad(rt_source_candidate_prev_image, pixel);
+		uint previous_key = current_class_key == RT_SOURCE_CLASS_DIRECT ? 0u : imageLoad(rt_source_candidate_key_prev_image, pixel).r;
+		vec4 previous_candidate = current_class_key == RT_SOURCE_CLASS_DIRECT ? vec4(0.0) : imageLoad(rt_source_candidate_prev_image, pixel);
 		uint reject_reason = RT_SOURCE_REJECT_NONE;
 		bool direct_reprojected = false;
 		if (current_class_key == RT_SOURCE_CLASS_DIRECT) {
 			ivec2 previous_pixel = ivec2(0);
-			direct_reprojected = rt_source_load_reprojected_previous(pixel, previous_pixel, previous_candidate, previous_key, reject_reason);
+			direct_reprojected = rt_source_load_reprojected_previous_direct(pixel, previous_pixel, previous_candidate, previous_key, reject_reason);
 			if (direct_reprojected) {
 				uint accept_reason = RT_SOURCE_REJECT_NONE;
-				if (!rt_source_direct_history_accept(pixel, previous_pixel, previous_candidate, source_key, previous_key, normalized_weight, accept_reason)) {
+				if (!rt_source_direct_history_accept(pixel, previous_pixel, previous_candidate, source_key, previous_key, normalized_weight, confidence, accept_reason)) {
 					reject_reason = accept_reason;
 				}
 			}

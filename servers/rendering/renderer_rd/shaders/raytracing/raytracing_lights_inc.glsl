@@ -356,6 +356,68 @@ vec3 rt_direct_lighting_sum(RTDirectLighting lighting) {
 	return lighting.diffuse + lighting.specular;
 }
 
+bool lights_direct_source_weight(
+		uint light_index,
+		uint light_count,
+		uint receiver_layer_mask,
+		bool is_indirect_bounce,
+		vec3 hit_pos,
+		vec3 N,
+		out float light_weight) {
+	light_weight = 0.0;
+	if (light_index >= light_count) {
+		return false;
+	}
+
+	RTLightData test_light = rt_lights[light_index];
+	bool is_valid = (test_light.cull_mask & receiver_layer_mask) != 0u;
+	bool is_positional = (test_light.type == RT_LIGHT_TYPE_OMNI || test_light.type == RT_LIGHT_TYPE_SPOT);
+	if (is_valid && is_positional) {
+		vec3 to_l = test_light.position - hit_pos;
+		float d2 = dot(to_l, to_l);
+		is_valid = (test_light.max_range_squared == 0.0 || d2 <= test_light.max_range_squared);
+	}
+	if (!is_valid) {
+		return false;
+	}
+
+	light_weight = lights_selection_weight(hit_pos, N, test_light, is_indirect_bounce);
+	return light_weight > 0.0;
+}
+
+bool lights_find_direct_source_by_id(
+		uint source_id,
+		uint light_count,
+		uint receiver_layer_mask,
+		bool is_indirect_bounce,
+		vec3 hit_pos,
+		vec3 N,
+		out uint light_index,
+		out float selected_weight,
+		out float total_weight) {
+	light_index = 0u;
+	selected_weight = 0.0;
+	total_weight = 0.0;
+	if (source_id == 0u) {
+		return false;
+	}
+
+	for (uint idx = 0u; idx < light_count; idx++) {
+		float light_weight = 0.0;
+		if (!lights_direct_source_weight(idx, light_count, receiver_layer_mask, is_indirect_bounce, hit_pos, N, light_weight)) {
+			continue;
+		}
+
+		total_weight += light_weight;
+		if (rt_lights[idx].source_id == source_id) {
+			light_index = idx;
+			selected_weight = light_weight;
+		}
+	}
+
+	return selected_weight > 0.0 && total_weight > 0.0;
+}
+
 vec3 rt_emissive_candidate_transform_point(RTEmissiveCandidate candidate, vec3 p) {
 	return vec3(
 			dot(vec4(p, 1.0), vec4(candidate.object_to_world[0], candidate.object_to_world[1], candidate.object_to_world[2], candidate.object_to_world[3])),
@@ -629,8 +691,16 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		bool is_indirect_bounce,
 		uint receiver_layer_mask,
 		uint light_count,
-		out uint out_source_key) {
+		out uint out_source_key,
+		out uint out_direct_source_key,
+		out float out_direct_source_pdf,
+		out RTDirectLighting out_direct_source_lighting,
+		out bool out_direct_source_stochastic) {
 	out_source_key = 0u;
+	out_direct_source_key = 0u;
+	out_direct_source_pdf = 0.0;
+	out_direct_source_lighting = rt_direct_lighting_zero();
+	out_direct_source_stochastic = false;
 	if (light_count == 0u) {
 		return rt_direct_lighting_zero();
 	}
@@ -640,23 +710,8 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 	float total_weight = 0.0;
 
 	for (uint idx = 0u; idx < light_count; idx++) {
-		RTLightData test_light = rt_lights[idx];
-
-		// Range check for positional lights.
-		bool is_valid = (test_light.cull_mask & receiver_layer_mask) != 0u;
-		bool is_positional = (test_light.type == RT_LIGHT_TYPE_OMNI || test_light.type == RT_LIGHT_TYPE_SPOT);
-		if (is_valid && is_positional) {
-			vec3 to_l = test_light.position - hit_pos;
-			float d2 = dot(to_l, to_l);
-			is_valid = (test_light.max_range_squared == 0.0 || d2 <= test_light.max_range_squared);
-		}
-
-		if (!is_valid) {
-			continue;
-		}
-
-		float light_weight = lights_selection_weight(hit_pos, N, test_light, is_indirect_bounce);
-		if (light_weight <= 0.0) {
+		float light_weight = 0.0;
+		if (!lights_direct_source_weight(idx, light_count, receiver_layer_mask, is_indirect_bounce, hit_pos, N, light_weight)) {
 			continue;
 		}
 
@@ -672,18 +727,11 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		RTDirectLighting deterministic_sum = rt_direct_lighting_zero();
 		float dominant_luma = 0.0;
 		for (uint idx = 0u; idx < light_count; idx++) {
-			RTLightData test_light = rt_lights[idx];
-
-			bool is_valid = (test_light.cull_mask & receiver_layer_mask) != 0u;
-			bool is_positional = (test_light.type == RT_LIGHT_TYPE_OMNI || test_light.type == RT_LIGHT_TYPE_SPOT);
-			if (is_valid && is_positional) {
-				vec3 to_l = test_light.position - hit_pos;
-				float d2 = dot(to_l, to_l);
-				is_valid = (test_light.max_range_squared == 0.0 || d2 <= test_light.max_range_squared);
-			}
-			if (!is_valid || lights_selection_weight(hit_pos, N, test_light, is_indirect_bounce) <= 0.0) {
+			float light_weight = 0.0;
+			if (!lights_direct_source_weight(idx, light_count, receiver_layer_mask, is_indirect_bounce, hit_pos, N, light_weight)) {
 				continue;
 			}
+			RTLightData test_light = rt_lights[idx];
 			RTDirectLighting light_result = lights_evaluate_single_direct_light_split(test_light, 1.0, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce);
 			deterministic_sum.diffuse += light_result.diffuse;
 			deterministic_sum.specular += light_result.specular;
@@ -691,6 +739,10 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 			if (light_luma > max(dominant_luma, 1e-6)) {
 				dominant_luma = light_luma;
 				out_source_key = rt_source_make_key(RT_SOURCE_CLASS_DIRECT, test_light.source_id);
+				out_direct_source_key = out_source_key;
+				out_direct_source_pdf = 1.0;
+				out_direct_source_lighting = light_result;
+				out_direct_source_stochastic = false;
 			}
 		}
 		return deterministic_sum;
@@ -703,31 +755,49 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 	for (uint candidate = 0u; candidate < candidate_count; candidate++) {
 		uint selected_idx = 0u;
 		float selected_weight = 0.0;
-		float selected_cdf = (float(candidate) + rand(rng_state)) * (total_weight / float(candidate_count));
-		float cdf = 0.0;
-		for (uint idx = 0u; idx < light_count; idx++) {
-			RTLightData test_light = rt_lights[idx];
+		bool selected_from_history = false;
 
-			bool is_valid = (test_light.cull_mask & receiver_layer_mask) != 0u;
-			bool is_positional = (test_light.type == RT_LIGHT_TYPE_OMNI || test_light.type == RT_LIGHT_TYPE_SPOT);
-			if (is_valid && is_positional) {
-				vec3 to_l = test_light.position - hit_pos;
-				float d2 = dot(to_l, to_l);
-				is_valid = (test_light.max_range_squared == 0.0 || d2 <= test_light.max_range_squared);
+		// Direct temporal source reuse replaces only stochastic slot 0. It
+		// reprojects the previous direct-only source ID, verifies the current
+		// surface/source/PDF contract, then evaluates that light with current
+		// light data and current shadow visibility. If the source is absent or
+		// validation fails, this slot falls through to the original stratified
+		// random candidate path, preserving the existing estimator for fallback.
+		if (candidate == 0u && !is_indirect_bounce) {
+			ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
+			ivec2 previous_pixel = ivec2(0);
+			vec4 previous_direct_candidate = vec4(0.0);
+			uint previous_direct_key = 0u;
+			uint reject_reason = RT_SOURCE_REJECT_NONE;
+			if (rt_source_load_reprojected_previous_direct(pixel, previous_pixel, previous_direct_candidate, previous_direct_key, reject_reason)) {
+				uint previous_source_id = previous_direct_key & 0x0FFFFFFFu;
+				float found_total_weight = 0.0;
+				if (lights_find_direct_source_by_id(previous_source_id, light_count, receiver_layer_mask, false, hit_pos, N, selected_idx, selected_weight, found_total_weight)) {
+					float current_pdf = selected_weight / max(found_total_weight, 1e-10);
+					uint current_key = rt_source_make_key(RT_SOURCE_CLASS_DIRECT, rt_lights[selected_idx].source_id);
+					uint accept_reason = RT_SOURCE_REJECT_NONE;
+					if (rt_source_direct_history_accept(pixel, previous_pixel, previous_direct_candidate, current_key, previous_direct_key, current_pdf, 1.0, accept_reason)) {
+						selected_from_history = true;
+						total_weight = found_total_weight;
+					}
+				}
 			}
-			if (!is_valid) {
-				continue;
-			}
+		}
 
-			float light_weight = lights_selection_weight(hit_pos, N, test_light, is_indirect_bounce);
-			if (light_weight <= 0.0) {
-				continue;
-			}
-			cdf += light_weight;
-			if (selected_cdf <= cdf) {
-				selected_idx = idx;
-				selected_weight = light_weight;
-				break;
+		if (!selected_from_history) {
+			float selected_cdf = (float(candidate) + rand(rng_state)) * (total_weight / float(candidate_count));
+			float cdf = 0.0;
+			for (uint idx = 0u; idx < light_count; idx++) {
+				float light_weight = 0.0;
+				if (!lights_direct_source_weight(idx, light_count, receiver_layer_mask, is_indirect_bounce, hit_pos, N, light_weight)) {
+					continue;
+				}
+				cdf += light_weight;
+				if (selected_cdf <= cdf) {
+					selected_idx = idx;
+					selected_weight = light_weight;
+					break;
+				}
 			}
 		}
 
@@ -737,6 +807,12 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 
 		float light_select_pdf = selected_weight / max(total_weight, 1e-10);
 		RTDirectLighting light_result = lights_evaluate_single_direct_light_split(rt_lights[selected_idx], light_select_pdf, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce);
+		if (candidate == 0u) {
+			out_direct_source_key = rt_source_make_key(RT_SOURCE_CLASS_DIRECT, rt_lights[selected_idx].source_id);
+			out_direct_source_pdf = light_select_pdf;
+			out_direct_source_lighting = light_result;
+			out_direct_source_stochastic = true;
+		}
 		candidate_sum.diffuse += light_result.diffuse;
 		candidate_sum.specular += light_result.specular;
 		float light_luma = rt_luminance(rt_direct_lighting_sum(light_result));
@@ -764,5 +840,9 @@ vec3 lights_evaluate_direct_lighting(
 		uint receiver_layer_mask,
 		uint light_count) {
 	uint source_key;
-	return rt_direct_lighting_sum(lights_evaluate_direct_lighting_split(hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce, receiver_layer_mask, light_count, source_key));
+	uint direct_source_key;
+	float direct_source_pdf;
+	RTDirectLighting direct_source_lighting;
+	bool direct_source_stochastic;
+	return rt_direct_lighting_sum(lights_evaluate_direct_lighting_split(hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce, receiver_layer_mask, light_count, source_key, direct_source_key, direct_source_pdf, direct_source_lighting, direct_source_stochastic));
 }
