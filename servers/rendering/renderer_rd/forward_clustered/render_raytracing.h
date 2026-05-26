@@ -44,6 +44,7 @@
 #define RB_TEX_RT_DIFFUSE_RADIANCE SNAME("rt_diffuse_radiance")
 #define RB_TEX_RT_SPECULAR_RADIANCE SNAME("rt_specular_radiance")
 #define RB_TEX_RT_SPECULAR_GUIDE SNAME("rt_specular_guide")
+#define RB_TEX_RT_SPECULAR_REPROJECTION SNAME("rt_specular_reprojection")
 #define RB_TEX_RT_SPECULAR_REFLECTION_DIRECTION SNAME("rt_specular_reflection_direction")
 #define RB_TEX_RT_DEPTH SNAME("rt_depth")
 #define RB_TEX_RT_DEPTH_ATTACHMENT SNAME("rt_depth_attachment")
@@ -422,6 +423,7 @@ class RenderRaytracing {
 	BindlessBlock *bindless_block = nullptr;
 
 	RID bindless_uniform_set;
+	RID blue_noise_texture;
 
 	HashMap<uint64_t, RTCacheEntry> surface_cache;
 	Vector<RTMaterialCacheEntry *> material_chunks;
@@ -543,6 +545,7 @@ class RenderRaytracing {
 	void build_acceleration_structures(RTViewportState *p_state, const LocalVector<RID> &p_dirty_blas_list, const LocalVector<RID> &p_dirty_blas_update_list);
 	void finalize_buffers(RTViewportState *p_state);
 	void prepare_frame();
+	RID _ensure_blue_noise_texture();
 
 public:
 	void initialize(RenderForwardClustered *p_owner);

@@ -147,6 +147,7 @@ layout(set = 0, binding = 36, rgba16f) uniform image2D rt_diffuse_radiance_image
 layout(set = 0, binding = 37, rgba16f) uniform image2D rt_specular_radiance_image;
 layout(set = 0, binding = 38, rgba16f) uniform image2D rt_specular_guide_image;
 layout(set = 0, binding = 60, rgba16f) uniform image2D rt_specular_reflection_direction_image;
+layout(set = 0, binding = 63, rgba16f) uniform image2D rt_specular_reprojection_image;
 layout(set = 0, binding = 39, rgba16f) uniform image2D rt_signal_direct_light_image;
 layout(set = 0, binding = 40, rgba16f) uniform image2D rt_signal_emissive_image;
 layout(set = 0, binding = 41, rgba16f) uniform image2D rt_signal_indirect_image;

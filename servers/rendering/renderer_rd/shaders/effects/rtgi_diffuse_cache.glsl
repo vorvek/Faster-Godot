@@ -63,6 +63,54 @@ float relative_delta(float a, float b, float floor_value) {
 	return abs(a - b) / max(max(a, b), floor_value);
 }
 
+vec3 clamp_current_diffuse_outlier(ivec2 pos, vec3 current, vec4 current_normal_roughness, vec4 current_viewz_hitdist) {
+	vec3 current_normal = decode_normal(current_normal_roughness);
+	float current_luma = luminance(current);
+	vec3 color_sum = vec3(0.0);
+	float luma_sum = 0.0;
+	float luma_sq_sum = 0.0;
+	float weight_sum = 0.0;
+
+	for (int y = -2; y <= 2; y++) {
+		for (int x = -2; x <= 2; x++) {
+			if (x == 0 && y == 0) {
+				continue;
+			}
+			ivec2 tap_pos = clamp(pos + ivec2(x, y), ivec2(0), ivec2(params.resolution) - ivec2(1));
+			vec4 tap_normal_roughness = texelFetch(normal_roughness_buffer, tap_pos, 0);
+			vec4 tap_viewz_hitdist = texelFetch(viewz_hitdist_buffer, tap_pos, 0);
+			float normal_similarity = max(dot(current_normal, decode_normal(tap_normal_roughness)), 0.0);
+			float depth_scale = max(max(current_viewz_hitdist.x, tap_viewz_hitdist.x), 1.0);
+			float relative_depth_error = abs(current_viewz_hitdist.x - tap_viewz_hitdist.x) / depth_scale;
+			if (normal_similarity < 0.82 || relative_depth_error > 0.12) {
+				continue;
+			}
+			vec3 tap = sanitize_color(imageLoad(source_image, tap_pos).rgb);
+			float tap_luma = luminance(tap);
+			float spatial_w = exp(-dot(vec2(x, y), vec2(x, y)) * 0.20);
+			float w = spatial_w * pow(normal_similarity, 3.0);
+			color_sum += tap * w;
+			luma_sum += tap_luma * w;
+			luma_sq_sum += tap_luma * tap_luma * w;
+			weight_sum += w;
+		}
+	}
+
+	if (weight_sum <= 1e-4) {
+		return current;
+	}
+
+	vec3 mean_color = color_sum / weight_sum;
+	float mean_luma = luma_sum / weight_sum;
+	float sigma = sqrt(max(luma_sq_sum / weight_sum - mean_luma * mean_luma, 0.0));
+	float dark_neighborhood = 1.0 - smoothstep(0.08, 0.32, mean_luma);
+	float hot_threshold = max(0.14, mean_luma * 3.25 + sigma * 2.0 + 0.035);
+	float hot = smoothstep(hot_threshold, hot_threshold + 0.08, current_luma) * dark_neighborhood;
+	float luma_cap = max(mean_luma + sigma * 2.25 + 0.045, mean_luma * 2.20 + 0.055);
+	vec3 clamped = clamp_luminance(current, luma_cap);
+	return sanitize_color(mix(current, mix(clamped, mean_color, 0.30), clamp(hot * 0.92, 0.0, 1.0)));
+}
+
 float variance_ratio_from_stats(vec4 stats_sample) {
 	float mean_value = max(stats_sample.y, 0.0);
 	float second_value = max(stats_sample.z, 0.0);
@@ -138,6 +186,8 @@ void main() {
 	float current_luma = luminance(current);
 	vec4 current_normal_roughness = texelFetch(normal_roughness_buffer, pos, 0);
 	vec4 current_viewz_hitdist = texelFetch(viewz_hitdist_buffer, pos, 0);
+	current = clamp_current_diffuse_outlier(pos, current, current_normal_roughness, current_viewz_hitdist);
+	current_luma = luminance(current);
 	vec4 confidence_signal = texelFetch(signal_confidence_buffer, pos, 0);
 	float current_valid = texelFetch(history_validity_buffer, pos, 0).r >= 0.5 ? 1.0 : 0.0;
 	float guide_valid = current_viewz_hitdist.x < 60000.0 ? 1.0 : 0.0;

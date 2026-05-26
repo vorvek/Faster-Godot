@@ -372,11 +372,23 @@ void write_primary_hit_guides(HitData h, MaterialResult m) {
 	vec3 reflection_dir = vec3(0.0);
 	vec3 view_dir = normalize(-gl_WorldRayDirectionEXT);
 	int vis_mode = int(get_rt_param(RT_PARAM_VIS_MODE));
-	bool needs_reflected_diagnostic = vis_mode == RT_VIS_MODE_SPECULAR_REFLECTED_HIT_DISTANCE ||
-			vis_mode == RT_VIS_MODE_SPECULAR_REFLECTED_HIT_NORMAL;
-	bool needs_reflected_guide = needs_reflected_diagnostic && specular_risk > 0.35 && guide_roughness <= 0.60;
+	bool needs_reflected_guide = specular_risk > 0.55 && guide_roughness <= 0.35;
 	bool reflected_hit_valid = needs_reflected_guide && rtgi_trace_specular_reflected_hit(h, normal, view_dir, reflected_hit_distance, reflected_hit_normal, reflection_dir);
-	imageStore(rt_specular_guide_image, pixel, vec4(guide_roughness, max(gl_HitTEXT, 0.0), specular_risk, 1.0));
+	float guide_hit_distance = reflected_hit_valid ? reflected_hit_distance : max(gl_HitTEXT, 0.0);
+	imageStore(rt_specular_guide_image, pixel, vec4(guide_roughness, guide_hit_distance, specular_risk, 1.0));
+	vec4 specular_reprojection = vec4(0.0);
+	if (reflected_hit_valid) {
+		vec3 virtual_pos = h.hit_pos + reflection_dir * reflected_hit_distance;
+		vec2 curr_virtual_uv;
+		vec2 prev_virtual_uv;
+		if (project_uv_checked(virtual_pos, curr_vp_unjittered, curr_virtual_uv) &&
+				project_uv_checked(virtual_pos, prev_vp_unjittered, prev_virtual_uv)) {
+			vec2 curr_virtual_texture_uv = rt_visible_to_texture_uv(curr_virtual_uv, rt_current_origin());
+			vec2 prev_virtual_texture_uv = rt_visible_to_texture_uv(prev_virtual_uv, rt_previous_origin());
+			specular_reprojection = vec4(prev_virtual_texture_uv - curr_virtual_texture_uv, clamp(reflected_hit_distance / 128.0, 0.0, 1.0), 1.0);
+		}
+	}
+	imageStore(rt_specular_reprojection_image, pixel, specular_reprojection);
 	if (vis_mode == RT_VIS_MODE_SPECULAR_REFLECTION_DIRECTION) {
 		vec3 diagnostic_reflection_dir = normalize(reflect(-view_dir, normal));
 		imageStore(rt_specular_reflection_direction_image, pixel, vec4(diagnostic_reflection_dir * 0.5 + 0.5, specular_risk));

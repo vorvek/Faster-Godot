@@ -31,7 +31,7 @@ layout(push_constant, std430) uniform Params {
 	float fog_sky_affect;
 	float fog_legacy_blending;
 	float specular_guide_enabled;
-	float push_constant_padding;
+	float history_clip_sigma;
 }
 params;
 
@@ -116,6 +116,25 @@ vec3 remodulate_radiance(vec3 radiance, vec4 normal_roughness, vec4 albedo_metal
 	return sanitize_color(radiance * radiance_modulation(normal_roughness, albedo_metalness, view_z));
 }
 
+vec3 specular_virtual_brdf(vec4 normal_roughness, vec4 albedo_metalness, vec4 guide) {
+	float roughness = clamp(normal_roughness.a, 0.0, 1.0);
+	float metalness = clamp(albedo_metalness.a, 0.0, 1.0);
+	float guide_weight = smoothstep(0.18, 0.80, guide_specular_risk(guide, normal_roughness, albedo_metalness));
+	vec3 f0 = mix(vec3(0.04), safe_albedo(albedo_metalness.rgb), metalness);
+	float fa = mix(0.98, 0.42, roughness);
+	float fb = (1.0 - metalness) * mix(0.035, 0.006, roughness);
+	vec3 brdf = max(f0 * fa + vec3(fb), vec3(0.08));
+	return mix(vec3(1.0), brdf, guide_weight);
+}
+
+vec3 demodulate_specular_radiance(vec3 radiance, vec4 normal_roughness, vec4 albedo_metalness, vec4 guide) {
+	return sanitize_color(radiance / specular_virtual_brdf(normal_roughness, albedo_metalness, guide));
+}
+
+vec3 remodulate_specular_radiance(vec3 radiance, vec4 normal_roughness, vec4 albedo_metalness, vec4 guide) {
+	return sanitize_color(radiance * specular_virtual_brdf(normal_roughness, albedo_metalness, guide));
+}
+
 #ifdef MODE_TEMPORAL
 
 layout(rgba16f, set = 0, binding = 0) uniform restrict readonly image2D noisy_image;
@@ -140,6 +159,7 @@ layout(r8, set = 0, binding = 18) uniform restrict writeonly image2D reactivity_
 layout(r16f, set = 0, binding = 19) uniform restrict writeonly image2D history_length_out;
 layout(set = 0, binding = 20) uniform sampler2D specular_guide_buffer;
 layout(set = 0, binding = 21) uniform sampler2D prev_specular_guide_buffer;
+layout(set = 0, binding = 22) uniform sampler2D specular_reprojection_buffer;
 
 vec3 load_radiance(ivec2 pos) {
 	ivec2 clamped_pos = clamp(pos, ivec2(0), ivec2(params.resolution) - ivec2(1));
@@ -148,10 +168,11 @@ vec3 load_radiance(ivec2 pos) {
 }
 
 vec3 load_demodulated_radiance(ivec2 pos, vec4 normal_roughness, vec4 albedo_metalness, vec2 viewz_hitdist) {
+	vec3 radiance = load_radiance(pos);
 	if (params.radiance_space_history > 0.5) {
-		return load_radiance(pos);
+		return radiance;
 	}
-	return demodulate_radiance(load_radiance(pos), normal_roughness, albedo_metalness, viewz_hitdist.x);
+	return demodulate_radiance(radiance, normal_roughness, albedo_metalness, viewz_hitdist.x);
 }
 
 bool previous_history_tap_valid(ivec2 tap_pos, vec4 current_nr, vec2 current_viewz_hitdist, float current_expected_prev_view_z, vec4 current_albedo_metalness, vec4 current_id, vec4 current_guide, float motion_px) {
@@ -276,10 +297,11 @@ void sample_reprojected_history(vec2 prev_uv, vec4 current_nr, vec2 current_view
 	}
 }
 
-void current_neighborhood(ivec2 pos, vec4 center_nr, vec2 center_viewz_hitdist, vec4 center_albedo, vec4 center_id, vec4 center_guide, out vec3 neighborhood_min, out vec3 neighborhood_max, out vec3 neighborhood_avg, out vec3 neighbor_avg, out float neighbor_weight_sum) {
+void current_neighborhood(ivec2 pos, vec4 center_nr, vec2 center_viewz_hitdist, vec4 center_albedo, vec4 center_id, vec4 center_guide, out vec3 neighborhood_min, out vec3 neighborhood_max, out vec3 neighborhood_avg, out vec3 neighborhood_sigma, out vec3 neighbor_avg, out float neighbor_weight_sum) {
 	neighborhood_min = vec3(MAX_RADIANCE);
 	neighborhood_max = vec3(0.0);
 	neighborhood_avg = vec3(0.0);
+	vec3 neighborhood_sq_avg = vec3(0.0);
 	float weight_sum = 0.0;
 	neighbor_avg = vec3(0.0);
 	neighbor_weight_sum = 0.0;
@@ -320,6 +342,7 @@ void current_neighborhood(ivec2 pos, vec4 center_nr, vec2 center_viewz_hitdist, 
 			neighborhood_min = min(neighborhood_min, tap);
 			neighborhood_max = max(neighborhood_max, tap);
 			neighborhood_avg += tap;
+			neighborhood_sq_avg += tap * tap;
 			weight_sum += 1.0;
 			neighbor_avg += tap;
 			neighbor_weight_sum += 1.0;
@@ -330,8 +353,11 @@ void current_neighborhood(ivec2 pos, vec4 center_nr, vec2 center_viewz_hitdist, 
 		neighborhood_min = center;
 		neighborhood_max = center;
 		neighborhood_avg = center;
+		neighborhood_sigma = vec3(0.0);
 	} else {
 		neighborhood_avg /= weight_sum;
+		neighborhood_sq_avg /= weight_sum;
+		neighborhood_sigma = sqrt(max(neighborhood_sq_avg - neighborhood_avg * neighborhood_avg, vec3(0.0)));
 	}
 	if (neighbor_weight_sum > 0.0) {
 		neighbor_avg /= neighbor_weight_sum;
@@ -346,9 +372,6 @@ void main() {
 
 	vec2 uv = (vec2(pos) + 0.5) / params.resolution;
 	vec2 velocity = texelFetch(velocity_buffer, pos, 0).xy;
-	float motion_px = velocity_pixels(velocity);
-	vec2 prev_uv = uv + velocity;
-	bool prev_in_screen = all(greaterThanEqual(prev_uv, vec2(0.0))) && all(lessThan(prev_uv, vec2(1.0)));
 
 	vec4 normal_roughness = texelFetch(normal_roughness_buffer, pos, 0);
 	vec4 viewz_hitdist_sample = texelFetch(viewz_hitdist_buffer, pos, 0);
@@ -357,6 +380,13 @@ void main() {
 	vec4 current_id = texelFetch(history_id_buffer, pos, 0);
 	vec4 albedo_metalness = texelFetch(albedo_metalness_buffer, pos, 0);
 	vec4 specular_guide = texelFetch(specular_guide_buffer, pos, 0);
+	float guide_specular_surface = guide_specular_risk(specular_guide, normal_roughness, albedo_metalness);
+	vec4 specular_reprojection = texelFetch(specular_reprojection_buffer, pos, 0);
+	float virtual_reprojection_weight = params.radiance_space_history > 0.5 ? guide_active(specular_guide) * specular_reprojection.a * smoothstep(0.35, 0.85, guide_specular_surface) : 0.0;
+	vec2 reprojection_velocity = mix(velocity, specular_reprojection.xy, virtual_reprojection_weight);
+	float motion_px = velocity_pixels(reprojection_velocity);
+	vec2 prev_uv = uv + reprojection_velocity;
+	bool prev_in_screen = all(greaterThanEqual(prev_uv, vec2(0.0))) && all(lessThan(prev_uv, vec2(1.0)));
 
 	bool current_valid = texelFetch(history_validity_buffer, pos, 0).r >= 0.5;
 
@@ -376,7 +406,6 @@ void main() {
 	history_confidence *= mix(1.0, 0.02, extreme_motion);
 	bool history_valid = history_confidence >= 0.08 && params.history_weight > 0.001;
 	float prev_history_len = prev_moments.z * HISTORY_LENGTH_STORAGE_SCALE;
-	float guide_specular_surface = guide_specular_risk(specular_guide, normal_roughness, albedo_metalness);
 	float guide_history_stability = guide_active(specular_guide) * smoothstep(0.30, 0.80, guide_specular_surface) * smoothstep(0.70, 0.98, reprojection_confidence) * (1.0 - smoothstep(0.5, 6.0, motion_px));
 	float early_specular_surface = guide_specular_surface;
 	float specular_history_guard = smoothstep(0.30, 0.95, early_specular_surface);
@@ -399,20 +428,28 @@ void main() {
 	vec3 neighborhood_min;
 	vec3 neighborhood_max;
 	vec3 neighborhood_avg;
+	vec3 neighborhood_sigma;
 	vec3 neighbor_avg;
 	float neighbor_weight_sum;
-	current_neighborhood(pos, normal_roughness, viewz_hitdist, albedo_metalness, current_id, specular_guide, neighborhood_min, neighborhood_max, neighborhood_avg, neighbor_avg, neighbor_weight_sum);
+	current_neighborhood(pos, normal_roughness, viewz_hitdist, albedo_metalness, current_id, specular_guide, neighborhood_min, neighborhood_max, neighborhood_avg, neighborhood_sigma, neighbor_avg, neighbor_weight_sum);
 	if (neighbor_weight_sum <= 0.0 && history_valid) {
 		vec3 history_reference = sanitize_color(prev_history.rgb);
 		neighborhood_min = history_reference;
 		neighborhood_max = history_reference;
 		neighborhood_avg = history_reference;
+		neighborhood_sigma = vec3(sqrt(max(prev_history.a, 0.0)));
 	}
 	float previous_variance = max(prev_history.a, 0.0);
 	vec3 neighborhood_range = max(neighborhood_max - neighborhood_min, vec3(0.05));
 	float history_clip_variance = min(previous_variance, mix(previous_variance + 1e-4, 0.16, params.denoise_strength));
 	vec3 clip_expand = neighborhood_range * 0.45 + vec3(sqrt(history_clip_variance) * 0.85 + 0.02);
-	vec3 history_color = history_valid ? clamp(sanitize_color(prev_history.rgb), neighborhood_min - clip_expand, neighborhood_max + clip_expand) : current;
+	float sigma_k = max(params.history_clip_sigma, 0.25);
+	vec3 sigma_min = neighborhood_avg - neighborhood_sigma * sigma_k;
+	vec3 sigma_max = neighborhood_avg + neighborhood_sigma * sigma_k;
+	vec3 clip_min = max(neighborhood_min - clip_expand, sigma_min - vec3(0.025));
+	vec3 clip_max = min(neighborhood_max + clip_expand, sigma_max + vec3(0.025));
+	clip_max = max(clip_max, clip_min + vec3(0.01));
+	vec3 history_color = history_valid ? clamp(sanitize_color(prev_history.rgb), clip_min, clip_max) : current;
 
 	float current_luma = luminance(current);
 	float raw_history_luma = history_valid ? luminance(sanitize_color(prev_history.rgb)) : current_luma;
@@ -613,6 +650,9 @@ layout(set = 0, binding = 0) uniform sampler2D diffuse_buffer;
 layout(set = 0, binding = 1) uniform sampler2D specular_buffer;
 layout(rgba16f, set = 0, binding = 2) uniform restrict writeonly image2D output_image;
 layout(set = 0, binding = 3) uniform sampler2D velocity_buffer;
+layout(set = 0, binding = 4) uniform sampler2D normal_roughness_buffer;
+layout(set = 0, binding = 5) uniform sampler2D albedo_metalness_buffer;
+layout(set = 0, binding = 6) uniform sampler2D specular_guide_buffer;
 
 void main() {
 	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
@@ -620,14 +660,18 @@ void main() {
 		return;
 	}
 
+	vec4 normal_roughness = texelFetch(normal_roughness_buffer, pos, 0);
+	vec4 albedo_metalness = texelFetch(albedo_metalness_buffer, pos, 0);
+	vec4 specular_guide = texelFetch(specular_guide_buffer, pos, 0);
 	vec3 diffuse = sanitize_color(texelFetch(diffuse_buffer, pos, 0).rgb);
-	vec3 specular = sanitize_color(texelFetch(specular_buffer, pos, 0).rgb);
+	vec3 specular = remodulate_specular_radiance(sanitize_color(texelFetch(specular_buffer, pos, 0).rgb), normal_roughness, albedo_metalness, specular_guide);
 	vec3 output_color = sanitize_color(diffuse + specular);
 	float center_luma = luminance(output_color);
 	if (center_luma > 0.0) {
 		vec3 neighbor_sum = vec3(0.0);
 		float neighbor_luma_sum = 0.0;
 		float neighbor_luma_max = 0.0;
+		float bright_support_sum = 0.0;
 		float neighbor_weight_sum = 0.0;
 		for (int y = -2; y <= 2; y++) {
 			for (int x = -2; x <= 2; x++) {
@@ -635,19 +679,27 @@ void main() {
 					continue;
 				}
 				ivec2 tap_pos = clamp(pos + ivec2(x, y), ivec2(0), ivec2(params.resolution) - ivec2(1));
-				vec3 tap_color = sanitize_color(texelFetch(diffuse_buffer, tap_pos, 0).rgb + texelFetch(specular_buffer, tap_pos, 0).rgb);
+				vec4 tap_nr = texelFetch(normal_roughness_buffer, tap_pos, 0);
+				vec4 tap_albedo = texelFetch(albedo_metalness_buffer, tap_pos, 0);
+				vec4 tap_guide = texelFetch(specular_guide_buffer, tap_pos, 0);
+				vec3 tap_specular = remodulate_specular_radiance(sanitize_color(texelFetch(specular_buffer, tap_pos, 0).rgb), tap_nr, tap_albedo, tap_guide);
+				vec3 tap_color = sanitize_color(texelFetch(diffuse_buffer, tap_pos, 0).rgb + tap_specular);
 				float tap_luma = luminance(tap_color);
 				float tap_w = exp(-dot(vec2(x, y), vec2(x, y)) * 0.22);
 				neighbor_sum += tap_color * tap_w;
 				neighbor_luma_sum += tap_luma * tap_w;
 				neighbor_luma_max = max(neighbor_luma_max, tap_luma);
+				bright_support_sum += (tap_luma > max(center_luma * 0.55, 0.08)) ? tap_w : 0.0;
 				neighbor_weight_sum += tap_w;
 			}
 		}
 		vec3 neighbor_color = neighbor_sum / max(neighbor_weight_sum, 1e-5);
 		float neighbor_luma = neighbor_luma_sum / max(neighbor_weight_sum, 1e-5);
-		float stable_bright_support = smoothstep(center_luma * 0.22 + 0.002, center_luma * 0.70 + 0.01, neighbor_luma_max);
-		float unsupported_near_black = smoothstep(max(neighbor_luma * 1.38 + 0.001, neighbor_luma_max * 1.035 + 0.00025), max(neighbor_luma * 1.78 + 0.010, neighbor_luma_max * 1.12 + 0.0025), center_luma);
+		float bright_support_ratio = bright_support_sum / max(neighbor_weight_sum, 1e-5);
+		float stable_bright_support = smoothstep(0.14, 0.42, bright_support_ratio) * smoothstep(center_luma * 0.22 + 0.002, center_luma * 0.70 + 0.01, neighbor_luma_max);
+		float sparse_support = 1.0 - smoothstep(0.08, 0.30, bright_support_ratio);
+		float unsupported_near_black = smoothstep(max(neighbor_luma * 1.38 + 0.001, mix(neighbor_luma * 2.8 + 0.025, neighbor_luma_max * 1.035 + 0.00025, stable_bright_support)), max(neighbor_luma * 1.78 + 0.010, mix(neighbor_luma * 4.0 + 0.060, neighbor_luma_max * 1.12 + 0.0025, stable_bright_support)), center_luma);
+		unsupported_near_black = max(unsupported_near_black, sparse_support * smoothstep(max(0.16, neighbor_luma * 4.0 + 0.035), max(0.22, neighbor_luma * 5.0 + 0.090), center_luma));
 		unsupported_near_black *= 1.0 - smoothstep(0.16, 0.42, center_luma);
 		unsupported_near_black *= mix(0.28, 1.0, smoothstep(0.02, 0.45, velocity_pixels(texelFetch(velocity_buffer, pos, 0).xy)));
 		unsupported_near_black = clamp(unsupported_near_black * params.denoise_strength * params.firefly_suppression * low_resolution_firefly_boost() * mix(1.0, 0.35, stable_bright_support), 0.0, 1.0);
@@ -827,6 +879,12 @@ void main() {
 	float spatial_strength = clamp(pow(params.denoise_strength, 0.85) * mix(0.50, 0.98, variance_filter) * mix(1.0, 0.76, reactive_detail), 0.0, 1.0);
 	spatial_strength *= mix(1.0, 0.60, specular_spatial_guard);
 	float moving_step_weight = exp(-float(max(params.step_size - 1, 0)) * (smoothstep(1.0, 16.0, center_motion_px) * 0.16 + center_reactivity * 0.24));
+	float center_hit_distance = max(center_guide.y, 0.0);
+	float hit_distance_filter_scale = mix(1.0, smoothstep(0.35, 7.0, center_hit_distance), guide_active(center_guide) * specular_spatial_guard);
+	int filter_step_size = max(1, int(round(float(params.step_size) * hit_distance_filter_scale)));
+	spatial_strength *= mix(1.0, mix(0.28, 1.0, hit_distance_filter_scale), specular_spatial_guard);
+	float contact_normal_tightening = mix(1.45, 1.0, hit_distance_filter_scale);
+	float contact_depth_tightening = mix(0.42, 1.0, hit_distance_filter_scale);
 
 	vec3 color_sum = vec3(0.0);
 	float variance_sum = 0.0;
@@ -836,7 +894,7 @@ void main() {
 
 	for (int y = -2; y <= 2; y++) {
 		for (int x = -2; x <= 2; x++) {
-			ivec2 tap_pos = clamp(pos + ivec2(x, y) * params.step_size, ivec2(0), ivec2(params.resolution) - ivec2(1));
+			ivec2 tap_pos = clamp(pos + ivec2(x, y) * filter_step_size, ivec2(0), ivec2(params.resolution) - ivec2(1));
 			vec4 tap = texelFetch(input_buffer, tap_pos, 0);
 			vec4 tap_nr = texelFetch(normal_roughness_buffer, tap_pos, 0);
 			vec4 tap_albedo = texelFetch(albedo_metalness_buffer, tap_pos, 0);
@@ -847,7 +905,7 @@ void main() {
 
 			float base_w = kernel_weight(x) * kernel_weight(y);
 			float normal_similarity = max(dot(center_n, decode_normal(tap_nr)), 0.0);
-			float normal_w = pow(normal_similarity, params.phi_normal * roughness_filter);
+			float normal_w = pow(normal_similarity, params.phi_normal * roughness_filter * contact_normal_tightening);
 			float albedo_delta = length(tap_albedo.rgb - center_albedo.rgb);
 			float metalness_delta = abs(tap_albedo.a - center_albedo.a);
 			if ((x != 0 || y != 0) && abs(x) <= 1 && abs(y) <= 1) {
@@ -855,7 +913,7 @@ void main() {
 				local_normal_detail = max(local_normal_detail, 1.0 - normal_similarity);
 			}
 			float plane_relax = stable_surface_match(normal_similarity, albedo_delta, metalness_delta);
-			float depth_w = exp(-abs(tap_z - center_z) / max(center_z * params.phi_depth * mix(1.0, 3.2, plane_relax), 0.02));
+			float depth_w = exp(-abs(tap_z - center_z) / max(center_z * params.phi_depth * contact_depth_tightening * mix(1.0, 3.2, plane_relax), 0.02));
 			float albedo_w = exp(-albedo_delta * 7.0);
 			float tap_luma = luminance(tap.rgb);
 			float tap_luma_t = tonemap_luma(tap_luma);
@@ -868,7 +926,7 @@ void main() {
 			float bright_tap_w = (x == 0 && y == 0) ? 1.0 : min(1.0, bright_tap_limit / max(tap_luma, 1e-4));
 			float guide_hitdist_scale = max(max(center_guide.y, tap_guide.y), 1.0);
 			float guide_hitdist_error = abs(center_guide.y - tap_guide.y) / guide_hitdist_scale;
-			float guide_hit_w = exp(-guide_hitdist_error / max(mix(0.46, 0.16, specular_surface), 1e-4));
+			float guide_hit_w = exp(-guide_hitdist_error / max(mix(0.46, 0.16, specular_surface) * mix(0.50, 1.0, hit_distance_filter_scale), 1e-4));
 			float identity_w = history_id_matches(center_id, tap_id) ? 1.0 : 0.05;
 			float material_identity_guard = smoothstep(0.58, 0.90, specular_surface);
 			float guide_identity_guard = max(specular_spatial_guard * guide_active(center_guide), material_identity_guard);

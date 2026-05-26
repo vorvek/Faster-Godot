@@ -29,7 +29,9 @@
 /**************************************************************************/
 
 #include "core/config/project_settings.h"
+#include "core/io/image.h"
 #include "core/math/math_funcs.h"
+#include "servers/rendering/renderer_rd/forward_clustered/rtgi_blue_noise_128_rgba.inc"
 #include "servers/rendering/renderer_rd/environment/sky.h"
 #include "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h"
 #include "servers/rendering/renderer_rd/forward_clustered/scene_shader_raytracing.h"
@@ -315,6 +317,10 @@ RenderRaytracing::~RenderRaytracing() {
 		RD::get_singleton()->free_rid(mat_ubo_pool_buffer);
 		mat_ubo_pool_buffer = RID();
 	}
+	if (blue_noise_texture.is_valid()) {
+		RD::get_singleton()->free_rid(blue_noise_texture);
+		blue_noise_texture = RID();
+	}
 
 	if (bindless_block) {
 		memdelete(bindless_block);
@@ -326,6 +332,28 @@ RenderRaytracing::~RenderRaytracing() {
 	}
 
 	mm_merge_shader.shader.version_free(mm_merge_shader.version);
+}
+
+RID RenderRaytracing::_ensure_blue_noise_texture() {
+	if (blue_noise_texture.is_valid()) {
+		return blue_noise_texture;
+	}
+
+	Image blue_noise_image(rtgi_blue_noise_128_rgba_png);
+	ERR_FAIL_COND_V_MSG(blue_noise_image.is_empty(), RID(), "Failed to decode embedded RTGI blue-noise texture.");
+	if (blue_noise_image.get_format() != Image::FORMAT_RGBA8) {
+		blue_noise_image.convert(Image::FORMAT_RGBA8);
+	}
+
+	RD::TextureFormat tf;
+	tf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
+	tf.width = blue_noise_image.get_width();
+	tf.height = blue_noise_image.get_height();
+	tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT;
+
+	blue_noise_texture = RD::get_singleton()->texture_create(tf, RD::TextureView(), Vector<Vector<uint8_t>>{ blue_noise_image.get_data() });
+	RD::get_singleton()->set_resource_name(blue_noise_texture, "RTGI Blue Noise 128 RGBA");
+	return blue_noise_texture;
 }
 
 // ---------------------------------------------------------------------------
@@ -4368,12 +4396,38 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		uniforms.push_back(u);
 	}
 
+	// Binding 63: RTGI specular virtual reprojection output.
+	{
+		RD::Uniform u;
+		u.binding = 63;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_specular_reprojection());
+		uniforms.push_back(u);
+	}
+
 	// Binding 60: RTGI specular reflection-direction diagnostic output.
 	{
 		RD::Uniform u;
 		u.binding = 60;
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
 		add_uniform_id(u, rb_data->rt_get_specular_reflection_direction());
+		uniforms.push_back(u);
+	}
+
+	// Bindings 61-62: Tiled 128x128 blue-noise seed texture and sampler.
+	{
+		RD::Uniform u;
+		u.binding = 61;
+		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		add_uniform_id(u, _ensure_blue_noise_texture());
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 62;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER;
+		add_uniform_id(u, RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(
+								  RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED));
 		uniforms.push_back(u);
 	}
 

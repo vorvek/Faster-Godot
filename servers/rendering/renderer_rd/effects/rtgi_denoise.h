@@ -64,6 +64,7 @@ public:
 			RID p_albedo_metalness,
 			RID p_viewz_hitdist,
 			RID p_specular_guide,
+			RID p_specular_reprojection,
 			RID p_history_validity,
 			RID p_prev_history_validity,
 			RID p_history_id,
@@ -91,6 +92,9 @@ public:
 			const StringName &p_diffuse_texture,
 			const StringName &p_specular_texture,
 			RID p_velocity,
+			RID p_normal_roughness,
+			RID p_albedo_metalness,
+			RID p_specular_guide,
 			const StringName &p_output_texture,
 			float p_denoise_strength,
 			float p_firefly_suppression,
@@ -147,7 +151,7 @@ private:
 		float fog_sky_affect;
 		float fog_legacy_blending;
 		float specular_guide_enabled;
-		float pad0;
+		float history_clip_sigma;
 	};
 
 	RtgiDenoiseShaderRD shader;
@@ -155,12 +159,12 @@ private:
 	RID pipelines[MODE_MAX];
 
 	bool _ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, const StringName &p_scope, const Size2i &p_size);
-	void _dispatch_temporal(const PushConstant &p_push_constant, RID p_source, RID p_velocity, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_specular_guide, RID p_prev_specular_guide, RID p_history, RID p_moments, RID p_prev_normal_roughness, RID p_prev_viewz_hitdist, RID p_prev_albedo_metalness, RID p_history_validity, RID p_prev_history_validity, RID p_history_id, RID p_prev_history_id, RID p_temporal_out, RID p_moments_out, RID p_variance_out, RID p_rejection_out, RID p_reactivity_out, RID p_history_length_out);
+	void _dispatch_temporal(const PushConstant &p_push_constant, RID p_source, RID p_velocity, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_specular_guide, RID p_prev_specular_guide, RID p_specular_reprojection, RID p_history, RID p_moments, RID p_prev_normal_roughness, RID p_prev_viewz_hitdist, RID p_prev_albedo_metalness, RID p_history_validity, RID p_prev_history_validity, RID p_history_id, RID p_prev_history_id, RID p_temporal_out, RID p_moments_out, RID p_variance_out, RID p_rejection_out, RID p_reactivity_out, RID p_history_length_out);
 	void _dispatch_variance_prefilter(const PushConstant &p_push_constant, RID p_temporal, RID p_normal_roughness, RID p_viewz_hitdist, RID p_variance, RID p_reactivity, RID p_prefilter_out);
 	void _dispatch_atrous(const PushConstant &p_push_constant, RID p_input, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_velocity, RID p_reactivity, RID p_specular_guide, RID p_history_id, RID p_output);
 	void _dispatch_composite(const PushConstant &p_push_constant, RID p_filtered, RID p_temporal, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_reactivity, RID p_specular_guide, RID p_history_id, RID p_output);
 	void _dispatch_blotch_stabilize(const PushConstant &p_push_constant, RID p_input, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_velocity, RID p_reactivity, RID p_output);
-	void _dispatch_split_composite(const PushConstant &p_push_constant, RID p_diffuse, RID p_specular, RID p_velocity, RID p_output);
+	void _dispatch_split_composite(const PushConstant &p_push_constant, RID p_diffuse, RID p_specular, RID p_velocity, RID p_normal_roughness, RID p_albedo_metalness, RID p_specular_guide, RID p_output);
 	void _dispatch_volumetric_fog(const PushConstant &p_push_constant, RID p_color, RID p_viewz_hitdist, RID p_fog_map);
 };
 

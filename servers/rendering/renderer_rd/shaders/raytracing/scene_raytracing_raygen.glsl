@@ -23,8 +23,42 @@
 
 layout(set = 0, binding = 0, rgba16f) uniform image2D image;
 layout(set = 0, binding = 1) uniform accelerationStructureEXT tlas;
+layout(set = 0, binding = 61) uniform texture2D rt_blue_noise_texture;
+layout(set = 0, binding = 62) uniform sampler rt_blue_noise_sampler;
 
 layout(location = 0) rayPayloadEXT PathPayload payload;
+
+vec4 sample_rt_blue_noise(uvec2 pixel, uint frame_index, uint sample_idx) {
+	const uint tile_mask = 127u;
+	uint frame_x = uint(fract(float(frame_index) * 0.61803398875) * 128.0);
+	uint frame_y = uint(fract(float(frame_index) * 0.75487766625) * 128.0);
+	uvec2 tile_pixel = (pixel + uvec2(frame_x, frame_y) + uvec2(sample_idx * 37u, sample_idx * 17u)) & uvec2(tile_mask);
+	return texelFetch(sampler2D(rt_blue_noise_texture, rt_blue_noise_sampler), ivec2(tile_pixel), 0);
+}
+
+uint init_blue_noise_rng(uvec2 pixel, uint frame_index, uint sample_idx) {
+	vec4 blue_noise = sample_rt_blue_noise(pixel, frame_index, sample_idx);
+	uvec4 packed_noise = uvec4(clamp(blue_noise, vec4(0.0), vec4(0.999)) * 255.0);
+	uint blue_seed = packed_noise.x | (packed_noise.y << 8u) | (packed_noise.z << 16u) | (packed_noise.w << 24u);
+	return pcg_hash(init_rng(pixel, frame_index, sample_idx) ^ rng_mix(blue_seed ^ (sample_idx * 0x9E3779B9u)));
+}
+
+vec3 rtgi_safe_albedo(vec3 albedo) {
+	return max(albedo, vec3(0.08));
+}
+
+vec3 rtgi_specular_virtual_brdf(vec4 normal_roughness, vec4 albedo_metalness, vec4 guide) {
+	float roughness = clamp(normal_roughness.a, 0.0, 1.0);
+	float metalness = clamp(albedo_metalness.a, 0.0, 1.0);
+	float guide_risk = max(1.0 - roughness, metalness);
+	guide_risk = max(guide_risk, clamp(guide.z, 0.0, 1.0));
+	float guide_weight = smoothstep(0.18, 0.80, guide_risk);
+	vec3 f0 = mix(vec3(0.04), rtgi_safe_albedo(albedo_metalness.rgb), metalness);
+	float fa = mix(0.98, 0.42, roughness);
+	float fb = (1.0 - metalness) * mix(0.035, 0.006, roughness);
+	vec3 brdf = max(f0 * fa + vec3(fb), vec3(0.08));
+	return mix(vec3(1.0), brdf, guide_weight);
+}
 
 void main() {
 	uvec2 pixel = gl_LaunchIDEXT.xy;
@@ -65,7 +99,7 @@ void main() {
 		ps.specular_radiance = vec3(0.0);
 		ps.throughput = vec3(1.0);
 		ps.packed_bounces_flags = (sample_idx == 0u) ? set_sample_zero(0u) : 0u;
-		ps.rng_state = init_rng(rng_pixel, frame_index, sample_idx);
+		ps.rng_state = init_blue_noise_rng(rng_pixel, frame_index, sample_idx);
 
 		vec3 ray_origin = origin.xyz;
 		vec3 ray_dir = direction.xyz;
@@ -126,10 +160,14 @@ void main() {
 	final_radiance = sanitize_payload_vec3(final_radiance);
 	final_specular = min(sanitize_payload_vec3(final_specular), final_radiance);
 	vec3 final_diffuse = sanitize_payload_vec3(max(final_radiance - final_specular, vec3(0.0)));
+	vec4 normal_roughness = imageLoad(rt_normal_roughness_image, pixel_i);
+	vec4 albedo_metalness = imageLoad(rt_albedo_metalness_image, pixel_i);
+	vec4 specular_guide = imageLoad(rt_specular_guide_image, pixel_i);
+	vec3 final_specular_demodulated = sanitize_payload_vec3(final_specular / rtgi_specular_virtual_brdf(normal_roughness, albedo_metalness, specular_guide));
 
 	imageStore(image, pixel_i, vec4(final_radiance, 1.0));
 	imageStore(rt_diffuse_radiance_image, pixel_i, vec4(final_diffuse, 1.0));
-	imageStore(rt_specular_radiance_image, pixel_i, vec4(final_specular, 1.0));
+	imageStore(rt_specular_radiance_image, pixel_i, vec4(final_specular_demodulated, 1.0));
 }
 
 #[miss]
@@ -207,6 +245,7 @@ void main() {
 				imageStore(rt_albedo_metalness_image, pixel, vec4(1.0, 1.0, 1.0, 0.0));
 				imageStore(rt_viewz_hitdist_image, pixel, vec4(65504.0, 65504.0, 0.0, 0.0));
 				imageStore(rt_specular_guide_image, pixel, vec4(1.0, 65504.0, 0.0, 0.0));
+				imageStore(rt_specular_reprojection_image, pixel, vec4(0.0));
 				if (int(get_rt_param(RT_PARAM_VIS_MODE)) == RT_VIS_MODE_SPECULAR_REFLECTION_DIRECTION) {
 					imageStore(rt_specular_reflection_direction_image, pixel, vec4(sky_direction * 0.5 + 0.5, 0.0));
 				} else if (int(get_rt_param(RT_PARAM_VIS_MODE)) == RT_VIS_MODE_SPECULAR_REFLECTED_HIT_DISTANCE) {
