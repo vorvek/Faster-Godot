@@ -3797,6 +3797,14 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 			copy_effects->copy_to_fb_rect(rb_data->rt_get_specular_reflection_direction(), fb, Rect2(Vector2(), rtsize), false, false);
 		}
 
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTED_HIT_DISTANCE && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_REFLECTION_DIRECTION)) {
+			copy_effects->copy_to_fb_rect(rb_data->rt_get_specular_reflection_direction(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
+		}
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTED_HIT_NORMAL && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_REFLECTION_DIRECTION)) {
+			copy_effects->copy_to_fb_rect(rb_data->rt_get_specular_reflection_direction(), fb, Rect2(Vector2(), rtsize), false, false);
+		}
+
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_HISTORY_LENGTH && rb->has_texture(RB_SCOPE_RTGI_DENOISE_SPECULAR, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH)) {
 			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DENOISE_SPECULAR, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH), fb, Rect2(Vector2(), rtsize), false, true);
 		}

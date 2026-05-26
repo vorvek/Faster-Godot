@@ -848,7 +848,7 @@ func _animate_specular_objects(frame: int) -> void:
 
 
 func _capture_debug_views(base_name: String) -> void:
-	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_reflection_direction", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
+	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
 	for view in views:
 		if view.begins_with("cache_") and not _cache_debug_available():
 			continue
@@ -1475,6 +1475,10 @@ func _apply_debug_view(view: String) -> void:
 			_environment.rtgi_debug_mode = Environment.RT_DEBUG_NORMAL_DEVIATION
 		elif view == "specular_reflection_direction":
 			_environment.rtgi_debug_mode = Environment.RT_DEBUG_SPECULAR_REFLECTION_DIRECTION
+		elif view == "specular_reflected_hit_distance":
+			_environment.rtgi_debug_mode = Environment.RT_DEBUG_SPECULAR_REFLECTED_HIT_DISTANCE
+		elif view == "specular_reflected_hit_normal":
+			_environment.rtgi_debug_mode = Environment.RT_DEBUG_SPECULAR_REFLECTED_HIT_NORMAL
 		else:
 			_environment.rtgi_debug_mode = Environment.RT_DEBUG_DISABLED
 	RenderingServer.viewport_set_debug_draw(get_viewport().get_viewport_rid(), _debug_draw_value(view))
@@ -1498,6 +1502,10 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_GUIDE
 		"specular_reflection_direction":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTION_DIRECTION
+		"specular_reflected_hit_distance":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTED_HIT_DISTANCE
+		"specular_reflected_hit_normal":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTED_HIT_NORMAL
 		"specular_roughness_bucket":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_ROUGHNESS_BUCKET
 		"specular_history_length":
@@ -1964,6 +1972,109 @@ func _measure_specular_temporal_metrics(base_name: String) -> Dictionary:
 		var direction_values: Array = bin_reflection_direction_deltas[key]
 		direction_values.sort()
 		metrics["rtgi_specular_roughness_%s_reflection_direction_delta_p99" % key] = _percentile_sorted(direction_values, 0.99)
+	metrics.merge(await _measure_specular_reflected_hit_distance_temporal_metrics(), true)
+	metrics.merge(await _measure_specular_reflected_hit_normal_temporal_metrics(), true)
+	return metrics
+
+
+func _measure_specular_reflected_hit_distance_temporal_metrics() -> Dictionary:
+	var previous_reflected_hit_distance: Image = null
+	var all_reflected_hit_distance_deltas: Array[float] = []
+	var bin_reflected_hit_distance_deltas := {
+		"00_05": [],
+		"05_15": [],
+		"15_30": [],
+		"30_60": [],
+		"60_100": [],
+	}
+	var reflected_hit_distance_disocclusion_pixels := 0
+	var reflected_hit_distance_valid_mismatch_pixels := 0
+	var reflected_hit_distance_valid_pairs := 0
+	var reflected_hit_distance_samples := 0
+	for frame in range(_sparkle_frames):
+		var scene_frame := _warmup_frames + _sparkle_frames + frame
+		if _camera_pan:
+			_animate_camera(scene_frame)
+		_animate_specular_objects(scene_frame)
+		_apply_debug_view("specular_roughness_bucket")
+		await _wait_render_frame()
+		var normal_roughness := get_viewport().get_texture().get_image()
+		normal_roughness.convert(Image.FORMAT_RGBA8)
+		_apply_debug_view("specular_reflected_hit_distance")
+		await _wait_render_frame()
+		var reflected_hit_distance := get_viewport().get_texture().get_image()
+		reflected_hit_distance.convert(Image.FORMAT_RGBA8)
+		if previous_reflected_hit_distance != null:
+			var hit_distance_metrics := _measure_specular_reflected_hit_distance_metrics(previous_reflected_hit_distance, reflected_hit_distance, normal_roughness)
+			all_reflected_hit_distance_deltas.append_array(hit_distance_metrics["deltas"])
+			reflected_hit_distance_disocclusion_pixels += int(hit_distance_metrics["disocclusion_pixels"])
+			reflected_hit_distance_valid_mismatch_pixels += int(hit_distance_metrics["valid_mismatch_pixels"])
+			reflected_hit_distance_valid_pairs += int(hit_distance_metrics["valid_pairs"])
+			reflected_hit_distance_samples += int(hit_distance_metrics["samples"])
+			for key in bin_reflected_hit_distance_deltas.keys():
+				bin_reflected_hit_distance_deltas[key].append_array(hit_distance_metrics["bin_deltas"][key])
+		previous_reflected_hit_distance = reflected_hit_distance
+	all_reflected_hit_distance_deltas.sort()
+	var metrics := {
+		"rtgi_specular_reflected_hit_distance_delta_p95": _percentile_sorted(all_reflected_hit_distance_deltas, 0.95),
+		"rtgi_specular_reflected_hit_distance_delta_p99": _percentile_sorted(all_reflected_hit_distance_deltas, 0.99),
+		"rtgi_specular_disocclusion_pixel_fraction": float(reflected_hit_distance_disocclusion_pixels) / maxf(float(reflected_hit_distance_samples), 1.0),
+		"rtgi_specular_reflected_hit_distance_valid_mismatch_fraction": float(reflected_hit_distance_valid_mismatch_pixels) / maxf(float(reflected_hit_distance_samples), 1.0),
+		"rtgi_specular_reflected_hit_distance_valid_pair_fraction": float(reflected_hit_distance_valid_pairs) / maxf(float(reflected_hit_distance_samples), 1.0),
+	}
+	for key in bin_reflected_hit_distance_deltas.keys():
+		var hit_distance_values: Array = bin_reflected_hit_distance_deltas[key]
+		hit_distance_values.sort()
+		metrics["rtgi_specular_roughness_%s_reflected_hit_distance_delta_p99" % key] = _percentile_sorted(hit_distance_values, 0.99)
+	return metrics
+
+
+func _measure_specular_reflected_hit_normal_temporal_metrics() -> Dictionary:
+	var previous_reflected_hit_normal: Image = null
+	var all_reflected_hit_normal_deltas: Array[float] = []
+	var bin_reflected_hit_normal_deltas := {
+		"00_05": [],
+		"05_15": [],
+		"15_30": [],
+		"30_60": [],
+		"60_100": [],
+	}
+	var reflected_hit_normal_valid_mismatch_pixels := 0
+	var reflected_hit_normal_valid_pairs := 0
+	var reflected_hit_normal_samples := 0
+	for frame in range(_sparkle_frames):
+		var scene_frame := _warmup_frames + _sparkle_frames * 2 + frame
+		if _camera_pan:
+			_animate_camera(scene_frame)
+		_animate_specular_objects(scene_frame)
+		_apply_debug_view("specular_roughness_bucket")
+		await _wait_render_frame()
+		var normal_roughness := get_viewport().get_texture().get_image()
+		normal_roughness.convert(Image.FORMAT_RGBA8)
+		_apply_debug_view("specular_reflected_hit_normal")
+		await _wait_render_frame()
+		var reflected_hit_normal := get_viewport().get_texture().get_image()
+		reflected_hit_normal.convert(Image.FORMAT_RGBA8)
+		if previous_reflected_hit_normal != null:
+			var hit_normal_metrics := _measure_specular_reflected_hit_normal_metrics(previous_reflected_hit_normal, reflected_hit_normal, normal_roughness)
+			all_reflected_hit_normal_deltas.append_array(hit_normal_metrics["deltas"])
+			reflected_hit_normal_valid_mismatch_pixels += int(hit_normal_metrics["valid_mismatch_pixels"])
+			reflected_hit_normal_valid_pairs += int(hit_normal_metrics["valid_pairs"])
+			reflected_hit_normal_samples += int(hit_normal_metrics["samples"])
+			for key in bin_reflected_hit_normal_deltas.keys():
+				bin_reflected_hit_normal_deltas[key].append_array(hit_normal_metrics["bin_deltas"][key])
+		previous_reflected_hit_normal = reflected_hit_normal
+	all_reflected_hit_normal_deltas.sort()
+	var metrics := {
+		"rtgi_specular_reflected_hit_normal_delta_p95": _percentile_sorted(all_reflected_hit_normal_deltas, 0.95),
+		"rtgi_specular_reflected_hit_normal_delta_p99": _percentile_sorted(all_reflected_hit_normal_deltas, 0.99),
+		"rtgi_specular_reflected_hit_normal_valid_mismatch_fraction": float(reflected_hit_normal_valid_mismatch_pixels) / maxf(float(reflected_hit_normal_samples), 1.0),
+		"rtgi_specular_reflected_hit_normal_valid_pair_fraction": float(reflected_hit_normal_valid_pairs) / maxf(float(reflected_hit_normal_samples), 1.0),
+	}
+	for key in bin_reflected_hit_normal_deltas.keys():
+		var hit_normal_values: Array = bin_reflected_hit_normal_deltas[key]
+		hit_normal_values.sort()
+		metrics["rtgi_specular_roughness_%s_reflected_hit_normal_delta_p99" % key] = _percentile_sorted(hit_normal_values, 0.99)
 	return metrics
 
 
@@ -2120,6 +2231,102 @@ func _measure_specular_reflection_direction_metrics(previous: Image, current: Im
 	return {
 		"deltas": deltas,
 		"bin_deltas": bin_deltas,
+	}
+
+
+func _measure_specular_reflected_hit_distance_metrics(previous: Image, current: Image, normal_roughness_image: Image) -> Dictionary:
+	var width := mini(mini(previous.get_width(), current.get_width()), normal_roughness_image.get_width())
+	var height := mini(mini(previous.get_height(), current.get_height()), normal_roughness_image.get_height())
+	var deltas: Array[float] = []
+	var bin_deltas := {
+		"00_05": [],
+		"05_15": [],
+		"15_30": [],
+		"30_60": [],
+		"60_100": [],
+	}
+	var disocclusion_pixels := 0
+	var valid_mismatch_pixels := 0
+	var valid_pairs := 0
+	var samples := 0
+	for y in range(2, height - 2, 2):
+		for x in range(2, width - 2, 2):
+			var roughness := _roughness_from_normal_roughness_pixel(normal_roughness_image.get_pixel(x, y))
+			if roughness > 0.60:
+				continue
+			var prev_pixel := previous.get_pixel(x, y)
+			var curr_pixel := current.get_pixel(x, y)
+			var prev_valid := _reflected_hit_distance_pixel_valid(prev_pixel)
+			var curr_valid := _reflected_hit_distance_pixel_valid(curr_pixel)
+			samples += 1
+			if prev_valid != curr_valid:
+				valid_mismatch_pixels += 1
+				continue
+			if not prev_valid:
+				continue
+			var prev_hit := _hit_distance_from_debug_pixel(prev_pixel)
+			var curr_hit := _hit_distance_from_debug_pixel(curr_pixel)
+			var delta: float = absf(curr_hit - prev_hit)
+			deltas.append(delta)
+			valid_pairs += 1
+			if delta > 0.25:
+				disocclusion_pixels += 1
+			var bucket := _roughness_delta_bucket(roughness)
+			if not bucket.is_empty():
+				bin_deltas[bucket].append(delta)
+	return {
+		"deltas": deltas,
+		"bin_deltas": bin_deltas,
+		"disocclusion_pixels": disocclusion_pixels,
+		"valid_mismatch_pixels": valid_mismatch_pixels,
+		"valid_pairs": valid_pairs,
+		"samples": samples,
+	}
+
+
+func _measure_specular_reflected_hit_normal_metrics(previous: Image, current: Image, normal_roughness_image: Image) -> Dictionary:
+	var width := mini(mini(previous.get_width(), current.get_width()), normal_roughness_image.get_width())
+	var height := mini(mini(previous.get_height(), current.get_height()), normal_roughness_image.get_height())
+	var deltas: Array[float] = []
+	var bin_deltas := {
+		"00_05": [],
+		"05_15": [],
+		"15_30": [],
+		"30_60": [],
+		"60_100": [],
+	}
+	var valid_mismatch_pixels := 0
+	var valid_pairs := 0
+	var samples := 0
+	for y in range(2, height - 2, 2):
+		for x in range(2, width - 2, 2):
+			var roughness := _roughness_from_normal_roughness_pixel(normal_roughness_image.get_pixel(x, y))
+			if roughness > 0.60:
+				continue
+			var prev_pixel := previous.get_pixel(x, y)
+			var curr_pixel := current.get_pixel(x, y)
+			var prev_valid := _reflected_hit_normal_pixel_valid(prev_pixel)
+			var curr_valid := _reflected_hit_normal_pixel_valid(curr_pixel)
+			samples += 1
+			if prev_valid != curr_valid:
+				valid_mismatch_pixels += 1
+				continue
+			if not prev_valid:
+				continue
+			var prev_normal := _reflection_direction_from_pixel(prev_pixel)
+			var curr_normal := _reflection_direction_from_pixel(curr_pixel)
+			var delta := 1.0 - clampf(prev_normal.dot(curr_normal), -1.0, 1.0)
+			deltas.append(delta)
+			valid_pairs += 1
+			var bucket := _roughness_delta_bucket(roughness)
+			if not bucket.is_empty():
+				bin_deltas[bucket].append(delta)
+	return {
+		"deltas": deltas,
+		"bin_deltas": bin_deltas,
+		"valid_mismatch_pixels": valid_mismatch_pixels,
+		"valid_pairs": valid_pairs,
+		"samples": samples,
 	}
 
 
@@ -2354,6 +2561,18 @@ func _reflection_direction_from_pixel(pixel: Color) -> Vector3:
 	if length <= 0.0001:
 		return Vector3(0.0, 0.0, 1.0)
 	return direction / length
+
+
+func _hit_distance_from_debug_pixel(pixel: Color) -> float:
+	return (pixel.r + pixel.g + pixel.b) / 3.0
+
+
+func _reflected_hit_distance_pixel_valid(pixel: Color) -> bool:
+	return maxf(maxf(pixel.r, pixel.g), pixel.b) > 0.001
+
+
+func _reflected_hit_normal_pixel_valid(pixel: Color) -> bool:
+	return maxf(maxf(pixel.r, pixel.g), pixel.b) > 0.001
 
 
 func _percentile_sorted(values: Array, percentile: float) -> float:

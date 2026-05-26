@@ -266,6 +266,73 @@ void write_primary_hit_velocity(vec3 hit_pos) {
 // ============================================================================
 
 #ifdef RT_STAGE_CLOSEST_HIT
+bool rtgi_trace_specular_reflected_hit(HitData h, vec3 normal, vec3 view_dir, out float hit_distance, out vec3 hit_normal, out vec3 reflection_dir) {
+	hit_distance = RT_FP16_MAX;
+	hit_normal = vec3(0.0);
+	reflection_dir = reflect(-view_dir, normal);
+	if (dot(reflection_dir, h.geometry_normal) < 0.0) {
+		vec3 recovered_reflection_dir;
+		if (recoverBelowHemisphereSample(reflection_dir, h.geometry_normal, recovered_reflection_dir)) {
+			reflection_dir = recovered_reflection_dir;
+		} else {
+			return false;
+		}
+	}
+
+	vec3 reflection_origin = offset_ray_origin(h.hit_pos, h.geometry_normal);
+	rayQueryEXT reflection_rq;
+	rayQueryInitializeEXT(reflection_rq, tlas, RT_RAY_FLAGS | gl_RayFlagsTerminateOnFirstHitEXT,
+			RT_INSTANCE_MASK_VISIBLE, reflection_origin, 0.001, reflection_dir, 10000.0);
+	float unsupported_t = 1e20;
+	while (rayQueryProceedEXT(reflection_rq)) {
+		uint candidate_type = rayQueryGetIntersectionTypeEXT(reflection_rq, false);
+		if (candidate_type == gl_RayQueryCandidateIntersectionTriangleEXT) {
+			uint candidate_geometry_idx = rayQueryGetIntersectionInstanceCustomIndexEXT(reflection_rq, false);
+			MaterialData candidate_mat = materials[candidate_geometry_idx];
+			if ((candidate_mat.flags & (RT_MAT_FLAG_ALPHA_TEST | RT_MAT_FLAG_CUSTOM_SHADER)) ==
+					(RT_MAT_FLAG_ALPHA_TEST | RT_MAT_FLAG_CUSTOM_SHADER)) {
+				unsupported_t = min(unsupported_t, rayQueryGetIntersectionTEXT(reflection_rq, false));
+				continue;
+			}
+			if (ray_query_alpha_test(
+						candidate_geometry_idx,
+						rayQueryGetIntersectionPrimitiveIndexEXT(reflection_rq, false),
+						rayQueryGetIntersectionBarycentricsEXT(reflection_rq, false),
+						rayQueryGetIntersectionObjectRayOriginEXT(reflection_rq, false) +
+								rayQueryGetIntersectionObjectRayDirectionEXT(reflection_rq, false) *
+										rayQueryGetIntersectionTEXT(reflection_rq, false))) {
+				rayQueryConfirmIntersectionEXT(reflection_rq);
+			}
+		} else if (candidate_type == gl_RayQueryCandidateIntersectionAABBEXT) {
+			unsupported_t = min(unsupported_t, rayQueryGetIntersectionTEXT(reflection_rq, false));
+		}
+	}
+	if (rayQueryGetIntersectionTypeEXT(reflection_rq, true) != gl_RayQueryCommittedIntersectionTriangleEXT) {
+		return false;
+	}
+
+	float committed_t = rayQueryGetIntersectionTEXT(reflection_rq, true);
+	if (unsupported_t < committed_t) {
+		return false;
+	}
+
+	uint committed_geometry_idx = rayQueryGetIntersectionInstanceCustomIndexEXT(reflection_rq, true);
+	GeometryData geom = geometries[committed_geometry_idx];
+	vec2 bary_xy = rayQueryGetIntersectionBarycentricsEXT(reflection_rq, true);
+	vec3 bary = vec3(1.0 - bary_xy.x - bary_xy.y, bary_xy.x, bary_xy.y);
+	uint i0, i1, i2;
+	get_triangle_indices_ex(geom, rayQueryGetIntersectionPrimitiveIndexEXT(reflection_rq, true), i0, i1, i2);
+	TBNResult tbn = fetch_tbn(geom, i0, i1, i2, bary);
+	vec3 world_normal = normalize(transpose(mat3(rayQueryGetIntersectionWorldToObjectEXT(reflection_rq, true))) * tbn.normal);
+	if (dot(world_normal, -reflection_dir) < 0.0) {
+		world_normal = -world_normal;
+	}
+
+	hit_distance = committed_t;
+	hit_normal = world_normal;
+	return true;
+}
+
 void write_primary_hit_guides(HitData h, MaterialResult m) {
 	if (get_total_bounces(payload.packed_bounces_flags) != 0u || !is_sample_zero(payload.packed_bounces_flags)) {
 		return;
@@ -295,15 +362,29 @@ void write_primary_hit_guides(HitData h, MaterialResult m) {
 	}
 
 	vec3 normal = normalize(m.normal);
-	imageStore(rt_normal_roughness_image, pixel, vec4(normal * 0.5 + 0.5, clamp(m.roughness, 0.0, 1.0)));
+	float guide_roughness = clamp(m.roughness, 0.0, 1.0);
 	imageStore(rt_albedo_metalness_image, pixel, vec4(max(m.albedo, vec3(0.0)), clamp(m.metalness, 0.0, 1.0)));
+	imageStore(rt_normal_roughness_image, pixel, vec4(normal * 0.5 + 0.5, guide_roughness));
 	imageStore(rt_viewz_hitdist_image, pixel, vec4(abs(view_pos.z), max(gl_HitTEXT, 0.0), expected_prev_view_z, 0.0));
-	float specular_risk = max(1.0 - clamp(m.roughness, 0.0, 1.0), clamp(m.metalness, 0.0, 1.0));
-	imageStore(rt_specular_guide_image, pixel, vec4(clamp(m.roughness, 0.0, 1.0), max(gl_HitTEXT, 0.0), specular_risk, 1.0));
-	if (int(get_rt_param(RT_PARAM_VIS_MODE)) == RT_VIS_MODE_SPECULAR_REFLECTION_DIRECTION) {
-		vec3 view_dir = normalize(-gl_WorldRayDirectionEXT);
-		vec3 reflection_dir = normalize(reflect(-view_dir, normal));
-		imageStore(rt_specular_reflection_direction_image, pixel, vec4(reflection_dir * 0.5 + 0.5, specular_risk));
+	float specular_risk = max(1.0 - guide_roughness, clamp(m.metalness, 0.0, 1.0));
+	float reflected_hit_distance = RT_FP16_MAX;
+	vec3 reflected_hit_normal = vec3(0.0);
+	vec3 reflection_dir = vec3(0.0);
+	vec3 view_dir = normalize(-gl_WorldRayDirectionEXT);
+	int vis_mode = int(get_rt_param(RT_PARAM_VIS_MODE));
+	bool needs_reflected_diagnostic = vis_mode == RT_VIS_MODE_SPECULAR_REFLECTED_HIT_DISTANCE ||
+			vis_mode == RT_VIS_MODE_SPECULAR_REFLECTED_HIT_NORMAL;
+	bool needs_reflected_guide = needs_reflected_diagnostic && specular_risk > 0.35 && guide_roughness <= 0.60;
+	bool reflected_hit_valid = needs_reflected_guide && rtgi_trace_specular_reflected_hit(h, normal, view_dir, reflected_hit_distance, reflected_hit_normal, reflection_dir);
+	imageStore(rt_specular_guide_image, pixel, vec4(guide_roughness, max(gl_HitTEXT, 0.0), specular_risk, 1.0));
+	if (vis_mode == RT_VIS_MODE_SPECULAR_REFLECTION_DIRECTION) {
+		vec3 diagnostic_reflection_dir = normalize(reflect(-view_dir, normal));
+		imageStore(rt_specular_reflection_direction_image, pixel, vec4(diagnostic_reflection_dir * 0.5 + 0.5, specular_risk));
+	} else if (vis_mode == RT_VIS_MODE_SPECULAR_REFLECTED_HIT_DISTANCE) {
+		float encoded_reflected_hit_distance = reflected_hit_valid ? max(reflected_hit_distance, 0.0) + 1.0 : 0.0;
+		imageStore(rt_specular_reflection_direction_image, pixel, vec4(encoded_reflected_hit_distance, 0.0, 0.0, reflected_hit_valid ? specular_risk : 0.0));
+	} else if (vis_mode == RT_VIS_MODE_SPECULAR_REFLECTED_HIT_NORMAL) {
+		imageStore(rt_specular_reflection_direction_image, pixel, vec4(reflected_hit_valid ? reflected_hit_normal * 0.5 + 0.5 : vec3(0.0), specular_risk));
 	}
 	rt_signal_set_primary_confidence(pixel, specular_risk, float(geom_idx & 1023u) / 1023.0, 1.0);
 }
@@ -561,6 +642,9 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 
 	uint total_bounces = get_total_bounces(ps.packed_bounces_flags);
 	uint diffuse_bounces = get_diffuse_bounces(ps.packed_bounces_flags);
+	float material_roughness = clamp(m.roughness, 0.0, 1.0);
+	float path_min_roughness = min(0.75, 0.02 + 0.05 * float(total_bounces));
+	float sampling_roughness = max(material_roughness, path_min_roughness);
 	uint rtgi_sampling_controls = uint(get_rt_param(RT_PARAM_RTGI_SAMPLING_CONTROLS));
 	bool hybrid_primary = uint(get_rt_param(RT_PARAM_MODE)) == RT_MODE_HYBRID && total_bounces == 0u;
 	if (hybrid_primary && (geometries[h.geometry_idx].flags & RT_GEOM_FLAG_RASTER_GI_OWNER) != 0u) {
@@ -580,7 +664,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 				(rtgi_sampling_controls & RTGI_SAMPLING_EXPLICIT_EMISSIVE_BIT) != 0u;
 		if (!suppress_diffuse_path_emissive) {
 			vec3 raw_emissive_contribution = ps.throughput * m.emissive;
-			vec3 emissive_contribution = rt_clamp_path_contribution(raw_emissive_contribution, m.roughness, m.metalness, secondary_emissive, secondary_emissive);
+			vec3 emissive_contribution = rt_clamp_path_contribution(raw_emissive_contribution, material_roughness, m.metalness, secondary_emissive, secondary_emissive);
 			rt_signal_add_emissive(ivec2(gl_LaunchIDEXT.xy), emissive_contribution, secondary_emissive, rt_signal_clamp_delta(raw_emissive_contribution, emissive_contribution));
 			ps.radiance += emissive_contribution;
 			if (total_bounces == 0u || get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {
@@ -600,7 +684,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	MaterialProperties brdf_mat;
 	brdf_mat.baseColor = m.albedo;
 	brdf_mat.metalness = m.metalness;
-	brdf_mat.roughness = m.roughness;
+	brdf_mat.roughness = material_roughness;
 	brdf_mat.dielectricF0 = specular_to_f0(m.specular);
 	brdf_mat.emissive = m.emissive;
 	brdf_mat.transmissivness = 0.0;
@@ -619,14 +703,14 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		vec3 diffuse_albedo = DLSSRR_computeDiffuseAlbedo(m.albedo, m.metalness);
 		imageStore(dlss_rr_diffuse_albedo, pixel, vec4(diffuse_albedo, 1.0));
 
-		vec3 specular_albedo = DLSSRR_computeSpecularAlbedo(m.albedo, m.metalness, brdf_mat.dielectricF0, m.roughness, NdotV);
+		vec3 specular_albedo = DLSSRR_computeSpecularAlbedo(m.albedo, m.metalness, brdf_mat.dielectricF0, material_roughness, NdotV);
 		imageStore(dlss_rr_specular_albedo, pixel, vec4(clamp(specular_albedo, vec3(0.0), vec3(1.0)), 1.0)); // match UNORM8 like before - fixes some issues with garbling..
 
-		imageStore(dlss_rr_normal_roughness, pixel, vec4(N, m.roughness));
+		imageStore(dlss_rr_normal_roughness, pixel, vec4(N, material_roughness));
 
 		// Specular hit distance via inline ray query (only for smooth surfaces).
 		float spec_hit_dist = -1.0;
-		if (m.roughness < MAX_DENOISER_SPECULAR_HIT_THRESHOLD) {
+		if (material_roughness < MAX_DENOISER_SPECULAR_HIT_THRESHOLD) {
 			vec3 spec_dir = reflect(-V, N);
 			bool spec_dir_valid = true;
 			if (dot(spec_dir, h.geometry_normal) < 0.0) {
@@ -698,13 +782,13 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 				direct_source_key, direct_slot_source_key, direct_slot_pdf, direct_slot_light, direct_slot_stochastic);
 		vec3 raw_direct_diffuse = ps.throughput * direct_light.diffuse;
 		vec3 raw_direct_specular = ps.throughput * direct_light.specular;
-		vec3 direct_diffuse = rt_clamp_path_contribution(raw_direct_diffuse, m.roughness, m.metalness, is_indirect, false);
-		vec3 direct_specular = rt_clamp_path_contribution(raw_direct_specular, m.roughness, m.metalness, is_indirect, false);
+		vec3 direct_diffuse = rt_clamp_path_contribution(raw_direct_diffuse, material_roughness, m.metalness, is_indirect, false);
+		vec3 direct_specular = rt_clamp_path_contribution(raw_direct_specular, material_roughness, m.metalness, is_indirect, false);
 		vec3 direct_total = direct_diffuse + direct_specular;
 		vec3 raw_direct_slot_diffuse = ps.throughput * direct_slot_light.diffuse;
 		vec3 raw_direct_slot_specular = ps.throughput * direct_slot_light.specular;
-		vec3 direct_slot_total = rt_clamp_path_contribution(raw_direct_slot_diffuse, m.roughness, m.metalness, is_indirect, false) +
-				rt_clamp_path_contribution(raw_direct_slot_specular, m.roughness, m.metalness, is_indirect, false);
+		vec3 direct_slot_total = rt_clamp_path_contribution(raw_direct_slot_diffuse, material_roughness, m.metalness, is_indirect, false) +
+				rt_clamp_path_contribution(raw_direct_slot_specular, material_roughness, m.metalness, is_indirect, false);
 		rt_signal_add_direct(ivec2(gl_LaunchIDEXT.xy), direct_diffuse, direct_specular,
 				rt_signal_clamp_delta(raw_direct_diffuse, direct_diffuse) + rt_signal_clamp_delta(raw_direct_specular, direct_specular));
 		if (!is_indirect) {
@@ -732,8 +816,8 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 				h.hit_pos, h.geometry_normal, N, V, brdf_mat, ps.rng_state, receiver_layer_mask, emissive_pdf, emissive_weight, emissive_source_key);
 		vec3 raw_emissive_diffuse = ps.throughput * emissive_light.diffuse;
 		vec3 raw_emissive_specular = ps.throughput * emissive_light.specular;
-		vec3 emissive_diffuse = rt_clamp_path_contribution(raw_emissive_diffuse, m.roughness, m.metalness, is_indirect, true);
-		vec3 emissive_specular = rt_clamp_path_contribution(raw_emissive_specular, m.roughness, m.metalness, is_indirect, true);
+		vec3 emissive_diffuse = rt_clamp_path_contribution(raw_emissive_diffuse, material_roughness, m.metalness, is_indirect, true);
+		vec3 emissive_specular = rt_clamp_path_contribution(raw_emissive_specular, material_roughness, m.metalness, is_indirect, true);
 		vec3 explicit_emissive_total = emissive_diffuse + emissive_specular;
 		rt_signal_add_explicit_emissive(ivec2(gl_LaunchIDEXT.xy), explicit_emissive_total, emissive_pdf, emissive_weight,
 				rt_signal_clamp_delta(raw_emissive_diffuse, emissive_diffuse) + rt_signal_clamp_delta(raw_emissive_specular, emissive_specular));
@@ -771,7 +855,9 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	vec2 u = rand2(ps.rng_state);
 	vec3 next_dir;
 	vec3 brdf_weight;
-	if (!evalIndirectCombinedBRDF(u, N, h.geometry_normal, V, brdf_mat, brdfType, next_dir, brdf_weight, vec4(0.0))) {
+	MaterialProperties sampling_brdf_mat = brdf_mat;
+	sampling_brdf_mat.roughness = sampling_roughness;
+	if (!evalIndirectCombinedBRDF(u, N, h.geometry_normal, V, sampling_brdf_mat, brdfType, next_dir, brdf_weight, vec4(0.0))) {
 		// Two failure modes:
 		//   1) Sample weight is zero (no contribution). Terminate.
 		//   2) Sampled direction is below the geometry plane. Recover by
@@ -790,14 +876,14 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 
 	ps.throughput *= brdf_weight;
 	vec3 raw_next_throughput = ps.throughput;
-	ps.throughput = rt_clamp_throughput(ps.throughput, m.roughness, m.metalness, total_bounces + 1u);
+	ps.throughput = rt_clamp_throughput(ps.throughput, sampling_roughness, m.metalness, total_bounces + 1u);
 	rt_signal_add_indirect(ivec2(gl_LaunchIDEXT.xy), ps.throughput, total_bounces + 1u, brdfType, rt_signal_clamp_delta(raw_next_throughput, ps.throughput));
 
 	if (brdfType == DIFFUSE_TYPE) {
 		ps.packed_bounces_flags = inc_diffuse_bounce(ps.packed_bounces_flags);
 	} else {
 		if (total_bounces == 0u) {
-			float primary_roughness = clamp(m.roughness, 0.0, 1.0);
+			float primary_roughness = max(material_roughness, 0.02);
 			float primary_metalness = clamp(m.metalness, 0.0, 1.0);
 			float primary_specular_risk = max(1.0 - primary_roughness, primary_metalness);
 			bool primary_specular_signal = primary_specular_risk > 0.35 && primary_roughness < mix(0.32, 0.14, primary_metalness);

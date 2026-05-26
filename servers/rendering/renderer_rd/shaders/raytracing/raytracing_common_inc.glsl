@@ -169,6 +169,8 @@ layout(set = 0, binding = 58, r32ui) uniform uimage2D rt_source_direct_candidate
 layout(set = 0, binding = 59, r32ui) uniform uimage2D rt_source_direct_candidate_key_prev_image;
 
 #define RT_VIS_MODE_SPECULAR_REFLECTION_DIRECTION 24
+#define RT_VIS_MODE_SPECULAR_REFLECTED_HIT_DISTANCE 25
+#define RT_VIS_MODE_SPECULAR_REFLECTED_HIT_NORMAL 26
 
 #define RT_SOURCE_CLASS_DIRECT 1u
 #define RT_SOURCE_CLASS_EMISSIVE 2u

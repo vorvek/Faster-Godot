@@ -824,7 +824,7 @@ void main() {
 	float variance_filter = smoothstep(0.0008, 0.055, variance);
 	float reactive_detail = max(center_reactivity, smoothstep(0.18, 1.0, center_motion_px) * 0.45);
 	float spatial_strength = clamp(pow(params.denoise_strength, 0.85) * mix(0.50, 0.98, variance_filter) * mix(1.0, 0.76, reactive_detail), 0.0, 1.0);
-	spatial_strength *= mix(1.0, 0.46, specular_spatial_guard);
+	spatial_strength *= mix(1.0, 0.60, specular_spatial_guard);
 	float moving_step_weight = exp(-float(max(params.step_size - 1, 0)) * (smoothstep(1.0, 16.0, center_motion_px) * 0.16 + center_reactivity * 0.24));
 
 	vec3 color_sum = vec3(0.0);
