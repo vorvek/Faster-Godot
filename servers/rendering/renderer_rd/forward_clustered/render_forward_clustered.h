@@ -37,6 +37,7 @@
 #include "servers/rendering/renderer_rd/effects/motion_vectors_store.h"
 #include "servers/rendering/renderer_rd/effects/rtgi_diffuse_cache.h"
 #include "servers/rendering/renderer_rd/effects/rtgi_denoise.h"
+#include "servers/rendering/renderer_rd/effects/rtgi_spatiotemporal_radiance_cache.h"
 #include "servers/rendering/renderer_rd/effects/ss_effects.h"
 #include "servers/rendering/renderer_rd/effects/taa.h"
 #include "servers/rendering/renderer_rd/forward_clustered/render_raytracing.h"
@@ -166,6 +167,8 @@ public:
 		bool rt_overscan_initialized = false;
 		uint64_t rt_diffuse_cache_signature = 0;
 		bool rt_diffuse_cache_signature_valid = false;
+		Vector3i rt_strc_probe_origins[4];
+		bool rt_strc_scroll_valid = false;
 
 		bool rt_update_overscan(const Size2i &p_visible_size, float p_horizontal, float p_vertical, const Vector2 &p_motion_pixels);
 		void rt_clear_textures();
@@ -868,6 +871,7 @@ private:
 	RendererRD::TAA *taa = nullptr;
 	RendererRD::RTGIDiffuseCache *rtgi_diffuse_cache = nullptr;
 	RendererRD::RTGIDenoise *rtgi_denoise = nullptr;
+	RendererRD::RTGISpatioTemporalRadianceCache *rtgi_strc = nullptr;
 	RendererRD::FSR2Effect *fsr2_effect = nullptr;
 	RendererRD::SSEffects *ss_effects = nullptr;
 

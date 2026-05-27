@@ -261,8 +261,10 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_clear_textures
 	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
 	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE_COMPOSITE);
 	render_buffers->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
+	render_buffers->clear_context(RB_SCOPE_RTGI_STRC);
 	rt_diffuse_cache_signature = 0;
 	rt_diffuse_cache_signature_valid = false;
+	rt_strc_scroll_valid = false;
 }
 
 void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_textures() {
@@ -2577,8 +2579,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// validate RT before render-list population so a pipeline/uniform failure can
 	// fall back to the normal opaque raster path instead of leaving the frame blank.
 	uint32_t rt_flags = SceneShaderRaytracing::RT_FLAG_NONE;
+	RTViewportState *rt_state = nullptr;
 	RID rt_uniform_set;
 	RID rt_pipeline;
+	bool rt_strc_enabled = false;
+	uint32_t rt_strc_cascade_count = 3;
+	uint32_t rt_strc_grid_size = 24;
+	uint32_t rt_strc_rays_per_frame = 4096;
+	float rt_strc_base_probe_spacing = 1.5f;
+	float rt_strc_temporal_weight = 0.97f;
 	const bool rt_requested = scene_features.rt;
 	const bool rt_setup_deferred = scene_features.rt && !rt_replaces_opaque;
 	auto invalidate_rt_temporal_history = [&]() {
@@ -2616,6 +2625,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
 		rb->clear_context(RB_SCOPE_RTGI_DENOISE_COMPOSITE);
 		rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
+		rb->clear_context(RB_SCOPE_RTGI_STRC);
+		rb_data->rt_strc_scroll_valid = false;
 	};
 	auto reject_rt_previous_history = [&]() {
 		if (!rb_data.is_valid()) {
@@ -2659,6 +2670,21 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				: nullptr;
 		const bool fog_enabled = p_render_data && p_render_data->environment.is_valid() && environment_get_fog_enabled(p_render_data->environment);
 		rt_flags = SceneShaderRaytracing::compute_rt_flags(env_params, fog_enabled);
+		rt_strc_enabled = (rt_flags & SceneShaderRaytracing::RT_FLAG_STRC_ENABLED) != 0;
+		rt_strc_cascade_count = env_params ? CLAMP((uint32_t)env_params[RSE::PT_PARAM_RTGI_STRC_CASCADE_COUNT], 1u, 4u) : 3u;
+		rt_strc_grid_size = env_params ? CLAMP((uint32_t)env_params[RSE::PT_PARAM_RTGI_STRC_GRID_SIZE], 12u, 32u) : 24u;
+		rt_strc_rays_per_frame = env_params ? CLAMP((uint32_t)env_params[RSE::PT_PARAM_RTGI_STRC_RAYS_PER_FRAME], 0u, 32768u) : 4096u;
+		rt_strc_base_probe_spacing = env_params ? CLAMP(env_params[RSE::PT_PARAM_RTGI_STRC_BASE_PROBE_SPACING], 0.25f, 8.0f) : 1.5f;
+		rt_strc_temporal_weight = env_params ? CLAMP(env_params[RSE::PT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT], 0.0f, 0.995f) : 0.97f;
+		if (rtgi_strc) {
+			uint64_t strc_signature = _rtgi_diffuse_cache_signature_mix(0x727473747263ULL, rt_flags);
+			strc_signature = _rtgi_diffuse_cache_signature_mix(strc_signature, rt_strc_cascade_count);
+			strc_signature = _rtgi_diffuse_cache_signature_mix(strc_signature, rt_strc_grid_size);
+			strc_signature = _rtgi_diffuse_cache_signature_mix_float(strc_signature, rt_strc_base_probe_spacing);
+			if (rtgi_strc->ensure_resources(rb, rt_strc_cascade_count, rt_strc_grid_size, MAX(rt_strc_rays_per_frame, 1u), strc_signature)) {
+				rb_data->rt_strc_scroll_valid = false;
+			}
+		}
 
 		const bool dlss_rr_enabled = (rt_flags & SceneShaderRaytracing::RT_FLAG_DLSS_RR_ENABLED) != 0;
 		if (dlss_rr_enabled) {
@@ -2684,9 +2710,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_COMPOSITE);
 			rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
+			rb->clear_context(RB_SCOPE_RTGI_STRC);
+			rb_data->rt_strc_scroll_valid = false;
 		}
 
-		RTViewportState *rt_state = raytracing->build_tlas(p_render_data, rt_flags);
+		rt_state = raytracing->build_tlas(p_render_data, rt_flags);
 		if (rt_state) {
 			rt_uniform_set = raytracing->update_uniform_set(rt_state, p_render_data, rt_flags);
 			if (rt_state->radiance_history_invalidated) {
@@ -3197,6 +3225,65 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		Size2i rt_size = rb_data->rt_get_size();
 		RD::get_singleton()->raytracing_list_trace_rays(raytracing_list, 0, raytracing->get_shader()->get_hit_sbt(rt_flags), rt_size.width, rt_size.height, 1);
 		RD::get_singleton()->raytracing_list_end();
+
+		if (rt_strc_enabled && rtgi_strc && rt_state && rt_strc_rays_per_frame > 0 && rtgi_strc->get_ray_result_buffer().is_valid()) {
+			RD::get_singleton()->draw_command_begin_label("RTGI STRC Probe Update");
+			const uint32_t probe_flags = rt_flags | SceneShaderRaytracing::RT_FLAG_STRC_PROBE_UPDATE;
+			RID probe_uniform_set = raytracing->update_uniform_set(rt_state, p_render_data, probe_flags);
+			RID probe_pipeline = raytracing->get_shader()->get_raytracing_pipeline(probe_flags);
+			if (probe_uniform_set.is_valid() && probe_pipeline.is_valid()) {
+				RD::RaytracingListID probe_list = RD::get_singleton()->raytracing_list_begin();
+				RD::get_singleton()->raytracing_list_bind_raytracing_pipeline(probe_list, probe_pipeline);
+				RD::get_singleton()->raytracing_list_bind_uniform_set(probe_list, probe_uniform_set, 0);
+				RID probe_bindless_set = raytracing->get_bindless_uniform_set();
+				if (probe_bindless_set.is_valid()) {
+					RD::get_singleton()->raytracing_list_bind_uniform_set(probe_list, probe_bindless_set, 1);
+				}
+				const uint32_t probe_dependency_count =
+						2 + raytracing->get_material_ubo_dependencies().size() +
+						raytracing->get_geometry_buffer_dependencies().size() +
+						raytracing->get_deformed_buffer_dependencies().size();
+				raytracing->begin_unique_buffer_dependencies(probe_dependency_count);
+				RID probe_mat_ubo_pool = raytracing->get_mat_ubo_pool_buffer();
+				raytracing->add_unique_buffer_dependency(probe_list, probe_mat_ubo_pool);
+				for (const RID &material_ubo : raytracing->get_material_ubo_dependencies()) {
+					raytracing->add_unique_buffer_dependency(probe_list, material_ubo);
+				}
+				for (const RID &geometry_buffer : raytracing->get_geometry_buffer_dependencies()) {
+					raytracing->add_unique_buffer_dependency(probe_list, geometry_buffer);
+				}
+				for (const RID &deformed_buffer : raytracing->get_deformed_buffer_dependencies()) {
+					raytracing->add_unique_buffer_dependency(probe_list, deformed_buffer);
+				}
+				RD::get_singleton()->raytracing_list_add_buffer_dependency(probe_list, rtgi_strc->get_ray_result_buffer(), true);
+				RD::get_singleton()->raytracing_list_trace_rays(probe_list, 0, raytracing->get_shader()->get_hit_sbt(probe_flags), rt_strc_rays_per_frame, 1, 1);
+				RD::get_singleton()->raytracing_list_end();
+				uint64_t process_strc_signature = _rtgi_diffuse_cache_signature_mix(0x727473747263ULL, rt_flags);
+				process_strc_signature = _rtgi_diffuse_cache_signature_mix(process_strc_signature, rt_strc_cascade_count);
+				process_strc_signature = _rtgi_diffuse_cache_signature_mix(process_strc_signature, rt_strc_grid_size);
+				process_strc_signature = _rtgi_diffuse_cache_signature_mix_float(process_strc_signature, rt_strc_base_probe_spacing);
+				if (rtgi_strc->ensure_resources(rb, rt_strc_cascade_count, rt_strc_grid_size, MAX(rt_strc_rays_per_frame, 1u), process_strc_signature)) {
+					rb_data->rt_strc_scroll_valid = false;
+				}
+				Vector3i current_probe_origins[4];
+				Vector3i cascade_scroll[4];
+				const Vector3 camera_origin = p_render_data->scene_data->cam_transform.origin;
+				for (uint32_t cascade = 0; cascade < 4; cascade++) {
+					const double spacing = double(rt_strc_base_probe_spacing) * Math::pow(2.0, double(cascade));
+					current_probe_origins[cascade] = Vector3i(
+							Math::floor(camera_origin.x / spacing),
+							Math::floor(camera_origin.y / spacing),
+							Math::floor(camera_origin.z / spacing));
+					cascade_scroll[cascade] = rb_data->rt_strc_scroll_valid ? current_probe_origins[cascade] - rb_data->rt_strc_probe_origins[cascade] : Vector3i();
+				}
+				rtgi_strc->process(rb, rt_strc_cascade_count, rt_strc_grid_size, rt_strc_rays_per_frame, rt_strc_temporal_weight, rt_state->frame_counter, cascade_scroll, rb_data->rt_strc_scroll_valid, 0);
+				for (uint32_t cascade = 0; cascade < 4; cascade++) {
+					rb_data->rt_strc_probe_origins[cascade] = current_probe_origins[cascade];
+				}
+				rb_data->rt_strc_scroll_valid = true;
+			}
+			RD::get_singleton()->draw_command_end_label();
+		}
 
 		RD::get_singleton()->texture_copy(rb_data->rt_get_source_candidate(), rb_data->rt_get_source_candidate_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
 		RD::get_singleton()->texture_copy(rb_data->rt_get_source_candidate_key(), rb_data->rt_get_source_candidate_key_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
@@ -3889,6 +3976,18 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_FILTERED_DIFFUSE && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_OUTPUT)) {
 			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_OUTPUT), fb, Rect2(Vector2(), rtsize), false, false);
+		}
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_STRC_RADIANCE && rb->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_RADIANCE_DEBUG)) {
+			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_RADIANCE_DEBUG), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
+		}
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_STRC_CONFIDENCE && rb->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_CONFIDENCE_DEBUG)) {
+			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_CONFIDENCE_DEBUG), fb, Rect2(Vector2(), rtsize), false, true);
+		}
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_STRC_UPDATES && rb->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_UPDATES_DEBUG)) {
+			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_UPDATES_DEBUG), fb, Rect2(Vector2(), rtsize), false, true);
 		}
 	}
 
@@ -6603,6 +6702,7 @@ RenderForwardClustered::RenderForwardClustered() {
 	taa = memnew(RendererRD::TAA);
 	rtgi_diffuse_cache = memnew(RendererRD::RTGIDiffuseCache);
 	rtgi_denoise = memnew(RendererRD::RTGIDenoise);
+	rtgi_strc = memnew(RendererRD::RTGISpatioTemporalRadianceCache);
 	fsr2_effect = memnew(RendererRD::FSR2Effect);
 	ss_effects = memnew(RendererRD::SSEffects);
 	motion_vectors_store = memnew(RendererRD::MotionVectorsStore);
@@ -6627,6 +6727,11 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (rtgi_denoise != nullptr) {
 		memdelete(rtgi_denoise);
 		rtgi_denoise = nullptr;
+	}
+
+	if (rtgi_strc != nullptr) {
+		memdelete(rtgi_strc);
+		rtgi_strc = nullptr;
 	}
 
 	if (rtgi_diffuse_cache != nullptr) {

@@ -13,7 +13,7 @@
 // ============================================================================
 // RT_PARAMS INDICES - Must match RT_PARAM_* in scene_shader_raytracing.h
 // ============================================================================
-// rt_params is a vec4[7] uniform buffer (28 floats total)
+// rt_params is a vec4[10] uniform buffer (40 floats total)
 // Access: rt_params[idx >> 2][idx & 3] or get_rt_param(idx)
 #define RT_PARAM_VIS_MODE 0 // rt_params[0].x - Debug visualization mode (0 = disabled)
 #define RT_PARAM_SAMPLE_COUNT 1 // rt_params[0].y - Samples per pixel
@@ -43,6 +43,13 @@
 #define RT_PARAM_RTGI_SAMPLING_CONTROLS 25 // rt_params[6].y - Bitfield for analytic/emissive sampling controls
 #define RT_PARAM_EMISSIVE_CANDIDATE_COUNT 26 // rt_params[6].z - Renderer-selected emissive candidate count
 #define RT_PARAM_EMISSIVE_CANDIDATE_TOTAL_WEIGHT 27 // rt_params[6].w - Sum of emissive candidate selection weights
+#define RT_PARAM_RTGI_STRC_ENABLED 28 // rt_params[7].x - World-space STRC/DDGI enabled
+#define RT_PARAM_RTGI_STRC_STRENGTH 29 // rt_params[7].y - STRC contribution strength
+#define RT_PARAM_RTGI_STRC_CASCADE_COUNT 30 // rt_params[7].z - Active camera-centered cascades
+#define RT_PARAM_RTGI_STRC_GRID_SIZE 31 // rt_params[7].w - Probes per axis
+#define RT_PARAM_RTGI_STRC_BASE_PROBE_SPACING 32 // rt_params[8].x - Cascade 0 spacing in world units
+#define RT_PARAM_RTGI_STRC_RAYS_PER_FRAME 33 // rt_params[8].y - Probe update ray budget
+#define RT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT 34 // rt_params[8].z - Probe temporal accumulation weight
 
 #define RTGI_SAMPLING_ANALYTIC_LIGHTS_BIT 1u
 #define RTGI_SAMPLING_EXPLICIT_EMISSIVE_BIT 2u

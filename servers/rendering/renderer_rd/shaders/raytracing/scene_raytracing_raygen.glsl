@@ -60,7 +60,83 @@ vec3 rtgi_specular_virtual_brdf(vec4 normal_roughness, vec4 albedo_metalness, ve
 	return mix(vec3(1.0), brdf, guide_weight);
 }
 
+void rt_strc_probe_update_main() {
+	uint ray_index = gl_LaunchIDEXT.x;
+	uint ray_count = uint(max(get_rt_param(RT_PARAM_RTGI_STRC_RAYS_PER_FRAME), 0.0));
+	if (ray_index >= ray_count) {
+		return;
+	}
+
+	uint grid = clamp(uint(get_rt_param(RT_PARAM_RTGI_STRC_GRID_SIZE)), 12u, 32u);
+	uint cascade_count = clamp(uint(get_rt_param(RT_PARAM_RTGI_STRC_CASCADE_COUNT)), 1u, 4u);
+	uint probe_count = cascade_count * grid * grid * grid;
+	uint texel_count = probe_count * 64u;
+	uint frame_index = uint(get_rt_param(RT_PARAM_FRAME_INDEX));
+	uint update_index = texel_count > 0u ? (frame_index * max(ray_count, 1u) + ray_index) % texel_count : 0u;
+	uint probe_index = update_index >> 6u;
+	uint dir_index = update_index & 63u;
+	uint probes_per_cascade = grid * grid * grid;
+	uint cascade = min(probe_index / probes_per_cascade, cascade_count - 1u);
+	uint probe = probe_index - cascade * probes_per_cascade;
+	uint px = probe % grid;
+	uint py = (probe / grid) % grid;
+	uint pz = probe / (grid * grid);
+
+	float spacing = max(get_rt_param(RT_PARAM_RTGI_STRC_BASE_PROBE_SPACING), 0.25) * exp2(float(cascade));
+	vec3 camera_origin = rt_camera_world_origin();
+	vec3 cascade_center = floor(camera_origin / spacing) * spacing;
+	vec3 probe_local = (vec3(float(px), float(py), float(pz)) + vec3(0.5)) - vec3(float(grid) * 0.5);
+	vec3 ray_origin = cascade_center + probe_local * spacing;
+
+	vec2 oct_uv = (vec2(float(dir_index & 7u), float((dir_index >> 3u) & 7u)) + vec2(0.5)) / 8.0;
+	vec3 ray_dir = normalize(oct_to_vec3(oct_uv * 2.0 - 1.0));
+
+	PathState ps;
+	ps.radiance = vec3(0.0);
+	ps.specular_radiance = vec3(0.0);
+	ps.throughput = vec3(1.0);
+	ps.packed_bounces_flags = set_sample_zero(0u);
+	ps.rng_state = init_blue_noise_rng(uvec2(ray_index & 255u, (ray_index >> 8u) & 255u), frame_index, dir_index);
+	ps.hit_t = 65504.0;
+	ps.offset_normal = vec3(0.0, 1.0, 0.0);
+	ps.next_ray_dir = ray_dir;
+
+	const uint max_bounces = RT_GET_MAX_BOUNCES();
+	[[dont_unroll]] for (uint bounce = 0u; bounce <= max_bounces; bounce++) {
+		path_pack(payload, ps);
+#ifdef USE_SER
+		hitObjectNV hitObject;
+		hitObjectTraceRayNV(hitObject, tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
+		uint hint = 0;
+		if (hitObjectIsHitNV(hitObject)) {
+			hint = hitObjectGetInstanceIdNV(hitObject);
+		}
+		reorderThreadNV(hitObject, hint, 8);
+		hitObjectExecuteShaderNV(hitObject, 0);
+#else
+		traceRayEXT(tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
+#endif
+		ps = path_unpack(payload);
+		if (is_path_terminated(ps.packed_bounces_flags)) {
+			break;
+		}
+		vec3 hit_pos = ray_origin + ray_dir * ps.hit_t;
+		ray_origin = offset_ray_origin(hit_pos, ps.offset_normal);
+		ray_dir = ps.next_ray_dir;
+	}
+
+	vec3 radiance = sanitize_payload_vec3(ps.radiance);
+	float confidence = clamp(rt_luminance(radiance) > 0.0 ? 1.0 : 0.35, 0.0, 1.0);
+	rt_strc_probe_ray_results[ray_index].radiance_distance = vec4(radiance, clamp(ps.hit_t, 0.0, 65504.0));
+	rt_strc_probe_ray_results[ray_index].normal_confidence = vec4(ps.offset_normal * 0.5 + 0.5, confidence);
+}
+
 void main() {
+	if (rt_strc_probe_update_mode()) {
+		rt_strc_probe_update_main();
+		return;
+	}
+
 	uvec2 pixel = gl_LaunchIDEXT.xy;
 	ivec2 pixel_i = ivec2(pixel);
 	const vec2 in_uv = rt_current_visible_uv(pixel_i);
@@ -224,7 +300,7 @@ void main() {
 	// Primary ray miss: write depth, velocity, and DLSS RR defaults (sample 0 only).
 	{
 		uint total_bounces = get_total_bounces(ps.packed_bounces_flags);
-		if (total_bounces == 0u && is_sample_zero(ps.packed_bounces_flags)) {
+		if (!rt_strc_probe_update_mode() && total_bounces == 0u && is_sample_zero(ps.packed_bounces_flags)) {
 			ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
 
 			imageStore(rt_depth_image, pixel, vec4(0.0));
@@ -303,7 +379,7 @@ void main() {
 #ifdef DLSS_RR_ENABLED
 	{
 		uint total_bounces = get_total_bounces(ps.packed_bounces_flags);
-		if (total_bounces == 0u && is_sample_zero(ps.packed_bounces_flags)) {
+		if (!rt_strc_probe_update_mode() && total_bounces == 0u && is_sample_zero(ps.packed_bounces_flags)) {
 			ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
 			imageStore(dlss_rr_diffuse_albedo, pixel, vec4(sky_color, 1.0));
 			imageStore(dlss_rr_specular_albedo, pixel, vec4(0.0));

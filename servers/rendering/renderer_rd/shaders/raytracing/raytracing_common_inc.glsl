@@ -7,6 +7,8 @@ layout(constant_id = 0) const uint RT_FLAGS = 0u;
 
 #define RT_FLAG_DLSS_RR_ENABLED (1u << 1)
 #define RT_FLAG_FOG_ENABLED (1u << 2)
+#define RT_FLAG_STRC_ENABLED (1u << 4)
+#define RT_FLAG_STRC_PROBE_UPDATE (1u << 5)
 
 #define RT_SAMPLE_COUNT_SHIFT 21u
 #define RT_SAMPLE_COUNT_MASK 0xFFu
@@ -33,7 +35,7 @@ global_shader_uniforms;
 #ifndef RT_STAGE_ANY_HIT
 
 layout(set = 0, binding = 6, std140) uniform RaytracingParams {
-	vec4 rt_params[7];
+	vec4 rt_params[10];
 	mat4 prev_vp_unjittered;
 	mat4 curr_vp_unjittered;
 	mat4 inv_projection_unjittered;
@@ -218,7 +220,93 @@ layout(set = 0, binding = 44, std430) readonly buffer RTEmissiveCandidateBuffer 
 	RTEmissiveCandidate rt_emissive_candidates[];
 };
 
+struct RTGISTRCProbeRayResult {
+	vec4 radiance_distance;
+	vec4 normal_confidence;
+};
+
+layout(set = 0, binding = 64, rgba16f) uniform image2D rt_strc_irradiance_image;
+layout(set = 0, binding = 65, rgba16f) uniform image2D rt_strc_distance_image;
+layout(set = 0, binding = 66, std430) buffer RTGISTRCProbeRayResultBuffer {
+	RTGISTRCProbeRayResult rt_strc_probe_ray_results[];
+};
+
+bool rt_strc_enabled() {
+	return (RT_FLAGS & RT_FLAG_STRC_ENABLED) != 0u && get_rt_param(RT_PARAM_RTGI_STRC_ENABLED) > 0.5 && get_rt_param(RT_PARAM_RTGI_STRC_STRENGTH) > 0.001;
+}
+
+bool rt_strc_probe_update_mode() {
+	return (RT_FLAGS & RT_FLAG_STRC_PROBE_UPDATE) != 0u;
+}
+
+vec3 rt_camera_world_origin() {
+	mat4 inv_view = transpose(mat4(scene_data_block.data.inv_view_matrix[0],
+			scene_data_block.data.inv_view_matrix[1],
+			scene_data_block.data.inv_view_matrix[2],
+			vec4(0.0, 0.0, 0.0, 1.0)));
+	return inv_view[3].xyz;
+}
+
+ivec2 rt_strc_atlas_coord(uint probe_index, uint dir_index, uint grid_size) {
+	uint grid = max(grid_size, 1u);
+	uint probes_per_cascade = grid * grid * grid;
+	uint cascade_count = max(uint(get_rt_param(RT_PARAM_RTGI_STRC_CASCADE_COUNT)), 1u);
+	uint cascade = min(probe_index / probes_per_cascade, cascade_count - 1u);
+	uint probe = probe_index - cascade * probes_per_cascade;
+	uint px = probe % grid;
+	uint py = (probe / grid) % grid;
+	uint pz = probe / (grid * grid);
+	uint dx = dir_index & 7u;
+	uint dy = (dir_index >> 3u) & 7u;
+	return ivec2(int(px * 8u + dx), int(((cascade * grid + pz) * grid + py) * 8u + dy));
+}
+
+vec3 rt_strc_sample_irradiance(vec3 world_pos, vec3 normal, out float confidence) {
+	confidence = 0.0;
+	if (!rt_strc_enabled() || rt_strc_probe_update_mode()) {
+		return vec3(0.0);
+	}
+
+	uint grid = clamp(uint(get_rt_param(RT_PARAM_RTGI_STRC_GRID_SIZE)), 12u, 32u);
+	uint cascade_count = clamp(uint(get_rt_param(RT_PARAM_RTGI_STRC_CASCADE_COUNT)), 1u, 4u);
+	float base_spacing = max(get_rt_param(RT_PARAM_RTGI_STRC_BASE_PROBE_SPACING), 0.25);
+	vec3 camera_origin = rt_camera_world_origin();
+	uint best_probe = 0u;
+	float best_weight = 0.0;
+
+	for (uint cascade = 0u; cascade < 4u; cascade++) {
+		if (cascade >= cascade_count) {
+			break;
+		}
+		float spacing = base_spacing * exp2(float(cascade));
+		vec3 cascade_center = floor(camera_origin / spacing) * spacing;
+		vec3 grid_pos = (world_pos - cascade_center) / spacing + vec3(float(grid) * 0.5);
+		ivec3 probe_coord = ivec3(floor(grid_pos));
+		if (all(greaterThanEqual(probe_coord, ivec3(1))) && all(lessThan(probe_coord, ivec3(int(grid) - 1)))) {
+			vec3 cell = abs(fract(grid_pos) - vec3(0.5));
+			best_weight = 1.0 - clamp(max(max(cell.x, cell.y), cell.z) * 2.0, 0.0, 1.0);
+			uint probe_in_cascade = uint(probe_coord.x) + uint(probe_coord.y) * grid + uint(probe_coord.z) * grid * grid;
+			best_probe = cascade * grid * grid * grid + probe_in_cascade;
+			break;
+		}
+	}
+
+	if (best_weight <= 0.0) {
+		return vec3(0.0);
+	}
+
+	vec2 oct = vec3_to_oct(normal) * 0.5 + 0.5;
+	uvec2 texel = uvec2(clamp(floor(oct * 8.0), vec2(0.0), vec2(7.0)));
+	uint dir_index = texel.x + texel.y * 8u;
+	vec4 sample_value = imageLoad(rt_strc_irradiance_image, rt_strc_atlas_coord(best_probe, dir_index, grid));
+	confidence = clamp(sample_value.a * best_weight, 0.0, 1.0);
+	return sanitize_payload_vec3(sample_value.rgb);
+}
+
 void rt_signal_reset(ivec2 pixel) {
+	if (rt_strc_probe_update_mode()) {
+		return;
+	}
 	imageStore(rt_signal_direct_light_image, pixel, vec4(0.0));
 	imageStore(rt_signal_emissive_image, pixel, vec4(0.0));
 	imageStore(rt_signal_indirect_image, pixel, vec4(0.0));
@@ -233,7 +321,7 @@ void rt_signal_reset(ivec2 pixel) {
 	imageStore(rt_source_rejection_image, pixel, vec4(0.0));
 }
 
-#define RT_SIGNAL_ACCUMULATE(signal_image, pixel, value) imageStore(signal_image, pixel, imageLoad(signal_image, pixel) + (value))
+#define RT_SIGNAL_ACCUMULATE(signal_image, pixel, value) if (!rt_strc_probe_update_mode()) { imageStore(signal_image, pixel, imageLoad(signal_image, pixel) + (value)); }
 
 bool rt_source_load_reprojected_previous(ivec2 pixel, out ivec2 previous_pixel, out vec4 previous_candidate, out uint previous_key, out uint reject_reason) {
 	vec2 extent = rt_extent();
@@ -357,6 +445,9 @@ bool rt_source_direct_history_accept(ivec2 pixel, ivec2 previous_pixel, vec4 pre
 }
 
 void rt_source_direct_candidate_record(ivec2 pixel, uint source_key, float confidence, float normalized_weight, vec3 contribution, bool stochastic_candidate_mode) {
+	if (rt_strc_probe_update_mode()) {
+		return;
+	}
 	vec3 value = sanitize_payload_vec3(contribution);
 	bool valid_source = source_key != 0u && (source_key >> RT_SOURCE_CLASS_SHIFT) == RT_SOURCE_CLASS_DIRECT;
 	float stored_confidence = stochastic_candidate_mode ? confidence : min(confidence, 0.5);
@@ -376,6 +467,9 @@ void rt_source_direct_candidate_record(ivec2 pixel, uint source_key, float confi
 }
 
 void rt_source_candidate_record(ivec2 pixel, float source_class, float confidence, float normalized_weight, vec3 contribution, float downweight, uint source_key) {
+	if (rt_strc_probe_update_mode()) {
+		return;
+	}
 	vec3 value = sanitize_payload_vec3(contribution);
 	float contribution_luma = rt_luminance(value);
 	vec4 previous = imageLoad(rt_source_candidate_image, pixel);
@@ -478,6 +572,9 @@ void rt_signal_add_sky(ivec2 pixel, vec3 contribution, bool secondary_miss, floa
 }
 
 void rt_signal_set_primary_confidence(ivec2 pixel, float specular_risk, float material_id, float validity) {
+	if (rt_strc_probe_update_mode()) {
+		return;
+	}
 	vec4 confidence = imageLoad(rt_signal_confidence_image, pixel);
 	confidence.b = material_id;
 	confidence.a = validity;
@@ -486,6 +583,9 @@ void rt_signal_set_primary_confidence(ivec2 pixel, float specular_risk, float ma
 }
 
 void rt_store_primary_velocity(ivec2 pixel, vec2 curr_visible_uv, vec2 prev_visible_uv) {
+	if (rt_strc_probe_update_mode()) {
+		return;
+	}
 	vec2 curr_texture_uv = rt_visible_to_texture_uv(curr_visible_uv, rt_current_origin());
 	vec2 prev_texture_uv = rt_visible_to_texture_uv(prev_visible_uv, rt_previous_origin());
 	imageStore(rt_velocity_image, pixel, vec4(prev_texture_uv - curr_texture_uv, 0.0, 0.0));
@@ -500,6 +600,9 @@ void rt_store_primary_velocity(ivec2 pixel, vec2 curr_visible_uv, vec2 prev_visi
 }
 
 void rt_store_invalid_primary_velocity(ivec2 pixel) {
+	if (rt_strc_probe_update_mode()) {
+		return;
+	}
 	imageStore(rt_velocity_image, pixel, vec4(0.0));
 
 	if (uint(get_rt_param(RT_PARAM_MODE)) == RT_MODE_PATH_TRACED) {

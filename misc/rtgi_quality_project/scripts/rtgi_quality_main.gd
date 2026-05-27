@@ -19,6 +19,13 @@ var _ray_max_radiance := 32.0
 var _analytic_light_sampling := true
 var _explicit_emissive_sampling := true
 var _diffuse_cache := true
+var _strc_enabled := true
+var _strc_strength := 0.70
+var _strc_cascade_count := 3
+var _strc_grid_size := 24
+var _strc_base_probe_spacing := 1.5
+var _strc_rays_per_frame := 4096
+var _strc_temporal_weight := 0.97
 var _warmup_frames := 120
 var _output_dir := DEFAULT_OUTPUT_DIR
 var _debug_view := "beauty"
@@ -90,6 +97,20 @@ func _parse_args() -> void:
 			_explicit_emissive_sampling = not (arg.trim_prefix("--rtgi-explicit-emissive-sampling=").to_lower() in ["0", "false", "off", "disabled"])
 		elif arg.begins_with("--rtgi-diffuse-cache="):
 			_diffuse_cache = not (arg.trim_prefix("--rtgi-diffuse-cache=").to_lower() in ["0", "false", "off", "disabled"])
+		elif arg.begins_with("--rtgi-strc-enabled="):
+			_strc_enabled = not (arg.trim_prefix("--rtgi-strc-enabled=").to_lower() in ["0", "false", "off", "disabled"])
+		elif arg.begins_with("--rtgi-strc-strength="):
+			_strc_strength = clampf(arg.trim_prefix("--rtgi-strc-strength=").to_float(), 0.0, 1.0)
+		elif arg.begins_with("--rtgi-strc-cascade-count="):
+			_strc_cascade_count = clampi(arg.trim_prefix("--rtgi-strc-cascade-count=").to_int(), 1, 4)
+		elif arg.begins_with("--rtgi-strc-grid-size="):
+			_strc_grid_size = clampi(arg.trim_prefix("--rtgi-strc-grid-size=").to_int(), 12, 32)
+		elif arg.begins_with("--rtgi-strc-base-probe-spacing="):
+			_strc_base_probe_spacing = clampf(arg.trim_prefix("--rtgi-strc-base-probe-spacing=").to_float(), 0.25, 8.0)
+		elif arg.begins_with("--rtgi-strc-rays-per-frame="):
+			_strc_rays_per_frame = clampi(arg.trim_prefix("--rtgi-strc-rays-per-frame=").to_int(), 0, 32768)
+		elif arg.begins_with("--rtgi-strc-temporal-weight="):
+			_strc_temporal_weight = clampf(arg.trim_prefix("--rtgi-strc-temporal-weight=").to_float(), 0.0, 0.995)
 		elif arg.begins_with("--rtgi-warmup-frames="):
 			_warmup_frames = max(1, arg.trim_prefix("--rtgi-warmup-frames=").to_int())
 		elif arg.begins_with("--rtgi-reference-spp="):
@@ -100,7 +121,7 @@ func _parse_args() -> void:
 			_convergence_frames = clampi(arg.trim_prefix("--rtgi-convergence-frames=").to_int(), 0, 128)
 		elif arg.begins_with("--rtgi-scene="):
 			var requested_scene := arg.trim_prefix("--rtgi-scene=").to_lower()
-			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability"]:
+			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability", "offscreen_bounce"]:
 				_scene_mode = requested_scene
 			else:
 				push_warning("Unknown RTGI quality scene '%s'; using stress scene." % requested_scene)
@@ -168,6 +189,13 @@ func _build_scene() -> void:
 	env.rtgi_analytic_light_sampling_enabled = _analytic_light_sampling
 	env.rtgi_explicit_emissive_sampling_enabled = _explicit_emissive_sampling
 	env.rtgi_diffuse_radiance_cache_enabled = _diffuse_cache
+	env.rtgi_strc_enabled = _strc_enabled
+	env.rtgi_strc_strength = _strc_strength
+	env.rtgi_strc_cascade_count = _strc_cascade_count
+	env.rtgi_strc_grid_size = _strc_grid_size
+	env.rtgi_strc_base_probe_spacing = _strc_base_probe_spacing
+	env.rtgi_strc_rays_per_frame = _strc_rays_per_frame
+	env.rtgi_strc_temporal_weight = _strc_temporal_weight
 	_environment = env
 
 	var world_environment := WorldEnvironment.new()
@@ -205,6 +233,9 @@ func _build_scene() -> void:
 		return
 	if _scene_mode == "specular_stability":
 		_build_specular_stability_scene(env)
+		return
+	if _scene_mode == "offscreen_bounce":
+		_build_offscreen_bounce_scene(env)
 		return
 
 	env.background_mode = Environment.BG_COLOR
@@ -311,6 +342,54 @@ func _build_many_light_emissive_scene(env: Environment) -> void:
 	_camera.position = Vector3(0.0, 1.55, 1.95)
 	add_child(_camera)
 	_camera.look_at(Vector3(0.0, 1.55, -4.4), Vector3.UP)
+
+
+func _build_offscreen_bounce_scene(env: Environment) -> void:
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.003, 0.004, 0.006)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.01, 0.01, 0.012)
+	env.ambient_light_energy = 0.08
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.rtgi_max_bounces = 5
+
+	var floor_material := _make_flat_material(Color(0.42, 0.40, 0.36), 0.84, 0.0)
+	var wall_material := _make_flat_material(Color(0.55, 0.57, 0.60), 0.88, 0.0)
+	var red_emissive := _make_emissive_material(Color(1.0, 0.18, 0.05), 9.0)
+	var blue_emissive := _make_emissive_material(Color(0.05, 0.25, 1.0), 7.0)
+
+	_add_box("BounceFloor", Vector3(0.0, -0.05, -1.0), Vector3(8.0, 0.10, 8.0), floor_material)
+	_add_box("FrontWall", Vector3(0.0, 1.55, -4.2), Vector3(8.0, 3.2, 0.12), wall_material)
+	_add_box("LeftWall", Vector3(-3.9, 1.55, -0.9), Vector3(0.12, 3.2, 6.6), wall_material)
+	_add_box("RightWall", Vector3(3.9, 1.55, -0.9), Vector3(0.12, 3.2, 6.6), wall_material)
+	_add_box("BehindCameraRedEmitter", Vector3(-1.35, 1.25, 2.9), Vector3(1.1, 1.0, 0.08), red_emissive)
+	_add_box("BehindCameraBlueEmitter", Vector3(1.35, 1.25, 2.9), Vector3(1.1, 1.0, 0.08), blue_emissive)
+
+	var red_light := OmniLight3D.new()
+	red_light.name = "OffscreenRedLight"
+	red_light.position = Vector3(-1.35, 1.30, 2.55)
+	red_light.light_color = Color(1.0, 0.20, 0.08)
+	red_light.light_energy = 4.5
+	red_light.omni_range = 5.5
+	add_child(red_light)
+
+	var blue_light := OmniLight3D.new()
+	blue_light.name = "OffscreenBlueLight"
+	blue_light.position = Vector3(1.35, 1.30, 2.55)
+	blue_light.light_color = Color(0.08, 0.24, 1.0)
+	blue_light.light_energy = 3.8
+	blue_light.omni_range = 5.5
+	add_child(blue_light)
+
+	_camera = Camera3D.new()
+	_camera.name = "OffscreenBounceCamera"
+	_camera.current = true
+	_camera.fov = 60.0
+	_camera.near = 0.05
+	_camera.far = 80.0
+	_camera.position = Vector3(0.0, 1.25, 1.75)
+	add_child(_camera)
+	_camera.look_at(Vector3(0.0, 1.15, -3.4), Vector3.UP)
 
 
 func _build_specular_stability_scene(env: Environment) -> void:
@@ -848,7 +927,7 @@ func _animate_specular_objects(frame: int) -> void:
 
 
 func _capture_debug_views(base_name: String) -> void:
-	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
+	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "variance", "history_length", "rejection", "final"]
 	for view in views:
 		if view.begins_with("cache_") and not _cache_debug_available():
 			continue
@@ -863,7 +942,7 @@ func _capture_debug_views(base_name: String) -> void:
 func _measure_signal_debug_views() -> Dictionary:
 	var result := {}
 	var previous_view := _debug_view
-	var signal_views := ["signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "noisy", "final"]
+	var signal_views := ["signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "noisy", "final"]
 	for view in signal_views:
 		if view.begins_with("cache_") and not _cache_debug_available():
 			continue
@@ -1374,6 +1453,20 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"ray_max_radiance": _ray_max_radiance,
 		},
 		{
+			"name": "path_traced_strc_off_1spp",
+			"enabled": true,
+			"mode": Environment.RTGI_MODE_PATH_TRACED,
+			"spp": 1,
+			"denoiser": Environment.RTGI_DENOISER_SVGF,
+			"max_bounces": 3,
+			"split_signals": _split_signals,
+			"analytic_light_sampling": _analytic_light_sampling,
+			"explicit_emissive_sampling": _explicit_emissive_sampling,
+			"ray_firefly_suppression": _ray_firefly_suppression,
+			"ray_max_radiance": _ray_max_radiance,
+			"strc_enabled": false,
+		},
+		{
 			"name": "no_rtgi",
 			"enabled": false,
 			"mode": Environment.RTGI_MODE_HYBRID,
@@ -1421,6 +1514,7 @@ func _capture_comparison_grid(base_name: String) -> void:
 		_environment.rtgi_explicit_emissive_sampling_enabled = config["explicit_emissive_sampling"]
 		_environment.rtgi_ray_firefly_suppression = config["ray_firefly_suppression"]
 		_environment.rtgi_ray_max_radiance = config["ray_max_radiance"]
+		_environment.rtgi_strc_enabled = config.get("strc_enabled", _strc_enabled)
 		_apply_debug_view("beauty")
 		for frame in range(comparison_warmup):
 			await _wait_render_frame()
@@ -1441,6 +1535,7 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"analytic_light_sampling": config["analytic_light_sampling"],
 			"explicit_emissive_sampling": config["explicit_emissive_sampling"],
 			"ray_firefly_suppression": config["ray_firefly_suppression"],
+			"strc_enabled": config.get("strc_enabled", _strc_enabled),
 			"ray_max_radiance": config["ray_max_radiance"],
 		})
 
@@ -1546,6 +1641,12 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_AGE
 		"cache_rejection":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_REJECTION
+		"strc_radiance":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_RADIANCE
+		"strc_confidence":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_CONFIDENCE
+		"strc_updates":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_UPDATES
 		"variance":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_VARIANCE
 		"history_length":

@@ -819,6 +819,69 @@ bool Environment::is_rtgi_diffuse_radiance_cache_enabled() const {
 	return rtgi_diffuse_radiance_cache_enabled;
 }
 
+void Environment::set_rtgi_strc_enabled(bool p_enabled) {
+	rtgi_strc_enabled = p_enabled;
+	_update_pathtracing();
+}
+
+bool Environment::is_rtgi_strc_enabled() const {
+	return rtgi_strc_enabled;
+}
+
+void Environment::set_rtgi_strc_strength(float p_strength) {
+	rtgi_strc_strength = CLAMP(p_strength, 0.0f, 1.0f);
+	_update_pathtracing();
+}
+
+float Environment::get_rtgi_strc_strength() const {
+	return rtgi_strc_strength;
+}
+
+void Environment::set_rtgi_strc_cascade_count(int p_count) {
+	rtgi_strc_cascade_count = CLAMP(p_count, 1, 4);
+	_update_pathtracing();
+}
+
+int Environment::get_rtgi_strc_cascade_count() const {
+	return rtgi_strc_cascade_count;
+}
+
+void Environment::set_rtgi_strc_grid_size(int p_size) {
+	rtgi_strc_grid_size = CLAMP(p_size, 12, 32);
+	_update_pathtracing();
+}
+
+int Environment::get_rtgi_strc_grid_size() const {
+	return rtgi_strc_grid_size;
+}
+
+void Environment::set_rtgi_strc_base_probe_spacing(float p_spacing) {
+	rtgi_strc_base_probe_spacing = CLAMP(p_spacing, 0.25f, 8.0f);
+	_update_pathtracing();
+}
+
+float Environment::get_rtgi_strc_base_probe_spacing() const {
+	return rtgi_strc_base_probe_spacing;
+}
+
+void Environment::set_rtgi_strc_rays_per_frame(int p_rays) {
+	rtgi_strc_rays_per_frame = CLAMP(p_rays, 0, 32768);
+	_update_pathtracing();
+}
+
+int Environment::get_rtgi_strc_rays_per_frame() const {
+	return rtgi_strc_rays_per_frame;
+}
+
+void Environment::set_rtgi_strc_temporal_weight(float p_weight) {
+	rtgi_strc_temporal_weight = CLAMP(p_weight, 0.0f, 0.995f);
+	_update_pathtracing();
+}
+
+float Environment::get_rtgi_strc_temporal_weight() const {
+	return rtgi_strc_temporal_weight;
+}
+
 void Environment::set_rtgi_overscan_horizontal(float p_overscan) {
 	rtgi_overscan_horizontal = CLAMP(p_overscan, 0.0f, 0.25f);
 	_update_pathtracing();
@@ -895,6 +958,13 @@ void Environment::_update_pathtracing() {
 	rtgi_sampling_controls |= rtgi_analytic_light_sampling_enabled ? 1u : 0u;
 	rtgi_sampling_controls |= rtgi_explicit_emissive_sampling_enabled ? 2u : 0u;
 	params.write[RSE::PT_PARAM_RTGI_SAMPLING_CONTROLS] = (float)rtgi_sampling_controls;
+	params.write[RSE::PT_PARAM_RTGI_STRC_ENABLED] = rtgi_strc_enabled ? 1.0f : 0.0f;
+	params.write[RSE::PT_PARAM_RTGI_STRC_STRENGTH] = rtgi_strc_strength;
+	params.write[RSE::PT_PARAM_RTGI_STRC_CASCADE_COUNT] = (float)rtgi_strc_cascade_count;
+	params.write[RSE::PT_PARAM_RTGI_STRC_GRID_SIZE] = (float)rtgi_strc_grid_size;
+	params.write[RSE::PT_PARAM_RTGI_STRC_BASE_PROBE_SPACING] = rtgi_strc_base_probe_spacing;
+	params.write[RSE::PT_PARAM_RTGI_STRC_RAYS_PER_FRAME] = (float)rtgi_strc_rays_per_frame;
+	params.write[RSE::PT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT] = rtgi_strc_temporal_weight;
 	RS::get_singleton()->environment_set_pathtracing_params(environment, params);
 }
 
@@ -1774,6 +1844,20 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_rtgi_explicit_emissive_sampling_enabled"), &Environment::is_rtgi_explicit_emissive_sampling_enabled);
 	ClassDB::bind_method(D_METHOD("set_rtgi_diffuse_radiance_cache_enabled", "enabled"), &Environment::set_rtgi_diffuse_radiance_cache_enabled);
 	ClassDB::bind_method(D_METHOD("is_rtgi_diffuse_radiance_cache_enabled"), &Environment::is_rtgi_diffuse_radiance_cache_enabled);
+	ClassDB::bind_method(D_METHOD("set_rtgi_strc_enabled", "enabled"), &Environment::set_rtgi_strc_enabled);
+	ClassDB::bind_method(D_METHOD("is_rtgi_strc_enabled"), &Environment::is_rtgi_strc_enabled);
+	ClassDB::bind_method(D_METHOD("set_rtgi_strc_strength", "strength"), &Environment::set_rtgi_strc_strength);
+	ClassDB::bind_method(D_METHOD("get_rtgi_strc_strength"), &Environment::get_rtgi_strc_strength);
+	ClassDB::bind_method(D_METHOD("set_rtgi_strc_cascade_count", "count"), &Environment::set_rtgi_strc_cascade_count);
+	ClassDB::bind_method(D_METHOD("get_rtgi_strc_cascade_count"), &Environment::get_rtgi_strc_cascade_count);
+	ClassDB::bind_method(D_METHOD("set_rtgi_strc_grid_size", "size"), &Environment::set_rtgi_strc_grid_size);
+	ClassDB::bind_method(D_METHOD("get_rtgi_strc_grid_size"), &Environment::get_rtgi_strc_grid_size);
+	ClassDB::bind_method(D_METHOD("set_rtgi_strc_base_probe_spacing", "spacing"), &Environment::set_rtgi_strc_base_probe_spacing);
+	ClassDB::bind_method(D_METHOD("get_rtgi_strc_base_probe_spacing"), &Environment::get_rtgi_strc_base_probe_spacing);
+	ClassDB::bind_method(D_METHOD("set_rtgi_strc_rays_per_frame", "rays"), &Environment::set_rtgi_strc_rays_per_frame);
+	ClassDB::bind_method(D_METHOD("get_rtgi_strc_rays_per_frame"), &Environment::get_rtgi_strc_rays_per_frame);
+	ClassDB::bind_method(D_METHOD("set_rtgi_strc_temporal_weight", "weight"), &Environment::set_rtgi_strc_temporal_weight);
+	ClassDB::bind_method(D_METHOD("get_rtgi_strc_temporal_weight"), &Environment::get_rtgi_strc_temporal_weight);
 	ClassDB::bind_method(D_METHOD("set_rtgi_overscan_horizontal", "overscan"), &Environment::set_rtgi_overscan_horizontal);
 	ClassDB::bind_method(D_METHOD("get_rtgi_overscan_horizontal"), &Environment::get_rtgi_overscan_horizontal);
 	ClassDB::bind_method(D_METHOD("set_rtgi_overscan_vertical", "overscan"), &Environment::set_rtgi_overscan_vertical);
@@ -1802,6 +1886,13 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_analytic_light_sampling_enabled"), "set_rtgi_analytic_light_sampling_enabled", "is_rtgi_analytic_light_sampling_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_explicit_emissive_sampling_enabled"), "set_rtgi_explicit_emissive_sampling_enabled", "is_rtgi_explicit_emissive_sampling_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_diffuse_radiance_cache_enabled"), "set_rtgi_diffuse_radiance_cache_enabled", "is_rtgi_diffuse_radiance_cache_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_strc_enabled"), "set_rtgi_strc_enabled", "is_rtgi_strc_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_strc_strength", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_strc_strength", "get_rtgi_strc_strength");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_strc_cascade_count", PROPERTY_HINT_RANGE, "1,4,1"), "set_rtgi_strc_cascade_count", "get_rtgi_strc_cascade_count");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_strc_grid_size", PROPERTY_HINT_RANGE, "12,32,1"), "set_rtgi_strc_grid_size", "get_rtgi_strc_grid_size");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_strc_base_probe_spacing", PROPERTY_HINT_RANGE, "0.25,8,0.01"), "set_rtgi_strc_base_probe_spacing", "get_rtgi_strc_base_probe_spacing");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_strc_rays_per_frame", PROPERTY_HINT_RANGE, "0,32768,1"), "set_rtgi_strc_rays_per_frame", "get_rtgi_strc_rays_per_frame");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_strc_temporal_weight", PROPERTY_HINT_RANGE, "0,0.995,0.001"), "set_rtgi_strc_temporal_weight", "get_rtgi_strc_temporal_weight");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_horizontal", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_horizontal", "get_rtgi_overscan_horizontal");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_vertical", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_vertical", "get_rtgi_overscan_vertical");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "SVGF (Default):8,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");

@@ -1130,6 +1130,9 @@ bool RendererSceneRenderRD::_debug_draw_can_use_effects(RSE::ViewportDebugDraw p
 		case RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_AGE:
 		case RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_REJECTION:
 		case RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_FILTERED_DIFFUSE:
+		case RSE::VIEWPORT_DEBUG_DRAW_RTGI_STRC_RADIANCE:
+		case RSE::VIEWPORT_DEBUG_DRAW_RTGI_STRC_CONFIDENCE:
+		case RSE::VIEWPORT_DEBUG_DRAW_RTGI_STRC_UPDATES:
 			can_use_effects = true;
 			break;
 		// Other debug draw modes keep camera effects.

@@ -122,6 +122,9 @@ vec3 apply_normal_map(HitData h, vec3 tangent_space_normal, float normal_map_dep
 
 /// Write NDC depth for primary ray hits (bounce 0, sample 0 only).
 void write_primary_hit_depth(vec3 hit_pos) {
+	if (rt_strc_probe_update_mode()) {
+		return;
+	}
 	if (get_total_bounces(payload.packed_bounces_flags) == 0u && is_sample_zero(payload.packed_bounces_flags)) {
 		mat4 view_mat = transpose(mat4(scene_data_block.data.view_matrix[0],
 				scene_data_block.data.view_matrix[1],
@@ -158,6 +161,9 @@ uint mix_history_id(uint id, uint value) {
 }
 
 void write_primary_hit_history_validity() {
+	if (rt_strc_probe_update_mode()) {
+		return;
+	}
 	if (get_total_bounces(payload.packed_bounces_flags) != 0u || !is_sample_zero(payload.packed_bounces_flags)) {
 		return;
 	}
@@ -202,6 +208,9 @@ mat4 decode_prev_object_to_world(int motion_idx) {
 /// Write motion vectors for primary ray hits (bounce 0, sample 0 only).
 /// Uses unjittered VP matrices matching the raster motion_vectors_store convention.
 void write_primary_hit_velocity(vec3 hit_pos) {
+	if (rt_strc_probe_update_mode()) {
+		return;
+	}
 	if (get_total_bounces(payload.packed_bounces_flags) != 0u || !is_sample_zero(payload.packed_bounces_flags)) {
 		return;
 	}
@@ -334,6 +343,9 @@ bool rtgi_trace_specular_reflected_hit(HitData h, vec3 normal, vec3 view_dir, ou
 }
 
 void write_primary_hit_guides(HitData h, MaterialResult m) {
+	if (rt_strc_probe_update_mode()) {
+		return;
+	}
 	if (get_total_bounces(payload.packed_bounces_flags) != 0u || !is_sample_zero(payload.packed_bounces_flags)) {
 		return;
 	}
@@ -709,7 +721,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	// DLSS Ray Reconstruction output (primary ray, sample 0 only)
 	// =================================================================
 #ifdef DLSS_RR_ENABLED
-	if (total_bounces == 0u && is_sample_zero(ps.packed_bounces_flags)) {
+	if (!rt_strc_probe_update_mode() && total_bounces == 0u && is_sample_zero(ps.packed_bounces_flags)) {
 		ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
 
 		vec3 diffuse_albedo = DLSSRR_computeDiffuseAlbedo(m.albedo, m.metalness);
@@ -840,6 +852,22 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 			ps.specular_radiance += explicit_emissive_total;
 		}
 		ps.radiance += explicit_emissive_total;
+	}
+
+	if (!hybrid_primary && total_bounces > 0u && diffuse_bounces > 0u && material_roughness > 0.35 && m.metalness < 0.5 && rt_strc_enabled() && !rt_strc_probe_update_mode()) {
+		float strc_confidence = 0.0;
+		vec3 strc_irradiance = rt_strc_sample_irradiance(h.hit_pos + N * 0.05, N, strc_confidence);
+		float rough_weight = smoothstep(0.35, 0.90, material_roughness);
+		float metal_weight = 1.0 - smoothstep(0.25, 0.75, clamp(m.metalness, 0.0, 1.0));
+		float strc_weight = clamp(strc_confidence * rough_weight * metal_weight * get_rt_param(RT_PARAM_RTGI_STRC_STRENGTH), 0.0, 1.0);
+		if (strc_weight > 0.001) {
+			vec3 cached_diffuse = sanitize_payload_vec3(ps.throughput * diffuseReflectance * strc_irradiance * strc_weight);
+			ps.radiance += cached_diffuse;
+			rt_signal_add_indirect(ivec2(gl_LaunchIDEXT.xy), cached_diffuse, total_bounces + 1u, DIFFUSE_TYPE, 0.0);
+			ps.packed_bounces_flags = set_path_terminated(ps.packed_bounces_flags);
+			path_pack(payload, ps);
+			return;
+		}
 	}
 
 	// =================================================================

@@ -116,7 +116,8 @@ static uint64_t _rt_history_mix_color(uint64_t p_hash, const Color &p_color) {
 }
 
 static uint64_t _rt_radiance_signature(uint32_t p_rt_flags, RID p_environment, RID p_camera_attributes, const float p_rt_params[SceneShaderRaytracing::RT_PARAM_SHADER_FLOAT_COUNT], const Color &p_background_color, bool p_background_uses_sky, const RT_LightData *p_light_data, uint32_t p_light_count) {
-	uint64_t signature = _rt_history_mix(0x727472616469616eULL, p_rt_flags);
+	const uint32_t signature_rt_flags = p_rt_flags & ~uint32_t(SceneShaderRaytracing::RT_FLAG_STRC_PROBE_UPDATE);
+	uint64_t signature = _rt_history_mix(0x727472616469616eULL, signature_rt_flags);
 	signature = _rt_history_mix_rid(signature, p_environment);
 	signature = _rt_history_mix_rid(signature, p_camera_attributes);
 	for (uint32_t i = 0; i < SceneShaderRaytracing::RT_PARAM_SHADER_FLOAT_COUNT; i++) {
@@ -4038,7 +4039,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			float rt_overscan[4];
 			float rt_prev_overscan[4];
 		} rt_ubo = {};
-		static_assert(sizeof(rt_ubo) == 84 * sizeof(float));
+		static_assert(sizeof(rt_ubo) == 96 * sizeof(float));
 
 		if (p_render_data && p_render_data->environment.is_valid()) {
 			const float *env_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
@@ -4402,6 +4403,41 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		u.binding = 63;
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
 		add_uniform_id(u, rb_data->rt_get_specular_reprojection());
+		uniforms.push_back(u);
+	}
+
+	// Bindings 64-66: RTGI spatio-temporal radiance cache.
+	{
+		RID irradiance = rb_data->rt_get_diffuse_radiance();
+		if (p_render_data && p_render_data->render_buffers.is_valid() && p_render_data->render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_IRRADIANCE)) {
+			irradiance = p_render_data->render_buffers->get_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_IRRADIANCE);
+		}
+		RD::Uniform u;
+		u.binding = 64;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, irradiance);
+		uniforms.push_back(u);
+	}
+	{
+		RID distance = rb_data->rt_get_diffuse_radiance();
+		if (p_render_data && p_render_data->render_buffers.is_valid() && p_render_data->render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_DISTANCE)) {
+			distance = p_render_data->render_buffers->get_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_DISTANCE);
+		}
+		RD::Uniform u;
+		u.binding = 65;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, distance);
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 66;
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		if (owner->rtgi_strc && owner->rtgi_strc->get_ray_result_buffer().is_valid()) {
+			add_uniform_id(u, owner->rtgi_strc->get_ray_result_buffer());
+		} else {
+			add_uniform_id(u, default_storage_buffer);
+		}
 		uniforms.push_back(u);
 	}
 
