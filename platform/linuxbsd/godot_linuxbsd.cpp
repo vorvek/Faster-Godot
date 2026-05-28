@@ -91,6 +91,7 @@ int main(int argc, char *argv[]) {
 	const bool cpuid_clmul_supported = cpuinfo[2] & (1 << 1);
 	const bool cpuid_sse42_supported = cpuinfo[2] & (1 << 20);
 	const bool cpuid_popcnt_supported = cpuinfo[2] & (1 << 23);
+	const bool cpuid_aes_supported = cpuinfo[2] & (1 << 25);
 	const bool cpuid_avx_supported = cpuinfo[2] & (1 << 28);
 	const bool cpuid_fma_supported = cpuinfo[2] & (1 << 12);
 	const bool cpuid_f16c_supported = cpuinfo[2] & (1 << 29);
@@ -105,18 +106,18 @@ int main(int argc, char *argv[]) {
 		os_avx_state_supported = (xcr0 & 0x6) == 0x6;
 	}
 
-	if (!(cpuid_sse42_supported && cpuid_popcnt_supported && cpuid_avx_supported && cpuid_fma_supported && cpuid_f16c_supported && cpuid_avx2_supported && cpuid_bmi1_supported && cpuid_bmi2_supported && cpuid_lzcnt_supported && cpuid_clmul_supported && os_avx_state_supported)) {
-		printf("A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, BMI1, BMI2, LZCNT, CLMUL, and AVX OS state support is required.\n");
+	if (!(cpuid_sse42_supported && cpuid_popcnt_supported && cpuid_aes_supported && cpuid_avx_supported && cpuid_fma_supported && cpuid_f16c_supported && cpuid_avx2_supported && cpuid_bmi1_supported && cpuid_bmi2_supported && cpuid_lzcnt_supported && cpuid_clmul_supported && os_avx_state_supported)) {
+		printf("A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA3, F16C, AES, PCLMUL, BMI1, BMI2, LZCNT, and AVX OS state support is required.\n");
 
-		int ret = system("zenity --warning --title \"Faster-Godot\" --text \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, BMI1, BMI2, LZCNT, CLMUL, and AVX OS state support is required.\" 2> /dev/null");
+		int ret = system("zenity --warning --title \"Faster-Godot\" --text \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA3, F16C, AES, PCLMUL, BMI1, BMI2, LZCNT, and AVX OS state support is required.\" 2> /dev/null");
 		if (ret != 0) {
-			ret = system("kdialog --title \"Faster-Godot\" --sorry \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, BMI1, BMI2, LZCNT, CLMUL, and AVX OS state support is required.\" 2> /dev/null");
+			ret = system("kdialog --title \"Faster-Godot\" --sorry \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA3, F16C, AES, PCLMUL, BMI1, BMI2, LZCNT, and AVX OS state support is required.\" 2> /dev/null");
 		}
 		if (ret != 0) {
-			ret = system("Xdialog --title \"Faster-Godot\" --msgbox \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, BMI1, BMI2, LZCNT, CLMUL, and AVX OS state support is required.\" 0 0 2> /dev/null");
+			ret = system("Xdialog --title \"Faster-Godot\" --msgbox \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA3, F16C, AES, PCLMUL, BMI1, BMI2, LZCNT, and AVX OS state support is required.\" 0 0 2> /dev/null");
 		}
 		if (ret != 0) {
-			ret = system("xmessage -center -title \"Faster-Godot\" \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, BMI1, BMI2, LZCNT, CLMUL, and AVX OS state support is required.\" 2> /dev/null");
+			ret = system("xmessage -center -title \"Faster-Godot\" \"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA3, F16C, AES, PCLMUL, BMI1, BMI2, LZCNT, and AVX OS state support is required.\" 2> /dev/null");
 		}
 		abort();
 	}

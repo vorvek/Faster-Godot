@@ -19,7 +19,7 @@ if env["library_type"] == "executable":
     if env["arch"] == "x86_64":
         env_cpu_check = env.Clone()
         env_cpu_check.add_source_files(sources, ["godot_linuxbsd.cpp"])
-        for flag in ["-mavx2", "-mfma", "-mf16c", "-mpopcnt", "-mbmi", "-mbmi2", "-mlzcnt", "-mpclmul"]:
+        for flag in env.get("faster_godot_gnu_x86_isa_flags", []):
             if flag in env_cpu_check["CCFLAGS"]:
                 env_cpu_check["CCFLAGS"].remove(flag)
     else:

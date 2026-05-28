@@ -7,7 +7,7 @@ from pathlib import Path
 
 import platform_windows_builders
 
-from methods import redirect_emitter
+from methods import redirect_emitter, using_clang
 
 sources = []
 
@@ -52,13 +52,16 @@ if env["arch"] == "x86_64" and env["library_type"] == "executable":
     if env.msvc:
         if "/d2archSSE42" in env_cpp_check["CCFLAGS"]:
             env_cpp_check["CCFLAGS"].remove("/d2archSSE42")
-        if "/arch:AVX2" in env_cpp_check["CCFLAGS"]:
-            env_cpp_check["CCFLAGS"].remove("/arch:AVX2")
+        for flag in env.get("faster_godot_msvc_x86_isa_flags", []):
+            if flag in env_cpp_check["CCFLAGS"]:
+                env_cpp_check["CCFLAGS"].remove(flag)
+        if using_clang(env):
+            for flag in env.get("faster_godot_gnu_x86_isa_flags", []):
+                if flag in env_cpp_check["CCFLAGS"]:
+                    env_cpp_check["CCFLAGS"].remove(flag)
         env.Append(LINKFLAGS=["/ENTRY:ShimMainCRTStartup"])
     else:
-        if "-msse4.2" in env_cpp_check["CCFLAGS"]:
-            env_cpp_check["CCFLAGS"].remove("-msse4.2")
-        for flag in ["-mavx2", "-mfma", "-mf16c", "-mpopcnt", "-mbmi", "-mbmi2", "-mlzcnt", "-mpclmul"]:
+        for flag in env.get("faster_godot_gnu_x86_isa_flags", []):
             if flag in env_cpp_check["CCFLAGS"]:
                 env_cpp_check["CCFLAGS"].remove(flag)
         env.Append(LINKFLAGS=["-Wl,--entry=ShimMainCRTStartup"])

@@ -812,16 +812,31 @@ elif env.msvc:
         Exit(255)
 
 # Set x86 CPU instruction sets to use by the compiler's autovectorization.
+faster_godot_gnu_x86_isa_flags = [
+    "-mavx2",
+    "-mfma",  # FMA3. Do not use AMD's separate FMA4 extension.
+    "-mf16c",
+    "-mpopcnt",
+    "-msse4.2",
+    "-mpclmul",
+    "-maes",
+    "-mbmi",
+    "-mbmi2",
+    "-mlzcnt",
+]
+env["faster_godot_gnu_x86_isa_flags"] = faster_godot_gnu_x86_isa_flags
+env["faster_godot_msvc_x86_isa_flags"] = ["/arch:AVX2"]
+
 if env["arch"] == "x86_64":
-    # Faster-Godot treats AVX2/FMA/F16C/POPCNT as the minimum x86_64 CPU contract.
+    # Faster-Godot treats AVX2/FMA3/F16C/POPCNT and Haswell-era helpers as the minimum x86_64 CPU contract.
     if env.msvc and not methods.using_clang(env):
         if "/fp:strict" in env["CCFLAGS"]:
             env["CCFLAGS"].remove("/fp:strict")
-        env.Append(CCFLAGS=["/arch:AVX2", "/fp:fast"])
+        env.Append(CCFLAGS=env["faster_godot_msvc_x86_isa_flags"] + ["/fp:fast"])
     else:
         if "-ffp-contract=off" in env["CCFLAGS"]:
             env["CCFLAGS"].remove("-ffp-contract=off")
-        env.Append(CCFLAGS=["-mavx2", "-mfma", "-mf16c", "-mpopcnt", "-mbmi", "-mbmi2", "-mlzcnt", "-mpclmul", "-ffp-contract=fast"])
+        env.Append(CCFLAGS=env["faster_godot_gnu_x86_isa_flags"] + ["-ffp-contract=fast"])
 elif env["arch"] == "x86_32":
     # Be more conservative with instruction sets on 32-bit x86 to improve compatibility.
     # SSE and SSE2 are present on all CPUs that support 64-bit, even if running a 32-bit OS.

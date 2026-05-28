@@ -36,17 +36,20 @@
 #error "Faster-Godot SIMD math paths require precision=single."
 #endif
 
-#if !defined(_MSC_VER) && (!defined(__AVX2__) || !defined(__FMA__) || !defined(__F16C__) || !defined(__POPCNT__) || !defined(__BMI__) || !defined(__BMI2__) || !defined(__LZCNT__) || !defined(__PCLMUL__))
-#error "Faster-Godot SIMD math paths require AVX2, FMA, F16C, POPCNT, BMI1, BMI2, LZCNT, and CLMUL compiler flags."
+#if !defined(_MSC_VER) && (!defined(__AVX2__) || !defined(__FMA__) || !defined(__F16C__) || !defined(__POPCNT__) || !defined(__SSE4_2__) || !defined(__AES__) || !defined(__BMI__) || !defined(__BMI2__) || !defined(__LZCNT__) || !defined(__PCLMUL__))
+#error "Faster-Godot SIMD math paths require AVX2, FMA3, F16C, POPCNT, SSE4.2, AES, PCLMUL, BMI1, BMI2, and LZCNT compiler flags."
 #endif
 
 #define MATH_SIMD_AVX2_FLOAT 1
 #define MATH_SIMD_FMA_FLOAT 1
 #define MATH_SIMD_F16C_FLOAT 1
+#define MATH_SIMD_SSE42 1
+#define MATH_SIMD_AESNI 1
 #define MATH_SIMD_BMI1 1
 #define MATH_SIMD_BMI2 1
 #define MATH_SIMD_LZCNT 1
 #define MATH_SIMD_CLMUL 1
+#define MATH_SIMD_PCLMUL 1
 
 #include <immintrin.h>
 

@@ -85,6 +85,7 @@ extern int WINAPI ShimMainCRTStartup() {
 
 	BOOL cpuid_clmul_supported = cpuinfo[2] & (1 << 1);
 	BOOL cpuid_popcnt_supported = cpuinfo[2] & (1 << 23);
+	BOOL cpuid_aes_supported = cpuinfo[2] & (1 << 25);
 	BOOL cpuid_avx_supported = cpuinfo[2] & (1 << 28);
 	BOOL cpuid_fma_supported = cpuinfo[2] & (1 << 12);
 	BOOL cpuid_f16c_supported = cpuinfo[2] & (1 << 29);
@@ -99,7 +100,7 @@ extern int WINAPI ShimMainCRTStartup() {
 		os_avx_state_supported = (xcr0 & 0x6) == 0x6;
 	}
 
-	if ((win_sse42_supported || cpuid_sse42_supported) && cpuid_popcnt_supported && cpuid_avx_supported && cpuid_fma_supported && cpuid_f16c_supported && cpuid_avx2_supported && cpuid_bmi1_supported && cpuid_bmi2_supported && cpuid_lzcnt_supported && cpuid_clmul_supported && os_avx_state_supported) {
+	if ((win_sse42_supported || cpuid_sse42_supported) && cpuid_popcnt_supported && cpuid_aes_supported && cpuid_avx_supported && cpuid_fma_supported && cpuid_f16c_supported && cpuid_avx2_supported && cpuid_bmi1_supported && cpuid_bmi2_supported && cpuid_lzcnt_supported && cpuid_clmul_supported && os_avx_state_supported) {
 #else
 	if (win_sse42_supported || cpuid_sse42_supported) {
 #endif
@@ -110,7 +111,7 @@ extern int WINAPI ShimMainCRTStartup() {
 #endif
 	} else {
 #ifdef FASTER_GODOT
-		MessageBoxW(NULL, L"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, BMI1, BMI2, LZCNT, CLMUL, and AVX OS state support is required.", L"Faster-Godot", MB_OK | MB_ICONEXCLAMATION | MB_TASKMODAL);
+		MessageBoxW(NULL, L"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA3, F16C, AES, PCLMUL, BMI1, BMI2, LZCNT, and AVX OS state support is required.", L"Faster-Godot", MB_OK | MB_ICONEXCLAMATION | MB_TASKMODAL);
 #else
 		MessageBoxW(NULL, L"A CPU with SSE4.2 instruction set support is required.", L"Faster-Godot", MB_OK | MB_ICONEXCLAMATION | MB_TASKMODAL);
 #endif

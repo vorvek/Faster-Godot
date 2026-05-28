@@ -8,7 +8,7 @@ desktop Forward+ profile. The detailed notes are split by change area:
 | Forward+ only renderer profile | [docs/forward_plus_only.md](docs/forward_plus_only.md) |
 | Vulkan-only Windows RenderingDevice profile | [docs/vulkan_only_windows_rendering.md](docs/vulkan_only_windows_rendering.md) |
 | Vulkan descriptor set cache | The Vulkan RenderingDevice driver now caches descriptor sets by layout and bound resource signature, reuses matching `VkDescriptorSet` handles, skips redundant `vkAllocateDescriptorSets()`/`vkUpdateDescriptorSets()` calls, evicts stale entries after several frames, and purges entries when referenced resources, layouts, or linear pools are destroyed/reset. |
-| x86_64 AVX2/FMA/F16C/POPCNT baseline and codec SIMD hooks | [docs/x86_64_avx2_fma.md](docs/x86_64_avx2_fma.md) |
+| x86_64 AVX2/FMA3/AES/BMI desktop baseline and codec SIMD hooks | [docs/x86_64_avx2_fma.md](docs/x86_64_avx2_fma.md) |
 | Windows and Linux target profile | [docs/windows_linux_target_profile.md](docs/windows_linux_target_profile.md) |
 | Rapier 2D physics backend | [docs/rapier_2d_physics.md](docs/rapier_2d_physics.md) |
 | Rapier/Jolt physics profile | [docs/rapier_jolt_physics.md](docs/rapier_jolt_physics.md) |
