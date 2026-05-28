@@ -30,13 +30,13 @@ desktop Forward+ profile. The detailed notes are split by change area:
 ## RTGI Denoiser Status
 
 RTGI ships three denoiser choices: `ASVFG (Experimental)`,
-`FidelityFX (Experimental)`, and `None`.
+`Internal Signal Decomposition`, and `None`.
 
 The local renderer emits RT radiance, depth, velocity, normal/roughness,
 albedo/metalness, view-Z, hit-distance, and history validity/identity masks for
 RTGI denoising. ASVFG consumes those guides on the GPU and applies an additional
-current-frame guided stabilizer for larger diffuse blotches, while the
-experimental FidelityFX path denoises RTGI's direct-light, emissive, indirect,
-sky, and specular signals before recomposition.
+current-frame guided stabilizer for larger diffuse blotches, while Internal
+Signal Decomposition denoises RTGI's direct-light, emissive, indirect, sky, and
+specular signals before recomposition.
 
 Maintained by Jon Tamayo - https://x.com/vorvek

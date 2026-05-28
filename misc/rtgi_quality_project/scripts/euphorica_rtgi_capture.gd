@@ -23,6 +23,7 @@ const RTGI_KNOB_STAGES = {
 	"rtgi_analytic_light_sampling_enabled": "RTGI analytic direct source sampling",
 	"rtgi_explicit_emissive_sampling_enabled": "RTGI explicit emissive source sampling",
 	"rtgi_diffuse_radiance_cache_enabled": "RTGI pre-ASVFG diffuse radiance cache",
+	"rtgi_diffuse_radiance_cache_max_entries": "RTGI diffuse cache GPU memory budget",
 	"rtgi_debug_mode": "RT raygen debug visualization",
 }
 
@@ -43,6 +44,7 @@ var _list_cases = false
 var _resume = false
 var _disable_rf_output_effect = false
 var _diffuse_cache = true
+var _diffuse_cache_max_entries = 262144
 var _profile_timings = false
 var _results = []
 var _split_pair_metrics = []
@@ -93,6 +95,8 @@ func _parse_args() -> void:
 			_disable_rf_output_effect = true
 		elif arg.begins_with("--euphorica-diffuse-cache="):
 			_diffuse_cache = not (arg.trim_prefix("--euphorica-diffuse-cache=").to_lower() in ["0", "false", "off", "disabled"])
+		elif arg.begins_with("--euphorica-diffuse-cache-max-entries="):
+			_diffuse_cache_max_entries = clampi(arg.trim_prefix("--euphorica-diffuse-cache-max-entries=").to_int(), 4096, 4194304)
 		elif arg == "--euphorica-profile-timings":
 			_profile_timings = true
 		elif arg.begins_with("--euphorica-debug-views="):
@@ -251,6 +255,7 @@ func _case(name: String, rtgi_enabled: bool, mode: String, denoise: float, histo
 	result["baseline"] = baseline
 	result["split_signals"] = true
 	result["split_pair_key"] = ""
+	result["diffuse_cache_max_entries"] = _diffuse_cache_max_entries
 	return result
 
 
@@ -291,12 +296,13 @@ func _write_summary(cases: Array) -> void:
 		"profile": _profile,
 		"scene": _scene_path,
 		"case_filter": _case_filter,
-			"split_signals": _split_signals_mode,
-			"resume": _resume,
-			"rf_output_effect_disabled": _disable_rf_output_effect,
-			"profile_timings": _profile_timings,
-			"debug_views": _debug_views,
-			"planned_cases": cases.map(func(test_case): return test_case["name"]),
+		"split_signals": _split_signals_mode,
+		"diffuse_cache_max_entries": _diffuse_cache_max_entries,
+		"resume": _resume,
+		"rf_output_effect_disabled": _disable_rf_output_effect,
+		"profile_timings": _profile_timings,
+		"debug_views": _debug_views,
+		"planned_cases": cases.map(func(test_case): return test_case["name"]),
 		"completed_cases": _results.size(),
 		"results": _results,
 		"split_pair_metrics": _split_pair_metrics,
@@ -442,6 +448,7 @@ func _apply_environment(test_case: Dictionary, env: Environment) -> void:
 	env.rtgi_analytic_light_sampling_enabled = bool(test_case.get("analytic_light_sampling", true))
 	env.rtgi_explicit_emissive_sampling_enabled = bool(test_case.get("explicit_emissive_sampling", true))
 	env.rtgi_diffuse_radiance_cache_enabled = bool(test_case.get("diffuse_cache", _diffuse_cache))
+	env.rtgi_diffuse_radiance_cache_max_entries = int(test_case.get("diffuse_cache_max_entries", _diffuse_cache_max_entries))
 	env.rtgi_debug_mode = int(test_case.get("debug_mode", Environment.RT_DEBUG_DISABLED))
 	if test_case.get("no_glow_fog", false):
 		env.glow_enabled = false
@@ -1566,6 +1573,7 @@ func _measure_case(frames: Array, game_image: Image, final_image: Image, baselin
 	metrics["final_to_game_firefly_ratio"] = _safe_ratio(metrics["final_full_frame_fireflies_per_megapixel"], metrics["game_full_frame_fireflies_per_megapixel"])
 	metrics["final_to_game_p99_luma_ratio"] = _safe_ratio(metrics["final_luma_p99"], metrics["game_luma_p99"])
 	metrics["final_to_game_detail_edge_ratio"] = _safe_ratio(metrics["final_detail_edge_energy"], metrics["game_detail_edge_energy"])
+	metrics.merge(_rtgi_diffuse_cache_budget_metrics(Vector2i(game_image.get_width(), game_image.get_height())), true)
 	if baseline_game != null:
 		var diff = _diff_metrics(game_image, baseline_game, "rtgi_vs_no_rtgi")
 		for key in diff.keys():
@@ -1575,6 +1583,34 @@ func _measure_case(frames: Array, game_image: Image, final_image: Image, baselin
 		for key in final_diff.keys():
 			metrics[key] = final_diff[key]
 	return metrics
+
+
+func _rtgi_diffuse_cache_budget_metrics(output_size: Vector2i) -> Dictionary:
+	var budget := clampi(_diffuse_cache_max_entries, 4096, 4194304)
+	var output_pixels := maxi(output_size.x * output_size.y, 1)
+	var cache_size := output_size
+	if output_pixels > budget:
+		var scale := sqrt(float(budget) / float(output_pixels))
+		cache_size = Vector2i(maxi(1, int(floor(float(output_size.x) * scale))), maxi(1, int(floor(float(output_size.y) * scale))))
+		while cache_size.x * cache_size.y > budget:
+			if cache_size.x >= cache_size.y and cache_size.x > 1:
+				cache_size.x -= 1
+			elif cache_size.y > 1:
+				cache_size.y -= 1
+			else:
+				break
+	var cache_pixels := maxi(cache_size.x * cache_size.y, 1)
+	var persistent_history_bytes := cache_pixels * 6 * 8
+	var full_resolution_bytes := output_pixels * ((2 * 8) + 4 + 1 + 1)
+	return {
+		"diffuse_radiance_cache_budget_entries": budget,
+		"diffuse_radiance_cache_width": cache_size.x,
+		"diffuse_radiance_cache_height": cache_size.y,
+		"diffuse_radiance_cache_entries": cache_pixels,
+		"diffuse_radiance_cache_persistent_history_bytes": persistent_history_bytes,
+		"diffuse_radiance_cache_fullres_output_and_diagnostic_bytes": full_resolution_bytes,
+		"diffuse_radiance_cache_total_effect_bytes": persistent_history_bytes + full_resolution_bytes,
+	}
 
 
 func _analysis_size_copy(image: Image, width: int, height: int) -> Image:
@@ -1970,6 +2006,26 @@ func _safe_ratio(a: float, b: float) -> float:
 	return a / max(b, 1e-6)
 
 
+func _rtgi_denoiser_path_name(denoiser: int) -> String:
+	match denoiser:
+		Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL:
+			return "ASVFG"
+		Environment.RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION:
+			return "Internal Signal Decomposition"
+		Environment.RTGI_DENOISER_NONE:
+			return "None"
+		Environment.RTGI_DENOISER_NVIDIA:
+			return "NVIDIA requested; active fallback ASVFG"
+		Environment.RTGI_DENOISER_FIDELITYFX:
+			return "Legacy FidelityFX request; active fallback Internal Signal Decomposition"
+		Environment.RTGI_DENOISER_AMD:
+			return "Legacy AMD request; active fallback Internal Signal Decomposition"
+		Environment.RTGI_DENOISER_INTEL:
+			return "Legacy Intel request; active fallback Internal Signal Decomposition"
+		_:
+			return "Unknown"
+
+
 func _collect_knobs(env: Environment) -> Dictionary:
 	var knobs = {}
 	for property_name in RTGI_KNOB_STAGES.keys():
@@ -1977,6 +2033,8 @@ func _collect_knobs(env: Environment) -> Dictionary:
 			"value": env.get(property_name),
 			"stage": RTGI_KNOB_STAGES[property_name],
 		}
+		if property_name == "rtgi_denoiser":
+			knobs[property_name]["active_path"] = _rtgi_denoiser_path_name(int(env.rtgi_denoiser))
 	return knobs
 
 

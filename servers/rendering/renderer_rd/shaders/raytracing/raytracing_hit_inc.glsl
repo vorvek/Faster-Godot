@@ -67,16 +67,34 @@ void get_triangle_indices(in GeometryData geom, out uint i0, out uint i1, out ui
 	get_triangle_indices_ex(geom, gl_PrimitiveID, i0, i1, i2);
 }
 
-vec3 fetch_position_uncompressed(in GeometryData geom, uint idx) {
-	if (geom.vertex_address == 0ul || (geom.flags & FLAG_COMPRESSED) != 0u) {
+vec3 fetch_position(in GeometryData geom, uint idx) {
+	if (geom.vertex_address == 0ul) {
 		return vec3(0.0);
 	}
+	if ((geom.flags & FLAG_COMPRESSED) != 0u) {
+		Uint32Buffer vb = Uint32Buffer(geom.vertex_address);
+		uint word0 = vb.v[idx * 2u];
+		uint word1 = vb.v[idx * 2u + 1u];
+		return vec3(
+				float(word0 & 0xFFFFu),
+				float(word0 >> 16),
+				float(word1 & 0xFFFFu)) /
+				65535.0;
+	}
 	FloatBuffer vb = FloatBuffer(geom.vertex_address);
-	uint stride_floats = max(geom.position_stride >> 2, 3u);
+	uint stride_floats = max(geom.position_stride >> 2, 2u);
+	float z = stride_floats > 2u ? vb.v[idx * stride_floats + 2u] : 0.0;
 	return vec3(
 			vb.v[idx * stride_floats],
 			vb.v[idx * stride_floats + 1u],
-			vb.v[idx * stride_floats + 2u]);
+			z);
+}
+
+vec3 fetch_position_uncompressed(in GeometryData geom, uint idx) {
+	if ((geom.flags & FLAG_COMPRESSED) != 0u) {
+		return vec3(0.0);
+	}
+	return fetch_position(geom, idx);
 }
 
 // ============================================================================

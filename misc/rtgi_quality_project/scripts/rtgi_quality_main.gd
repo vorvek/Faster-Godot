@@ -19,6 +19,7 @@ var _ray_max_radiance := 32.0
 var _analytic_light_sampling := true
 var _explicit_emissive_sampling := true
 var _diffuse_cache := true
+var _diffuse_cache_max_entries := 262144
 var _strc_enabled := true
 var _strc_strength := 0.70
 var _strc_cascade_count := 3
@@ -62,6 +63,26 @@ func _ready() -> void:
 	call_deferred("_run_capture")
 
 
+func _rtgi_denoiser_path_name(denoiser: int) -> String:
+	match denoiser:
+		Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL:
+			return "ASVFG"
+		Environment.RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION:
+			return "Internal Signal Decomposition"
+		Environment.RTGI_DENOISER_NONE:
+			return "None"
+		Environment.RTGI_DENOISER_NVIDIA:
+			return "NVIDIA requested; active fallback ASVFG"
+		Environment.RTGI_DENOISER_FIDELITYFX:
+			return "Legacy FidelityFX request; active fallback Internal Signal Decomposition"
+		Environment.RTGI_DENOISER_AMD:
+			return "Legacy AMD request; active fallback Internal Signal Decomposition"
+		Environment.RTGI_DENOISER_INTEL:
+			return "Legacy Intel request; active fallback Internal Signal Decomposition"
+		_:
+			return "Unknown"
+
+
 func _force_square_viewport() -> void:
 	var square_size := Vector2i(768, 768)
 	get_viewport().size = square_size
@@ -97,6 +118,8 @@ func _parse_args() -> void:
 			_explicit_emissive_sampling = not (arg.trim_prefix("--rtgi-explicit-emissive-sampling=").to_lower() in ["0", "false", "off", "disabled"])
 		elif arg.begins_with("--rtgi-diffuse-cache="):
 			_diffuse_cache = not (arg.trim_prefix("--rtgi-diffuse-cache=").to_lower() in ["0", "false", "off", "disabled"])
+		elif arg.begins_with("--rtgi-diffuse-cache-max-entries="):
+			_diffuse_cache_max_entries = clampi(arg.trim_prefix("--rtgi-diffuse-cache-max-entries=").to_int(), 4096, 4194304)
 		elif arg.begins_with("--rtgi-strc-enabled="):
 			_strc_enabled = not (arg.trim_prefix("--rtgi-strc-enabled=").to_lower() in ["0", "false", "off", "disabled"])
 		elif arg.begins_with("--rtgi-strc-strength="):
@@ -189,6 +212,7 @@ func _build_scene() -> void:
 	env.rtgi_analytic_light_sampling_enabled = _analytic_light_sampling
 	env.rtgi_explicit_emissive_sampling_enabled = _explicit_emissive_sampling
 	env.rtgi_diffuse_radiance_cache_enabled = _diffuse_cache
+	env.rtgi_diffuse_radiance_cache_max_entries = _diffuse_cache_max_entries
 	env.rtgi_strc_enabled = _strc_enabled
 	env.rtgi_strc_strength = _strc_strength
 	env.rtgi_strc_cascade_count = _strc_cascade_count
@@ -849,6 +873,9 @@ func _run_capture() -> void:
 	metrics["split_signals"] = _split_signals
 	metrics["specular_history_weight"] = _specular_history_weight
 	metrics["specular_spatial_strength"] = _specular_spatial_strength
+	var active_denoiser := int(_environment.rtgi_denoiser) if _environment != null else Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL
+	metrics["rtgi_denoiser"] = active_denoiser
+	metrics["rtgi_denoiser_path"] = _rtgi_denoiser_path_name(active_denoiser)
 	metrics["ray_firefly_suppression"] = _ray_firefly_suppression
 	metrics["ray_max_radiance"] = _ray_max_radiance
 	metrics["warmup_frames"] = _warmup_frames
@@ -863,6 +890,7 @@ func _run_capture() -> void:
 	metrics["analytic_light_sampling_enabled"] = _analytic_light_sampling
 	metrics["explicit_emissive_sampling_enabled"] = _explicit_emissive_sampling
 	metrics["diffuse_radiance_cache_enabled"] = _diffuse_cache
+	metrics.merge(_rtgi_diffuse_cache_budget_metrics(Vector2i(final_image.get_width(), final_image.get_height())), true)
 	if _sparkle_frames > 1 and DisplayServer.get_name().to_lower() != "headless":
 		metrics.merge(await _measure_temporal_sparkle(base_name), true)
 	if _convergence_frames > 1 and DisplayServer.get_name().to_lower() != "headless":
@@ -927,7 +955,7 @@ func _animate_specular_objects(frame: int) -> void:
 
 
 func _capture_debug_views(base_name: String) -> void:
-	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "variance", "history_length", "rejection", "final"]
+	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "strc_visibility", "strc_age", "strc_variance", "strc_rejection", "variance", "history_length", "rejection", "final"]
 	for view in views:
 		if view.begins_with("cache_") and not _cache_debug_available():
 			continue
@@ -942,7 +970,7 @@ func _capture_debug_views(base_name: String) -> void:
 func _measure_signal_debug_views() -> Dictionary:
 	var result := {}
 	var previous_view := _debug_view
-	var signal_views := ["signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "noisy", "final"]
+	var signal_views := ["signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "strc_visibility", "strc_age", "strc_variance", "strc_rejection", "noisy", "final"]
 	for view in signal_views:
 		if view.begins_with("cache_") and not _cache_debug_available():
 			continue
@@ -977,6 +1005,34 @@ func _measure_signal_debug_views() -> Dictionary:
 
 func _cache_debug_available() -> bool:
 	return _diffuse_cache and _split_signals and _denoise_strength > 0.001 and _history_weight > 0.001
+
+
+func _rtgi_diffuse_cache_budget_metrics(output_size: Vector2i) -> Dictionary:
+	var budget := clampi(_diffuse_cache_max_entries, 4096, 4194304)
+	var output_pixels := maxi(output_size.x * output_size.y, 1)
+	var cache_size := output_size
+	if output_pixels > budget:
+		var scale := sqrt(float(budget) / float(output_pixels))
+		cache_size = Vector2i(maxi(1, int(floor(float(output_size.x) * scale))), maxi(1, int(floor(float(output_size.y) * scale))))
+		while cache_size.x * cache_size.y > budget:
+			if cache_size.x >= cache_size.y and cache_size.x > 1:
+				cache_size.x -= 1
+			elif cache_size.y > 1:
+				cache_size.y -= 1
+			else:
+				break
+	var cache_pixels := maxi(cache_size.x * cache_size.y, 1)
+	var persistent_history_bytes := cache_pixels * 6 * 8
+	var full_resolution_bytes := output_pixels * ((2 * 8) + 4 + 1 + 1)
+	return {
+		"diffuse_radiance_cache_budget_entries": budget,
+		"diffuse_radiance_cache_width": cache_size.x,
+		"diffuse_radiance_cache_height": cache_size.y,
+		"diffuse_radiance_cache_entries": cache_pixels,
+		"diffuse_radiance_cache_persistent_history_bytes": persistent_history_bytes,
+		"diffuse_radiance_cache_fullres_output_and_diagnostic_bytes": full_resolution_bytes,
+		"diffuse_radiance_cache_total_effect_bytes": persistent_history_bytes + full_resolution_bytes,
+	}
 
 
 func _measure_channel_means(image: Image) -> Dictionary:
@@ -1427,11 +1483,11 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"ray_max_radiance": _ray_max_radiance,
 		},
 		{
-			"name": "path_traced_amd_fallback_1spp",
+			"name": "path_traced_internal_signal_decomposition_1spp",
 			"enabled": true,
 			"mode": Environment.RTGI_MODE_FULL_PATH_TRACING,
 			"spp": 1,
-			"denoiser": Environment.RTGI_DENOISER_AMD,
+			"denoiser": Environment.RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION,
 			"max_bounces": 3,
 			"split_signals": true,
 			"analytic_light_sampling": _analytic_light_sampling,
@@ -1466,11 +1522,11 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"ray_max_radiance": _ray_max_radiance,
 		},
 		{
-			"name": "reflections_only_amd_fallback_1spp",
+			"name": "reflections_only_internal_signal_decomposition_1spp",
 			"enabled": true,
 			"mode": Environment.RTGI_MODE_REFLECTIONS_RT_ONLY,
 			"spp": 1,
-			"denoiser": Environment.RTGI_DENOISER_AMD,
+			"denoiser": Environment.RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION,
 			"max_bounces": 3,
 			"split_signals": true,
 			"analytic_light_sampling": _analytic_light_sampling,
@@ -1585,6 +1641,7 @@ func _capture_comparison_grid(base_name: String) -> void:
 		_environment.rtgi_denoiser_split_signals = config["split_signals"]
 		_environment.rtgi_analytic_light_sampling_enabled = config["analytic_light_sampling"]
 		_environment.rtgi_explicit_emissive_sampling_enabled = config["explicit_emissive_sampling"]
+		_environment.rtgi_diffuse_radiance_cache_max_entries = config.get("diffuse_cache_max_entries", _diffuse_cache_max_entries)
 		_environment.rtgi_ray_firefly_suppression = config["ray_firefly_suppression"]
 		_environment.rtgi_ray_max_radiance = config["ray_max_radiance"]
 		_environment.rtgi_strc_enabled = config.get("strc_enabled", _strc_enabled)
@@ -1598,6 +1655,7 @@ func _capture_comparison_grid(base_name: String) -> void:
 		var path := "%s/%s_compare_%s.png" % [_output_dir, base_name, config["name"]]
 		image.save_png(path)
 		captures.append(image)
+		var active_denoiser := int(_environment.rtgi_denoiser)
 		manifest["captures"].append({
 			"name": config["name"],
 			"path": ProjectSettings.globalize_path(path),
@@ -1606,6 +1664,8 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"rtgi_mode": config["mode"],
 			"spp": config["spp"],
 			"denoiser": config["denoiser"],
+			"active_denoiser": active_denoiser,
+			"active_denoiser_path": _rtgi_denoiser_path_name(active_denoiser),
 			"max_bounces": config["max_bounces"],
 			"split_signals": config["split_signals"],
 			"analytic_light_sampling": config["analytic_light_sampling"],
@@ -1725,6 +1785,14 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_CONFIDENCE
 		"strc_updates":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_UPDATES
+		"strc_visibility":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_VISIBILITY
+		"strc_age":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_AGE
+		"strc_variance":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_VARIANCE
+		"strc_rejection":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_REJECTION
 		"variance":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_VARIANCE
 		"history_length":

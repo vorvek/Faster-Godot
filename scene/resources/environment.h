@@ -87,17 +87,19 @@ public:
 	enum RTGIMode {
 		RTGI_MODE_REFLECTIONS_RT_ONLY,
 		RTGI_MODE_FULL_PATH_TRACING,
-		RTGI_MODE_HYBRID = RTGI_MODE_REFLECTIONS_RT_ONLY,
+		RTGI_MODE_HYBRID,
 		RTGI_MODE_PATH_TRACED = RTGI_MODE_FULL_PATH_TRACING,
 	};
 
 	enum RTGIDenoiser {
 		RTGI_DENOISER_ASVFG_EXPERIMENTAL = 8,
 		RTGI_DENOISER_NONE = 9,
+		// Legacy values kept for old scenes and scripts.
 		RTGI_DENOISER_FIDELITYFX = 10,
 		RTGI_DENOISER_NVIDIA = 11,
 		RTGI_DENOISER_AMD = 12,
 		RTGI_DENOISER_INTEL = 13,
+		RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION = 14,
 		RTGI_DENOISER_SVGF = RTGI_DENOISER_ASVFG_EXPERIMENTAL,
 	};
 
@@ -240,6 +242,7 @@ private:
 	bool rtgi_analytic_light_sampling_enabled = true;
 	bool rtgi_explicit_emissive_sampling_enabled = true;
 	bool rtgi_diffuse_radiance_cache_enabled = true;
+	int rtgi_diffuse_radiance_cache_max_entries = 262144;
 	bool rtgi_strc_enabled = true;
 	float rtgi_strc_strength = 0.70f;
 	int rtgi_strc_cascade_count = 3;
@@ -491,6 +494,8 @@ public:
 	bool is_rtgi_explicit_emissive_sampling_enabled() const;
 	void set_rtgi_diffuse_radiance_cache_enabled(bool p_enabled);
 	bool is_rtgi_diffuse_radiance_cache_enabled() const;
+	void set_rtgi_diffuse_radiance_cache_max_entries(int p_entries);
+	int get_rtgi_diffuse_radiance_cache_max_entries() const;
 	void set_rtgi_strc_enabled(bool p_enabled);
 	bool is_rtgi_strc_enabled() const;
 	void set_rtgi_strc_strength(float p_strength);

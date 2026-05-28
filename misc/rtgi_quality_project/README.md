@@ -32,6 +32,7 @@ Useful options:
 - `--rtgi-specular-spatial-strength=0.0..1.0` (default `1.0`)
 - `--rtgi-ray-firefly-suppression=0.0..1.0`
 - `--rtgi-ray-max-radiance=0.0..4096.0`
+- `--rtgi-diffuse-cache-max-entries=4096..4194304`
 - `--rtgi-warmup-frames=120`
 - `--rtgi-reference-spp=16`
 - `--rtgi-debug-view=beauty|final|noisy|diffuse_noisy|specular_noisy|diffuse_final|specular_final|specular_guide|normal_roughness|normal_deviation|viewz_hitdist|motion_vectors|variance|history_length|rejection|disabled`
@@ -93,6 +94,8 @@ Useful Euphorica split options:
 
 - `--euphorica-split-signals=on|off|both` selects the denoiser topology. The
   comparison profiles default to `both`.
+- `--euphorica-diffuse-cache-max-entries=4096..4194304` sets the bounded
+  diffuse cache entry budget for each RTGI case.
 - `--euphorica-case-filter=<substring>` runs only matching cases, plus the
   no-RTGI baseline when needed, so long matrices can be resumed in chunks.
 - `--euphorica-list-cases` writes a summary with the planned case names and
@@ -102,9 +105,10 @@ Useful Euphorica split options:
   cache filtered diffuse, and final buffers when those views are available.
 
 Each case writes `_game.png`, `_final.png`, per-case metrics JSON, and
-`euphorica_rtgi_summary.json` with effective RTGI knob values and the renderer
-stage each knob feeds. The summary is rewritten after every completed case and
-contains split-on/off pair metrics when both sides of a pair have completed.
+`euphorica_rtgi_summary.json` with effective RTGI knob values, the active RTGI
+denoiser path, and the renderer stage each knob feeds. The summary is rewritten
+after every completed case and contains split-on/off pair metrics when both
+sides of a pair have completed.
 
 ## Cornell Box
 

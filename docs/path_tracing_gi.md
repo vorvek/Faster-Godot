@@ -139,16 +139,18 @@ The feature is exposed on `Environment`, so it appears through the same
     atrous passes. It uses RT velocity, normal/roughness, albedo/metalness,
     linear view-Z, hit distance, validity masks, and history IDs to preserve
     edges and reject invalid samples.
+  - `Internal Signal Decomposition`: uses the internal multi-signal denoise and
+    recomposition path. Direct light, emissive, indirect, sky, diffuse, and
+    specular radiance keep separate temporal/spatial resources before the final
+    internal composite pass.
   - `NVIDIA`: requests the NVIDIA denoiser path. NRD and DLSS Ray
     Reconstruction remain gated by Streamline/API/platform/runtime requirements.
     Until available, this warns once and falls back to ASVFG without rewriting
     the scene.
-  - `AMD`: requests the AMD denoiser path. The current renderer maps this to
-    the available FidelityFX-style multi-signal path; future AMD-specific
-    denoising remains gated by a Vulkan-compatible SDK handoff.
-  - `Intel`: requests the Intel denoiser path. For the real-time Forward+ path,
-    this targets the same cross-vendor FidelityFX denoiser handoff as AMD, not
-    Open Image Denoise. It falls back to ASVFG until that handoff is available.
+  - Legacy `FidelityFX`, `AMD`, and `Intel` constants are accepted for older
+    scenes and scripts, warn once, and normalize to `Internal Signal
+    Decomposition`. They do not call an external FidelityFX, AMD, or Intel
+    denoiser backend.
   - `None`: disables the RT denoiser so the raw sampled RT result is visible.
     This is useful for debugging sample distribution, material hits, and TLAS
     coverage, but it is expected to show more noise.
@@ -319,13 +321,13 @@ written at the visible internal render size. Newly visible geometry, newly loade
 materials, and geometry that has just become RT-ready therefore start from fresh
 samples instead of borrowing stale accumulated lighting.
 
-The AMD/FidelityFX-compatible path runs a separate RTGI denoise graph for
+The Internal Signal Decomposition path runs a separate RTGI denoise graph for
 the split lighting signals. Low-frequency diffuse GI, dominant direct light,
 emissive, sky, and specular radiance each keep their own temporal/spatial
-resources, then a FidelityFX-style composite pass remodulates the denoised
-signals into the final RTGI output. Switching between ASVFG, vendor selections, and
-raw output clears the inactive denoiser resources so stale histories are not
-reused across modes.
+resources, then an internal composite pass remodulates the denoised signals into
+the final RTGI output. Switching between ASVFG, Internal Signal Decomposition,
+legacy vendor selections, and raw output clears the inactive denoiser resources
+so stale histories are not reused across modes.
 
 The ray tracing path now applies optional source-side contribution clamping in
 linear HDR space before denoising. The high-strength denoiser path
@@ -382,8 +384,8 @@ the existing non-ray-traced path instead of destructively changing scene data.
     samples, secondary emissive/sky hits, and secondary path throughput before
     ASVFG history.
 - `servers/rendering/renderer_rd/effects/rtgi_denoise.*`
-  - Adds the ASVFG/RELAX-style RTGI denoiser and FidelityFX-style RTGI denoiser
-    as separate RD effect paths.
+  - Adds the ASVFG/RELAX-style RTGI denoiser and Internal Signal Decomposition
+    denoiser as separate RD effect paths.
     It maintains moments, variance, rejection, noisy-input, and guide textures,
     then runs a current-frame guided stabilizer to reduce broad diffuse
     blotches. Max denoiser strength uses stronger isolated-outlier suppression
@@ -437,11 +439,11 @@ Current RTGI buffer coverage compared with NRD:
   a shadow denoiser dispatch path.
 
 The default shipped RTGI denoiser is now ASVFG for interactive motion stability,
-with FidelityFX available as an experimental multi-signal alternative.
+with Internal Signal Decomposition available as the multi-signal alternative.
 Future NRD or vendor-specific work should start from the existing guide
 textures, split diffuse/specular signals to match the target backend's resource
 model, then add an optional backend that consumes those guides without changing
-the two-option RTGI denoiser UI.
+the vendor-neutral RTGI denoiser UI.
 
 ## Validation
 

@@ -25,8 +25,15 @@ layout(set = 0, binding = 0, rgba16f) uniform image2D image;
 layout(set = 0, binding = 1) uniform accelerationStructureEXT tlas;
 layout(set = 0, binding = 61) uniform texture2D rt_blue_noise_texture;
 layout(set = 0, binding = 62) uniform sampler rt_blue_noise_sampler;
+layout(set = 0, binding = 71) uniform texture2D raster_depth_texture;
+layout(set = 0, binding = 72) uniform texture2D raster_normal_roughness_texture;
+layout(set = 0, binding = 73) uniform texture2D raster_color_texture;
+layout(set = 0, binding = 74) uniform sampler raster_nearest_sampler;
 
 layout(location = 0) rayPayloadEXT PathPayload payload;
+
+const int RTGI_RAYGEN_BRDF_DIFFUSE = 1;
+const int RTGI_RAYGEN_BRDF_SPECULAR = 2;
 
 vec4 sample_rt_blue_noise(uvec2 pixel, uint frame_index, uint sample_idx) {
 	const uint tile_mask = 127u;
@@ -60,6 +67,143 @@ vec3 rtgi_specular_virtual_brdf(vec4 normal_roughness, vec4 albedo_metalness, ve
 	return mix(vec3(1.0), brdf, guide_weight);
 }
 
+vec4 rtgi_pack_history_id(uint id) {
+	uvec4 bytes = uvec4(id & 0xFFu, (id >> 8u) & 0xFFu, (id >> 16u) & 0xFFu, (id >> 24u) & 0xFFu);
+	return vec4(bytes) * (1.0 / 255.0);
+}
+
+uint rtgi_mix_history_id(uint id, uint value) {
+	uint h = id ^ (value + 0x9e3779b9u + (id << 6u) + (id >> 2u));
+	h ^= h >> 16u;
+	h *= 0x7feb352du;
+	h ^= h >> 15u;
+	h *= 0x846ca68bu;
+	h ^= h >> 16u;
+	return h == 0u ? 1u : h;
+}
+
+float rtgi_decode_raster_roughness(float encoded_roughness) {
+	float roughness = encoded_roughness > 0.5 ? 1.0 - encoded_roughness : encoded_roughness;
+	return clamp(roughness / (127.0 / 255.0), 0.0, 1.0);
+}
+
+vec3 rtgi_decode_raster_world_normal(vec4 normal_roughness, mat4 inv_view) {
+	vec3 view_normal = normalize(normal_roughness.xyz * 2.0 - 1.0);
+	return normalize(mat3(inv_view) * view_normal);
+}
+
+void rtgi_make_basis(vec3 n, out vec3 tangent, out vec3 bitangent) {
+	vec3 up = abs(n.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+	tangent = normalize(cross(up, n));
+	bitangent = cross(n, tangent);
+}
+
+vec3 rtgi_sample_cosine_hemisphere(vec2 u, vec3 n) {
+	float r = sqrt(clamp(u.x, 0.0, 0.999999));
+	float phi = 2.0 * PI * u.y;
+	vec3 tangent;
+	vec3 bitangent;
+	rtgi_make_basis(n, tangent, bitangent);
+	vec3 local_dir = vec3(cos(phi) * r, sin(phi) * r, sqrt(max(1.0 - u.x, 0.0)));
+	return normalize(tangent * local_dir.x + bitangent * local_dir.y + n * local_dir.z);
+}
+
+vec3 rtgi_sample_rough_specular(vec2 u, vec3 n, vec3 view_dir, float roughness) {
+	vec3 reflection_dir = normalize(reflect(-view_dir, n));
+	vec3 lobe_dir = rtgi_sample_cosine_hemisphere(u, reflection_dir);
+	vec3 ray_dir = normalize(mix(reflection_dir, lobe_dir, clamp(roughness * roughness, 0.0, 1.0)));
+	if (dot(ray_dir, n) <= 0.001) {
+		ray_dir = normalize(reflection_dir + n * max(0.05, roughness));
+	}
+	return ray_dir;
+}
+
+uint rtgi_raster_history_id(ivec2 visible_pixel, float depth, vec3 normal) {
+	uint h = 0x68796272u;
+	h = rtgi_mix_history_id(h, uint(visible_pixel.x));
+	h = rtgi_mix_history_id(h, uint(visible_pixel.y));
+	h = rtgi_mix_history_id(h, floatBitsToUint(depth));
+	h = rtgi_mix_history_id(h, floatBitsToUint(normal.x));
+	h = rtgi_mix_history_id(h, floatBitsToUint(normal.y));
+	h = rtgi_mix_history_id(h, floatBitsToUint(normal.z));
+	return h;
+}
+
+void rtgi_store_empty_raster_guides(ivec2 pixel) {
+	imageStore(rt_depth_image, pixel, vec4(0.0));
+	imageStore(rt_history_validity_image, pixel, vec4(0.0));
+	imageStore(rt_history_id_image, pixel, vec4(0.0));
+	imageStore(rt_normal_roughness_image, pixel, vec4(0.5, 0.5, 1.0, 1.0));
+	imageStore(rt_albedo_metalness_image, pixel, vec4(1.0, 1.0, 1.0, 0.0));
+	imageStore(rt_viewz_hitdist_image, pixel, vec4(65504.0, 65504.0, 0.0, 0.0));
+	imageStore(rt_specular_guide_image, pixel, vec4(1.0, 65504.0, 0.0, 0.0));
+	imageStore(rt_specular_reprojection_image, pixel, vec4(0.0));
+	imageStore(rt_diffuse_radiance_image, pixel, vec4(0.0));
+	imageStore(rt_specular_radiance_image, pixel, vec4(0.0));
+	imageStore(image, pixel, vec4(0.0, 0.0, 0.0, 1.0));
+	rt_store_invalid_primary_velocity(pixel);
+}
+
+bool rtgi_load_raster_surface(ivec2 visible_pixel, vec2 visible_uv, mat4 inv_view, out float depth, out vec3 view_pos, out vec3 world_pos, out vec3 world_normal, out float roughness, out vec3 albedo_proxy) {
+	depth = texelFetch(sampler2D(raster_depth_texture, raster_nearest_sampler), visible_pixel, 0).r;
+	if (depth <= 0.000001) {
+		return false;
+	}
+
+	vec4 view_h = inv_projection_unjittered * vec4(visible_uv * 2.0 - 1.0, depth, 1.0);
+	if (any(isnan(view_h)) || any(isinf(view_h)) || abs(view_h.w) <= 1e-6) {
+		return false;
+	}
+	view_pos = view_h.xyz / view_h.w;
+	world_pos = (inv_view * vec4(view_pos, 1.0)).xyz;
+	if (any(isnan(world_pos)) || any(isinf(world_pos))) {
+		return false;
+	}
+
+	vec4 raster_normal_roughness = texelFetch(sampler2D(raster_normal_roughness_texture, raster_nearest_sampler), visible_pixel, 0);
+	world_normal = rtgi_decode_raster_world_normal(raster_normal_roughness, inv_view);
+	vec3 view_dir = normalize(rt_camera_world_origin() - world_pos);
+	if (dot(world_normal, view_dir) < 0.0) {
+		world_normal = -world_normal;
+	}
+	roughness = rtgi_decode_raster_roughness(raster_normal_roughness.a);
+
+	vec3 raster_color = sanitize_payload_vec3(texelFetch(sampler2D(raster_color_texture, raster_nearest_sampler), visible_pixel, 0).rgb);
+	float max_channel = max(max(raster_color.r, raster_color.g), raster_color.b);
+	albedo_proxy = clamp(raster_color / max(max_channel, 1.0), vec3(0.04), vec3(1.0));
+	return true;
+}
+
+void rtgi_store_raster_guides(ivec2 pixel, ivec2 visible_pixel, vec2 visible_uv, float depth, vec3 view_pos, vec3 world_pos, vec3 world_normal, float roughness, vec3 albedo_proxy) {
+	uint history_id = rtgi_raster_history_id(visible_pixel, depth, world_normal);
+	float hit_distance = length(world_pos - rt_camera_world_origin());
+	float specular_risk = smoothstep(0.15, 0.85, 1.0 - roughness);
+
+	mat4 prev_view_mat = transpose(mat4(scene_data_block.prev_data.view_matrix[0],
+			scene_data_block.prev_data.view_matrix[1],
+			scene_data_block.prev_data.view_matrix[2],
+			vec4(0.0, 0.0, 0.0, 1.0)));
+	vec3 prev_view_pos = (prev_view_mat * vec4(world_pos, 1.0)).xyz;
+	float expected_prev_view_z = any(isnan(prev_view_pos)) || any(isinf(prev_view_pos)) ? 0.0 : abs(prev_view_pos.z);
+
+	imageStore(rt_depth_image, pixel, vec4(depth));
+	imageStore(rt_history_validity_image, pixel, vec4(1.0, 0.0, 0.0, 0.0));
+	imageStore(rt_history_id_image, pixel, rtgi_pack_history_id(history_id));
+	imageStore(rt_normal_roughness_image, pixel, vec4(world_normal * 0.5 + 0.5, roughness));
+	imageStore(rt_albedo_metalness_image, pixel, vec4(albedo_proxy, 0.0));
+	imageStore(rt_viewz_hitdist_image, pixel, vec4(abs(view_pos.z), hit_distance, expected_prev_view_z, 0.0));
+	imageStore(rt_specular_guide_image, pixel, vec4(roughness, 65504.0, specular_risk, 1.0));
+	imageStore(rt_specular_reprojection_image, pixel, vec4(0.0));
+	rt_signal_set_primary_confidence(pixel, specular_risk, float(history_id & 0xFFu) * (1.0 / 255.0), 1.0);
+
+	vec2 prev_uv;
+	if (project_uv_checked(world_pos, prev_vp_unjittered, prev_uv)) {
+		rt_store_primary_velocity(pixel, visible_uv, prev_uv);
+	} else {
+		rt_store_invalid_primary_velocity(pixel);
+	}
+}
+
 void rt_strc_probe_update_main() {
 	uint ray_index = gl_LaunchIDEXT.x;
 	uint ray_count = uint(max(get_rt_param(RT_PARAM_RTGI_STRC_RAYS_PER_FRAME), 0.0));
@@ -72,7 +216,7 @@ void rt_strc_probe_update_main() {
 	uint probe_count = cascade_count * grid * grid * grid;
 	uint texel_count = probe_count * 64u;
 	uint frame_index = uint(get_rt_param(RT_PARAM_FRAME_INDEX));
-	uint update_index = texel_count > 0u ? (frame_index * max(ray_count, 1u) + ray_index) % texel_count : 0u;
+	uint update_index = texel_count > 0u ? rt_strc_select_update_index(ray_index, max(ray_count, 1u), grid, cascade_count, frame_index) % texel_count : 0u;
 	uint probe_index = update_index >> 6u;
 	uint dir_index = update_index & 63u;
 	uint probes_per_cascade = grid * grid * grid;
@@ -130,6 +274,7 @@ void rt_strc_probe_update_main() {
 	float confidence = clamp(rt_luminance(radiance) > 0.0 ? (dynamic_hit ? 0.45 : 1.0) : 0.35, 0.0, 1.0);
 	rt_strc_probe_ray_results[ray_index].radiance_distance = vec4(radiance, clamp(ps.hit_t, 0.0, 65504.0));
 	rt_strc_probe_ray_results[ray_index].normal_confidence = vec4(ps.offset_normal * 0.5 + 0.5, confidence);
+	rt_strc_probe_ray_results[ray_index].metadata = vec4(dynamic_hit ? 1.0 : 0.0, confidence, 0.0, 0.0);
 }
 
 void main() {
@@ -166,61 +311,147 @@ void main() {
 	rt_signal_reset(pixel_i);
 
 	const uint max_bounces = RT_GET_MAX_BOUNCES();
+	uint rt_mode = uint(get_rt_param(RT_PARAM_MODE));
 
 	// TODO: when we have a spp > 0 the first raycast is always identical,
 	// we should move it out of the loop
 
-	[[dont_unroll]] for (uint sample_idx = 0u; sample_idx < samples_per_pixel; sample_idx++) {
-		PathState ps;
-		ps.radiance = vec3(0.0);
-		ps.specular_radiance = vec3(0.0);
-		ps.throughput = vec3(1.0);
-		ps.packed_bounces_flags = (sample_idx == 0u) ? set_sample_zero(0u) : 0u;
-		ps.rng_state = init_blue_noise_rng(rng_pixel, frame_index, sample_idx);
+	if (rt_mode == RT_MODE_HYBRID) {
+		float raster_depth;
+		vec3 raster_view_pos;
+		vec3 raster_world_pos;
+		vec3 raster_world_normal;
+		float raster_roughness;
+		vec3 raster_albedo_proxy;
+		bool raster_hit_valid = pixel_in_visible && rtgi_load_raster_surface(visible_pixel_i, in_uv, inv_view, raster_depth, raster_view_pos, raster_world_pos, raster_world_normal, raster_roughness, raster_albedo_proxy);
 
-		vec3 ray_origin = origin.xyz;
-		vec3 ray_dir = direction.xyz;
-
-		[[dont_unroll]] for (uint bounce = 0u; bounce <= max_bounces; bounce++) {
-			path_pack(payload, ps);
-
-#ifdef USE_SER
-			hitObjectNV hitObject;
-			hitObjectTraceRayNV(hitObject, tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
-
-			// Reorder with a coherence hint that has 8 bits
-			uint hint = 0;
-			if (hitObjectIsHitNV(hitObject)) {
-				// TODO: This hint barely does anything. There is a lot of untapped potential here.
-				hint = hitObjectGetInstanceIdNV(hitObject);
-			}
-			reorderThreadNV(hitObject, hint, 8);
-
-			hitObjectExecuteShaderNV(hitObject, 0);
-#else
-			traceRayEXT(tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
-#endif
-
-			ps = path_unpack(payload);
-			if (is_path_terminated(ps.packed_bounces_flags)) {
-				break;
-			}
-			// Reconstruct the next ray origin from the current ray + hit distance, apply bias
-			vec3 hit_pos = ray_origin + ray_dir * ps.hit_t;
-			ray_origin = offset_ray_origin(hit_pos, ps.offset_normal);
-			ray_dir = ps.next_ray_dir;
+		if (!raster_hit_valid) {
+			rtgi_store_empty_raster_guides(pixel_i);
+			return;
 		}
 
-		if (get_rt_param(RT_PARAM_VIS_MODE) == 0.0) {
-			vec3 sample_radiance = sanitize_payload_vec3(ps.radiance);
-			vec3 sample_specular = min(sanitize_payload_vec3(ps.specular_radiance), sample_radiance);
-			if (uint(get_rt_param(RT_PARAM_MODE)) == RT_MODE_HYBRID && has_primary_raster_gi_owner(ps.packed_bounces_flags)) {
-				sample_radiance = sample_specular;
+		rtgi_store_raster_guides(pixel_i, visible_pixel_i, in_uv, raster_depth, raster_view_pos, raster_world_pos, raster_world_normal, raster_roughness, raster_albedo_proxy);
+
+		vec3 view_dir = normalize(rt_camera_world_origin() - raster_world_pos);
+		float specular_probability = clamp(mix(0.08, 0.82, smoothstep(0.10, 0.90, 1.0 - raster_roughness)), 0.05, 0.90);
+		vec3 specular_weight = mix(vec3(0.04), raster_albedo_proxy, 0.0) * mix(1.0, 0.35, raster_roughness);
+
+		[[dont_unroll]] for (uint sample_idx = 0u; sample_idx < samples_per_pixel; sample_idx++) {
+			PathState ps;
+			ps.radiance = vec3(0.0);
+			ps.specular_radiance = vec3(0.0);
+			ps.throughput = vec3(1.0);
+			ps.packed_bounces_flags = set_primary_raster_gi_owner((sample_idx == 0u) ? set_sample_zero(0u) : 0u);
+			ps.rng_state = init_blue_noise_rng(rng_pixel, frame_index, sample_idx);
+			ps.hit_t = 65504.0;
+			ps.offset_normal = raster_world_normal;
+			ps.next_ray_dir = raster_world_normal;
+
+			bool trace_specular = rand(ps.rng_state) < specular_probability;
+			vec2 u = rand2(ps.rng_state);
+			vec3 ray_origin = offset_ray_origin(raster_world_pos, raster_world_normal);
+			vec3 ray_dir;
+			if (trace_specular) {
+				ps.throughput = specular_weight / max(specular_probability, 1e-4);
+				ps.packed_bounces_flags = inc_total_bounce(ps.packed_bounces_flags);
+				ray_dir = rtgi_sample_rough_specular(u, raster_world_normal, view_dir, raster_roughness);
+				rt_signal_add_indirect(pixel_i, ps.throughput, 1u, RTGI_RAYGEN_BRDF_SPECULAR, 0.0);
+			} else {
+				ps.throughput = raster_albedo_proxy / max(1.0 - specular_probability, 1e-4);
+				ps.packed_bounces_flags = inc_diffuse_bounce(ps.packed_bounces_flags);
+				ray_dir = rtgi_sample_cosine_hemisphere(u, raster_world_normal);
+				rt_signal_add_indirect(pixel_i, ps.throughput, 1u, RTGI_RAYGEN_BRDF_DIFFUSE, 0.0);
 			}
-			total_radiance += sample_radiance;
-			total_specular_radiance += sample_specular;
-		} else {
-			total_radiance += ps.radiance;
+
+			[[dont_unroll]] for (uint bounce = 1u; bounce <= max_bounces; bounce++) {
+				path_pack(payload, ps);
+
+#ifdef USE_SER
+				hitObjectNV hitObject;
+				hitObjectTraceRayNV(hitObject, tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
+
+				uint hint = 0;
+				if (hitObjectIsHitNV(hitObject)) {
+					hint = hitObjectGetInstanceIdNV(hitObject);
+				}
+				reorderThreadNV(hitObject, hint, 8);
+
+				hitObjectExecuteShaderNV(hitObject, 0);
+#else
+				traceRayEXT(tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
+#endif
+
+				ps = path_unpack(payload);
+				if (is_path_terminated(ps.packed_bounces_flags)) {
+					break;
+				}
+				vec3 hit_pos = ray_origin + ray_dir * ps.hit_t;
+				ray_origin = offset_ray_origin(hit_pos, ps.offset_normal);
+				ray_dir = ps.next_ray_dir;
+			}
+
+			if (get_rt_param(RT_PARAM_VIS_MODE) == 0.0) {
+				vec3 sample_radiance = sanitize_payload_vec3(ps.radiance);
+				vec3 sample_specular = min(sanitize_payload_vec3(ps.specular_radiance), sample_radiance);
+				total_radiance += sample_radiance;
+				total_specular_radiance += sample_specular;
+			} else {
+				total_radiance += ps.radiance;
+			}
+		}
+	} else {
+		[[dont_unroll]] for (uint sample_idx = 0u; sample_idx < samples_per_pixel; sample_idx++) {
+			PathState ps;
+			ps.radiance = vec3(0.0);
+			ps.specular_radiance = vec3(0.0);
+			ps.throughput = vec3(1.0);
+			ps.packed_bounces_flags = (sample_idx == 0u) ? set_sample_zero(0u) : 0u;
+			ps.rng_state = init_blue_noise_rng(rng_pixel, frame_index, sample_idx);
+
+			vec3 ray_origin = origin.xyz;
+			vec3 ray_dir = direction.xyz;
+
+			[[dont_unroll]] for (uint bounce = 0u; bounce <= max_bounces; bounce++) {
+				path_pack(payload, ps);
+
+#ifdef USE_SER
+				hitObjectNV hitObject;
+				hitObjectTraceRayNV(hitObject, tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
+
+				// Reorder with a coherence hint that has 8 bits
+				uint hint = 0;
+				if (hitObjectIsHitNV(hitObject)) {
+					// TODO: This hint barely does anything. There is a lot of untapped potential here.
+					hint = hitObjectGetInstanceIdNV(hitObject);
+				}
+				reorderThreadNV(hitObject, hint, 8);
+
+				hitObjectExecuteShaderNV(hitObject, 0);
+#else
+				traceRayEXT(tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
+#endif
+
+				ps = path_unpack(payload);
+				if (is_path_terminated(ps.packed_bounces_flags)) {
+					break;
+				}
+				// Reconstruct the next ray origin from the current ray + hit distance, apply bias
+				vec3 hit_pos = ray_origin + ray_dir * ps.hit_t;
+				ray_origin = offset_ray_origin(hit_pos, ps.offset_normal);
+				ray_dir = ps.next_ray_dir;
+			}
+
+			if (get_rt_param(RT_PARAM_VIS_MODE) == 0.0) {
+				vec3 sample_radiance = sanitize_payload_vec3(ps.radiance);
+				vec3 sample_specular = min(sanitize_payload_vec3(ps.specular_radiance), sample_radiance);
+				if (rt_mode == RT_MODE_REFLECTIONS_RT_ONLY && has_primary_raster_gi_owner(ps.packed_bounces_flags)) {
+					sample_radiance = sample_specular;
+				}
+				total_radiance += sample_radiance;
+				total_specular_radiance += sample_specular;
+			} else {
+				total_radiance += ps.radiance;
+			}
 		}
 	}
 
@@ -340,7 +571,8 @@ void main() {
 		}
 	}
 
-	if (uint(get_rt_param(RT_PARAM_MODE)) == RT_MODE_HYBRID &&
+	uint rt_mode = uint(get_rt_param(RT_PARAM_MODE));
+	if ((rt_mode == RT_MODE_REFLECTIONS_RT_ONLY || rt_mode == RT_MODE_HYBRID) &&
 			get_total_bounces(ps.packed_bounces_flags) == 0u) {
 		ps.radiance = vec3(0.0);
 		ps.specular_radiance = vec3(0.0);

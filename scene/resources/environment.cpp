@@ -39,6 +39,10 @@
 #include "scene/resources/sky.h"
 #include "servers/rendering/rendering_server.h"
 
+static void _warn_rtgi_legacy_denoiser_fallback(const char *p_requested_name) {
+	WARN_PRINT_ONCE(vformat("RTGI denoiser '%s' is a legacy external/vendor selection. No external denoiser backend is invoked; using Internal Signal Decomposition instead.", p_requested_name));
+}
+
 RID Environment::get_rid() const {
 	return environment;
 }
@@ -647,17 +651,26 @@ void Environment::set_pathtracing_denoiser(RSE::PathtracingDenoiser p_denoiser) 
 		case RSE::PT_DENOISER_NONE:
 			rtgi_denoiser = RTGI_DENOISER_NONE;
 			break;
+		case RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION:
+			rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+			break;
 		case RSE::PT_DENOISER_NVIDIA:
 			rtgi_denoiser = RTGI_DENOISER_NVIDIA;
 			break;
 		case RSE::PT_DENOISER_AMD:
-			rtgi_denoiser = RTGI_DENOISER_AMD;
+			_warn_rtgi_legacy_denoiser_fallback("AMD");
+			rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
 			break;
 		case RSE::PT_DENOISER_INTEL:
-			rtgi_denoiser = RTGI_DENOISER_INTEL;
+			_warn_rtgi_legacy_denoiser_fallback("Intel");
+			rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
 			break;
 		case RSE::PT_DENOISER_FIDELITYFX:
-			rtgi_denoiser = RTGI_DENOISER_FIDELITYFX;
+			_warn_rtgi_legacy_denoiser_fallback("FidelityFX");
+			rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
 			break;
 		case RSE::PT_DENOISER_INTERNAL:
 		default:
@@ -693,6 +706,7 @@ void Environment::set_rtgi_mode(RTGIMode p_mode) {
 	switch ((int)p_mode) {
 		case RTGI_MODE_REFLECTIONS_RT_ONLY:
 		case RTGI_MODE_FULL_PATH_TRACING:
+		case RTGI_MODE_HYBRID:
 			rtgi_mode = p_mode;
 			break;
 		default:
@@ -848,6 +862,15 @@ bool Environment::is_rtgi_diffuse_radiance_cache_enabled() const {
 	return rtgi_diffuse_radiance_cache_enabled;
 }
 
+void Environment::set_rtgi_diffuse_radiance_cache_max_entries(int p_entries) {
+	rtgi_diffuse_radiance_cache_max_entries = CLAMP(p_entries, 4096, 4194304);
+	_update_pathtracing();
+}
+
+int Environment::get_rtgi_diffuse_radiance_cache_max_entries() const {
+	return rtgi_diffuse_radiance_cache_max_entries;
+}
+
 void Environment::set_rtgi_strc_enabled(bool p_enabled) {
 	rtgi_strc_enabled = p_enabled;
 	_update_pathtracing();
@@ -958,17 +981,24 @@ void Environment::set_rtgi_denoiser(RTGIDenoiser p_denoiser) {
 			rtgi_denoiser = RTGI_DENOISER_NVIDIA;
 			pathtracing_denoiser = RSE::PT_DENOISER_NVIDIA;
 			break;
+		case RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION:
+			rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+			break;
 		case RTGI_DENOISER_AMD:
-			rtgi_denoiser = RTGI_DENOISER_AMD;
-			pathtracing_denoiser = RSE::PT_DENOISER_AMD;
+			_warn_rtgi_legacy_denoiser_fallback("AMD");
+			rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
 			break;
 		case RTGI_DENOISER_INTEL:
-			rtgi_denoiser = RTGI_DENOISER_INTEL;
-			pathtracing_denoiser = RSE::PT_DENOISER_INTEL;
+			_warn_rtgi_legacy_denoiser_fallback("Intel");
+			rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
 			break;
 		case RTGI_DENOISER_FIDELITYFX:
-			rtgi_denoiser = RTGI_DENOISER_FIDELITYFX;
-			pathtracing_denoiser = RSE::PT_DENOISER_FIDELITYFX;
+			_warn_rtgi_legacy_denoiser_fallback("FidelityFX");
+			rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
 			break;
 		case RTGI_DENOISER_ASVFG_EXPERIMENTAL:
 		default:
@@ -1013,6 +1043,7 @@ void Environment::_update_pathtracing() {
 	params.write[RSE::PT_PARAM_DENOISER_FIREFLY_SUPPRESSION] = rtgi_denoiser_firefly_suppression;
 	params.write[RSE::PT_PARAM_DENOISER_DETAIL_PRESERVATION] = rtgi_denoiser_detail_preservation;
 	params.write[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED] = rtgi_diffuse_radiance_cache_enabled ? 1.0f : 0.0f;
+	params.write[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES] = (float)rtgi_diffuse_radiance_cache_max_entries;
 	params.write[RSE::PT_PARAM_RAY_FIREFLY_SUPPRESSION] = rtgi_ray_firefly_suppression;
 	params.write[RSE::PT_PARAM_RAY_MAX_RADIANCE] = rtgi_ray_max_radiance;
 	params.write[RSE::PT_PARAM_DENOISER_SPLIT_SIGNALS] = rtgi_denoiser_split_signals ? 1.0f : 0.0f;
@@ -1912,6 +1943,8 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_rtgi_explicit_emissive_sampling_enabled"), &Environment::is_rtgi_explicit_emissive_sampling_enabled);
 	ClassDB::bind_method(D_METHOD("set_rtgi_diffuse_radiance_cache_enabled", "enabled"), &Environment::set_rtgi_diffuse_radiance_cache_enabled);
 	ClassDB::bind_method(D_METHOD("is_rtgi_diffuse_radiance_cache_enabled"), &Environment::is_rtgi_diffuse_radiance_cache_enabled);
+	ClassDB::bind_method(D_METHOD("set_rtgi_diffuse_radiance_cache_max_entries", "entries"), &Environment::set_rtgi_diffuse_radiance_cache_max_entries);
+	ClassDB::bind_method(D_METHOD("get_rtgi_diffuse_radiance_cache_max_entries"), &Environment::get_rtgi_diffuse_radiance_cache_max_entries);
 	ClassDB::bind_method(D_METHOD("set_rtgi_strc_enabled", "enabled"), &Environment::set_rtgi_strc_enabled);
 	ClassDB::bind_method(D_METHOD("is_rtgi_strc_enabled"), &Environment::is_rtgi_strc_enabled);
 	ClassDB::bind_method(D_METHOD("set_rtgi_strc_strength", "strength"), &Environment::set_rtgi_strc_strength);
@@ -1942,7 +1975,7 @@ void Environment::_bind_methods() {
 	ADD_GROUP("RTGI", "rtgi_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_enabled", PROPERTY_HINT_GROUP_ENABLE), "set_rtgi_enabled", "is_rtgi_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_backend", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR), "set_rtgi_backend", "get_rtgi_backend");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_mode", PROPERTY_HINT_ENUM, "Reflections RT Only,Full Path Tracing"), "set_rtgi_mode", "get_rtgi_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_mode", PROPERTY_HINT_ENUM, "Reflections RT Only,Full Path Tracing,Hybrid RTGI"), "set_rtgi_mode", "get_rtgi_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_samples_per_pixel", PROPERTY_HINT_RANGE, "1,16,1"), "set_rtgi_samples_per_pixel", "get_rtgi_samples_per_pixel");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_max_bounces", PROPERTY_HINT_RANGE, "1,8,1"), "set_rtgi_max_bounces", "get_rtgi_max_bounces");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_energy", PROPERTY_HINT_RANGE, "0,16,0.01,or_greater"), "set_rtgi_energy", "get_rtgi_energy");
@@ -1959,6 +1992,7 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_analytic_light_sampling_enabled"), "set_rtgi_analytic_light_sampling_enabled", "is_rtgi_analytic_light_sampling_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_explicit_emissive_sampling_enabled"), "set_rtgi_explicit_emissive_sampling_enabled", "is_rtgi_explicit_emissive_sampling_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_diffuse_radiance_cache_enabled"), "set_rtgi_diffuse_radiance_cache_enabled", "is_rtgi_diffuse_radiance_cache_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_diffuse_radiance_cache_max_entries", PROPERTY_HINT_RANGE, "4096,4194304,1024,or_greater"), "set_rtgi_diffuse_radiance_cache_max_entries", "get_rtgi_diffuse_radiance_cache_max_entries");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_strc_enabled"), "set_rtgi_strc_enabled", "is_rtgi_strc_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_strc_strength", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_strc_strength", "get_rtgi_strc_strength");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_strc_cascade_count", PROPERTY_HINT_RANGE, "1,4,1"), "set_rtgi_strc_cascade_count", "get_rtgi_strc_cascade_count");
@@ -1970,7 +2004,7 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_vertical", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_vertical", "get_rtgi_overscan_vertical");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_strc_static_visual_layers", PROPERTY_HINT_LAYERS_3D_RENDER), "set_rtgi_strc_static_visual_layers", "get_rtgi_strc_static_visual_layers");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_strc_dynamic_visual_layers", PROPERTY_HINT_LAYERS_3D_RENDER), "set_rtgi_strc_dynamic_visual_layers", "get_rtgi_strc_dynamic_visual_layers");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "ASVFG (Experimental):8,Intel:13,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "ASVFG (Experimental):8,Internal Signal Decomposition:14,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_debug_mode", PROPERTY_HINT_ENUM, "Disabled,Mirror Reflection,Geometry Normals,Final Normals,Normal Map,Tangent,Bitangent,UV,Albedo,ORM,Diffuse Albedo,Specular Albedo,Normal+Roughness,Specular Hit Dist,Metalness,Roughness,View Normals,Diffuse+Specular,Fresnel F0,Front/Back Face,Depth,Emissive,BRDF Rejection,Normal Deviation,Specular Reflection Direction,Specular Reflected Hit Distance,Specular Reflected Hit Normal"), "set_rtgi_debug_mode", "get_rtgi_debug_mode");
 
 	// Glow
@@ -2182,6 +2216,7 @@ void Environment::_bind_methods() {
 	BIND_ENUM_CONSTANT(RTGI_DENOISER_ASVFG_EXPERIMENTAL);
 	BIND_ENUM_CONSTANT(RTGI_DENOISER_SVGF);
 	BIND_ENUM_CONSTANT(RTGI_DENOISER_NONE);
+	BIND_ENUM_CONSTANT(RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION);
 	BIND_ENUM_CONSTANT(RTGI_DENOISER_FIDELITYFX);
 	BIND_ENUM_CONSTANT(RTGI_DENOISER_NVIDIA);
 	BIND_ENUM_CONSTANT(RTGI_DENOISER_AMD);

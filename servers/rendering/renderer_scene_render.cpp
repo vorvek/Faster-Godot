@@ -80,14 +80,14 @@ static const char *_pathtracing_backend_integration_path(RSE::PathtracingBackend
 static const char *_pathtracing_backend_denoiser_name(RSE::PathtracingBackend p_backend) {
 	switch (p_backend) {
 		case RSE::PT_BACKEND_NVIDIA_RTXPT:
-			return "NVIDIA NRD";
+			return "ASVFG fallback";
 		case RSE::PT_BACKEND_AMD_HIP_RT:
-			return "AMD FidelityFX Denoiser";
+			return "Internal Signal Decomposition fallback";
 		case RSE::PT_BACKEND_INTEL_EMBREE:
-			return "AMD FidelityFX Denoiser (cross-vendor)";
+			return "Internal Signal Decomposition fallback";
 		case RSE::PT_BACKEND_VULKAN_GENERIC:
 		default:
-			return "ASVFG/Internal";
+			return "ASVFG / Internal Signal Decomposition";
 	}
 }
 

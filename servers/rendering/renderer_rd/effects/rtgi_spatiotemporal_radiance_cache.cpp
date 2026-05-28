@@ -41,7 +41,7 @@ bool RTGISpatioTemporalRadianceCache::_ensure_ray_result_buffer(uint32_t p_rays_
 		ray_result_buffer = RID();
 	}
 
-	const uint32_t result_stride = sizeof(float) * 8u;
+	const uint32_t result_stride = sizeof(float) * 12u;
 	ray_result_buffer = RD::get_singleton()->storage_buffer_create(uint64_t(capacity) * result_stride);
 	RD::get_singleton()->set_resource_name(ray_result_buffer, "RTGI STRC Probe Ray Results");
 	ray_result_capacity = capacity;
@@ -58,9 +58,15 @@ bool RTGISpatioTemporalRadianceCache::ensure_resources(Ref<RenderSceneBuffersRD>
 			!p_render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_IRRADIANCE_NEXT) ||
 			!p_render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_DISTANCE) ||
 			!p_render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_DISTANCE_NEXT) ||
+			!p_render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_METADATA) ||
+			!p_render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_METADATA_NEXT) ||
 			!p_render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_RADIANCE_DEBUG) ||
 			!p_render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_CONFIDENCE_DEBUG) ||
-			!p_render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_UPDATES_DEBUG);
+			!p_render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_UPDATES_DEBUG) ||
+			!p_render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_VISIBILITY_DEBUG) ||
+			!p_render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_AGE_DEBUG) ||
+			!p_render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_VARIANCE_DEBUG) ||
+			!p_render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_REJECTION_DEBUG);
 
 	bool reset = false;
 	if (size_mismatch || missing || resource_signature != p_signature) {
@@ -84,15 +90,26 @@ bool RTGISpatioTemporalRadianceCache::ensure_resources(Ref<RenderSceneBuffersRD>
 	p_render_buffers->create_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_IRRADIANCE_NEXT, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, atlas_size);
 	RID distance = p_render_buffers->create_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_DISTANCE, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, atlas_size);
 	p_render_buffers->create_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_DISTANCE_NEXT, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, atlas_size);
+	RID metadata = p_render_buffers->create_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_METADATA, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, atlas_size);
+	p_render_buffers->create_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_METADATA_NEXT, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, atlas_size);
 	RID radiance_debug = p_render_buffers->create_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_RADIANCE_DEBUG, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, atlas_size);
 	RID confidence_debug = p_render_buffers->create_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_CONFIDENCE_DEBUG, RD::DATA_FORMAT_R8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, atlas_size);
 	RID updates_debug = p_render_buffers->create_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_UPDATES_DEBUG, RD::DATA_FORMAT_R8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, atlas_size);
+	RID visibility_debug = p_render_buffers->create_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_VISIBILITY_DEBUG, RD::DATA_FORMAT_R8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, atlas_size);
+	RID age_debug = p_render_buffers->create_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_AGE_DEBUG, RD::DATA_FORMAT_R8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, atlas_size);
+	RID variance_debug = p_render_buffers->create_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_VARIANCE_DEBUG, RD::DATA_FORMAT_R8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, atlas_size);
+	RID rejection_debug = p_render_buffers->create_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_REJECTION_DEBUG, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, atlas_size);
 
 	RD::get_singleton()->texture_clear(irradiance, Color(0, 0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
 	RD::get_singleton()->texture_clear(distance, Color(65504.0, 0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
+	RD::get_singleton()->texture_clear(metadata, Color(65504.0, 0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
 	RD::get_singleton()->texture_clear(radiance_debug, Color(0, 0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
 	RD::get_singleton()->texture_clear(confidence_debug, Color(0, 0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
 	RD::get_singleton()->texture_clear(updates_debug, Color(0, 0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
+	RD::get_singleton()->texture_clear(visibility_debug, Color(0, 0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
+	RD::get_singleton()->texture_clear(age_debug, Color(1, 0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
+	RD::get_singleton()->texture_clear(variance_debug, Color(0, 0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
+	RD::get_singleton()->texture_clear(rejection_debug, Color(0, 0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
 
 	return true;
 }
@@ -108,9 +125,15 @@ void RTGISpatioTemporalRadianceCache::process(Ref<RenderSceneBuffersRD> p_render
 	RID irradiance_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_IRRADIANCE_NEXT, p_view, 0);
 	RID distance = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_DISTANCE, p_view, 0);
 	RID distance_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_DISTANCE_NEXT, p_view, 0);
+	RID metadata = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_METADATA, p_view, 0);
+	RID metadata_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_METADATA_NEXT, p_view, 0);
 	RID radiance_debug = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_RADIANCE_DEBUG, p_view, 0);
 	RID confidence_debug = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_CONFIDENCE_DEBUG, p_view, 0);
 	RID updates_debug = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_UPDATES_DEBUG, p_view, 0);
+	RID visibility_debug = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_VISIBILITY_DEBUG, p_view, 0);
+	RID age_debug = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_AGE_DEBUG, p_view, 0);
+	RID variance_debug = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_VARIANCE_DEBUG, p_view, 0);
+	RID rejection_debug = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_REJECTION_DEBUG, p_view, 0);
 
 	RD::get_singleton()->texture_clear(updates_debug, Color(0, 0, 0, 0), 0, 1, 0, 1);
 
@@ -122,11 +145,17 @@ void RTGISpatioTemporalRadianceCache::process(Ref<RenderSceneBuffersRD> p_render
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 0, ray_result_buffer));
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 1, irradiance_next));
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 2, distance_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 3, radiance_debug));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 4, confidence_debug));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 5, updates_debug));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 6, irradiance));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 7, distance));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 3, metadata_next));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 4, radiance_debug));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 5, confidence_debug));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 6, updates_debug));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 7, visibility_debug));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 8, age_debug));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 9, variance_debug));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 10, rejection_debug));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 11, irradiance));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 12, distance));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 13, metadata));
 
 	PushConstant push_constant;
 	memset(&push_constant, 0, sizeof(PushConstant));
@@ -156,4 +185,5 @@ void RTGISpatioTemporalRadianceCache::process(Ref<RenderSceneBuffersRD> p_render
 
 	RD::get_singleton()->texture_copy(irradiance_next, irradiance, Vector3(), Vector3(), Vector3(atlas_size.x, atlas_size.y, 1), 0, 0, 0, 0);
 	RD::get_singleton()->texture_copy(distance_next, distance, Vector3(), Vector3(), Vector3(atlas_size.x, atlas_size.y, 1), 0, 0, 0, 0);
+	RD::get_singleton()->texture_copy(metadata_next, metadata, Vector3(), Vector3(), Vector3(atlas_size.x, atlas_size.y, 1), 0, 0, 0, 0);
 }

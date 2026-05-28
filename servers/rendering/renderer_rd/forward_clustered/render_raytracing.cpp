@@ -90,6 +90,11 @@ using namespace RendererSceneRenderImplementation;
 
 static constexpr real_t RT_COMPRESSED_AABB_EPSILON = 0.0001;
 static constexpr uint32_t RTGI_MAX_EMISSIVE_CANDIDATES = 512;
+static constexpr uint32_t RTGI_MAX_EMISSIVE_PRIMITIVE_DISTRIBUTIONS = 65536;
+static constexpr uint32_t RTGI_MAX_EMISSIVE_PRIMITIVES_PER_CANDIDATE = 4096;
+static constexpr uint32_t RT_EMISSIVE_CANDIDATE_FLAG_COMPRESSED_GEOMETRY = 1u;
+static constexpr uint32_t RT_EMISSIVE_CANDIDATE_FLAG_PRIMITIVE_DISTRIBUTION = 2u;
+static constexpr uint32_t RT_EMISSIVE_CANDIDATE_FLAG_TEXTURED_EMISSION = 4u;
 
 template <typename PackedFloat3>
 static _ALWAYS_INLINE_ void _rtgi_store_packed_float3(PackedFloat3 &r_dst, float p_x, float p_y, float p_z) {
@@ -442,7 +447,7 @@ static RTGIBackendCapabilities _rtgi_vulkan_generic_capabilities() {
 	caps.generic_probe_update_fallback = false;
 	caps.denoiser_runtime_detected = caps.available;
 	caps.denoiser_available = caps.available;
-	caps.denoiser_name = "ASVFG/Internal";
+	caps.denoiser_name = "ASVFG / Internal Signal Decomposition";
 	caps.probe_update_path = "Vulkan Generic ray tracing pipeline";
 	caps.availability_failure = _rtgi_availability_failure(caps.backend_compiled, caps.runtime_detected, caps.device_supported, caps.resource_exchange_supported, caps.implementation_ready);
 	if (!caps.available) {
@@ -906,7 +911,7 @@ static bool _rtgi_probe_vendor_denoiser_runtime(RSE::PathtracingBackend p_backen
 				break;
 			case RSE::PT_BACKEND_VULKAN_GENERIC:
 			default:
-				*r_denoiser_name = "ASVFG/Internal";
+				*r_denoiser_name = "ASVFG / Internal Signal Decomposition";
 				break;
 		}
 	}
@@ -994,6 +999,19 @@ static bool _rtgi_vendor_denoiser_handoff_ready(RSE::PathtracingBackend p_backen
 	}
 }
 
+static const char *_rtgi_backend_denoiser_fallback_name(RSE::PathtracingBackend p_backend) {
+	switch (p_backend) {
+		case RSE::PT_BACKEND_NVIDIA_RTXPT:
+			return "ASVFG";
+		case RSE::PT_BACKEND_AMD_HIP_RT:
+		case RSE::PT_BACKEND_INTEL_EMBREE:
+			return "Internal Signal Decomposition";
+		case RSE::PT_BACKEND_VULKAN_GENERIC:
+		default:
+			return "";
+	}
+}
+
 static RTGIBackendCapabilities _rtgi_vendor_backend_capabilities(const RTGIVendorBackendRequirements &p_requirements) {
 	RTGIBackendCapabilities caps;
 	RenderingDevice *rd = RD::get_singleton();
@@ -1053,6 +1071,16 @@ static RTGIBackendCapabilities _rtgi_vendor_backend_capabilities(const RTGIVendo
 	caps.denoiser_handoff = caps.denoiser_available;
 	if (!caps.denoiser_available && caps.denoiser_failure_reason.is_empty()) {
 		caps.denoiser_failure_reason = caps.denoiser_runtime_detected ? "Vendor denoiser runtime was detected, but the matching RTGI denoiser handoff implementation was not compiled into this build." : "Vendor denoiser runtime was not detected.";
+	}
+	if (!caps.denoiser_available) {
+		const char *fallback_name = _rtgi_backend_denoiser_fallback_name(p_requirements.backend);
+		if (fallback_name[0] != '\0') {
+			caps.denoiser_name = fallback_name;
+			if (!caps.denoiser_failure_reason.is_empty()) {
+				caps.denoiser_failure_reason += " ";
+			}
+			caps.denoiser_failure_reason += vformat("Falling back to %s.", fallback_name);
+		}
 	}
 	caps.compile_failure_reason = probe.compile_failure_reason;
 	caps.runtime_failure_reason = probe.runtime_failure_reason;
@@ -5730,6 +5758,9 @@ void RenderRaytracing::_free_viewport_state_internal(RTViewportState *p_state) {
 	if (p_state->emissive_candidate_buffer.is_valid()) {
 		RD::get_singleton()->free_rid(p_state->emissive_candidate_buffer);
 	}
+	if (p_state->emissive_primitive_buffer.is_valid()) {
+		RD::get_singleton()->free_rid(p_state->emissive_primitive_buffer);
+	}
 	if (p_state->light_buffer.is_valid()) {
 		RD::get_singleton()->free_rid(p_state->light_buffer);
 	}
@@ -5981,6 +6012,7 @@ void RenderRaytracing::prepare_frame() {
 	motion_indices.clear();
 	motion_transforms.clear();
 	emissive_candidates.clear();
+	emissive_primitive_distributions.clear();
 	emissive_candidate_total_weight = 0.0f;
 	current_emissive_candidate_signature = _rt_history_mix(0x7274656d69737376ULL, 0);
 
@@ -7800,6 +7832,8 @@ void RenderRaytracing::finalize_buffers(RTViewportState *p_state) {
 			motion_transforms.ptr(), motion_transforms.size() * sizeof(RT_InstanceMotionData));
 	update_or_grow(p_state->emissive_candidate_buffer, p_state->emissive_candidate_buffer_capacity,
 			emissive_candidates.ptr(), emissive_candidates.size() * sizeof(RT_EmissiveCandidate));
+	update_or_grow(p_state->emissive_primitive_buffer, p_state->emissive_primitive_buffer_capacity,
+			emissive_primitive_distributions.ptr(), emissive_primitive_distributions.size() * sizeof(RT_EmissivePrimitiveDistribution));
 	p_state->emissive_candidate_signature = current_emissive_candidate_signature;
 }
 
@@ -8365,25 +8399,90 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 		return RID();
 	};
 
-	auto estimate_emissive_proxy_weight = [](const RT_GeometryData &p_geom, const RT_MaterialData &p_mat) -> float {
+	auto emissive_proxy_luminance = [](const RT_MaterialData &p_mat) -> float {
 		const float emission_luma = MAX(0.0f, p_mat.emission_color[0] * 0.2126f + p_mat.emission_color[1] * 0.7152f + p_mat.emission_color[2] * 0.0722f) * MAX(p_mat.emission_strength, 0.0f);
 		const float texture_floor = (p_mat.flags & RT_MAT_FLAG_HAS_EMISSION_TEX) != 0 ? 0.20f : 0.0f;
-		const float emissive_luma = MAX(emission_luma, texture_floor);
+		return MAX(emission_luma, texture_floor);
+	};
+
+	auto estimate_emissive_proxy_weight = [&](const Transform3D &p_transform, const RT_GeometryData &p_geom, const RT_MaterialData &p_mat) -> float {
+		const float emissive_luma = emissive_proxy_luminance(p_mat);
 		if (emissive_luma <= 0.0f || p_geom.primitive_count == 0) {
 			return 0.0f;
 		}
 		const float sx = MAX(p_geom.aabb_size_x, 0.001f);
 		const float sy = MAX(p_geom.aabb_size_y, 0.001f);
 		const float sz = MAX(p_geom.aabb_size_z, 0.001f);
-		const float proxy_area = MAX(MAX(sx * sy, sy * sz), sx * sz);
-		return emissive_luma * MAX(proxy_area, 0.001f) * MAX((float)p_geom.primitive_count, 1.0f);
+		const Vector3 wx = p_transform.basis.xform(Vector3(sx, 0.0f, 0.0f));
+		const Vector3 wy = p_transform.basis.xform(Vector3(0.0f, sy, 0.0f));
+		const Vector3 wz = p_transform.basis.xform(Vector3(0.0f, 0.0f, sz));
+		const float proxy_area = MAX(MAX(wx.cross(wy).length(), wy.cross(wz).length()), wz.cross(wx).length());
+		return emissive_luma * MAX(proxy_area, 0.001f);
 	};
 
-	auto add_emissive_candidate = [&](const Transform3D &p_transform, uint32_t p_geometry_index, const RT_GeometryData &p_geom, const RT_MaterialData &p_mat, uint32_t p_sbt_offset, uint8_t p_instance_mask) {
+	auto append_emissive_primitive_distribution = [&](void *p_mesh_surface, const Transform3D &p_transform, const RT_GeometryData &p_geom, const RT_MaterialData &p_mat, RT_EmissiveCandidate &r_candidate) -> float {
+		const float emissive_luma = emissive_proxy_luminance(p_mat);
+		if (p_mesh_surface == nullptr || emissive_luma <= 0.0f || emissive_primitive_distributions.size() >= RTGI_MAX_EMISSIVE_PRIMITIVE_DISTRIBUTIONS) {
+			return 0.0f;
+		}
+
+		const RTGIBackendCPUGeometry cpu_geometry = _rt_make_cpu_geometry_from_surface(p_mesh_surface, p_geom);
+		if (!cpu_geometry.valid || cpu_geometry.primitive_count == 0) {
+			return 0.0f;
+		}
+
+		const uint32_t available_entries = RTGI_MAX_EMISSIVE_PRIMITIVE_DISTRIBUTIONS - (uint32_t)emissive_primitive_distributions.size();
+		const uint32_t distribution_count = MIN(MIN(cpu_geometry.primitive_count, RTGI_MAX_EMISSIVE_PRIMITIVES_PER_CANDIDATE), available_entries);
+		if (distribution_count == 0) {
+			return 0.0f;
+		}
+
+		const uint32_t primitive_offset = (uint32_t)emissive_primitive_distributions.size();
+		float cumulative_weight = 0.0f;
+		for (uint32_t sample_idx = 0; sample_idx < distribution_count; sample_idx++) {
+			const uint32_t bucket_begin = (uint32_t)((uint64_t)sample_idx * cpu_geometry.primitive_count / distribution_count);
+			const uint32_t bucket_end = (uint32_t)((uint64_t)(sample_idx + 1u) * cpu_geometry.primitive_count / distribution_count);
+			const uint32_t represented_primitives = MAX(bucket_end - bucket_begin, 1u);
+			const uint32_t primitive_id = MIN(bucket_begin + represented_primitives / 2u, cpu_geometry.primitive_count - 1u);
+			const uint32_t index_offset = primitive_id * 3u;
+			if (index_offset + 2u >= cpu_geometry.indices.size()) {
+				continue;
+			}
+
+			const Vector3 wp0 = p_transform.xform(cpu_geometry.vertices[cpu_geometry.indices[index_offset]]);
+			const Vector3 wp1 = p_transform.xform(cpu_geometry.vertices[cpu_geometry.indices[index_offset + 1u]]);
+			const Vector3 wp2 = p_transform.xform(cpu_geometry.vertices[cpu_geometry.indices[index_offset + 2u]]);
+			const float tri_area = (wp1 - wp0).cross(wp2 - wp0).length() * 0.5f;
+			if (tri_area <= 0.00000001f) {
+				continue;
+			}
+
+			cumulative_weight += tri_area * emissive_luma * (float)represented_primitives;
+			RT_EmissivePrimitiveDistribution primitive_distribution = {};
+			primitive_distribution.primitive_id = primitive_id;
+			primitive_distribution.cumulative_weight = cumulative_weight;
+			primitive_distribution.area = tri_area;
+			emissive_primitive_distributions.push_back(primitive_distribution);
+		}
+
+		const uint32_t primitive_count = (uint32_t)emissive_primitive_distributions.size() - primitive_offset;
+		if (cumulative_weight <= 0.0f || primitive_count == 0) {
+			emissive_primitive_distributions.resize(primitive_offset);
+			return 0.0f;
+		}
+
+		r_candidate.primitive_offset = primitive_offset;
+		r_candidate.primitive_count = primitive_count;
+		r_candidate.primitive_weight_sum = cumulative_weight;
+		r_candidate.flags |= RT_EMISSIVE_CANDIDATE_FLAG_PRIMITIVE_DISTRIBUTION;
+		return cumulative_weight;
+	};
+
+	auto add_emissive_candidate = [&](const Transform3D &p_transform, uint32_t p_geometry_index, const RT_GeometryData &p_geom, const RT_MaterialData &p_mat, uint32_t p_sbt_offset, uint8_t p_instance_mask, void *p_mesh_surface) {
 		if ((p_instance_mask & RT_INSTANCE_MASK_VISIBLE) == 0 || p_sbt_offset != 0 || emissive_candidates.size() >= RTGI_MAX_EMISSIVE_CANDIDATES) {
 			return;
 		}
-		const uint32_t rejected_geom_flags = RT_GEOM_FLAG_COMPRESSED | RT_GEOM_FLAG_COMPRESSED_ATTRIBUTES | RT_GEOM_FLAG_PROCEDURAL | RT_GEOM_FLAG_DEFORMED | RT_GEOM_FLAG_RASTER_GI_LIGHTMAP | RT_GEOM_FLAG_RASTER_GI_LIGHTMAP_CAPTURE | RT_GEOM_FLAG_RASTER_GI_VOXELGI | RT_GEOM_FLAG_RASTER_GI_SDFGI;
+		const uint32_t rejected_geom_flags = RT_GEOM_FLAG_PROCEDURAL | RT_GEOM_FLAG_DEFORMED | RT_GEOM_FLAG_RASTER_GI_LIGHTMAP | RT_GEOM_FLAG_RASTER_GI_LIGHTMAP_CAPTURE | RT_GEOM_FLAG_RASTER_GI_VOXELGI | RT_GEOM_FLAG_RASTER_GI_SDFGI;
 		if ((p_geom.flags & rejected_geom_flags) != 0 || p_geom.vertex_buffer_address == 0 || p_geom.primitive_count == 0) {
 			return;
 		}
@@ -8391,14 +8490,24 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 		if ((p_mat.flags & rejected_mat_flags) != 0) {
 			return;
 		}
-		const float weight = estimate_emissive_proxy_weight(p_geom, p_mat);
-		if (weight <= 0.0f) {
-			return;
-		}
 		RT_EmissiveCandidate candidate = {};
 		RendererRD::MaterialStorage::store_transform_transposed_3x4(p_transform, candidate.object_to_world);
 		candidate.geometry_index = p_geometry_index;
 		candidate.flags = 0;
+		if ((p_geom.flags & RT_GEOM_FLAG_COMPRESSED) != 0) {
+			candidate.flags |= RT_EMISSIVE_CANDIDATE_FLAG_COMPRESSED_GEOMETRY;
+		}
+		if ((p_mat.flags & RT_MAT_FLAG_HAS_EMISSION_TEX) != 0) {
+			candidate.flags |= RT_EMISSIVE_CANDIDATE_FLAG_TEXTURED_EMISSION;
+		}
+
+		float weight = append_emissive_primitive_distribution(p_mesh_surface, p_transform, p_geom, p_mat, candidate);
+		if (weight <= 0.0f) {
+			weight = estimate_emissive_proxy_weight(p_transform, p_geom, p_mat);
+		}
+		if (weight <= 0.0f) {
+			return;
+		}
 		candidate.selection_weight = weight;
 		emissive_candidates.push_back(candidate);
 		geometry_data[p_geometry_index].flags |= RT_GEOM_FLAG_EXPLICIT_EMISSIVE_CANDIDATE;
@@ -8411,6 +8520,9 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, p_mat.emission_color[2]);
 		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, p_mat.emission_strength);
 		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, weight);
+		current_emissive_candidate_signature = _rt_history_mix(current_emissive_candidate_signature, candidate.flags);
+		current_emissive_candidate_signature = _rt_history_mix(current_emissive_candidate_signature, candidate.primitive_count);
+		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, candidate.primitive_weight_sum);
 		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, p_transform.origin.x);
 		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, p_transform.origin.y);
 		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, p_transform.origin.z);
@@ -8797,7 +8909,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 				material_data.push_back(surface_material);
 				instance_flags.push_back(p_inst_flags);
 				instance_masks.push_back(p_instance_mask);
-				add_emissive_candidate(final_transform, geometry_index, rt_geometry, surface_material, rt_sbt_offset, p_instance_mask);
+				add_emissive_candidate(final_transform, geometry_index, rt_geometry, surface_material, rt_sbt_offset, p_instance_mask, mesh_surface);
 				pushed_entries++;
 			};
 
@@ -8867,7 +8979,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 				}
 				instance_flags.push_back(p_inst_flags);
 				instance_masks.push_back(p_instance_mask);
-				add_emissive_candidate(pending.instance_transform, geometry_index, merged_geometry, surface_material, pending.rt_sbt_offset, p_instance_mask);
+				add_emissive_candidate(pending.instance_transform, geometry_index, merged_geometry, surface_material, pending.rt_sbt_offset, p_instance_mask, nullptr);
 				pushed_entries++;
 			};
 
@@ -8977,7 +9089,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 
 					instance_flags.push_back(p_inst_flags);
 					instance_masks.push_back(p_instance_mask);
-					add_emissive_candidate(final_transform, geometry_index, rt_geometry, surface_material, pending.rt_sbt_offset, p_instance_mask);
+					add_emissive_candidate(final_transform, geometry_index, rt_geometry, surface_material, pending.rt_sbt_offset, p_instance_mask, pending.mesh_surface);
 				};
 
 				push_mm_instance_entry(pending.visible_instance_mask, pending.visible_inst_flags);
@@ -9079,6 +9191,7 @@ void RenderRaytracing::populate_backend_scene_snapshot(RTViewportState *p_state,
 	r_snapshot.motion_indices = motion_indices;
 	r_snapshot.motion_transforms = motion_transforms;
 	r_snapshot.emissive_candidates = emissive_candidates;
+	r_snapshot.emissive_primitive_distributions = emissive_primitive_distributions;
 	r_snapshot.emissive_candidate_total_weight = emissive_candidate_total_weight;
 	r_snapshot.emissive_candidate_signature = p_state->emissive_candidate_signature;
 	r_snapshot.radiance_history_signature = p_state->radiance_history_signature;
@@ -9516,6 +9629,19 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		uniforms.push_back(u);
 	}
 
+	// Binding 76: per-candidate emissive primitive CDF entries.
+	{
+		RD::Uniform u;
+		u.binding = 76;
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		if (p_state->emissive_primitive_buffer.is_valid()) {
+			add_uniform_id(u, p_state->emissive_primitive_buffer);
+		} else {
+			add_uniform_id(u, default_storage_buffer);
+		}
+		uniforms.push_back(u);
+	}
+
 		// Binding 6: Raytracing params + unjittered VP matrices.
 	{
 		struct {
@@ -9893,7 +10019,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		uniforms.push_back(u);
 	}
 
-	// Bindings 64-66: RTGI spatio-temporal radiance cache.
+	// Bindings 64-66 and 75: RTGI spatio-temporal radiance cache.
 	{
 		RID irradiance = rb_data->rt_get_diffuse_radiance();
 		if (p_render_data && p_render_data->render_buffers.is_valid() && p_render_data->render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_IRRADIANCE)) {
@@ -9927,6 +10053,17 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		}
 		uniforms.push_back(u);
 	}
+	{
+		RID metadata = rb_data->rt_get_diffuse_radiance();
+		if (p_render_data && p_render_data->render_buffers.is_valid() && p_render_data->render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_METADATA)) {
+			metadata = p_render_data->render_buffers->get_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_METADATA);
+		}
+		RD::Uniform u;
+		u.binding = 75;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, metadata);
+		uniforms.push_back(u);
+	}
 
 	// Binding 60: RTGI specular reflection-direction diagnostic output.
 	{
@@ -9951,6 +10088,68 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER;
 		add_uniform_id(u, RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(
 								  RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED));
+		uniforms.push_back(u);
+	}
+
+	// Bindings 71-74: raster G-buffer inputs used by Hybrid RTGI raygen.
+	{
+		RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
+		RID raster_depth = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_DEPTH);
+		RID raster_normal_roughness = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_NORMAL);
+		RID raster_color = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+		if (p_render_data && p_render_data->render_buffers.is_valid()) {
+			RID depth = p_render_data->render_buffers->get_depth_texture();
+			if (depth.is_valid()) {
+				raster_depth = depth;
+			}
+			RID color = p_render_data->render_buffers->get_internal_texture();
+			if (color.is_valid()) {
+				raster_color = color;
+			}
+		}
+		if (rb_data->has_normal_roughness()) {
+			raster_normal_roughness = rb_data->get_normal_roughness();
+		}
+
+		RD::Uniform u;
+		u.binding = 71;
+		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		add_uniform_id(u, raster_depth);
+		uniforms.push_back(u);
+	}
+	{
+		RID raster_normal_roughness = RendererRD::TextureStorage::get_singleton()->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_NORMAL);
+		if (rb_data->has_normal_roughness()) {
+			raster_normal_roughness = rb_data->get_normal_roughness();
+		}
+
+		RD::Uniform u;
+		u.binding = 72;
+		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		add_uniform_id(u, raster_normal_roughness);
+		uniforms.push_back(u);
+	}
+	{
+		RID raster_color = RendererRD::TextureStorage::get_singleton()->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+		if (p_render_data && p_render_data->render_buffers.is_valid()) {
+			RID color = p_render_data->render_buffers->get_internal_texture();
+			if (color.is_valid()) {
+				raster_color = color;
+			}
+		}
+
+		RD::Uniform u;
+		u.binding = 73;
+		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		add_uniform_id(u, raster_color);
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 74;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER;
+		add_uniform_id(u, RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(
+								  RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED));
 		uniforms.push_back(u);
 	}
 
@@ -10093,6 +10292,34 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		u.binding = 59;
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
 		add_uniform_id(u, rb_data->rt_get_source_direct_candidate_key_prev());
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 67;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_source_direct_reservoir());
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 68;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_source_direct_reservoir_prev());
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 69;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_source_direct_reservoir_lighting());
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 70;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		add_uniform_id(u, rb_data->rt_get_source_direct_reservoir_lighting_prev());
 		uniforms.push_back(u);
 	}
 

@@ -130,11 +130,12 @@ public:
 	static constexpr int RT_PARAM_RTGI_BACKEND = RSE::PT_PARAM_RTGI_BACKEND;
 	static constexpr int RT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS = RSE::PT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS;
 	static constexpr int RT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS = RSE::PT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS;
+	static constexpr int RT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES = RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES;
 	static constexpr uint32_t RT_PARAM_SHADER_FLOAT_COUNT = 40;
 
 	static constexpr uint32_t RT_MODE_REFLECTIONS_RT_ONLY = 0;
 	static constexpr uint32_t RT_MODE_FULL_PATH_TRACING = 1;
-	static constexpr uint32_t RT_MODE_HYBRID = RT_MODE_REFLECTIONS_RT_ONLY;
+	static constexpr uint32_t RT_MODE_HYBRID = 2;
 	static constexpr uint32_t RT_MODE_PATH_TRACED = RT_MODE_FULL_PATH_TRACING;
 
 	static inline uint32_t rt_flags_pack(uint32_t p_flags, uint32_t p_sample_count, uint32_t p_max_bounces) {

@@ -15,9 +15,15 @@
 #define RB_TEX_RTGI_STRC_IRRADIANCE_NEXT SNAME("irradiance_next")
 #define RB_TEX_RTGI_STRC_DISTANCE SNAME("distance")
 #define RB_TEX_RTGI_STRC_DISTANCE_NEXT SNAME("distance_next")
+#define RB_TEX_RTGI_STRC_METADATA SNAME("metadata")
+#define RB_TEX_RTGI_STRC_METADATA_NEXT SNAME("metadata_next")
 #define RB_TEX_RTGI_STRC_RADIANCE_DEBUG SNAME("radiance_debug")
 #define RB_TEX_RTGI_STRC_CONFIDENCE_DEBUG SNAME("confidence_debug")
 #define RB_TEX_RTGI_STRC_UPDATES_DEBUG SNAME("updates_debug")
+#define RB_TEX_RTGI_STRC_VISIBILITY_DEBUG SNAME("visibility_debug")
+#define RB_TEX_RTGI_STRC_AGE_DEBUG SNAME("age_debug")
+#define RB_TEX_RTGI_STRC_VARIANCE_DEBUG SNAME("variance_debug")
+#define RB_TEX_RTGI_STRC_REJECTION_DEBUG SNAME("rejection_debug")
 
 namespace RendererRD {
 

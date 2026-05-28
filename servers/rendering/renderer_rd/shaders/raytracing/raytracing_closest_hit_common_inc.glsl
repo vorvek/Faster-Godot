@@ -674,8 +674,10 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	float path_min_roughness = min(0.75, 0.02 + 0.05 * float(total_bounces));
 	float sampling_roughness = max(material_roughness, path_min_roughness);
 	uint rtgi_sampling_controls = uint(get_rt_param(RT_PARAM_RTGI_SAMPLING_CONTROLS));
-	bool reflections_only = uint(get_rt_param(RT_PARAM_MODE)) == RT_MODE_REFLECTIONS_RT_ONLY;
-	bool hybrid_primary = reflections_only && total_bounces == 0u;
+	uint rt_mode = uint(get_rt_param(RT_PARAM_MODE));
+	bool reflections_only = rt_mode == RT_MODE_REFLECTIONS_RT_ONLY;
+	bool raster_owned_primary = (reflections_only || rt_mode == RT_MODE_HYBRID) && total_bounces == 0u;
+	bool hybrid_primary = raster_owned_primary;
 	if (hybrid_primary && (hit_geom.flags & RT_GEOM_FLAG_RASTER_GI_OWNER) != 0u) {
 		ps.packed_bounces_flags = set_primary_raster_gi_owner(ps.packed_bounces_flags);
 	}
@@ -806,9 +808,20 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		float direct_slot_pdf = 0.0;
 		RTDirectLighting direct_slot_light = rt_direct_lighting_zero();
 		bool direct_slot_stochastic = false;
+		float direct_slot_reservoir_m = 0.0;
+		float direct_slot_reservoir_weight_sum = 0.0;
+		float direct_slot_target = 0.0;
+		bool direct_slot_temporal_accepted = false;
+		bool direct_slot_spatial_accepted = false;
+		uint direct_slot_temporal_reject = RT_SOURCE_REJECT_PREV_UV;
+		uint direct_slot_spatial_reject = RT_SOURCE_REJECT_PREV_UV;
+		uint direct_slot_visibility_failures = 0u;
 		RTDirectLighting direct_light = lights_evaluate_direct_lighting_split(
 				h.hit_pos, h.geometry_normal, N, V, brdf_mat, ps.rng_state, is_indirect, receiver_layer_mask, rt_light_count,
-				direct_source_key, direct_slot_source_key, direct_slot_pdf, direct_slot_light, direct_slot_stochastic);
+				direct_source_key, direct_slot_source_key, direct_slot_pdf, direct_slot_light, direct_slot_stochastic,
+				direct_slot_reservoir_m, direct_slot_reservoir_weight_sum, direct_slot_target,
+				direct_slot_temporal_accepted, direct_slot_spatial_accepted, direct_slot_temporal_reject,
+				direct_slot_spatial_reject, direct_slot_visibility_failures);
 		vec3 raw_direct_diffuse = ps.throughput * direct_light.diffuse;
 		vec3 raw_direct_specular = ps.throughput * direct_light.specular;
 		vec3 direct_diffuse = rt_clamp_path_contribution(raw_direct_diffuse, material_roughness, m.metalness, is_indirect, false);
@@ -823,8 +836,11 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 				(reflections_only ? 0.0 : rt_signal_clamp_delta(raw_direct_diffuse, direct_diffuse)) + rt_signal_clamp_delta(raw_direct_specular, direct_specular));
 		if (!is_indirect) {
 			float direct_record_confidence = direct_slot_stochastic ? 1.0 : 0.5;
-			rt_source_direct_candidate_record(ivec2(gl_LaunchIDEXT.xy), direct_slot_source_key, direct_record_confidence, direct_slot_pdf, direct_slot_total, direct_slot_stochastic);
 			rt_source_candidate_record(ivec2(gl_LaunchIDEXT.xy), 0.25, direct_record_confidence, direct_slot_pdf, direct_slot_total, 0.0, direct_slot_source_key);
+			rt_source_direct_candidate_record(ivec2(gl_LaunchIDEXT.xy), direct_slot_source_key, direct_record_confidence, direct_slot_pdf, direct_slot_total, direct_slot_stochastic,
+					direct_slot_reservoir_m, direct_slot_reservoir_weight_sum, direct_slot_target,
+					direct_slot_temporal_accepted, direct_slot_spatial_accepted, direct_slot_temporal_reject,
+					direct_slot_spatial_reject, direct_slot_visibility_failures);
 		}
 		if (total_bounces == 0u) {
 			float direct_total_luma = rt_luminance(direct_total);
@@ -842,8 +858,9 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		float emissive_pdf = 0.0;
 		float emissive_weight = 0.0;
 		uint emissive_source_key = 0u;
+		float emissive_distribution_debug = 0.0;
 		RTDirectLighting emissive_light = lights_evaluate_explicit_emissive_candidate_split(
-				h.hit_pos, h.geometry_normal, N, V, brdf_mat, ps.rng_state, receiver_layer_mask, emissive_pdf, emissive_weight, emissive_source_key);
+				h.hit_pos, h.geometry_normal, N, V, brdf_mat, ps.rng_state, receiver_layer_mask, emissive_pdf, emissive_weight, emissive_source_key, emissive_distribution_debug);
 		vec3 raw_emissive_diffuse = ps.throughput * emissive_light.diffuse;
 		vec3 raw_emissive_specular = ps.throughput * emissive_light.specular;
 		vec3 emissive_diffuse = rt_clamp_path_contribution(raw_emissive_diffuse, material_roughness, m.metalness, is_indirect, true);
@@ -851,7 +868,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		vec3 explicit_emissive_total = reflections_only ? emissive_specular : emissive_diffuse + emissive_specular;
 		rt_signal_add_explicit_emissive(ivec2(gl_LaunchIDEXT.xy), explicit_emissive_total, emissive_pdf, emissive_weight,
 				(reflections_only ? 0.0 : rt_signal_clamp_delta(raw_emissive_diffuse, emissive_diffuse)) + rt_signal_clamp_delta(raw_emissive_specular, emissive_specular));
-		rt_source_candidate_record(ivec2(gl_LaunchIDEXT.xy), 0.50, 1.0, clamp(emissive_pdf * 64.0, 0.0, 1.0), explicit_emissive_total, 0.0, emissive_source_key);
+		rt_source_candidate_record(ivec2(gl_LaunchIDEXT.xy), 0.50, emissive_distribution_debug, clamp(emissive_pdf * 64.0, 0.0, 1.0), explicit_emissive_total, 0.0, emissive_source_key);
 		if (total_bounces == 0u) {
 			ps.specular_radiance += emissive_specular;
 		} else if (get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {

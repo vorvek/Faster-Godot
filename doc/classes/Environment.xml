@@ -212,7 +212,7 @@
 			If [code]true[/code], enables hardware RTGI or path tracing for this environment when the active renderer and GPU support Vulkan ray tracing.
 		</member>
 		<member name="rtgi_mode" type="int" setter="set_rtgi_mode" getter="get_rtgi_mode" enum="Environment.RTGIMode" default="0">
-			Selects the RTGI ownership mode. [constant RTGI_MODE_FULL_PATH_TRACING] lets RTGI own opaque diffuse and specular lighting. [constant RTGI_MODE_REFLECTIONS_RT_ONLY] keeps raster GI systems responsible for diffuse GI and uses RTGI for specular/reflection paths only.
+			Selects the RTGI ownership mode. [constant RTGI_MODE_FULL_PATH_TRACING] lets RTGI own opaque diffuse and specular lighting. [constant RTGI_MODE_REFLECTIONS_RT_ONLY] keeps raster GI systems responsible for diffuse GI and uses RTGI for specular/reflection paths only. [constant RTGI_MODE_HYBRID] keeps the raster opaque pass as the primary surface owner and traces RTGI diffuse/specular secondary lighting from the raster G-buffer.
 		</member>
 		<member name="rtgi_samples_per_pixel" type="int" setter="set_rtgi_samples_per_pixel" getter="get_rtgi_samples_per_pixel" default="1">
 			Controls ray samples per pixel for RTGI.
@@ -224,7 +224,7 @@
 			Multiplier applied to the RTGI contribution before composition.
 		</member>
 		<member name="rtgi_denoiser" type="int" setter="set_rtgi_denoiser" getter="get_rtgi_denoiser" enum="Environment.RTGIDenoiser" default="8">
-			Selects the requested RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser. [constant RTGI_DENOISER_AMD] and [constant RTGI_DENOISER_INTEL] use the FidelityFX-style real-time path; unsupported vendor selections remain serialized and fall back without changing this resource. [constant RTGI_DENOISER_NONE] leaves the raw sampled RTGI result visible.
+			Selects the requested RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser. [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION] uses the internal multi-signal denoise and recomposition path. Legacy FidelityFX, AMD, and Intel constants are normalized to [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION] because no external denoiser backend is invoked by those selections. [constant RTGI_DENOISER_NONE] leaves the raw sampled RTGI result visible.
 		</member>
 		<member name="rtgi_denoiser_strength" type="float" setter="set_rtgi_denoiser_strength" getter="get_rtgi_denoiser_strength" default="0.9">
 			Controls RTGI denoiser spatial filtering, blotch stabilization, and firefly suppression strength. Higher values reduce 1-sample-per-pixel speckles, but can blur fine indirect-light detail. Lower values preserve texture and fast dynamic light changes better, but leave more raw RT noise.
@@ -260,7 +260,10 @@
 			Enables RTGI bounded emissive surface candidate sampling before denoising.
 		</member>
 		<member name="rtgi_diffuse_radiance_cache_enabled" type="bool" setter="set_rtgi_diffuse_radiance_cache_enabled" getter="is_rtgi_diffuse_radiance_cache_enabled" default="true">
-			Enables the pre-ASVFG RTGI diffuse radiance cache for split-signal RTGI denoising. The cache reuses valid screen-space diffuse radiance before the ASVFG denoiser and rejects history on disocclusion, guide mismatch, low confidence, high variance, or large radiance changes. It is inactive when [member rtgi_denoiser_split_signals] is disabled, [member rtgi_denoiser_history_weight] is [code]0.0[/code], or [member rtgi_denoiser_strength] is effectively disabled.
+			Enables the pre-ASVFG RTGI diffuse radiance cache for split-signal RTGI denoising. The cache reuses valid bounded screen-space diffuse radiance before the ASVFG denoiser and rejects history on disocclusion, guide mismatch, low confidence, high variance, or large radiance changes. It is inactive when [member rtgi_denoiser_split_signals] is disabled, [member rtgi_denoiser_history_weight] is [code]0.0[/code], or [member rtgi_denoiser_strength] is effectively disabled.
+		</member>
+		<member name="rtgi_diffuse_radiance_cache_max_entries" type="int" setter="set_rtgi_diffuse_radiance_cache_max_entries" getter="get_rtgi_diffuse_radiance_cache_max_entries" default="262144">
+			Sets the maximum number of persistent screen-space diffuse radiance cache entries. Lower values reduce GPU memory and history bandwidth independently of the output resolution, at the cost of broader cache reconstruction tiles. Full-resolution cache diagnostics remain available.
 		</member>
 		<member name="rtgi_overscan_horizontal" type="float" setter="set_rtgi_overscan_horizontal" getter="get_rtgi_overscan_horizontal" default="0.0">
 			Sets the extra horizontal path-traced RTGI margin as a fraction of the viewport width. Higher values can reduce edge speckles from newly revealed pixels while moving, but increase RT cost and do not add samples to the interior of the image.
@@ -581,8 +584,8 @@
 		<constant name="RTGI_MODE_FULL_PATH_TRACING" value="1" enum="RTGIMode">
 			Use RTGI/path tracing for opaque diffuse and specular lighting.
 		</constant>
-		<constant name="RTGI_MODE_HYBRID" value="0" enum="RTGIMode">
-			Deprecated compatibility alias for [constant RTGI_MODE_REFLECTIONS_RT_ONLY].
+		<constant name="RTGI_MODE_HYBRID" value="2" enum="RTGIMode">
+			Uses raster G-buffer primary hits and traces RTGI diffuse/specular secondary lighting as a composite contribution.
 		</constant>
 		<constant name="RTGI_MODE_PATH_TRACED" value="1" enum="RTGIMode">
 			Deprecated compatibility alias for [constant RTGI_MODE_FULL_PATH_TRACING].
@@ -596,17 +599,20 @@
 		<constant name="RTGI_DENOISER_NONE" value="9" enum="RTGIDenoiser">
 			Disable RTGI denoising.
 		</constant>
+		<constant name="RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION" value="14" enum="RTGIDenoiser">
+			Use the internal multi-signal RTGI denoiser. Direct light, emissive, indirect, sky, diffuse, and specular signals are denoised separately before internal recomposition.
+		</constant>
 		<constant name="RTGI_DENOISER_FIDELITYFX" value="10" enum="RTGIDenoiser">
-			Deprecated compatibility value for the existing FidelityFX-style denoiser path.
+			Deprecated compatibility value. It is normalized to [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION].
 		</constant>
 		<constant name="RTGI_DENOISER_NVIDIA" value="11" enum="RTGIDenoiser">
 			Request the NVIDIA RTGI denoiser. Falls back to ASVFG until NRD or DLSS Ray Reconstruction support is available.
 		</constant>
 		<constant name="RTGI_DENOISER_AMD" value="12" enum="RTGIDenoiser">
-			Request the AMD RTGI denoiser. Uses the available FidelityFX-style path in this renderer and gates future FidelityFX SDK paths by platform and runtime support.
+			Deprecated compatibility value. It is normalized to [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION].
 		</constant>
 		<constant name="RTGI_DENOISER_INTEL" value="13" enum="RTGIDenoiser">
-			Request the Intel RTGI denoiser. Uses the cross-vendor FidelityFX target for real-time rendering and falls back to ASVFG until that handoff is available.
+			Deprecated compatibility value. It is normalized to [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION].
 		</constant>
 	</constants>
 </class>

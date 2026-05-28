@@ -22,20 +22,66 @@ RTGIDiffuseCache::~RTGIDiffuseCache() {
 	shader.version_free(shader_version);
 }
 
-bool RTGIDiffuseCache::_ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, const Size2i &p_size) {
-	ERR_FAIL_COND_V(p_render_buffers.is_null(), false);
-	ERR_FAIL_COND_V(p_size.x <= 0 || p_size.y <= 0, false);
+Size2i RTGIDiffuseCache::_cache_size(const Size2i &p_output_size, uint32_t p_max_cache_entries) const {
+	ERR_FAIL_COND_V(p_output_size.x <= 0 || p_output_size.y <= 0, Size2i());
 
-	if (p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RADIANCE) &&
-			p_render_buffers->get_texture_slice_size(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RADIANCE, 0) != p_size) {
-		p_render_buffers->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
+	const uint32_t max_entries = MIN(4194304u, MAX(4096u, p_max_cache_entries));
+	const uint64_t output_pixels = (uint64_t)p_output_size.x * (uint64_t)p_output_size.y;
+	if (output_pixels <= max_entries) {
+		return p_output_size;
 	}
 
-	if (p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RADIANCE) &&
-			(!p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_DIAGNOSTIC) ||
-					!p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RAW) ||
-					!p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_AGE) ||
-					!p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_REJECTION))) {
+	const double scale = Math::sqrt((double)max_entries / (double)output_pixels);
+	Size2i cache_size(
+			MAX(1, (int32_t)Math::floor((double)p_output_size.x * scale)),
+			MAX(1, (int32_t)Math::floor((double)p_output_size.y * scale)));
+	while ((uint64_t)cache_size.x * (uint64_t)cache_size.y > max_entries) {
+		if (cache_size.x >= cache_size.y && cache_size.x > 1) {
+			cache_size.x--;
+		} else if (cache_size.y > 1) {
+			cache_size.y--;
+		} else {
+			break;
+		}
+	}
+	return cache_size;
+}
+
+bool RTGIDiffuseCache::_ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, const Size2i &p_output_size, const Size2i &p_cache_size) {
+	ERR_FAIL_COND_V(p_render_buffers.is_null(), false);
+	ERR_FAIL_COND_V(p_output_size.x <= 0 || p_output_size.y <= 0, false);
+	ERR_FAIL_COND_V(p_cache_size.x <= 0 || p_cache_size.y <= 0, false);
+
+	const bool has_radiance = p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RADIANCE);
+	const bool has_output = p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_OUTPUT);
+
+	bool needs_clear = false;
+	if (has_radiance &&
+			p_render_buffers->get_texture_slice_size(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RADIANCE, 0) != p_cache_size) {
+		needs_clear = true;
+	}
+	if (has_output &&
+			p_render_buffers->get_texture_slice_size(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_OUTPUT, 0) != p_output_size) {
+		needs_clear = true;
+	}
+
+	const bool has_complete_context = has_radiance &&
+			p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RADIANCE_NEXT) &&
+			p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_META) &&
+			p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_META_NEXT) &&
+			p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_STATS) &&
+			p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_STATS_NEXT) &&
+			has_output &&
+			p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_DIAGNOSTIC) &&
+			p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RAW) &&
+			p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_AGE) &&
+			p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_REJECTION);
+
+	if ((has_radiance || has_output) && !has_complete_context) {
+		needs_clear = true;
+	}
+
+	if (needs_clear) {
 		p_render_buffers->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
 	}
 
@@ -48,17 +94,17 @@ bool RTGIDiffuseCache::_ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffer
 			RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT |
 			RD::TEXTURE_USAGE_CAN_COPY_TO_BIT;
 
-	RID radiance = p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RADIANCE, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RADIANCE_NEXT, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	RID meta = p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_META, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_META_NEXT, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	RID stats = p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_STATS, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_STATS_NEXT, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_OUTPUT, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RAW, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	RID diagnostic = p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_DIAGNOSTIC, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	RID age = p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_AGE, RD::DATA_FORMAT_R8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
-	RID rejection = p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_REJECTION, RD::DATA_FORMAT_R8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, p_size);
+	RID radiance = p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RADIANCE, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_cache_size);
+	p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RADIANCE_NEXT, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_cache_size);
+	RID meta = p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_META, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_cache_size);
+	p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_META_NEXT, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_cache_size);
+	RID stats = p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_STATS, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_cache_size);
+	p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_STATS_NEXT, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_cache_size);
+	p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_OUTPUT, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_output_size);
+	p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RAW, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, p_output_size);
+	RID diagnostic = p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_DIAGNOSTIC, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, p_output_size);
+	RID age = p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_AGE, RD::DATA_FORMAT_R8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, p_output_size);
+	RID rejection = p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_REJECTION, RD::DATA_FORMAT_R8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, p_output_size);
 
 	RD::get_singleton()->texture_clear(radiance, Color(0, 0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
 	RD::get_singleton()->texture_clear(meta, Color(0.5, 0.5, 1.0, 65504.0), 0, 1, 0, p_render_buffers->get_view_count());
@@ -81,6 +127,7 @@ void RTGIDiffuseCache::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 		RID p_prev_history_id,
 		RID p_signal_confidence,
 		const Size2i &p_process_size,
+		uint32_t p_max_cache_entries,
 		uint32_t p_view) {
 	ERR_FAIL_COND(p_render_buffers.is_null());
 	ERR_FAIL_COND(p_process_size.x <= 0 || p_process_size.y <= 0);
@@ -88,7 +135,8 @@ void RTGIDiffuseCache::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 	ERR_FAIL_COND(!p_history_validity.is_valid() || !p_prev_history_validity.is_valid() || !p_history_id.is_valid() || !p_prev_history_id.is_valid() || !p_signal_confidence.is_valid());
 	ERR_FAIL_UNSIGNED_INDEX(p_view, p_render_buffers->get_view_count());
 
-	const bool reset_history = _ensure_buffers(p_render_buffers, p_process_size);
+	const Size2i cache_size = _cache_size(p_process_size, p_max_cache_entries);
+	const bool reset_history = _ensure_buffers(p_render_buffers, p_process_size, cache_size);
 
 	RID radiance = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RADIANCE, p_view, 0);
 	RID radiance_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RADIANCE_NEXT, p_view, 0);
@@ -110,11 +158,12 @@ void RTGIDiffuseCache::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 	ERR_FAIL_NULL(material_storage);
 
 	RID nearest_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID linear_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 	RID shader_rd = shader.version_get_shader(shader_version, 0);
 
 	LocalVector<RD::Uniform> uniforms;
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 0, p_diffuse_radiance));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ nearest_sampler, radiance })));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ linear_sampler, radiance })));
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, Vector<RID>({ nearest_sampler, meta })));
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 3, Vector<RID>({ nearest_sampler, stats })));
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 4, Vector<RID>({ nearest_sampler, p_velocity })));
@@ -137,17 +186,29 @@ void RTGIDiffuseCache::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 	memset(&push_constant, 0, sizeof(PushConstant));
 	push_constant.resolution_width = (float)p_process_size.x;
 	push_constant.resolution_height = (float)p_process_size.y;
+	push_constant.cache_width = (float)cache_size.x;
+	push_constant.cache_height = (float)cache_size.y;
 	push_constant.max_history = reset_history ? 1.0f : 48.0f;
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
+	push_constant.mode = 0u;
+	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, cache_size.x, cache_size.y, 1);
+	RD::get_singleton()->compute_list_end();
+
+	RD::get_singleton()->texture_copy(radiance_next, radiance, Vector3(), Vector3(), Vector3(cache_size.x, cache_size.y, 1), 0, 0, 0, 0);
+	RD::get_singleton()->texture_copy(meta_next, meta, Vector3(), Vector3(), Vector3(cache_size.x, cache_size.y, 1), 0, 0, 0, 0);
+	RD::get_singleton()->texture_copy(stats_next, stats, Vector3(), Vector3(), Vector3(cache_size.x, cache_size.y, 1), 0, 0, 0, 0);
+
+	compute_list = RD::get_singleton()->compute_list_begin();
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
+	push_constant.mode = 1u;
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_process_size.x, p_process_size.y, 1);
 	RD::get_singleton()->compute_list_end();
 
 	RD::get_singleton()->texture_copy(output, p_diffuse_radiance, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, 0, p_view);
-	RD::get_singleton()->texture_copy(radiance_next, radiance, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, 0, 0);
-	RD::get_singleton()->texture_copy(meta_next, meta, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, 0, 0);
-	RD::get_singleton()->texture_copy(stats_next, stats, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, 0, 0);
 }

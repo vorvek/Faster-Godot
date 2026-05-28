@@ -58,6 +58,7 @@ void RendererEnvironmentStorage::environment_initialize(RID p_rid) {
 	ERR_FAIL_NULL(env);
 	env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS] = 1048575.0f;
 	env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS] = 1048575.0f;
+	env->pathtracing_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES] = 262144.0f;
 }
 
 void RendererEnvironmentStorage::environment_free(RID p_rid) {
@@ -923,6 +924,9 @@ void RendererEnvironmentStorage::environment_set_pathtracing_params(RID p_env, c
 	}
 	if (p_params.size() <= RSE::PT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS) {
 		env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS] = 1048575.0f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES) {
+		env->pathtracing_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES] = 262144.0f;
 	}
 }
 

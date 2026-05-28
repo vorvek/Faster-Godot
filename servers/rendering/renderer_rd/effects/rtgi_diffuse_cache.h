@@ -41,21 +41,27 @@ public:
 			RID p_prev_history_id,
 			RID p_signal_confidence,
 			const Size2i &p_process_size,
+			uint32_t p_max_cache_entries,
 			uint32_t p_view = 0);
 
 private:
 	struct PushConstant {
 		float resolution_width;
 		float resolution_height;
+		float cache_width;
+		float cache_height;
 		float max_history;
-		float pad0;
+		uint32_t mode;
+		uint32_t pad0;
+		uint32_t pad1;
 	};
 
 	RtgiDiffuseCacheShaderRD shader;
 	RID shader_version;
 	RID pipeline;
 
-	bool _ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, const Size2i &p_size);
+	Size2i _cache_size(const Size2i &p_output_size, uint32_t p_max_cache_entries) const;
+	bool _ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, const Size2i &p_output_size, const Size2i &p_cache_size);
 };
 
 } // namespace RendererRD

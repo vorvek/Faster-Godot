@@ -74,6 +74,10 @@
 #define RB_TEX_RT_SOURCE_DIRECT_CANDIDATE_PREV SNAME("rt_source_direct_candidate_prev")
 #define RB_TEX_RT_SOURCE_DIRECT_CANDIDATE_KEY SNAME("rt_source_direct_candidate_key")
 #define RB_TEX_RT_SOURCE_DIRECT_CANDIDATE_KEY_PREV SNAME("rt_source_direct_candidate_key_prev")
+#define RB_TEX_RT_SOURCE_DIRECT_RESERVOIR SNAME("rt_source_direct_reservoir")
+#define RB_TEX_RT_SOURCE_DIRECT_RESERVOIR_PREV SNAME("rt_source_direct_reservoir_prev")
+#define RB_TEX_RT_SOURCE_DIRECT_RESERVOIR_LIGHTING SNAME("rt_source_direct_reservoir_lighting")
+#define RB_TEX_RT_SOURCE_DIRECT_RESERVOIR_LIGHTING_PREV SNAME("rt_source_direct_reservoir_lighting_prev")
 #define RB_TEX_RT_SOURCE_HISTORY SNAME("rt_source_history")
 #define RB_TEX_RT_SOURCE_TEMPORAL_DELTA SNAME("rt_source_temporal_delta")
 #define RB_TEX_RT_SOURCE_REJECTION SNAME("rt_source_rejection")
@@ -158,15 +162,27 @@ struct alignas(16) RT_MaterialData {
 };
 static_assert(sizeof(RT_MaterialData) == 112, "RT_MaterialData must be 112 bytes for std430");
 
-// Must match GLSL RTEmissiveCandidate (std430, 64 bytes).
+// Must match GLSL RTEmissivePrimitiveDistribution (std430, 16 bytes).
+struct alignas(16) RT_EmissivePrimitiveDistribution {
+	uint32_t primitive_id;
+	float cumulative_weight;
+	float area;
+	float _pad;
+};
+static_assert(sizeof(RT_EmissivePrimitiveDistribution) == 16, "RT_EmissivePrimitiveDistribution must be 16 bytes for std430");
+
+// Must match GLSL RTEmissiveCandidate (std430, 80 bytes).
 struct alignas(16) RT_EmissiveCandidate {
 	float object_to_world[12];
 	uint32_t geometry_index;
 	uint32_t flags;
 	float selection_weight;
-	float _pad;
+	float primitive_weight_sum;
+	uint32_t primitive_offset;
+	uint32_t primitive_count;
+	uint32_t _pad[2];
 };
-static_assert(sizeof(RT_EmissiveCandidate) == 64, "RT_EmissiveCandidate must be 64 bytes for std430");
+static_assert(sizeof(RT_EmissiveCandidate) == 80, "RT_EmissiveCandidate must be 80 bytes for std430");
 
 // Light types for raytracing (matches GLSL RT_LIGHT_TYPE_* defines).
 enum RTLightType : uint32_t {
@@ -396,6 +412,8 @@ struct RTViewportState {
 	uint32_t motion_transform_buffer_capacity = 0;
 	RID emissive_candidate_buffer;
 	uint32_t emissive_candidate_buffer_capacity = 0;
+	RID emissive_primitive_buffer;
+	uint32_t emissive_primitive_buffer_capacity = 0;
 
 	RID light_buffer;
 	RID params_buffer;
@@ -589,6 +607,7 @@ struct RTGIBackendSceneSnapshot {
 	LocalVector<int32_t> motion_indices;
 	LocalVector<RT_InstanceMotionData> motion_transforms;
 	LocalVector<RT_EmissiveCandidate> emissive_candidates;
+	LocalVector<RT_EmissivePrimitiveDistribution> emissive_primitive_distributions;
 	LocalVector<RT_LightData> lights;
 	uint32_t tlas_instance_count = 0;
 	float emissive_candidate_total_weight = 0.0f;
@@ -696,6 +715,7 @@ class RenderRaytracing {
 	LocalVector<int32_t> motion_indices; ///< Per-instance: index into motion_transforms[], or -1.
 	LocalVector<RT_InstanceMotionData> motion_transforms; ///< Compact: only moving instances.
 	LocalVector<RT_EmissiveCandidate> emissive_candidates;
+	LocalVector<RT_EmissivePrimitiveDistribution> emissive_primitive_distributions;
 	float emissive_candidate_total_weight = 0.0f;
 	uint64_t current_emissive_candidate_signature = 0;
 	LocalVector<RID> blass;
