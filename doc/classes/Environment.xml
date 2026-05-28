@@ -224,7 +224,7 @@
 			Multiplier applied to the RTGI contribution before composition.
 		</member>
 		<member name="rtgi_denoiser" type="int" setter="set_rtgi_denoiser" getter="get_rtgi_denoiser" enum="Environment.RTGIDenoiser" default="8">
-			Selects the requested RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser. Vendor selections remain serialized when unavailable; the renderer warns once and falls back without changing this resource. [constant RTGI_DENOISER_NONE] leaves the raw sampled RTGI result visible.
+			Selects the requested RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser. [constant RTGI_DENOISER_AMD] and [constant RTGI_DENOISER_INTEL] use the FidelityFX-style real-time path; unsupported vendor selections remain serialized and fall back without changing this resource. [constant RTGI_DENOISER_NONE] leaves the raw sampled RTGI result visible.
 		</member>
 		<member name="rtgi_denoiser_strength" type="float" setter="set_rtgi_denoiser_strength" getter="get_rtgi_denoiser_strength" default="0.9">
 			Controls RTGI denoiser spatial filtering, blotch stabilization, and firefly suppression strength. Higher values reduce 1-sample-per-pixel speckles, but can blur fine indirect-light detail. Lower values preserve texture and fast dynamic light changes better, but leave more raw RT noise.
@@ -567,13 +567,13 @@
 			Use the built-in Vulkan ray tracing RTGI backend.
 		</constant>
 		<constant name="RTGI_BACKEND_NVIDIA_RTXPT" value="1" enum="RTGIBackend">
-			Request the NVIDIA RTXPT backend. Falls back to [constant RTGI_BACKEND_VULKAN_GENERIC] until the renderer-port backend is available.
+			Request the NVIDIA RTXPT backend. Uses the NVIDIA Godot fork-compatible RenderingDevice/Vulkan dispatch path when the RTXPT module is compiled, with denoising/runtime support gated separately.
 		</constant>
 		<constant name="RTGI_BACKEND_AMD_HIP_RT" value="2" enum="RTGIBackend">
-			Request the AMD HIP RT backend. Falls back to [constant RTGI_BACKEND_VULKAN_GENERIC] until HIP/Vulkan interop is available.
+			Request the AMD HIP RT backend. Requires the HIP RT module, runtime libraries, and Vulkan/HIP external memory and semaphore interop; otherwise it falls back to [constant RTGI_BACKEND_VULKAN_GENERIC].
 		</constant>
 		<constant name="RTGI_BACKEND_INTEL_EMBREE" value="3" enum="RTGIBackend">
-			Request the Intel Embree backend. Falls back to [constant RTGI_BACKEND_VULKAN_GENERIC] until an in-frame GPU interop path is available.
+			Request the Intel Embree/OSPRay backend. Uses compiled CPU rendering with synchronized RD upload when available; otherwise it falls back to [constant RTGI_BACKEND_VULKAN_GENERIC].
 		</constant>
 		<constant name="RTGI_MODE_REFLECTIONS_RT_ONLY" value="0" enum="RTGIMode">
 			Use RTGI for specular/reflection paths only while diffuse GI remains owned by raster GI systems.
@@ -603,10 +603,10 @@
 			Request the NVIDIA RTGI denoiser. Falls back to ASVFG until NRD or DLSS Ray Reconstruction support is available.
 		</constant>
 		<constant name="RTGI_DENOISER_AMD" value="12" enum="RTGIDenoiser">
-			Request the AMD RTGI denoiser. Uses the available FidelityFX-style path in this renderer and gates future AMD SDK paths by platform and hardware support.
+			Request the AMD RTGI denoiser. Uses the available FidelityFX-style path in this renderer and gates future FidelityFX SDK paths by platform and runtime support.
 		</constant>
 		<constant name="RTGI_DENOISER_INTEL" value="13" enum="RTGIDenoiser">
-			Request the Intel RTGI denoiser. Falls back to ASVFG until a supported runtime path is available.
+			Request the Intel RTGI denoiser. Uses the cross-vendor FidelityFX target for real-time rendering and falls back to ASVFG until that handoff is available.
 		</constant>
 	</constants>
 </class>

@@ -80,20 +80,26 @@ extern int WINAPI ShimMainCRTStartup() {
 #ifdef FASTER_GODOT
 	int cpuinfo7[4];
 	GODOT_CPUID(cpuinfo7, 0x07, 0x00);
+	int cpuinfo_ext[4];
+	GODOT_CPUID(cpuinfo_ext, 0x80000001, 0x00);
 
+	BOOL cpuid_clmul_supported = cpuinfo[2] & (1 << 1);
 	BOOL cpuid_popcnt_supported = cpuinfo[2] & (1 << 23);
 	BOOL cpuid_avx_supported = cpuinfo[2] & (1 << 28);
 	BOOL cpuid_fma_supported = cpuinfo[2] & (1 << 12);
 	BOOL cpuid_f16c_supported = cpuinfo[2] & (1 << 29);
 	BOOL cpuid_osxsave_supported = cpuinfo[2] & (1 << 27);
+	BOOL cpuid_bmi1_supported = cpuinfo7[1] & (1 << 3);
+	BOOL cpuid_bmi2_supported = cpuinfo7[1] & (1 << 8);
 	BOOL cpuid_avx2_supported = cpuinfo7[1] & (1 << 5);
+	BOOL cpuid_lzcnt_supported = cpuinfo_ext[2] & (1 << 5);
 	BOOL os_avx_state_supported = FALSE;
 	if (cpuid_osxsave_supported) {
 		uint64_t xcr0 = GODOT_XGETBV(0);
 		os_avx_state_supported = (xcr0 & 0x6) == 0x6;
 	}
 
-	if ((win_sse42_supported || cpuid_sse42_supported) && cpuid_popcnt_supported && cpuid_avx_supported && cpuid_fma_supported && cpuid_f16c_supported && cpuid_avx2_supported && os_avx_state_supported) {
+	if ((win_sse42_supported || cpuid_sse42_supported) && cpuid_popcnt_supported && cpuid_avx_supported && cpuid_fma_supported && cpuid_f16c_supported && cpuid_avx2_supported && cpuid_bmi1_supported && cpuid_bmi2_supported && cpuid_lzcnt_supported && cpuid_clmul_supported && os_avx_state_supported) {
 #else
 	if (win_sse42_supported || cpuid_sse42_supported) {
 #endif
@@ -104,7 +110,7 @@ extern int WINAPI ShimMainCRTStartup() {
 #endif
 	} else {
 #ifdef FASTER_GODOT
-		MessageBoxW(NULL, L"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, and AVX OS state support is required.", L"Faster-Godot", MB_OK | MB_ICONEXCLAMATION | MB_TASKMODAL);
+		MessageBoxW(NULL, L"A CPU and operating system with SSE4.2, POPCNT, AVX, AVX2, FMA, F16C, BMI1, BMI2, LZCNT, CLMUL, and AVX OS state support is required.", L"Faster-Godot", MB_OK | MB_ICONEXCLAMATION | MB_TASKMODAL);
 #else
 		MessageBoxW(NULL, L"A CPU with SSE4.2 instruction set support is required.", L"Faster-Godot", MB_OK | MB_ICONEXCLAMATION | MB_TASKMODAL);
 #endif

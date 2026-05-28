@@ -215,7 +215,7 @@ bool previous_history_tap_valid(ivec2 tap_pos, vec4 current_nr, vec2 current_vie
 		if (abs(current_guide_active - previous_guide_active) > 0.5 && guide_risk > 0.30) {
 			return false;
 		}
-		if (abs(current_guide.x - previous_guide.x) > mix(0.24, 0.08, guide_risk)) {
+		if (abs(current_guide.x - previous_guide.x) > mix(0.30, 0.16, guide_risk)) {
 			return false;
 		}
 	}
@@ -244,22 +244,51 @@ bool previous_history_tap_valid(ivec2 tap_pos, vec4 current_nr, vec2 current_vie
 	}
 
 	float reference_prev_view_z = current_expected_prev_view_z > 0.0 ? current_expected_prev_view_z : current_viewz_hitdist.x;
-	float depth_scale = max(max(reference_prev_view_z, previous_viewz_hitdist.x), 1.0);
-	float relative_depth_error = abs(reference_prev_view_z - previous_viewz_hitdist.x) / depth_scale;
-	float hitdist_scale = max(max(current_viewz_hitdist.y, previous_viewz_hitdist.y), 1.0);
-	float relative_hitdist_error = abs(current_viewz_hitdist.y - previous_viewz_hitdist.y) / hitdist_scale;
+	float relative_depth_error;
+	float relative_hitdist_error;
+
 	if (current_guide_active > 0.5 && previous_guide_active > 0.5) {
+		// 1. Calculate and compare virtual depth of the reflection (reprojected point depth + hit distance)
+		float V_curr = reference_prev_view_z + current_guide.y;
+		float V_prev = previous_viewz_hitdist.x + previous_guide.y;
+		float virtual_depth_scale = max(max(V_curr, V_prev), 1.0);
+		relative_depth_error = abs(V_curr - V_prev) / virtual_depth_scale;
+
+		// 2. Perform a relaxed check on the mirror surface depth itself to ensure we didn't reproject off-surface
+		float surface_depth_scale = max(max(reference_prev_view_z, previous_viewz_hitdist.x), 1.0);
+		float relative_surface_depth = abs(reference_prev_view_z - previous_viewz_hitdist.x) / surface_depth_scale;
+		if (relative_surface_depth > 0.35) {
+			return false;
+		}
+
+		// 3. Bypass surface primary hit distance check; only compare specular guide hit distance
 		float guide_hitdist_scale = max(max(current_guide.y, previous_guide.y), 1.0);
-		float guide_hitdist_error = abs(current_guide.y - previous_guide.y) / guide_hitdist_scale;
-		relative_hitdist_error = max(relative_hitdist_error, guide_hitdist_error);
+		relative_hitdist_error = abs(current_guide.y - previous_guide.y) / guide_hitdist_scale;
+	} else {
+		// Standard diffuse depth and hit distance logic
+		float depth_scale = max(max(reference_prev_view_z, previous_viewz_hitdist.x), 1.0);
+		relative_depth_error = abs(reference_prev_view_z - previous_viewz_hitdist.x) / depth_scale;
+
+		float hitdist_scale = max(max(current_viewz_hitdist.y, previous_viewz_hitdist.y), 1.0);
+		relative_hitdist_error = abs(current_viewz_hitdist.y - previous_viewz_hitdist.y) / hitdist_scale;
 	}
+
 	float motion_slack = smoothstep(1.0, 32.0, motion_px);
 	float stable_surface = stable_surface_match(normal_similarity, albedo_delta, metalness_delta);
 	float depth_threshold = mix(mix(0.11, 0.35, motion_slack), mix(0.16, 0.55, motion_slack), stable_surface);
 	float hitdist_threshold = mix(mix(0.55, 0.85, motion_slack), mix(0.95, 1.65, motion_slack), stable_surface);
 	float specular_surface = guide_risk;
-	depth_threshold = mix(depth_threshold, min(depth_threshold, mix(0.11, 0.42, motion_slack)), specular_surface * 0.35);
-	hitdist_threshold = mix(hitdist_threshold, min(hitdist_threshold, mix(0.42, 0.95, motion_slack)), specular_surface * current_guide_active * 0.65);
+
+	if (current_guide_active > 0.5) {
+		// Relax thresholds for specular signals to allow robust temporal accumulation under stochastic noise
+		depth_threshold = mix(depth_threshold, mix(0.24, 0.58, motion_slack), 0.5);
+		hitdist_threshold = mix(hitdist_threshold, mix(0.75, 1.85, motion_slack), 0.5);
+	} else {
+		// Standard diffuse tightening logic based on specular surface presence
+		depth_threshold = mix(depth_threshold, min(depth_threshold, mix(0.11, 0.42, motion_slack)), specular_surface * 0.35);
+		hitdist_threshold = mix(hitdist_threshold, min(hitdist_threshold, mix(0.42, 0.95, motion_slack)), specular_surface * current_guide_active * 0.65);
+	}
+
 	return relative_depth_error < depth_threshold && relative_hitdist_error < hitdist_threshold;
 }
 

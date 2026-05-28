@@ -1134,7 +1134,7 @@ void JoltBody3D::pre_step(float p_step, JPH::Body &p_jolt_body) {
 	}
 
 	if (_should_call_queries()) {
-		_enqueue_call_queries();
+		space->enqueue_call_queries(this);
 	}
 
 	contact_count = 0;

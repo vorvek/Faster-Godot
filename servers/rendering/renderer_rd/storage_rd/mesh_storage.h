@@ -82,9 +82,11 @@ private:
 			uint32_t vertex_count = 0;
 			RID vertex_buffer;
 			uint32_t vertex_buffer_size = 0;
+			Vector<uint8_t> rt_vertex_data;
 
 			RID attribute_buffer;
 			uint32_t attribute_buffer_size = 0;
+			Vector<uint8_t> rt_attribute_data;
 
 			RID skin_buffer;
 			uint32_t skin_buffer_size = 0;
@@ -112,6 +114,7 @@ private:
 
 			RID index_buffer;
 			uint32_t index_buffer_size = 0;
+			Vector<uint8_t> rt_index_data;
 			RID index_array;
 			uint32_t index_count = 0;
 
@@ -486,6 +489,11 @@ public:
 		return s->vertex_buffer;
 	}
 
+	_FORCE_INLINE_ const Vector<uint8_t> &mesh_surface_get_rt_vertex_data(void *p_surface) const {
+		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+		return s->rt_vertex_data;
+	}
+
 	_FORCE_INLINE_ RID mesh_instance_get_vertex_buffer(RID p_mesh_instance, uint32_t p_surface_index) {
 		MeshInstance *mi = mesh_instance_owner.get_or_null(p_mesh_instance);
 		if (!mi || p_surface_index >= mi->surfaces.size()) {
@@ -518,6 +526,11 @@ public:
 		return s->attribute_buffer;
 	}
 
+	_FORCE_INLINE_ const Vector<uint8_t> &mesh_surface_get_rt_attribute_data(void *p_surface) const {
+		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+		return s->rt_attribute_data;
+	}
+
 	_FORCE_INLINE_ RID mesh_surface_get_index_buffer(void *p_surface, uint32_t p_lod = 0) {
 		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
 		if (p_lod == 0) {
@@ -525,6 +538,11 @@ public:
 		}
 		ERR_FAIL_UNSIGNED_INDEX_V(p_lod - 1, s->lod_count, RID());
 		return s->lods[p_lod - 1].index_buffer;
+	}
+
+	_FORCE_INLINE_ const Vector<uint8_t> &mesh_surface_get_rt_index_data(void *p_surface) const {
+		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+		return s->rt_index_data;
 	}
 
 	_FORCE_INLINE_ uint32_t mesh_surface_get_index_count(void *p_surface, uint32_t p_lod = 0) {

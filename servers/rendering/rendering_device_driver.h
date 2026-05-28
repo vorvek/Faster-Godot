@@ -972,8 +972,34 @@ public:
 		bool timeline_semaphore_supported = false;
 	};
 
+	enum ExternalHandleType {
+		EXTERNAL_HANDLE_NONE,
+		EXTERNAL_HANDLE_OPAQUE_FD,
+		EXTERNAL_HANDLE_OPAQUE_WIN32,
+	};
+
+	struct ExternalMemoryHandleInfo {
+		uint64_t handle = 0;
+		ExternalHandleType handle_type = EXTERNAL_HANDLE_NONE;
+		uint64_t allocation_offset = 0;
+		uint64_t allocation_size = 0;
+		bool dedicated_allocation = false;
+		bool exportable = false;
+	};
+
+	struct ExternalSemaphoreHandleInfo {
+		uint64_t handle = 0;
+		ExternalHandleType handle_type = EXTERNAL_HANDLE_NONE;
+		bool timeline = false;
+		uint64_t timeline_value = 0;
+		bool exportable = false;
+	};
+
 	virtual void set_object_name(ObjectType p_type, ID p_driver_id, const String &p_name) = 0;
 	virtual uint64_t get_resource_native_handle(DriverResource p_type, ID p_driver_id) = 0;
+	virtual bool texture_get_external_memory_handle(TextureID p_texture, ExternalMemoryHandleInfo &r_info) { return false; }
+	virtual SemaphoreID external_semaphore_create(bool p_timeline = false, uint64_t p_initial_value = 0) { return SemaphoreID(); }
+	virtual bool semaphore_get_external_handle(SemaphoreID p_semaphore, bool p_timeline, uint64_t p_timeline_value, ExternalSemaphoreHandleInfo &r_info) { return false; }
 	virtual uint64_t get_total_memory_used() = 0;
 	virtual uint64_t get_lazily_memory_used() = 0;
 	virtual uint64_t limit_get(Limit p_limit) = 0;

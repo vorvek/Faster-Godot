@@ -409,6 +409,8 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 
 	s->format = new_surface.format;
 	s->primitive = new_surface.primitive;
+	s->rt_vertex_data = new_surface.vertex_data;
+	s->rt_attribute_data = new_surface.attribute_data;
 
 	const bool use_as_storage = (new_surface.skin_data.size() || mesh->blend_shape_count > 0);
 	const BitField<RD::BufferCreationBits> as_storage_flag = use_as_storage ? RD::BUFFER_CREATION_AS_STORAGE_BIT : 0;
@@ -460,6 +462,8 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 		s->index_buffer = RD::get_singleton()->index_buffer_create(index_buffer_count, is_index_16 ? RD::INDEX_BUFFER_FORMAT_UINT16 : RD::INDEX_BUFFER_FORMAT_UINT32, index_data, false, rt_as_input_bits);
 		s->index_buffer_size = index_data.size();
 		s->index_count = new_surface.index_count;
+		s->rt_index_data.resize_initialized(index_data.size());
+		memcpy(s->rt_index_data.ptrw(), index_data.ptr(), index_data.size());
 		s->index_array = RD::get_singleton()->index_array_create(s->index_buffer, 0, s->index_count);
 		if (new_surface.lods.size()) {
 			s->lods = memnew_arr(Mesh::Surface::LOD, new_surface.lods.size());
@@ -627,6 +631,10 @@ void MeshStorage::mesh_surface_update_vertex_region(RID p_mesh, int p_surface, i
 	const uint8_t *r = p_data.ptr();
 
 	RD::get_singleton()->buffer_update(mesh->surfaces[p_surface]->vertex_buffer, p_offset, data_size, r);
+	Vector<uint8_t> &rt_vertex_data = mesh->surfaces[p_surface]->rt_vertex_data;
+	if (p_offset >= 0 && uint64_t(p_offset) + data_size <= uint64_t(rt_vertex_data.size())) {
+		memcpy(rt_vertex_data.ptrw() + p_offset, r, data_size);
+	}
 	mesh->surfaces[p_surface]->rt_invalidation_counter++;
 }
 
@@ -641,6 +649,10 @@ void MeshStorage::mesh_surface_update_attribute_region(RID p_mesh, int p_surface
 	const uint8_t *r = p_data.ptr();
 
 	RD::get_singleton()->buffer_update(mesh->surfaces[p_surface]->attribute_buffer, p_offset, data_size, r);
+	Vector<uint8_t> &rt_attribute_data = mesh->surfaces[p_surface]->rt_attribute_data;
+	if (p_offset >= 0 && uint64_t(p_offset) + data_size <= uint64_t(rt_attribute_data.size())) {
+		memcpy(rt_attribute_data.ptrw() + p_offset, r, data_size);
+	}
 	mesh->surfaces[p_surface]->rt_invalidation_counter++;
 }
 
@@ -669,6 +681,10 @@ void RendererRD::MeshStorage::mesh_surface_update_index_region(RID p_mesh, int p
 	const uint8_t *r = p_data.ptr();
 
 	RD::get_singleton()->buffer_update(mesh->surfaces[p_surface]->index_buffer, p_offset, data_size, r);
+	Vector<uint8_t> &rt_index_data = mesh->surfaces[p_surface]->rt_index_data;
+	if (p_offset >= 0 && uint64_t(p_offset) + data_size <= uint64_t(rt_index_data.size())) {
+		memcpy(rt_index_data.ptrw() + p_offset, r, data_size);
+	}
 	mesh->surfaces[p_surface]->rt_invalidation_counter++;
 }
 

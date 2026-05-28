@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/math/bvh.h"
+#include "core/math/dynamic_bvh.h"
 
 #include "tests/test_macros.h"
 
@@ -74,6 +75,64 @@ TEST_CASE("[BVH] AABB culling returns the same leaf hits across SIMD-sized leave
 	CHECK(seen[6]);
 	CHECK_FALSE(seen[1]);
 	CHECK_FALSE(seen[7]);
+}
+
+TEST_CASE("[BVH] DynamicBVH convex query handles SIMD-sized plane batches") {
+	const Plane planes[8] = {
+		Plane(Vector3(1, 0, 0), 1),
+		Plane(Vector3(-1, 0, 0), 1),
+		Plane(Vector3(0, 1, 0), 1),
+		Plane(Vector3(0, -1, 0), 1),
+		Plane(Vector3(0, 0, 1), 1),
+		Plane(Vector3(1, 1, 0).normalized(), Math::SQRT12),
+		Plane(Vector3(0, 0, -1), 1),
+		Plane(Vector3(-1, 1, 0).normalized(), 2),
+	};
+	const Vector3 points[8] = {
+		Vector3(-1, -1, -1),
+		Vector3(-1, -1, 1),
+		Vector3(-1, 1, -1),
+		Vector3(-1, 1, 1),
+		Vector3(1, -1, -1),
+		Vector3(1, -1, 1),
+		Vector3(1, 1, -1),
+		Vector3(1, 1, 1),
+	};
+
+	DynamicBVH bvh;
+	int items[4] = { 0, 1, 2, 3 };
+	bvh.insert(AABB(Vector3(-0.25, -0.25, -0.25), Vector3(0.5, 0.5, 0.5)), &items[0]);
+	bvh.insert(AABB(Vector3(0.75, 0.15, -0.25), Vector3(0.25, 0.25, 0.5)), &items[1]);
+	bvh.insert(AABB(Vector3(0.85, 0.85, -0.25), Vector3(0.1, 0.1, 0.5)), &items[2]);
+	bvh.insert(AABB(Vector3(1.25, -0.25, -0.25), Vector3(0.25, 0.5, 0.5)), &items[3]);
+
+	bool seen_six_planes[4] = {};
+	auto collect_six_planes = [&seen_six_planes](void *p_data) {
+		const int item = *static_cast<int *>(p_data);
+		seen_six_planes[item] = true;
+		return false;
+	};
+
+	bvh.convex_query(planes, 6, points, 8, collect_six_planes);
+
+	CHECK(seen_six_planes[0]);
+	CHECK(seen_six_planes[1]);
+	CHECK_FALSE(seen_six_planes[2]);
+	CHECK_FALSE(seen_six_planes[3]);
+
+	bool seen_eight_planes[4] = {};
+	auto collect_eight_planes = [&seen_eight_planes](void *p_data) {
+		const int item = *static_cast<int *>(p_data);
+		seen_eight_planes[item] = true;
+		return false;
+	};
+
+	bvh.convex_query(planes, 8, points, 8, collect_eight_planes);
+
+	CHECK(seen_eight_planes[0]);
+	CHECK(seen_eight_planes[1]);
+	CHECK_FALSE(seen_eight_planes[2]);
+	CHECK_FALSE(seen_eight_planes[3]);
 }
 
 } // namespace TestBVH

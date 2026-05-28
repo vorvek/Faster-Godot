@@ -428,7 +428,7 @@ for key, value in flag_list.items():
         env[key] = value
 
 # Update the environment to take platform-specific options into account.
-opts.Update(env, {**ARGUMENTS, **env.Dictionary()})
+opts.Update(env, {**env.Dictionary(), **ARGUMENTS})
 
 # Detect modules.
 modules_detected = OrderedDict()
@@ -487,7 +487,7 @@ for name, path in modules_detected.items():
 env.modules_detected = modules_detected
 
 # Update the environment again after all the module options are added.
-opts.Update(env, {**ARGUMENTS, **env.Dictionary()})
+opts.Update(env, {**env.Dictionary(), **ARGUMENTS})
 if "faster_godot" in ARGUMENTS:
     print_warning("The faster_godot option is ignored; this fork always builds the Faster-Godot desktop profile.")
 env["faster_godot"] = True
@@ -821,7 +821,7 @@ if env["arch"] == "x86_64":
     else:
         if "-ffp-contract=off" in env["CCFLAGS"]:
             env["CCFLAGS"].remove("-ffp-contract=off")
-        env.Append(CCFLAGS=["-mavx2", "-mfma", "-mf16c", "-mpopcnt", "-ffp-contract=fast"])
+        env.Append(CCFLAGS=["-mavx2", "-mfma", "-mf16c", "-mpopcnt", "-mbmi", "-mbmi2", "-mlzcnt", "-mpclmul", "-ffp-contract=fast"])
 elif env["arch"] == "x86_32":
     # Be more conservative with instruction sets on 32-bit x86 to improve compatibility.
     # SSE and SSE2 are present on all CPUs that support 64-bit, even if running a 32-bit OS.

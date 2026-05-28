@@ -79,6 +79,7 @@ void JoltSpace3D::_pre_step(float p_step) {
 	const JPH::BodyLockInterface &lock_iface = get_lock_iface();
 	const JPH::BodyID *active_rigid_bodies = physics_system->GetActiveBodiesUnsafe(JPH::EBodyType::RigidBody);
 	const JPH::uint32 active_rigid_body_count = physics_system->GetNumActiveBodies(JPH::EBodyType::RigidBody);
+	body_call_queries_batch.reserve(body_call_queries_batch.size() + active_rigid_body_count);
 
 	for (JPH::uint32 i = 0; i < active_rigid_body_count; i++) {
 		JPH::Body *jolt_body = lock_iface.TryGetBody(active_rigid_bodies[i]);
@@ -220,9 +221,20 @@ void JoltSpace3D::step(float p_step) {
 }
 
 void JoltSpace3D::call_queries() {
-	while (body_call_queries_list.first()) {
-		JoltBody3D *body = body_call_queries_list.first()->self();
-		body_call_queries_list.remove(body_call_queries_list.first());
+	{
+		MutexLock body_call_queries_lock(body_call_queries_mutex);
+
+		while (body_call_queries_list.first()) {
+			JoltBody3D *body = body_call_queries_list.first()->self();
+			body_call_queries_list.remove(body_call_queries_list.first());
+			body_call_queries_batch.push_back(body);
+		}
+	}
+
+	while (!body_call_queries_batch.is_empty()) {
+		JoltBody3D *body = body_call_queries_batch[body_call_queries_batch.size() - 1];
+		body_call_queries_batch.remove_at_unordered(body_call_queries_batch.size() - 1);
+		body->call_queries_enqueued = false;
 		body->call_queries();
 	}
 
@@ -499,12 +511,25 @@ void JoltSpace3D::set_is_object_sleeping(const JPH::BodyID &p_jolt_id, bool p_en
 	}
 }
 
+void JoltSpace3D::enqueue_call_queries(JoltBody3D *p_body) {
+	ERR_FAIL_NULL(p_body);
+
+	if (p_body->call_queries_enqueued) {
+		return;
+	}
+
+	p_body->call_queries_enqueued = true;
+	body_call_queries_batch.push_back(p_body);
+}
+
 void JoltSpace3D::enqueue_call_queries(SelfList<JoltBody3D> *p_body) {
 	// This method will be called from the body activation listener on multiple threads during the simulation step.
 	MutexLock body_call_queries_lock(body_call_queries_mutex);
 
-	if (!p_body->in_list()) {
-		body_call_queries_list.add(p_body);
+	JoltBody3D *body = p_body->self();
+	if (!body->call_queries_enqueued) {
+		body->call_queries_enqueued = true;
+		body_call_queries_list.add_last(p_body);
 	}
 }
 
@@ -515,9 +540,16 @@ void JoltSpace3D::enqueue_call_queries(SelfList<JoltArea3D> *p_area) {
 }
 
 void JoltSpace3D::dequeue_call_queries(SelfList<JoltBody3D> *p_body) {
+	MutexLock body_call_queries_lock(body_call_queries_mutex);
+
+	JoltBody3D *body = p_body->self();
+
 	if (p_body->in_list()) {
 		body_call_queries_list.remove(p_body);
 	}
+
+	body_call_queries_batch.erase_unordered(body);
+	body->call_queries_enqueued = false;
 }
 
 void JoltSpace3D::dequeue_call_queries(SelfList<JoltArea3D> *p_area) {

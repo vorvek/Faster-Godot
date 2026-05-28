@@ -294,7 +294,7 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_clear_textures
 	rt_strc_scroll_valid = false;
 }
 
-void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_textures() {
+void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_textures(bool p_external_memory_exportable) {
 	ERR_FAIL_NULL(render_buffers);
 
 	if (rt_size == Size2i()) {
@@ -307,6 +307,19 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 
 	if (render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING) &&
 			render_buffers->get_texture_slice_size(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, 0) != rt_size) {
+		rt_clear_textures();
+	}
+
+	auto rt_texture_exportability_mismatch = [&](const StringName &p_texture_name) {
+		if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, p_texture_name)) {
+			return false;
+		}
+		const RD::TextureFormat format = render_buffers->get_texture_format(RB_SCOPE_FORWARD_CLUSTERED, p_texture_name);
+		return format.is_external_memory_exportable != p_external_memory_exportable;
+	};
+	if (rt_texture_exportability_mismatch(RB_TEX_RAYTRACING) ||
+			rt_texture_exportability_mismatch(RB_TEX_RT_DIFFUSE_RADIANCE) ||
+			rt_texture_exportability_mismatch(RB_TEX_RT_SPECULAR_RADIANCE)) {
 		rt_clear_textures();
 	}
 
@@ -330,7 +343,12 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 				RD::DATA_FORMAT_R16G16B16A16_SFLOAT,
 				rt_output_usage_bits,
 				RD::TEXTURE_SAMPLES_1,
-				rt_size);
+				rt_size,
+				0,
+				1,
+				true,
+				false,
+				p_external_memory_exportable);
 	}
 
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DIFFUSE_RADIANCE)) {
@@ -340,7 +358,12 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 				RD::DATA_FORMAT_R16G16B16A16_SFLOAT,
 				usage_bits,
 				RD::TEXTURE_SAMPLES_1,
-				rt_size);
+				rt_size,
+				0,
+				1,
+				true,
+				false,
+				p_external_memory_exportable);
 	}
 
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_RADIANCE)) {
@@ -350,7 +373,12 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 				RD::DATA_FORMAT_R16G16B16A16_SFLOAT,
 				usage_bits,
 				RD::TEXTURE_SAMPLES_1,
-				rt_size);
+				rt_size,
+				0,
+				1,
+				true,
+				false,
+				p_external_memory_exportable);
 	}
 
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_GUIDE)) {
@@ -2364,11 +2392,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	bool rt_replaces_opaque = scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING;
 	scene_features.rt_replaces_opaque = rt_replaces_opaque;
 	const uint32_t rt_denoiser = rt_env_params ? (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
-	if (scene_features.rt && (rt_denoiser == RSE::PT_DENOISER_NVIDIA || rt_denoiser == RSE::PT_DENOISER_AMD || rt_denoiser == RSE::PT_DENOISER_INTEL)) {
+	if (scene_features.rt && rt_denoiser == RSE::PT_DENOISER_NVIDIA) {
 		WARN_PRINT_ONCE(vformat("RTGI denoiser '%s' is not available in the Vulkan renderer yet. Falling back to ASVFG for this viewport without changing the Environment resource.", _rtgi_denoiser_name(rt_denoiser)));
 	}
-	const bool rt_asvfg_denoiser = rt_denoiser == RSE::PT_DENOISER_INTERNAL || rt_denoiser == RSE::PT_DENOISER_NVIDIA || rt_denoiser == RSE::PT_DENOISER_AMD || rt_denoiser == RSE::PT_DENOISER_INTEL;
-	const bool rt_fidelityfx_denoiser = rt_denoiser == RSE::PT_DENOISER_FIDELITYFX;
+	const bool rt_asvfg_denoiser = rt_denoiser == RSE::PT_DENOISER_INTERNAL || rt_denoiser == RSE::PT_DENOISER_NVIDIA;
+	const bool rt_fidelityfx_denoiser = rt_denoiser == RSE::PT_DENOISER_FIDELITYFX || rt_denoiser == RSE::PT_DENOISER_AMD || rt_denoiser == RSE::PT_DENOISER_INTEL;
 	const bool rt_temporal_denoiser = rt_asvfg_denoiser || rt_fidelityfx_denoiser;
 
 	static const int texture_multisamples[RSE::VIEWPORT_MSAA_MAX] = { 1, 2, 4, 8 };
@@ -2616,6 +2644,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RTGIBackendFrameContext rt_backend_context;
 	RTGIBackendStatus rt_backend_status;
 	RSE::PathtracingBackend rt_path_output_backend = RSE::PT_BACKEND_VULKAN_GENERIC;
+	bool rt_requires_external_resource_exchange = false;
 	bool rt_strc_enabled = false;
 	uint32_t rt_strc_cascade_count = 3;
 	uint32_t rt_strc_grid_size = 24;
@@ -2714,6 +2743,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		const RSE::PathtracingBackend requested_rtgi_backend = env_params ? RenderRaytracing::backend_from_env_param(env_params[RSE::PT_PARAM_RTGI_BACKEND]) : RSE::PT_BACKEND_VULKAN_GENERIC;
 		raytracing->resolve_backend(requested_rtgi_backend);
 		rt_backend_status = raytracing->get_backend_status();
+		const RTGIBackendCapabilities rt_backend_capabilities = raytracing->get_backend_capabilities(rt_backend_status.active_backend);
+		rt_requires_external_resource_exchange = rt_backend_capabilities.external_memory && rt_backend_capabilities.external_semaphore;
 		const bool fog_enabled = p_render_data && p_render_data->environment.is_valid() && environment_get_fog_enabled(p_render_data->environment);
 		rt_flags = SceneShaderRaytracing::compute_rt_flags(env_params, fog_enabled);
 		rt_strc_enabled = (rt_flags & SceneShaderRaytracing::RT_FLAG_STRC_ENABLED) != 0;
@@ -2770,6 +2801,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			rb->clear_context(RB_SCOPE_RTGI_STRC);
 			rb_data->rt_strc_scroll_valid = false;
 		}
+
+		rb_data->rt_ensure_textures(rt_requires_external_resource_exchange);
 
 		if (!raytracing->prepare_backend_frame(p_render_data, rt_flags, rt_backend_context)) {
 			return false;
@@ -3241,7 +3274,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		RENDER_TIMESTAMP("TLAS Build");
 
 		// Ensure raytracing output textures exist
-		rb_data->rt_ensure_textures();
+		rb_data->rt_ensure_textures(rt_requires_external_resource_exchange);
 
 		RENDER_TIMESTAMP("Pathtracer");
 

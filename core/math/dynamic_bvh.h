@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/math/aabb.h"
+#include "core/math/simd_defs.h"
 #include "core/templates/list.h"
 #include "core/templates/local_vector.h"
 #include "core/templates/paged_allocator.h"
@@ -138,7 +139,54 @@ private:
 			Vector3 half_extents = (max - min) * 0.5;
 			Vector3 ofs = min + half_extents;
 
-			for (int i = 0; i < p_plane_count; i++) {
+			int i = 0;
+			const __m256 half_x = _mm256_set1_ps(half_extents.x);
+			const __m256 half_y = _mm256_set1_ps(half_extents.y);
+			const __m256 half_z = _mm256_set1_ps(half_extents.z);
+			const __m256 ofs_x = _mm256_set1_ps(ofs.x);
+			const __m256 ofs_y = _mm256_set1_ps(ofs.y);
+			const __m256 ofs_z = _mm256_set1_ps(ofs.z);
+			const __m256 sign_mask = _mm256_set1_ps(-0.0f);
+
+			for (; i + 8 <= p_plane_count; i += 8) {
+				const __m256 nx = _mm256_setr_ps(p_planes[i + 0].normal.x, p_planes[i + 1].normal.x, p_planes[i + 2].normal.x, p_planes[i + 3].normal.x, p_planes[i + 4].normal.x, p_planes[i + 5].normal.x, p_planes[i + 6].normal.x, p_planes[i + 7].normal.x);
+				const __m256 ny = _mm256_setr_ps(p_planes[i + 0].normal.y, p_planes[i + 1].normal.y, p_planes[i + 2].normal.y, p_planes[i + 3].normal.y, p_planes[i + 4].normal.y, p_planes[i + 5].normal.y, p_planes[i + 6].normal.y, p_planes[i + 7].normal.y);
+				const __m256 nz = _mm256_setr_ps(p_planes[i + 0].normal.z, p_planes[i + 1].normal.z, p_planes[i + 2].normal.z, p_planes[i + 3].normal.z, p_planes[i + 4].normal.z, p_planes[i + 5].normal.z, p_planes[i + 6].normal.z, p_planes[i + 7].normal.z);
+				const __m256 d = _mm256_setr_ps(p_planes[i + 0].d, p_planes[i + 1].d, p_planes[i + 2].d, p_planes[i + 3].d, p_planes[i + 4].d, p_planes[i + 5].d, p_planes[i + 6].d, p_planes[i + 7].d);
+
+				const __m256 abs_nx = _mm256_andnot_ps(sign_mask, nx);
+				const __m256 abs_ny = _mm256_andnot_ps(sign_mask, ny);
+				const __m256 abs_nz = _mm256_andnot_ps(sign_mask, nz);
+				const __m256 radius = Math::simd_fmadd_ps(abs_nz, half_z, Math::simd_fmadd_ps(abs_ny, half_y, _mm256_mul_ps(abs_nx, half_x)));
+				const __m256 center_dot = Math::simd_fmadd_ps(nz, ofs_z, Math::simd_fmadd_ps(ny, ofs_y, _mm256_mul_ps(nx, ofs_x)));
+				const __m256 support_dot = _mm256_sub_ps(center_dot, radius);
+
+				if (_mm256_movemask_ps(_mm256_cmp_ps(support_dot, d, _CMP_GT_OQ)) != 0) {
+					return false;
+				}
+			}
+
+			if (i + 4 <= p_plane_count) {
+				const __m256 nx = _mm256_setr_ps(p_planes[i + 0].normal.x, p_planes[i + 1].normal.x, p_planes[i + 2].normal.x, p_planes[i + 3].normal.x, 0.0f, 0.0f, 0.0f, 0.0f);
+				const __m256 ny = _mm256_setr_ps(p_planes[i + 0].normal.y, p_planes[i + 1].normal.y, p_planes[i + 2].normal.y, p_planes[i + 3].normal.y, 0.0f, 0.0f, 0.0f, 0.0f);
+				const __m256 nz = _mm256_setr_ps(p_planes[i + 0].normal.z, p_planes[i + 1].normal.z, p_planes[i + 2].normal.z, p_planes[i + 3].normal.z, 0.0f, 0.0f, 0.0f, 0.0f);
+				const __m256 d = _mm256_setr_ps(p_planes[i + 0].d, p_planes[i + 1].d, p_planes[i + 2].d, p_planes[i + 3].d, Math::INF, Math::INF, Math::INF, Math::INF);
+
+				const __m256 abs_nx = _mm256_andnot_ps(sign_mask, nx);
+				const __m256 abs_ny = _mm256_andnot_ps(sign_mask, ny);
+				const __m256 abs_nz = _mm256_andnot_ps(sign_mask, nz);
+				const __m256 radius = Math::simd_fmadd_ps(abs_nz, half_z, Math::simd_fmadd_ps(abs_ny, half_y, _mm256_mul_ps(abs_nx, half_x)));
+				const __m256 center_dot = Math::simd_fmadd_ps(nz, ofs_z, Math::simd_fmadd_ps(ny, ofs_y, _mm256_mul_ps(nx, ofs_x)));
+				const __m256 support_dot = _mm256_sub_ps(center_dot, radius);
+
+				if (_mm256_movemask_ps(_mm256_cmp_ps(support_dot, d, _CMP_GT_OQ)) != 0) {
+					return false;
+				}
+
+				i += 4;
+			}
+
+			for (; i < p_plane_count; i++) {
 				const Plane &p = p_planes[i];
 				Vector3 point(
 						(p.normal.x > 0) ? -half_extents.x : half_extents.x,

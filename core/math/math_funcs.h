@@ -742,51 +742,9 @@ _ALWAYS_INLINE_ float half_to_float(const uint16_t p_half) {
 }
 
 _ALWAYS_INLINE_ uint16_t make_half_float(float p_value) {
-	union {
-		float fv;
-		uint32_t ui;
-	} ci;
-	ci.fv = p_value;
-
-	uint32_t x = ci.ui;
-	uint32_t sign = (unsigned short)(x >> 31);
-	uint32_t mantissa;
-	uint32_t exponent;
-	uint16_t hf;
-
-	// get mantissa
-	mantissa = x & ((1 << 23) - 1);
-	// get exponent bits
-	exponent = x & (0xFF << 23);
-	if (exponent >= 0x47800000) {
-		// check if the original single precision float number is a NaN
-		if (mantissa && (exponent == (0xFF << 23))) {
-			// we have a single precision NaN
-			mantissa = (1 << 23) - 1;
-		} else {
-			// 16-bit half-float representation stores number as Inf
-			mantissa = 0;
-		}
-		hf = (((uint16_t)sign) << 15) | (uint16_t)((0x1F << 10)) |
-				(uint16_t)(mantissa >> 13);
-	}
-	// check if exponent is <= -15
-	else if (exponent <= 0x38000000) {
-		/*
-		// store a denorm half-float value or zero
-		exponent = (0x38000000 - exponent) >> 23;
-		mantissa >>= (14 + exponent);
-
-		hf = (((uint16_t)sign) << 15) | (uint16_t)(mantissa);
-		*/
-		hf = 0; //denormals do not work for 3D, convert to zero
-	} else {
-		hf = (((uint16_t)sign) << 15) |
-				(uint16_t)((exponent - 0x38000000) >> 13) |
-				(uint16_t)(mantissa >> 13);
-	}
-
-	return hf;
+	const __m128 val = _mm_set_ss(p_value);
+	const __m128i half = _mm_cvtps_ph(val, 0);
+	return (uint16_t)_mm_cvtsi128_si32(half);
 }
 
 _ALWAYS_INLINE_ float snap_scalar(float p_offset, float p_step, float p_target) {

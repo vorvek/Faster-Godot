@@ -46,7 +46,7 @@ RenderSceneBuffersRD::~RenderSceneBuffersRD() {
 
 void RenderSceneBuffersRD::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("has_texture", "context", "name"), &RenderSceneBuffersRD::has_texture);
-	ClassDB::bind_method(D_METHOD("create_texture", "context", "name", "data_format", "usage_bits", "texture_samples", "size", "layers", "mipmaps", "unique", "discardable"), &RenderSceneBuffersRD::create_texture);
+	ClassDB::bind_method(D_METHOD("create_texture", "context", "name", "data_format", "usage_bits", "texture_samples", "size", "layers", "mipmaps", "unique", "discardable", "external_memory_exportable"), &RenderSceneBuffersRD::create_texture, DEFVAL(RD::TEXTURE_SAMPLES_1), DEFVAL(Size2i(0, 0)), DEFVAL(0), DEFVAL(1), DEFVAL(true), DEFVAL(false), DEFVAL(false));
 	ClassDB::bind_method(D_METHOD("create_texture_from_format", "context", "name", "format", "view", "unique"), &RenderSceneBuffersRD::_create_texture_from_format);
 	ClassDB::bind_method(D_METHOD("create_texture_view", "context", "name", "view_name", "view"), &RenderSceneBuffersRD::_create_texture_view);
 	ClassDB::bind_method(D_METHOD("get_texture", "context", "name"), &RenderSceneBuffersRD::get_texture);
@@ -286,7 +286,7 @@ bool RenderSceneBuffersRD::has_texture(const StringName &p_context, const String
 	return named_textures.has(key);
 }
 
-RID RenderSceneBuffersRD::create_texture(const StringName &p_context, const StringName &p_texture_name, const RD::DataFormat p_data_format, const uint32_t p_usage_bits, const RD::TextureSamples p_texture_samples, const Size2i p_size, const uint32_t p_layers, const uint32_t p_mipmaps, bool p_unique, bool p_discardable) {
+RID RenderSceneBuffersRD::create_texture(const StringName &p_context, const StringName &p_texture_name, const RD::DataFormat p_data_format, const uint32_t p_usage_bits, const RD::TextureSamples p_texture_samples, const Size2i p_size, const uint32_t p_layers, const uint32_t p_mipmaps, bool p_unique, bool p_discardable, bool p_external_memory_exportable) {
 	// Keep some useful data, we use default values when these are 0.
 	Size2i size = p_size == Size2i(0, 0) ? internal_size : p_size;
 	uint32_t layers = p_layers == 0 ? view_count : p_layers;
@@ -307,8 +307,13 @@ RID RenderSceneBuffersRD::create_texture(const StringName &p_context, const Stri
 	tf.usage_bits = p_usage_bits;
 	tf.samples = p_texture_samples;
 	tf.is_discardable = p_discardable;
+	tf.is_external_memory_exportable = p_external_memory_exportable;
 
-	return create_texture_from_format(p_context, p_texture_name, tf, RD::TextureView(), p_unique);
+	return create_texture_from_format(p_context, p_texture_name, tf, RD::TextureView(), p_unique, p_external_memory_exportable);
+}
+
+RID RenderSceneBuffersRD::create_texture_exportable(const StringName &p_context, const StringName &p_texture_name, const RD::DataFormat p_data_format, const uint32_t p_usage_bits, const RD::TextureSamples p_texture_samples, const Size2i p_size, const uint32_t p_layers, const uint32_t p_mipmaps, bool p_unique, bool p_discardable) {
+	return create_texture(p_context, p_texture_name, p_data_format, p_usage_bits, p_texture_samples, p_size, p_layers, p_mipmaps, p_unique, p_discardable, true);
 }
 
 RID RenderSceneBuffersRD::_create_texture_from_format(const StringName &p_context, const StringName &p_texture_name, const Ref<RDTextureFormat> &p_texture_format, const Ref<RDTextureView> &p_view, bool p_unique) {
@@ -322,8 +327,10 @@ RID RenderSceneBuffersRD::_create_texture_from_format(const StringName &p_contex
 	return create_texture_from_format(p_context, p_texture_name, p_texture_format->base, texture_view, p_unique);
 }
 
-RID RenderSceneBuffersRD::create_texture_from_format(const StringName &p_context, const StringName &p_texture_name, const RD::TextureFormat &p_texture_format, RD::TextureView p_view, bool p_unique) {
+RID RenderSceneBuffersRD::create_texture_from_format(const StringName &p_context, const StringName &p_texture_name, const RD::TextureFormat &p_texture_format, RD::TextureView p_view, bool p_unique, bool p_external_memory_exportable) {
 	// TODO p_unique, if p_unique is true, this is a texture that can be shared. This will be implemented later as an optimization.
+	RD::TextureFormat texture_format = p_texture_format;
+	texture_format.is_external_memory_exportable = texture_format.is_external_memory_exportable || p_external_memory_exportable;
 
 	NTKey key(p_context, p_texture_name);
 
@@ -334,9 +341,9 @@ RID RenderSceneBuffersRD::create_texture_from_format(const StringName &p_context
 
 	// Add a new entry..
 	NamedTexture &named_texture = named_textures[key];
-	named_texture.format = p_texture_format;
+	named_texture.format = texture_format;
 	named_texture.is_unique = p_unique;
-	named_texture.texture = RD::get_singleton()->texture_create(p_texture_format, p_view);
+	named_texture.texture = texture_format.is_external_memory_exportable ? RD::get_singleton()->texture_create_exportable(texture_format, p_view) : RD::get_singleton()->texture_create(texture_format, p_view);
 
 	Array arr = { p_context, p_texture_name };
 	RD::get_singleton()->set_resource_name(named_texture.texture, String("RenderBuffer {0}/{1}").format(arr));
@@ -346,6 +353,10 @@ RID RenderSceneBuffersRD::create_texture_from_format(const StringName &p_context
 	// The rest is lazy created..
 
 	return named_texture.texture;
+}
+
+RID RenderSceneBuffersRD::create_texture_from_format_exportable(const StringName &p_context, const StringName &p_texture_name, const RD::TextureFormat &p_texture_format, RD::TextureView p_view, bool p_unique) {
+	return create_texture_from_format(p_context, p_texture_name, p_texture_format, p_view, p_unique, true);
 }
 
 RID RenderSceneBuffersRD::_create_texture_view(const StringName &p_context, const StringName &p_texture_name, const StringName &p_view_name, const Ref<RDTextureView> p_view) {

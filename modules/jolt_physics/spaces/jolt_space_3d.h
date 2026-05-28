@@ -62,6 +62,7 @@ class JoltSpace3D {
 	SelfList<JoltShapedObject3D>::List shapes_changed_list;
 	SelfList<JoltShapedObject3D>::List needs_optimization_list;
 
+	LocalVector<JoltBody3D *> body_call_queries_batch;
 	LocalVector<JPH::BodyID> pending_objects_sleeping;
 	LocalVector<JPH::BodyID> pending_objects_awake;
 
@@ -138,6 +139,7 @@ public:
 
 	void set_is_object_sleeping(const JPH::BodyID &p_jolt_id, bool p_enable);
 
+	void enqueue_call_queries(JoltBody3D *p_body);
 	void enqueue_call_queries(SelfList<JoltBody3D> *p_body);
 	void enqueue_call_queries(SelfList<JoltArea3D> *p_area);
 	void dequeue_call_queries(SelfList<JoltBody3D> *p_body);

@@ -42,6 +42,7 @@
 #include "servers/audio/audio_stream.h"
 
 #ifndef _3D_DISABLED
+#include "core/math/simd_defs.h"
 #include "scene/3d/audio_stream_player_3d.h"
 #include "scene/3d/mesh_instance_3d.h"
 #include "scene/3d/node_3d.h"
@@ -51,6 +52,106 @@
 #ifdef TOOLS_ENABLED
 #include "editor/editor_undo_redo_manager.h"
 #endif // TOOLS_ENABLED
+
+#ifndef _3D_DISABLED
+namespace {
+
+_ALWAYS_INLINE_ Vector3 _animation_mixer_accumulate_vector3_delta_avx2(const Vector3 &p_accumulator, const Vector3 &p_delta, real_t p_weight) {
+	const __m256 accumulator = _mm256_setr_ps(p_accumulator.x, p_accumulator.y, p_accumulator.z, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+	const __m256 delta = _mm256_setr_ps(p_delta.x, p_delta.y, p_delta.z, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+	const __m256 weight = _mm256_set1_ps(p_weight);
+	const __m256 blended = Math::simd_fmadd_ps(delta, weight, accumulator);
+
+	alignas(32) float result[8];
+	_mm256_store_ps(result, blended);
+	return Vector3(result[0], result[1], result[2]);
+}
+
+_ALWAYS_INLINE_ void _animation_mixer_accumulate_vector3_delta(Vector3 &r_accumulator, const Vector3 &p_delta, real_t p_weight) {
+	r_accumulator = _animation_mixer_accumulate_vector3_delta_avx2(r_accumulator, p_delta, p_weight);
+}
+
+_ALWAYS_INLINE_ void _animation_mixer_accumulate_vector3_from_rest(Vector3 &r_accumulator, const Vector3 &p_value, const Vector3 &p_rest, real_t p_weight) {
+	_animation_mixer_accumulate_vector3_delta(r_accumulator, p_value - p_rest, p_weight);
+}
+
+struct AnimationMixerVector3BlendBatch {
+	static constexpr int BATCH_SIZE = 8;
+
+	Vector3 *accumulators[BATCH_SIZE];
+	Vector3 deltas[BATCH_SIZE];
+	real_t weights[BATCH_SIZE];
+	int count = 0;
+
+	_ALWAYS_INLINE_ bool has_accumulator(const Vector3 *p_accumulator) const {
+		for (int i = 0; i < count; i++) {
+			if (accumulators[i] == p_accumulator) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	_ALWAYS_INLINE_ void add_delta(Vector3 &r_accumulator, const Vector3 &p_delta, real_t p_weight) {
+		if (count == BATCH_SIZE || has_accumulator(&r_accumulator)) {
+			flush();
+		}
+
+		accumulators[count] = &r_accumulator;
+		deltas[count] = p_delta;
+		weights[count] = p_weight;
+		count++;
+
+		if (count == BATCH_SIZE) {
+			flush();
+		}
+	}
+
+	_ALWAYS_INLINE_ void add_from_rest(Vector3 &r_accumulator, const Vector3 &p_value, const Vector3 &p_rest, real_t p_weight) {
+		add_delta(r_accumulator, p_value - p_rest, p_weight);
+	}
+
+	_ALWAYS_INLINE_ void flush() {
+		if (count == 0) {
+			return;
+		}
+
+		if (count < BATCH_SIZE) {
+			for (int i = 0; i < count; i++) {
+				*accumulators[i] = _animation_mixer_accumulate_vector3_delta_avx2(*accumulators[i], deltas[i], weights[i]);
+			}
+			count = 0;
+			return;
+		}
+
+		const __m256 accumulator_x = _mm256_setr_ps(accumulators[0]->x, accumulators[1]->x, accumulators[2]->x, accumulators[3]->x, accumulators[4]->x, accumulators[5]->x, accumulators[6]->x, accumulators[7]->x);
+		const __m256 accumulator_y = _mm256_setr_ps(accumulators[0]->y, accumulators[1]->y, accumulators[2]->y, accumulators[3]->y, accumulators[4]->y, accumulators[5]->y, accumulators[6]->y, accumulators[7]->y);
+		const __m256 accumulator_z = _mm256_setr_ps(accumulators[0]->z, accumulators[1]->z, accumulators[2]->z, accumulators[3]->z, accumulators[4]->z, accumulators[5]->z, accumulators[6]->z, accumulators[7]->z);
+		const __m256 delta_x = _mm256_setr_ps(deltas[0].x, deltas[1].x, deltas[2].x, deltas[3].x, deltas[4].x, deltas[5].x, deltas[6].x, deltas[7].x);
+		const __m256 delta_y = _mm256_setr_ps(deltas[0].y, deltas[1].y, deltas[2].y, deltas[3].y, deltas[4].y, deltas[5].y, deltas[6].y, deltas[7].y);
+		const __m256 delta_z = _mm256_setr_ps(deltas[0].z, deltas[1].z, deltas[2].z, deltas[3].z, deltas[4].z, deltas[5].z, deltas[6].z, deltas[7].z);
+		const __m256 weight = _mm256_setr_ps(weights[0], weights[1], weights[2], weights[3], weights[4], weights[5], weights[6], weights[7]);
+
+		const __m256 result_x = Math::simd_fmadd_ps(delta_x, weight, accumulator_x);
+		const __m256 result_y = Math::simd_fmadd_ps(delta_y, weight, accumulator_y);
+		const __m256 result_z = Math::simd_fmadd_ps(delta_z, weight, accumulator_z);
+
+		alignas(32) float out_x[BATCH_SIZE];
+		alignas(32) float out_y[BATCH_SIZE];
+		alignas(32) float out_z[BATCH_SIZE];
+		_mm256_store_ps(out_x, result_x);
+		_mm256_store_ps(out_y, result_y);
+		_mm256_store_ps(out_z, result_z);
+
+		for (int i = 0; i < BATCH_SIZE; i++) {
+			*accumulators[i] = Vector3(out_x[i], out_y[i], out_z[i]);
+		}
+		count = 0;
+	}
+};
+
+} // namespace
+#endif // _3D_DISABLED
 
 bool AnimationMixer::_set(const StringName &p_name, const Variant &p_value) {
 	String name = p_name;
@@ -1187,6 +1288,9 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 #ifdef TOOLS_ENABLED
 	bool can_call = is_inside_tree() && !Engine::get_singleton()->is_editor_hint();
 #endif // TOOLS_ENABLED
+#ifndef _3D_DISABLED
+	AnimationMixerVector3BlendBatch vector3_blend_batch;
+#endif // _3D_DISABLED
 	for (const AnimationInstance &ai : animation_instances) {
 		Ref<Animation> a = ai.animation_data.animation;
 		double time = ai.playback_info.time;
@@ -1294,7 +1398,7 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 									a->try_rotation_track_interpolate(rot_track, end, &rot);
 									rot = post_process_key_value(a, rot_track, rot, t->object_id, t->bone_idx);
 
-									root_motion_cache.loc += rot.xform_inv(loc[1] - loc[0]) * blend;
+									_animation_mixer_accumulate_vector3_delta(root_motion_cache.loc, rot.xform_inv(loc[1] - loc[0]), blend);
 									prev_time = start;
 								}
 							} else {
@@ -1310,7 +1414,7 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 									a->try_rotation_track_interpolate(rot_track, start, &rot);
 									rot = post_process_key_value(a, rot_track, rot, t->object_id, t->bone_idx);
 
-									root_motion_cache.loc += rot.xform_inv(loc[1] - loc[0]) * blend;
+									_animation_mixer_accumulate_vector3_delta(root_motion_cache.loc, rot.xform_inv(loc[1] - loc[0]), blend);
 									prev_time = end;
 								}
 							}
@@ -1325,7 +1429,7 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 							a->try_rotation_track_interpolate(rot_track, time, &rot);
 							rot = post_process_key_value(a, rot_track, rot, t->object_id, t->bone_idx);
 
-							root_motion_cache.loc += rot.xform_inv(loc[1] - loc[0]) * blend;
+							_animation_mixer_accumulate_vector3_delta(root_motion_cache.loc, rot.xform_inv(loc[1] - loc[0]), blend);
 							prev_time = !backward ? start : end;
 						} else {
 							Vector3 loc[2];
@@ -1338,7 +1442,7 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 									loc[0] = post_process_key_value(a, i, loc[0], t->object_id, t->bone_idx);
 									a->try_position_track_interpolate(i, end, &loc[1]);
 									loc[1] = post_process_key_value(a, i, loc[1], t->object_id, t->bone_idx);
-									root_motion_cache.loc += (loc[1] - loc[0]) * blend;
+									_animation_mixer_accumulate_vector3_delta(root_motion_cache.loc, loc[1] - loc[0], blend);
 									prev_time = start;
 								}
 							} else {
@@ -1350,7 +1454,7 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 									loc[0] = post_process_key_value(a, i, loc[0], t->object_id, t->bone_idx);
 									a->try_position_track_interpolate(i, start, &loc[1]);
 									loc[1] = post_process_key_value(a, i, loc[1], t->object_id, t->bone_idx);
-									root_motion_cache.loc += (loc[1] - loc[0]) * blend;
+									_animation_mixer_accumulate_vector3_delta(root_motion_cache.loc, loc[1] - loc[0], blend);
 									prev_time = end;
 								}
 							}
@@ -1361,7 +1465,7 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 							loc[0] = post_process_key_value(a, i, loc[0], t->object_id, t->bone_idx);
 							a->try_position_track_interpolate(i, time, &loc[1]);
 							loc[1] = post_process_key_value(a, i, loc[1], t->object_id, t->bone_idx);
-							root_motion_cache.loc += (loc[1] - loc[0]) * blend;
+							_animation_mixer_accumulate_vector3_delta(root_motion_cache.loc, loc[1] - loc[0], blend);
 							prev_time = !backward ? start : end;
 						}
 					}
@@ -1372,7 +1476,7 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 							continue;
 						}
 						loc = post_process_key_value(a, i, loc, t->object_id, t->bone_idx);
-						t->loc += (loc - t->init_loc) * blend;
+						vector3_blend_batch.add_from_rest(t->loc, loc, t->init_loc, blend);
 					}
 #endif // _3D_DISABLED
 				} break;
@@ -1515,7 +1619,7 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 								scale[0] = post_process_key_value(a, i, scale[0], t->object_id, t->bone_idx);
 								a->try_scale_track_interpolate(i, end, &scale[1]);
 								scale[1] = post_process_key_value(a, i, scale[1], t->object_id, t->bone_idx);
-								root_motion_cache.scale += (scale[1] - scale[0]) * blend;
+								_animation_mixer_accumulate_vector3_delta(root_motion_cache.scale, scale[1] - scale[0], blend);
 								prev_time = start;
 							}
 						} else {
@@ -1527,7 +1631,7 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 								scale[0] = post_process_key_value(a, i, scale[0], t->object_id, t->bone_idx);
 								a->try_scale_track_interpolate(i, start, &scale[1]);
 								scale[1] = post_process_key_value(a, i, scale[1], t->object_id, t->bone_idx);
-								root_motion_cache.scale += (scale[1] - scale[0]) * blend;
+								_animation_mixer_accumulate_vector3_delta(root_motion_cache.scale, scale[1] - scale[0], blend);
 								prev_time = end;
 							}
 						}
@@ -1538,7 +1642,7 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 						scale[0] = post_process_key_value(a, i, scale[0], t->object_id, t->bone_idx);
 						a->try_scale_track_interpolate(i, time, &scale[1]);
 						scale[1] = post_process_key_value(a, i, scale[1], t->object_id, t->bone_idx);
-						root_motion_cache.scale += (scale[1] - scale[0]) * blend;
+						_animation_mixer_accumulate_vector3_delta(root_motion_cache.scale, scale[1] - scale[0], blend);
 						prev_time = !backward ? start : end;
 					}
 					{
@@ -1548,7 +1652,7 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 							continue;
 						}
 						scale = post_process_key_value(a, i, scale, t->object_id, t->bone_idx);
-						t->scale += (scale - t->init_scale) * blend;
+						vector3_blend_batch.add_from_rest(t->scale, scale, t->init_scale, blend);
 					}
 #endif // _3D_DISABLED
 				} break;
@@ -1851,6 +1955,9 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 			}
 		}
 	}
+#ifndef _3D_DISABLED
+	vector3_blend_batch.flush();
+#endif // _3D_DISABLED
 	is_GDVIRTUAL_CALL_post_process_key_value = true;
 }
 

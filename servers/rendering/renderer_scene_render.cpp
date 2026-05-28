@@ -77,6 +77,20 @@ static const char *_pathtracing_backend_integration_path(RSE::PathtracingBackend
 	}
 }
 
+static const char *_pathtracing_backend_denoiser_name(RSE::PathtracingBackend p_backend) {
+	switch (p_backend) {
+		case RSE::PT_BACKEND_NVIDIA_RTXPT:
+			return "NVIDIA NRD";
+		case RSE::PT_BACKEND_AMD_HIP_RT:
+			return "AMD FidelityFX Denoiser";
+		case RSE::PT_BACKEND_INTEL_EMBREE:
+			return "AMD FidelityFX Denoiser (cross-vendor)";
+		case RSE::PT_BACKEND_VULKAN_GENERIC:
+		default:
+			return "ASVFG/Internal";
+	}
+}
+
 static bool _pathtracing_backend_compiled(RSE::PathtracingBackend p_backend) {
 	switch (p_backend) {
 		case RSE::PT_BACKEND_NVIDIA_RTXPT:
@@ -92,7 +106,7 @@ static bool _pathtracing_backend_compiled(RSE::PathtracingBackend p_backend) {
 			return false;
 #endif
 		case RSE::PT_BACKEND_INTEL_EMBREE:
-#if defined(MODULE_EMBREE_ENABLED) || defined(MODULE_OSPRAY_ENABLED)
+#if defined(MODULE_EMBREE_ENABLED) || defined(MODULE_OSPRAY_ENABLED) || (defined(MODULE_RAYCAST_ENABLED) && defined(RTGI_BUILTIN_EMBREE_ENABLED))
 			return true;
 #else
 			return false;
@@ -133,6 +147,7 @@ static Dictionary _make_unavailable_pathtracing_capabilities(RSE::PathtracingBac
 	const bool backend_compiled = _pathtracing_backend_compiled(p_backend);
 	Dictionary availability_checks;
 	availability_checks["backend_compiled"] = backend_compiled;
+	availability_checks["sdk_headers_present"] = false;
 	availability_checks["runtime_detected"] = false;
 	availability_checks["device_supported"] = false;
 	availability_checks["resource_exchange_supported"] = false;
@@ -156,10 +171,19 @@ static Dictionary _make_unavailable_pathtracing_capabilities(RSE::PathtracingBac
 	capabilities["rendering_device_vendor"] = "unknown";
 	capabilities["rendering_device_vendor_id"] = int64_t(0);
 	capabilities["vulkan_runtime"] = false;
+	capabilities["vulkan_interop_mode"] = "none";
+	capabilities["resource_exchange_sync"] = "none";
 	capabilities["exchange"] = exchange;
 	capabilities["exchange_summary"] = "none";
 	capabilities["availability_checks"] = availability_checks;
 	capabilities["denoiser_handoff"] = false;
+	capabilities["denoiser_name"] = _pathtracing_backend_denoiser_name(p_backend);
+	capabilities["denoiser_runtime_detected"] = false;
+	capabilities["denoiser_available"] = false;
+	capabilities["denoiser_failure_reason"] = p_reason;
+	capabilities["native_probe_update"] = false;
+	capabilities["generic_probe_update_fallback"] = p_backend != RSE::PT_BACKEND_VULKAN_GENERIC;
+	capabilities["probe_update_path"] = p_backend == RSE::PT_BACKEND_VULKAN_GENERIC ? String("Vulkan Generic ray tracing pipeline") : String("Vulkan Generic STRC probe fallback");
 	capabilities["fallback_reason"] = p_reason;
 	return capabilities;
 }

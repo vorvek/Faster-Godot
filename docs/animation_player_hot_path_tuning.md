@@ -25,6 +25,10 @@ per-frame skeleton skin uploads without changing animation behavior.
     command per bone.
   - Double-buffers the scene-thread upload vector per skin reference so the
     queued render-thread command owns stable data until it is flushed.
+- `scene/animation/animation_mixer.cpp`
+  - Batches transform position and scale blend accumulation into eight-lane
+    AVX2/FMA updates while preserving the existing quaternion rest-axis slerp
+    behavior.
 
 ## Pros
 
@@ -38,10 +42,13 @@ per-frame skeleton skin uploads without changing animation behavior.
   transforms each frame.
 - Reduces scene-thread command queue pressure for animated crowds by replacing
   dozens of per-bone render-server calls per skinned mesh with one bulk upload.
+- Reduces scalar arithmetic in `AnimationMixer` transform blend accumulation
+  for animated skeleton and `Node3D` position/scale tracks.
 
 ## Validation
 
 - Windows editor dev build.
+- Targeted Windows editor dev object rebuild for `animation_mixer.cpp`.
 - RTGI runtime smoke suite.
 - Static adversarial review of playback, stopping, queued transition,
   animation change behavior, skeleton skin upload bounds, and queued bulk

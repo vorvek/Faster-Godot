@@ -5657,13 +5657,13 @@
 			Built-in Vulkan Generic path tracing backend.
 		</constant>
 		<constant name="PT_BACKEND_NVIDIA_RTXPT" value="1" enum="PathtracingBackend">
-			NVIDIA RTXPT backend identifier. Runtime selection falls back to [constant PT_BACKEND_VULKAN_GENERIC] until the Vulkan RTXPT backend is available.
+			NVIDIA RTXPT backend identifier. Uses the NVIDIA Godot fork-compatible RenderingDevice/Vulkan dispatch path when the RTXPT module is compiled, with denoising/runtime support gated separately.
 		</constant>
 		<constant name="PT_BACKEND_AMD_HIP_RT" value="2" enum="PathtracingBackend">
-			AMD HIP RT backend identifier. Runtime selection falls back to [constant PT_BACKEND_VULKAN_GENERIC] until HIP/Vulkan interop is available.
+			AMD HIP RT backend identifier. Requires the HIP RT module, runtime libraries, and Vulkan/HIP external memory and semaphore interop; otherwise it falls back to [constant PT_BACKEND_VULKAN_GENERIC].
 		</constant>
 		<constant name="PT_BACKEND_INTEL_EMBREE" value="3" enum="PathtracingBackend">
-			Intel Embree/OSPRay backend identifier. Runtime selection falls back to [constant PT_BACKEND_VULKAN_GENERIC] until a CPU/SYCL renderer with Vulkan resource exchange is available.
+			Intel Embree/OSPRay backend identifier. Uses compiled CPU rendering with synchronized RD upload when available; otherwise it falls back to [constant PT_BACKEND_VULKAN_GENERIC].
 		</constant>
 		<constant name="PT_BACKEND_MAX" value="4" enum="PathtracingBackend">
 			Represents the size of the [enum PathtracingBackend] enum.

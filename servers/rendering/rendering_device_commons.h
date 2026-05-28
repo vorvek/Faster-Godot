@@ -444,6 +444,7 @@ public:
 		bool is_resolve_buffer = false;
 		bool is_discardable = false;
 		bool is_subsampled = false;
+		bool is_external_memory_exportable = false;
 
 		bool operator==(const TextureFormat &b) const {
 			if (format != b.format) {
@@ -469,6 +470,10 @@ public:
 			} else if (is_resolve_buffer != b.is_resolve_buffer) {
 				return false;
 			} else if (is_discardable != b.is_discardable) {
+				return false;
+			} else if (is_subsampled != b.is_subsampled) {
+				return false;
+			} else if (is_external_memory_exportable != b.is_external_memory_exportable) {
 				return false;
 			} else {
 				return true;

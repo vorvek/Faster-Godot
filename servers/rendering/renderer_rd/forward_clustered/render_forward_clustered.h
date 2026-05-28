@@ -176,7 +176,7 @@ public:
 		Size2i rt_get_visible_size() const { return rt_visible_size; }
 		Vector2i rt_get_visible_origin() const { return rt_visible_origin; }
 		Vector2i rt_get_prev_visible_origin() const { return rt_prev_visible_origin; }
-		void rt_ensure_textures();
+		void rt_ensure_textures(bool p_external_memory_exportable = false);
 		bool rt_has_texture() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING); }
 		RID rt_get_texture() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING); }
 		RID rt_get_diffuse_radiance() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DIFFUSE_RADIANCE); }

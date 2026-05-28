@@ -7,6 +7,7 @@ desktop Forward+ profile. The detailed notes are split by change area:
 | --- | --- |
 | Forward+ only renderer profile | [docs/forward_plus_only.md](docs/forward_plus_only.md) |
 | Vulkan-only Windows RenderingDevice profile | [docs/vulkan_only_windows_rendering.md](docs/vulkan_only_windows_rendering.md) |
+| Vulkan descriptor set cache | The Vulkan RenderingDevice driver now caches descriptor sets by layout and bound resource signature, reuses matching `VkDescriptorSet` handles, skips redundant `vkAllocateDescriptorSets()`/`vkUpdateDescriptorSets()` calls, evicts stale entries after several frames, and purges entries when referenced resources, layouts, or linear pools are destroyed/reset. |
 | x86_64 AVX2/FMA/F16C/POPCNT baseline and codec SIMD hooks | [docs/x86_64_avx2_fma.md](docs/x86_64_avx2_fma.md) |
 | Windows and Linux target profile | [docs/windows_linux_target_profile.md](docs/windows_linux_target_profile.md) |
 | Rapier 2D physics backend | [docs/rapier_2d_physics.md](docs/rapier_2d_physics.md) |
@@ -16,8 +17,9 @@ desktop Forward+ profile. The detailed notes are split by change area:
 | Editor frame-rate limits while testing | [docs/editor_frame_rate_limits.md](docs/editor_frame_rate_limits.md) |
 | Forward+/RTGI rendering hot-path tuning | [docs/rendering_hot_path_tuning.md](docs/rendering_hot_path_tuning.md) |
 | Audio hot-path tuning | [docs/audio_hot_path_tuning.md](docs/audio_hot_path_tuning.md) |
-| Animation and skinning hot-path tuning | [docs/animation_player_hot_path_tuning.md](docs/animation_player_hot_path_tuning.md) |
+| AnimationMixer SIMD track blending and skinning hot-path tuning | [docs/animation_player_hot_path_tuning.md](docs/animation_player_hot_path_tuning.md) |
 | SceneTree hot-path tuning | [docs/scene_tree_hot_path_tuning.md](docs/scene_tree_hot_path_tuning.md) |
+| DynamicBVH convex/frustum culling SIMD tuning | `DynamicBVH::Volume::intersects_convex()` now batches AABB-vs-plane rejection checks with AVX2/FMA for 8-plane and 4-plane groups, preserving the scalar tail and point-separation checks for exact behavior. |
 | Occlusion culling and Embree update | [docs/occlusion_culling.md](docs/occlusion_culling.md) |
 | Windows high-polling mouse input | [docs/windows_high_polling_mouse_input.md](docs/windows_high_polling_mouse_input.md) |
 | Binary and memory surface reduction | [docs/binary_and_memory_surface.md](docs/binary_and_memory_surface.md) |

@@ -372,6 +372,7 @@ public:
 		bool is_resolve_buffer = false;
 		bool is_discardable = false;
 		bool is_subsampled = false;
+		bool is_external_memory_exportable = false;
 		bool has_initial_data = false;
 		bool pending_clear = false;
 
@@ -410,6 +411,8 @@ public:
 			tf.shareable_formats = allowed_shared_formats;
 			tf.is_resolve_buffer = is_resolve_buffer;
 			tf.is_discardable = is_discardable;
+			tf.is_subsampled = is_subsampled;
+			tf.is_external_memory_exportable = is_external_memory_exportable;
 			return tf;
 		}
 	};
@@ -469,6 +472,7 @@ public:
 	};
 
 	RID texture_create(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data = Vector<Vector<uint8_t>>());
+	RID texture_create_exportable(const TextureFormat &p_format, const TextureView &p_view);
 	RID texture_create_shared(const TextureView &p_view, RID p_with_texture);
 	RID texture_create_from_extension(TextureType p_type, DataFormat p_format, TextureSamples p_samples, BitField<RenderingDevice::TextureUsageBits> p_usage, uint64_t p_image, uint64_t p_width, uint64_t p_height, uint64_t p_depth, uint64_t p_layers, uint64_t p_mipmaps = 1);
 	RID texture_create_shared_from_slice(const TextureView &p_view, RID p_with_texture, uint32_t p_layer, uint32_t p_mipmap, uint32_t p_mipmaps = 1, TextureSliceType p_slice_type = TEXTURE_SLICE_2D, uint32_t p_layers = 0);
@@ -480,6 +484,7 @@ public:
 	bool texture_is_shared(RID p_texture);
 	bool texture_is_valid(RID p_texture);
 	TextureFormat texture_get_format(RID p_texture);
+	bool texture_get_external_memory_handle(RID p_texture, RDD::ExternalMemoryHandleInfo &r_info);
 	Size2i texture_size(RID p_texture);
 #ifndef DISABLE_DEPRECATED
 	uint64_t texture_get_native_handle(RID p_texture);
@@ -491,6 +496,12 @@ public:
 
 	void texture_set_discardable(RID p_texture, bool p_discardable);
 	bool texture_is_discardable(RID p_texture);
+
+	RDD::SemaphoreID external_semaphore_create(bool p_timeline = false, uint64_t p_initial_value = 0);
+	bool external_semaphore_get_handle(RDD::SemaphoreID p_semaphore, bool p_timeline, uint64_t p_timeline_value, RDD::ExternalSemaphoreHandleInfo &r_info);
+	Error external_semaphore_wait_on_current_frame(RDD::SemaphoreID p_semaphore);
+	Error external_resource_handoff_sync(RDD::SemaphoreID p_signal_semaphore = RDD::SemaphoreID());
+	void external_semaphore_free(RDD::SemaphoreID p_semaphore);
 
 public:
 	/*************/

@@ -445,6 +445,16 @@ struct RTGIBackendCapabilities {
 	bool device_supported = false;
 	bool resource_exchange_supported = false;
 	bool implementation_ready = false;
+	bool sdk_headers_present = false;
+	String vulkan_interop_mode;
+	String resource_exchange_sync;
+	bool native_probe_update = false;
+	bool generic_probe_update_fallback = false;
+	bool denoiser_runtime_detected = false;
+	bool denoiser_available = false;
+	String denoiser_name;
+	String denoiser_failure_reason;
+	String probe_update_path;
 	String availability_failure;
 	String compile_failure_reason;
 	String runtime_failure_reason;
@@ -506,11 +516,16 @@ struct RTGIBackendResourceExchange {
 	void *release_driver_callback_userdata = nullptr;
 	uint64_t external_memory_handle = 0;
 	RTGIBackendExternalHandleType external_memory_handle_type = RTGI_BACKEND_EXTERNAL_HANDLE_NONE;
+	uint64_t external_memory_allocation_offset = 0;
+	uint64_t external_memory_allocation_size = 0;
+	bool external_memory_dedicated_allocation = false;
 	uint64_t external_wait_semaphore_handle = 0;
 	RTGIBackendExternalHandleType external_wait_semaphore_handle_type = RTGI_BACKEND_EXTERNAL_HANDLE_NONE;
 	uint64_t external_signal_semaphore_handle = 0;
 	RTGIBackendExternalHandleType external_signal_semaphore_handle_type = RTGI_BACKEND_EXTERNAL_HANDLE_NONE;
 	RTGIBackendExternalSemaphoreKind external_semaphore_kind = RTGI_BACKEND_EXTERNAL_SEMAPHORE_BINARY;
+	RDD::SemaphoreID external_wait_semaphore;
+	RDD::SemaphoreID external_signal_semaphore;
 	RDD::TextureLayout external_output_layout_before_backend = RDD::TEXTURE_LAYOUT_GENERAL;
 	RDD::TextureLayout external_output_layout_after_backend = RDD::TEXTURE_LAYOUT_GENERAL;
 	RID wait_semaphore;
@@ -552,6 +567,37 @@ struct RTGIBackendSceneResources {
 	RID params_buffer;
 };
 
+struct RTGIBackendCPUGeometry {
+	LocalVector<Vector3> vertices;
+	LocalVector<uint32_t> indices;
+	uint32_t primitive_count = 0;
+	bool valid = false;
+	bool indexed = false;
+};
+
+struct RTGIBackendSceneSnapshot {
+	RID tlas;
+	LocalVector<RID> blases;
+	LocalVector<Transform3D> blas_transforms;
+	LocalVector<uint32_t> instance_flags;
+	LocalVector<uint8_t> instance_masks;
+	LocalVector<uint32_t> sbt_offsets;
+	LocalVector<RT_GeometryData> geometries;
+	LocalVector<RTGIBackendCPUGeometry> cpu_geometries;
+	LocalVector<RT_MaterialData> materials;
+	LocalVector<RID> material_uniform_buffers;
+	LocalVector<int32_t> motion_indices;
+	LocalVector<RT_InstanceMotionData> motion_transforms;
+	LocalVector<RT_EmissiveCandidate> emissive_candidates;
+	LocalVector<RT_LightData> lights;
+	uint32_t tlas_instance_count = 0;
+	float emissive_candidate_total_weight = 0.0f;
+	uint64_t emissive_candidate_signature = 0;
+	uint64_t radiance_history_signature = 0;
+	bool radiance_history_signature_valid = false;
+	bool radiance_history_invalidated = false;
+};
+
 struct RTGIBackendFrameContext {
 	RenderingDevice *rd = nullptr;
 	RenderRaytracing *raytracing = nullptr;
@@ -562,6 +608,7 @@ struct RTGIBackendFrameContext {
 	uint32_t rt_flags = 0;
 	Size2i output_size;
 	RTGIBackendSceneResources scene_resources;
+	RTGIBackendSceneSnapshot scene_snapshot;
 	RTGIBackendResourceExchange exchange;
 	bool radiance_history_invalidated = false;
 	bool acquire_callback_recorded = false;
@@ -656,6 +703,7 @@ class RenderRaytracing {
 	LocalVector<uint32_t> instance_flags;
 	LocalVector<uint8_t> instance_masks;
 	LocalVector<uint32_t> sbt_offsets; // 0 = default material hit group
+	LocalVector<RTGIBackendCPUGeometry> cpu_geometry_data;
 
 	HashMap<RenderSceneBuffersRD *, RTViewportState *> viewport_states;
 	RTGIBackend *rtgi_backends[RSE::PT_BACKEND_MAX] = {};
@@ -744,6 +792,9 @@ public:
 	static Array get_static_backend_capabilities_dictionaries();
 	static Dictionary get_static_backend_status_dictionary();
 	static Dictionary get_static_backend_status_dictionary(RSE::PathtracingBackend p_requested);
+#ifdef TESTS_ENABLED
+	static bool test_vulkan_external_resource_exchange(RenderingDevice *p_rd, Dictionary *r_result, String *r_failure_reason);
+#endif
 	RSE::PathtracingBackend resolve_backend(RSE::PathtracingBackend p_requested);
 	RSE::PathtracingBackend get_active_backend() const { return active_backend; }
 	String get_active_backend_fallback_reason() const { return active_backend_fallback_reason; }
@@ -755,6 +806,7 @@ public:
 
 	RTViewportState *build_tlas(const RenderDataRD *p_render_data, uint32_t p_rt_flags);
 	void populate_backend_scene_resources(RTViewportState *p_state, RTGIBackendSceneResources &r_resources) const;
+	void populate_backend_scene_snapshot(RTViewportState *p_state, RTGIBackendSceneSnapshot &r_snapshot) const;
 	uint32_t gather_lights(const RenderDataRD *p_render_data, RT_LightData *r_light_data, uint32_t p_max_lights);
 	RID update_uniform_set(RTViewportState *p_state, const RenderDataRD *p_render_data, uint32_t p_rt_flags);
 	bool prepare_backend_frame(const RenderDataRD *p_render_data, uint32_t p_rt_flags, RTGIBackendFrameContext &r_context);

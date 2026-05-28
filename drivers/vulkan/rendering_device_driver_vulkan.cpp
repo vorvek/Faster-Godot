@@ -1651,6 +1651,22 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 		if (enabled_device_extension_names.has(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) {
 			device_functions.CreateRaytracingPipelinesKHR = PFN_vkCreateRayTracingPipelinesKHR(functions.GetDeviceProcAddr(vk_device, "vkCreateRayTracingPipelinesKHR"));
 		}
+
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+		if (enabled_device_extension_names.has(VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME)) {
+			device_functions.GetMemoryWin32HandleKHR = PFN_vkGetMemoryWin32HandleKHR(functions.GetDeviceProcAddr(vk_device, "vkGetMemoryWin32HandleKHR"));
+		}
+		if (enabled_device_extension_names.has(VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME)) {
+			device_functions.GetSemaphoreWin32HandleKHR = PFN_vkGetSemaphoreWin32HandleKHR(functions.GetDeviceProcAddr(vk_device, "vkGetSemaphoreWin32HandleKHR"));
+		}
+#else
+		if (enabled_device_extension_names.has(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME)) {
+			device_functions.GetMemoryFdKHR = PFN_vkGetMemoryFdKHR(functions.GetDeviceProcAddr(vk_device, "vkGetMemoryFdKHR"));
+		}
+		if (enabled_device_extension_names.has(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME)) {
+			device_functions.GetSemaphoreFdKHR = PFN_vkGetSemaphoreFdKHR(functions.GetDeviceProcAddr(vk_device, "vkGetSemaphoreFdKHR"));
+		}
+#endif
 	}
 
 	return OK;
@@ -2036,6 +2052,30 @@ Error RenderingDeviceDriverVulkan::initialize(uint32_t p_device_index, uint32_t 
 
 static const uint32_t SMALL_ALLOCATION_MAX_SIZE = 4096;
 
+static RDD::ExternalHandleType _vulkan_platform_external_handle_type() {
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+	return RDD::EXTERNAL_HANDLE_OPAQUE_WIN32;
+#else
+	return RDD::EXTERNAL_HANDLE_OPAQUE_FD;
+#endif
+}
+
+static VkExternalMemoryHandleTypeFlags _vulkan_platform_external_memory_handle_flags() {
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+	return VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+#else
+	return VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+#endif
+}
+
+static VkExternalSemaphoreHandleTypeFlags _vulkan_platform_external_semaphore_handle_flags() {
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+	return VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+#else
+	return VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
+#endif
+}
+
 VmaPool RenderingDeviceDriverVulkan::_find_or_create_small_allocs_pool(uint32_t p_mem_type_index) {
 	if (small_allocs_pools.has(p_mem_type_index)) {
 		return small_allocs_pools[p_mem_type_index];
@@ -2204,6 +2244,8 @@ bool RenderingDeviceDriverVulkan::buffer_set_texel_format(BufferID p_buffer, Dat
 }
 
 void RenderingDeviceDriverVulkan::buffer_free(BufferID p_buffer) {
+	_descriptor_set_cache_evict_resource(DESCRIPTOR_SET_CACHE_RESOURCE_BUFFER, p_buffer.id);
+
 	BufferInfo *buf_info = (BufferInfo *)p_buffer.id;
 	if (buf_info->vk_view) {
 		vkDestroyBufferView(vk_device, buf_info->vk_view, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER_VIEW));
@@ -2409,6 +2451,21 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 		create_info.flags |= VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_QCOM;
 	}
 
+	const bool external_memory_exportable = p_format.is_external_memory_exportable;
+	const RDD::ExternalHandleType external_memory_handle_type = external_memory_exportable ? _vulkan_platform_external_handle_type() : RDD::EXTERNAL_HANDLE_NONE;
+	const VkExternalMemoryHandleTypeFlags external_memory_handle_flags = external_memory_exportable ? _vulkan_platform_external_memory_handle_flags() : 0;
+	VkExternalMemoryImageCreateInfo external_image_create_info = {};
+	if (external_memory_exportable) {
+		ERR_FAIL_COND_V_MSG(!device_capabilities.external_memory_supported, TextureID(), "Vulkan external memory export is not supported by the active device.");
+		ERR_FAIL_COND_V_MSG(external_memory_handle_flags == 0, TextureID(), "Vulkan external memory export has no platform-compatible handle type.");
+		ERR_FAIL_COND_V_MSG(p_format.usage_bits & TEXTURE_USAGE_CPU_READ_BIT, TextureID(), "External memory export is only supported for GPU-local textures.");
+		ERR_FAIL_COND_V_MSG(p_format.usage_bits & TEXTURE_USAGE_TRANSIENT_BIT, TextureID(), "External memory export is not supported for transient textures.");
+		external_image_create_info.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
+		external_image_create_info.handleTypes = external_memory_handle_flags;
+		external_image_create_info.pNext = create_info.pNext;
+		create_info.pNext = &external_image_create_info;
+	}
+
 	create_info.imageType = RD_TEX_TYPE_TO_VK_IMG_TYPE[p_format.texture_type];
 
 	create_info.format = RD_TO_VK_FORMAT[p_format.format];
@@ -2488,7 +2545,33 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 		alloc_create_info.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 	}
 
-	if (image_size <= SMALL_ALLOCATION_MAX_SIZE) {
+	TextureInfo *tex_info = nullptr;
+	if (external_memory_exportable) {
+		tex_info = VersatileResource::allocate<TextureInfo>(resources_allocator);
+		tex_info->external_memory_export_info.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_KHR;
+		tex_info->external_memory_export_info.handleTypes = external_memory_handle_flags;
+
+		uint32_t mem_type_index = 0;
+		VkResult err = vmaFindMemoryTypeIndexForImageInfo(allocator, &create_info, &alloc_create_info, &mem_type_index);
+		if (err != VK_SUCCESS) {
+			VersatileResource::free(resources_allocator, tex_info);
+			ERR_FAIL_V_MSG(TextureID(), vformat("Couldn't find memory type for exportable Vulkan image (VkResult error %d).", err));
+		}
+
+		VmaPoolCreateInfo pool_create_info = {};
+		pool_create_info.memoryTypeIndex = mem_type_index;
+		pool_create_info.maxBlockCount = SIZE_MAX;
+		pool_create_info.priority = 0.5f;
+		pool_create_info.pMemoryAllocateNext = &tex_info->external_memory_export_info;
+		err = vmaCreatePool(allocator, &pool_create_info, &tex_info->external_memory_pool);
+		if (err != VK_SUCCESS) {
+			VersatileResource::free(resources_allocator, tex_info);
+			ERR_FAIL_V_MSG(TextureID(), vformat("Couldn't create exportable Vulkan image memory pool (VkResult error %d).", err));
+		}
+
+		alloc_create_info.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+		alloc_create_info.pool = tex_info->external_memory_pool;
+	} else if (image_size <= SMALL_ALLOCATION_MAX_SIZE) {
 		uint32_t mem_type_index = 0;
 		vmaFindMemoryTypeIndexForImageInfo(allocator, &create_info, &alloc_create_info, &mem_type_index);
 		alloc_create_info.pool = _find_or_create_small_allocs_pool(mem_type_index);
@@ -2499,18 +2582,43 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 	VkImage vk_image = VK_NULL_HANDLE;
 	VmaAllocation allocation = nullptr;
 	VmaAllocationInfo alloc_info = {};
+	auto free_external_texture_info = [&]() {
+		if (tex_info != nullptr) {
+			if (tex_info->external_memory_pool != nullptr) {
+				vmaDestroyPool(allocator, tex_info->external_memory_pool);
+				tex_info->external_memory_pool = nullptr;
+			}
+			VersatileResource::free(resources_allocator, tex_info);
+			tex_info = nullptr;
+		}
+	};
 
 	if (!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()) {
 		alloc_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
 		VkResult err = vmaCreateImage(allocator, &create_info, &alloc_create_info, &vk_image, &allocation, &alloc_info);
-		ERR_FAIL_COND_V_MSG(err, TextureID(), vformat("Couldn't create Vulkan image in memory for use with extra GPU memory tracking (VkResult error %d).", err));
+		if (err != VK_SUCCESS) {
+			free_external_texture_info();
+			ERR_FAIL_V_MSG(TextureID(), vformat("Couldn't create Vulkan image in memory (VkResult error %d).", err));
+		}
 	} else {
 		VkResult err = vkCreateImage(vk_device, &create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE), &vk_image);
-		ERR_FAIL_COND_V_MSG(err, TextureID(), vformat("Couldn't create Vulkan image (VkResult error %d).", err));
+		if (err != VK_SUCCESS) {
+			free_external_texture_info();
+			ERR_FAIL_V_MSG(TextureID(), vformat("Couldn't create Vulkan image (VkResult error %d).", err));
+		}
 		err = vmaAllocateMemoryForImage(allocator, vk_image, &alloc_create_info, &allocation, &alloc_info);
-		ERR_FAIL_COND_V_MSG(err, TextureID(), vformat("Couldn't allocate memory for Vulkan image (VkResult error %d).", err));
+		if (err != VK_SUCCESS) {
+			vkDestroyImage(vk_device, vk_image, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE));
+			free_external_texture_info();
+			ERR_FAIL_V_MSG(TextureID(), vformat("Couldn't allocate memory for Vulkan image (VkResult error %d).", err));
+		}
 		err = vmaBindImageMemory2(allocator, allocation, 0, vk_image, nullptr);
-		ERR_FAIL_COND_V_MSG(err, TextureID(), vformat("Couldn't bind memory to Vulkan image (VkResult error %d).", err));
+		if (err != VK_SUCCESS) {
+			vmaFreeMemory(allocator, allocation);
+			vkDestroyImage(vk_device, vk_image, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE));
+			free_external_texture_info();
+			ERR_FAIL_V_MSG(TextureID(), vformat("Couldn't bind memory to Vulkan image (VkResult error %d).", err));
+		}
 	}
 
 	// Create view.
@@ -2551,19 +2659,24 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 			vkDestroyImage(vk_device, vk_image, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE));
 			vmaFreeMemory(allocator, allocation);
 		}
+		free_external_texture_info();
 
 		ERR_FAIL_COND_V_MSG(err, TextureID(), vformat("Couldn't create Vulkan image view (VkResult error %d).", err));
 	}
 
 	// Bookkeep.
 
-	TextureInfo *tex_info = VersatileResource::allocate<TextureInfo>(resources_allocator);
+	if (tex_info == nullptr) {
+		tex_info = VersatileResource::allocate<TextureInfo>(resources_allocator);
+	}
 	tex_info->vk_image = vk_image;
 	tex_info->vk_view = vk_image_view;
 	tex_info->rd_format = p_format.format;
 	tex_info->vk_create_info = create_info;
 	tex_info->vk_view_create_info = image_view_create_info;
 	tex_info->allocation.handle = allocation;
+	tex_info->external_memory_exportable = external_memory_exportable;
+	tex_info->external_memory_handle_type = external_memory_handle_type;
 	tex_info->is_subsampled = (create_info.flags & VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT) != 0;
 #ifdef DEBUG_ENABLED
 	tex_info->transient = (p_format.usage_bits & TEXTURE_USAGE_TRANSIENT_BIT) != 0;
@@ -2725,6 +2838,8 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create_shared_from_slice(Tex
 }
 
 void RenderingDeviceDriverVulkan::texture_free(TextureID p_texture) {
+	_descriptor_set_cache_evict_resource(DESCRIPTOR_SET_CACHE_RESOURCE_TEXTURE, p_texture.id);
+
 	TextureInfo *tex_info = (TextureInfo *)p_texture.id;
 	vkDestroyImageView(vk_device, tex_info->vk_view, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE_VIEW));
 	if (tex_info->allocation.handle) {
@@ -2735,12 +2850,52 @@ void RenderingDeviceDriverVulkan::texture_free(TextureID p_texture) {
 			vmaFreeMemory(allocator, tex_info->allocation.handle);
 		}
 	}
+	if (tex_info->external_memory_pool != nullptr) {
+		vmaDestroyPool(allocator, tex_info->external_memory_pool);
+	}
 	VersatileResource::free(resources_allocator, tex_info);
 }
 
 uint64_t RenderingDeviceDriverVulkan::texture_get_allocation_size(TextureID p_texture) {
 	const TextureInfo *tex_info = (const TextureInfo *)p_texture.id;
 	return tex_info->allocation.info.size;
+}
+
+bool RenderingDeviceDriverVulkan::texture_get_external_memory_handle(TextureID p_texture, ExternalMemoryHandleInfo &r_info) {
+	const TextureInfo *tex_info = (const TextureInfo *)p_texture.id;
+	ERR_FAIL_COND_V(tex_info == nullptr, false);
+	ERR_FAIL_COND_V_MSG(!tex_info->external_memory_exportable || tex_info->allocation.info.deviceMemory == VK_NULL_HANDLE, false, "Vulkan texture was not allocated with exportable external memory.");
+
+	r_info = ExternalMemoryHandleInfo();
+	r_info.handle_type = tex_info->external_memory_handle_type;
+	r_info.allocation_offset = tex_info->allocation.info.offset;
+	r_info.allocation_size = tex_info->allocation.info.size;
+	r_info.dedicated_allocation = true;
+	r_info.exportable = true;
+
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+	ERR_FAIL_NULL_V_MSG(device_functions.GetMemoryWin32HandleKHR, false, "vkGetMemoryWin32HandleKHR is unavailable.");
+	VkMemoryGetWin32HandleInfoKHR handle_info = {};
+	handle_info.sType = VK_STRUCTURE_TYPE_MEMORY_GET_WIN32_HANDLE_INFO_KHR;
+	handle_info.memory = tex_info->allocation.info.deviceMemory;
+	handle_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+	HANDLE handle = nullptr;
+	const VkResult err = device_functions.GetMemoryWin32HandleKHR(vk_device, &handle_info, &handle);
+	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS || handle == nullptr, false, vformat("Couldn't export Vulkan texture memory handle (VkResult error %d).", err));
+	r_info.handle = uint64_t(reinterpret_cast<uintptr_t>(handle));
+#else
+	ERR_FAIL_NULL_V_MSG(device_functions.GetMemoryFdKHR, false, "vkGetMemoryFdKHR is unavailable.");
+	VkMemoryGetFdInfoKHR handle_info = {};
+	handle_info.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
+	handle_info.memory = tex_info->allocation.info.deviceMemory;
+	handle_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+	int fd = -1;
+	const VkResult err = device_functions.GetMemoryFdKHR(vk_device, &handle_info, &fd);
+	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS || fd < 0, false, vformat("Couldn't export Vulkan texture memory file descriptor (VkResult error %d).", err));
+	r_info.handle = uint64_t(fd);
+#endif
+
+	return true;
 }
 
 void RenderingDeviceDriverVulkan::texture_get_copyable_layout(TextureID p_texture, const TextureSubresource &p_subresource, TextureCopyableLayout *r_layout) {
@@ -2922,6 +3077,8 @@ RDD::SamplerID RenderingDeviceDriverVulkan::sampler_create(const SamplerState &p
 }
 
 void RenderingDeviceDriverVulkan::sampler_free(SamplerID p_sampler) {
+	_descriptor_set_cache_evict_resource(DESCRIPTOR_SET_CACHE_RESOURCE_SAMPLER, p_sampler.id);
+
 	vkDestroySampler(vk_device, (VkSampler)p_sampler.id, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SAMPLER));
 }
 
@@ -3233,8 +3390,67 @@ RDD::SemaphoreID RenderingDeviceDriverVulkan::semaphore_create() {
 	return SemaphoreID(semaphore);
 }
 
+RDD::SemaphoreID RenderingDeviceDriverVulkan::external_semaphore_create(bool p_timeline, uint64_t p_initial_value) {
+	ERR_FAIL_COND_V_MSG(!device_capabilities.external_semaphore_supported, SemaphoreID(), "Vulkan external semaphore export is not supported by the active device.");
+	ERR_FAIL_COND_V_MSG(p_timeline, SemaphoreID(), "Vulkan external timeline semaphore export is not implemented for RTGI resource exchange yet.");
+	ERR_FAIL_COND_V_MSG(p_initial_value != 0, SemaphoreID(), "Binary external semaphores must use an initial value of zero.");
+
+	VkExportSemaphoreCreateInfo export_create_info = {};
+	export_create_info.sType = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO;
+	export_create_info.handleTypes = _vulkan_platform_external_semaphore_handle_flags();
+
+	VkSemaphoreCreateInfo create_info = {};
+	create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	create_info.pNext = &export_create_info;
+
+	VkSemaphore semaphore = VK_NULL_HANDLE;
+	VkResult err = vkCreateSemaphore(vk_device, &create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SEMAPHORE), &semaphore);
+	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, SemaphoreID(), vformat("Couldn't create exportable Vulkan semaphore (VkResult error %d).", err));
+
+	exportable_binary_semaphores.insert(uint64_t(semaphore));
+	return SemaphoreID(semaphore);
+}
+
 void RenderingDeviceDriverVulkan::semaphore_free(SemaphoreID p_semaphore) {
+	exportable_binary_semaphores.erase(p_semaphore.id);
 	vkDestroySemaphore(vk_device, VkSemaphore(p_semaphore.id), VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SEMAPHORE));
+}
+
+bool RenderingDeviceDriverVulkan::semaphore_get_external_handle(SemaphoreID p_semaphore, bool p_timeline, uint64_t p_timeline_value, ExternalSemaphoreHandleInfo &r_info) {
+	ERR_FAIL_COND_V(!p_semaphore, false);
+	ERR_FAIL_COND_V_MSG(p_timeline, false, "Vulkan external timeline semaphore handles are not implemented for RTGI resource exchange yet.");
+	ERR_FAIL_COND_V_MSG(p_timeline_value != 0, false, "Binary external semaphore export requires a timeline value of zero.");
+	ERR_FAIL_COND_V_MSG(!exportable_binary_semaphores.has(p_semaphore.id), false, "Vulkan semaphore was not created with external export enabled.");
+
+	r_info = ExternalSemaphoreHandleInfo();
+	r_info.handle_type = _vulkan_platform_external_handle_type();
+	r_info.timeline = false;
+	r_info.timeline_value = 0;
+	r_info.exportable = true;
+
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+	ERR_FAIL_NULL_V_MSG(device_functions.GetSemaphoreWin32HandleKHR, false, "vkGetSemaphoreWin32HandleKHR is unavailable.");
+	VkSemaphoreGetWin32HandleInfoKHR handle_info = {};
+	handle_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_WIN32_HANDLE_INFO_KHR;
+	handle_info.semaphore = VkSemaphore(p_semaphore.id);
+	handle_info.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+	HANDLE handle = nullptr;
+	const VkResult err = device_functions.GetSemaphoreWin32HandleKHR(vk_device, &handle_info, &handle);
+	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS || handle == nullptr, false, vformat("Couldn't export Vulkan semaphore handle (VkResult error %d).", err));
+	r_info.handle = uint64_t(reinterpret_cast<uintptr_t>(handle));
+#else
+	ERR_FAIL_NULL_V_MSG(device_functions.GetSemaphoreFdKHR, false, "vkGetSemaphoreFdKHR is unavailable.");
+	VkSemaphoreGetFdInfoKHR handle_info = {};
+	handle_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR;
+	handle_info.semaphore = VkSemaphore(p_semaphore.id);
+	handle_info.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
+	int fd = -1;
+	const VkResult err = device_functions.GetSemaphoreFdKHR(vk_device, &handle_info, &fd);
+	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS || fd < 0, false, vformat("Couldn't export Vulkan semaphore file descriptor (VkResult error %d).", err));
+	r_info.handle = uint64_t(fd);
+#endif
+
+	return true;
 }
 
 /******************/
@@ -4727,6 +4943,7 @@ void RenderingDeviceDriverVulkan::shader_free(ShaderID p_shader) {
 	ShaderInfo *shader_info = (ShaderInfo *)p_shader.id;
 
 	for (uint32_t i = 0; i < shader_info->vk_descriptor_set_layouts.size(); i++) {
+		_descriptor_set_cache_evict_layout(shader_info->vk_descriptor_set_layouts[i]);
 		vkDestroyDescriptorSetLayout(vk_device, shader_info->vk_descriptor_set_layouts[i], VKC::get_allocation_callbacks(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT));
 	}
 
@@ -4882,6 +5099,97 @@ void RenderingDeviceDriverVulkan::_descriptor_set_pool_unreference(DescriptorSet
 	}
 }
 
+void RenderingDeviceDriverVulkan::_descriptor_set_cache_evict_entry(const DescriptorSetCacheKey &p_key, DescriptorSetCacheEntry &p_entry) {
+	if (p_entry.reference_count > 0) {
+		p_entry.pending_evict = true;
+		return;
+	}
+
+	if (p_key.linear_pool_index < 0 && p_entry.vk_descriptor_set != VK_NULL_HANDLE) {
+		VkDescriptorSet vk_descriptor_set = p_entry.vk_descriptor_set;
+		vkFreeDescriptorSets(vk_device, p_entry.vk_descriptor_pool, 1, &vk_descriptor_set);
+		_descriptor_set_pool_unreference(p_entry.pool_sets_it, p_entry.vk_descriptor_pool, -1);
+	}
+
+	descriptor_set_cache.erase(p_key);
+}
+
+void RenderingDeviceDriverVulkan::_descriptor_set_cache_evict_resource(DescriptorSetCacheResourceType p_type, uint64_t p_id) {
+	MutexLock lock(descriptor_set_cache_mutex);
+
+	LocalVector<DescriptorSetCacheKey> keys_to_evict;
+	for (HashMap<DescriptorSetCacheKey, DescriptorSetCacheEntry>::Iterator E = descriptor_set_cache.begin(); E; ++E) {
+		for (const DescriptorSetCacheResource &resource : E->value.resources) {
+			if (resource.type == p_type && resource.id == p_id) {
+				keys_to_evict.push_back(E->key);
+				break;
+			}
+		}
+	}
+
+	for (const DescriptorSetCacheKey &key : keys_to_evict) {
+		HashMap<DescriptorSetCacheKey, DescriptorSetCacheEntry>::Iterator E = descriptor_set_cache.find(key);
+		if (E) {
+			_descriptor_set_cache_evict_entry(E->key, E->value);
+		}
+	}
+}
+
+void RenderingDeviceDriverVulkan::_descriptor_set_cache_evict_layout(VkDescriptorSetLayout p_layout) {
+	MutexLock lock(descriptor_set_cache_mutex);
+
+	LocalVector<DescriptorSetCacheKey> keys_to_evict;
+	for (HashMap<DescriptorSetCacheKey, DescriptorSetCacheEntry>::Iterator E = descriptor_set_cache.begin(); E; ++E) {
+		if (E->key.vk_layout == p_layout) {
+			keys_to_evict.push_back(E->key);
+		}
+	}
+
+	for (const DescriptorSetCacheKey &key : keys_to_evict) {
+		HashMap<DescriptorSetCacheKey, DescriptorSetCacheEntry>::Iterator E = descriptor_set_cache.find(key);
+		if (E) {
+			_descriptor_set_cache_evict_entry(E->key, E->value);
+		}
+	}
+}
+
+void RenderingDeviceDriverVulkan::_descriptor_set_cache_evict_linear_pool(int p_linear_pool_index) {
+	MutexLock lock(descriptor_set_cache_mutex);
+
+	LocalVector<DescriptorSetCacheKey> keys_to_evict;
+	for (HashMap<DescriptorSetCacheKey, DescriptorSetCacheEntry>::Iterator E = descriptor_set_cache.begin(); E; ++E) {
+		if (E->key.linear_pool_index == p_linear_pool_index) {
+			keys_to_evict.push_back(E->key);
+		}
+	}
+
+	for (const DescriptorSetCacheKey &key : keys_to_evict) {
+		descriptor_set_cache.erase(key);
+	}
+}
+
+void RenderingDeviceDriverVulkan::_descriptor_set_cache_gc() {
+	MutexLock lock(descriptor_set_cache_mutex);
+
+	LocalVector<DescriptorSetCacheKey> keys_to_evict;
+	for (HashMap<DescriptorSetCacheKey, DescriptorSetCacheEntry>::Iterator E = descriptor_set_cache.begin(); E; ++E) {
+		if (E->key.linear_pool_index >= 0 || E->value.reference_count > 0) {
+			continue;
+		}
+
+		if (descriptor_set_cache_frame - E->value.last_used_frame > DESCRIPTOR_SET_CACHE_MAX_FRAME_AGE) {
+			keys_to_evict.push_back(E->key);
+		}
+	}
+
+	for (const DescriptorSetCacheKey &key : keys_to_evict) {
+		HashMap<DescriptorSetCacheKey, DescriptorSetCacheEntry>::Iterator E = descriptor_set_cache.find(key);
+		if (E) {
+			_descriptor_set_cache_evict_entry(E->key, E->value);
+		}
+	}
+}
+
 RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) {
 	if (!linear_descriptor_pools_enabled) {
 		p_linear_pool_index = -1;
@@ -4893,12 +5201,33 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 	const BufferInfo *dynamic_buffers[MAX_DYNAMIC_BUFFERS];
 	uint32_t num_dynamic_buffers = 0u;
 
+	uint64_t descriptor_set_cache_bindings_hash = hash_djb2_one_64(p_uniforms.size());
+	LocalVector<DescriptorSetCacheResource> descriptor_set_cache_resources;
+	auto descriptor_set_cache_hash_u64 = [&descriptor_set_cache_bindings_hash](uint64_t p_value) {
+		descriptor_set_cache_bindings_hash = hash_djb2_one_64(p_value, descriptor_set_cache_bindings_hash);
+	};
+	auto descriptor_set_cache_add_resource = [&](DescriptorSetCacheResourceType p_type, uint64_t p_id) {
+		descriptor_set_cache_hash_u64((uint64_t)p_type);
+		descriptor_set_cache_hash_u64(p_id);
+
+		DescriptorSetCacheResource resource;
+		resource.type = p_type;
+		resource.id = p_id;
+		descriptor_set_cache_resources.push_back(resource);
+	};
+
 	// Immutable samplers will be skipped so we need to track the number of vk_writes used.
 	VkWriteDescriptorSet *vk_writes = ALLOCA_ARRAY(VkWriteDescriptorSet, p_uniforms.size());
 	uint32_t writes_amount = 0;
 	uint32_t variable_descriptor_count = 0;
 	for (uint32_t i = 0; i < p_uniforms.size(); i++) {
 		const BoundUniform &uniform = p_uniforms[i];
+
+		descriptor_set_cache_hash_u64(uniform.type);
+		descriptor_set_cache_hash_u64(uniform.binding);
+		descriptor_set_cache_hash_u64(uniform.ids.size());
+		descriptor_set_cache_hash_u64(uniform.variable_count ? 1 : 0);
+		descriptor_set_cache_hash_u64(uniform.immutable_sampler && immutable_samplers_enabled ? 1 : 0);
 
 		vk_writes[writes_amount] = {};
 		vk_writes[writes_amount].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -4911,11 +5240,16 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 				num_descriptors = uniform.ids.size();
 
 				if (uniform.immutable_sampler && immutable_samplers_enabled) {
+					for (uint32_t j = 0; j < num_descriptors; j++) {
+						descriptor_set_cache_add_resource(DESCRIPTOR_SET_CACHE_RESOURCE_SAMPLER, uniform.ids[j].id);
+					}
 					add_write = false;
 				} else {
 					VkDescriptorImageInfo *vk_img_infos = ALLOCA_ARRAY(VkDescriptorImageInfo, num_descriptors);
 
 					for (uint32_t j = 0; j < num_descriptors; j++) {
+						descriptor_set_cache_add_resource(DESCRIPTOR_SET_CACHE_RESOURCE_SAMPLER, uniform.ids[j].id);
+
 						vk_img_infos[j] = {};
 						vk_img_infos[j].sampler = (VkSampler)uniform.ids[j].id;
 						vk_img_infos[j].imageView = VK_NULL_HANDLE;
@@ -4936,9 +5270,15 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 						ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT texture must not be used for sampling in a shader.");
 					}
 #endif
+					const TextureInfo *tex_info = (const TextureInfo *)uniform.ids[j * 2 + 1].id;
+					descriptor_set_cache_add_resource(DESCRIPTOR_SET_CACHE_RESOURCE_SAMPLER, uniform.ids[j * 2 + 0].id);
+					descriptor_set_cache_add_resource(DESCRIPTOR_SET_CACHE_RESOURCE_TEXTURE, uniform.ids[j * 2 + 1].id);
+					descriptor_set_cache_hash_u64((uint64_t)tex_info->vk_view);
+					descriptor_set_cache_hash_u64(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
 					vk_img_infos[j] = {};
 					vk_img_infos[j].sampler = (VkSampler)uniform.ids[j * 2 + 0].id;
-					vk_img_infos[j].imageView = ((const TextureInfo *)uniform.ids[j * 2 + 1].id)->vk_view;
+					vk_img_infos[j].imageView = tex_info->vk_view;
 					vk_img_infos[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				}
 
@@ -4955,8 +5295,13 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 						ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT texture must not be used for sampling in a shader.");
 					}
 #endif
+					const TextureInfo *tex_info = (const TextureInfo *)uniform.ids[j].id;
+					descriptor_set_cache_add_resource(DESCRIPTOR_SET_CACHE_RESOURCE_TEXTURE, uniform.ids[j].id);
+					descriptor_set_cache_hash_u64((uint64_t)tex_info->vk_view);
+					descriptor_set_cache_hash_u64(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
 					vk_img_infos[j] = {};
-					vk_img_infos[j].imageView = ((const TextureInfo *)uniform.ids[j].id)->vk_view;
+					vk_img_infos[j].imageView = tex_info->vk_view;
 					vk_img_infos[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				}
 
@@ -4973,8 +5318,13 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 						ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT texture must not be used for sampling in a shader.");
 					}
 #endif
+					const TextureInfo *tex_info = (const TextureInfo *)uniform.ids[j].id;
+					descriptor_set_cache_add_resource(DESCRIPTOR_SET_CACHE_RESOURCE_TEXTURE, uniform.ids[j].id);
+					descriptor_set_cache_hash_u64((uint64_t)tex_info->vk_view);
+					descriptor_set_cache_hash_u64(VK_IMAGE_LAYOUT_GENERAL);
+
 					vk_img_infos[j] = {};
-					vk_img_infos[j].imageView = ((const TextureInfo *)uniform.ids[j].id)->vk_view;
+					vk_img_infos[j].imageView = tex_info->vk_view;
 					vk_img_infos[j].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 				}
 
@@ -4988,6 +5338,11 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 
 				for (uint32_t j = 0; j < num_descriptors; j++) {
 					const BufferInfo *buf_info = (const BufferInfo *)uniform.ids[j].id;
+					descriptor_set_cache_add_resource(DESCRIPTOR_SET_CACHE_RESOURCE_BUFFER, uniform.ids[j].id);
+					descriptor_set_cache_hash_u64((uint64_t)buf_info->vk_view);
+					descriptor_set_cache_hash_u64((uint64_t)buf_info->vk_buffer);
+					descriptor_set_cache_hash_u64(buf_info->size);
+
 					vk_buf_infos[j] = {};
 					vk_buf_infos[j].buffer = buf_info->vk_buffer;
 					vk_buf_infos[j].range = buf_info->size;
@@ -5010,6 +5365,12 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 					vk_img_infos[j].sampler = (VkSampler)uniform.ids[j * 2 + 0].id;
 
 					const BufferInfo *buf_info = (const BufferInfo *)uniform.ids[j * 2 + 1].id;
+					descriptor_set_cache_add_resource(DESCRIPTOR_SET_CACHE_RESOURCE_SAMPLER, uniform.ids[j * 2 + 0].id);
+					descriptor_set_cache_add_resource(DESCRIPTOR_SET_CACHE_RESOURCE_BUFFER, uniform.ids[j * 2 + 1].id);
+					descriptor_set_cache_hash_u64((uint64_t)buf_info->vk_view);
+					descriptor_set_cache_hash_u64((uint64_t)buf_info->vk_buffer);
+					descriptor_set_cache_hash_u64(buf_info->size);
+
 					vk_buf_infos[j] = {};
 					vk_buf_infos[j].buffer = buf_info->vk_buffer;
 					vk_buf_infos[j].range = buf_info->size;
@@ -5027,6 +5388,10 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 			} break;
 			case UNIFORM_TYPE_UNIFORM_BUFFER: {
 				const BufferInfo *buf_info = (const BufferInfo *)uniform.ids[0].id;
+				descriptor_set_cache_add_resource(DESCRIPTOR_SET_CACHE_RESOURCE_BUFFER, uniform.ids[0].id);
+				descriptor_set_cache_hash_u64((uint64_t)buf_info->vk_buffer);
+				descriptor_set_cache_hash_u64(buf_info->size);
+
 				VkDescriptorBufferInfo *vk_buf_info = ALLOCA_SINGLE(VkDescriptorBufferInfo);
 				*vk_buf_info = {};
 				vk_buf_info->buffer = buf_info->vk_buffer;
@@ -5040,6 +5405,10 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 			} break;
 			case UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC: {
 				const BufferInfo *buf_info = (const BufferInfo *)uniform.ids[0].id;
+				descriptor_set_cache_add_resource(DESCRIPTOR_SET_CACHE_RESOURCE_BUFFER, uniform.ids[0].id);
+				descriptor_set_cache_hash_u64((uint64_t)buf_info->vk_buffer);
+				descriptor_set_cache_hash_u64(buf_info->size);
+
 				VkDescriptorBufferInfo *vk_buf_info = ALLOCA_SINGLE(VkDescriptorBufferInfo);
 				*vk_buf_info = {};
 				vk_buf_info->buffer = buf_info->vk_buffer;
@@ -5056,6 +5425,10 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 			} break;
 			case UNIFORM_TYPE_STORAGE_BUFFER: {
 				const BufferInfo *buf_info = (const BufferInfo *)uniform.ids[0].id;
+				descriptor_set_cache_add_resource(DESCRIPTOR_SET_CACHE_RESOURCE_BUFFER, uniform.ids[0].id);
+				descriptor_set_cache_hash_u64((uint64_t)buf_info->vk_buffer);
+				descriptor_set_cache_hash_u64(buf_info->size);
+
 				VkDescriptorBufferInfo *vk_buf_info = ALLOCA_SINGLE(VkDescriptorBufferInfo);
 				*vk_buf_info = {};
 				vk_buf_info->buffer = buf_info->vk_buffer;
@@ -5069,6 +5442,10 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 			} break;
 			case UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC: {
 				const BufferInfo *buf_info = (const BufferInfo *)uniform.ids[0].id;
+				descriptor_set_cache_add_resource(DESCRIPTOR_SET_CACHE_RESOURCE_BUFFER, uniform.ids[0].id);
+				descriptor_set_cache_hash_u64((uint64_t)buf_info->vk_buffer);
+				descriptor_set_cache_hash_u64(buf_info->size);
+
 				VkDescriptorBufferInfo *vk_buf_info = ALLOCA_SINGLE(VkDescriptorBufferInfo);
 				*vk_buf_info = {};
 				vk_buf_info->buffer = buf_info->vk_buffer;
@@ -5088,8 +5465,13 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 				VkDescriptorImageInfo *vk_img_infos = ALLOCA_ARRAY(VkDescriptorImageInfo, num_descriptors);
 
 				for (uint32_t j = 0; j < uniform.ids.size(); j++) {
+					const TextureInfo *tex_info = (const TextureInfo *)uniform.ids[j].id;
+					descriptor_set_cache_add_resource(DESCRIPTOR_SET_CACHE_RESOURCE_TEXTURE, uniform.ids[j].id);
+					descriptor_set_cache_hash_u64((uint64_t)tex_info->vk_view);
+					descriptor_set_cache_hash_u64(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
 					vk_img_infos[j] = {};
-					vk_img_infos[j].imageView = ((const TextureInfo *)uniform.ids[j].id)->vk_view;
+					vk_img_infos[j].imageView = tex_info->vk_view;
 					vk_img_infos[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				}
 
@@ -5098,14 +5480,17 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 			} break;
 			case UNIFORM_TYPE_ACCELERATION_STRUCTURE: {
 				const AccelerationStructureInfo *accel_info = (const AccelerationStructureInfo *)uniform.ids[0].id;
+				descriptor_set_cache_add_resource(DESCRIPTOR_SET_CACHE_RESOURCE_ACCELERATION_STRUCTURE, uniform.ids[0].id);
+				descriptor_set_cache_hash_u64((uint64_t)accel_info->vk_acceleration_structure);
+
 				VkWriteDescriptorSetAccelerationStructureKHR *acceleration_structure_write = ALLOCA_SINGLE(VkWriteDescriptorSetAccelerationStructureKHR);
 				*acceleration_structure_write = {};
 				acceleration_structure_write->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
 				acceleration_structure_write->accelerationStructureCount = 1;
 				acceleration_structure_write->pAccelerationStructures = &accel_info->vk_acceleration_structure;
 
-				vk_writes[i].descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-				vk_writes[i].pNext = acceleration_structure_write;
+				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+				vk_writes[writes_amount].pNext = acceleration_structure_write;
 			} break;
 			default: {
 				DEV_ASSERT(false);
@@ -5129,78 +5514,124 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 	}
 
 	bool linear_pool = p_linear_pool_index >= 0;
-	DescriptorSetPools::Iterator pool_sets_it = linear_pool ? linear_descriptor_set_pools[p_linear_pool_index].find(pool_key) : descriptor_set_pools.find(pool_key);
-	if (!pool_sets_it) {
-		if (linear_pool) {
-			pool_sets_it = linear_descriptor_set_pools[p_linear_pool_index].insert(pool_key, HashMap<VkDescriptorPool, uint32_t>());
-		} else {
-			pool_sets_it = descriptor_set_pools.insert(pool_key, HashMap<VkDescriptorPool, uint32_t>());
-		}
-	}
-
-	VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {};
-	descriptor_set_allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	descriptor_set_allocate_info.descriptorSetCount = 1;
 	const ShaderInfo *shader_info = (const ShaderInfo *)p_shader.id;
-	descriptor_set_allocate_info.pSetLayouts = &shader_info->vk_descriptor_set_layouts[p_set_index];
+	DescriptorSetCacheKey descriptor_set_cache_key;
+	descriptor_set_cache_key.vk_layout = shader_info->vk_descriptor_set_layouts[p_set_index];
+	descriptor_set_cache_key.bindings_hash = descriptor_set_cache_bindings_hash;
+	descriptor_set_cache_key.variable_descriptor_count = variable_descriptor_count;
+	descriptor_set_cache_key.linear_pool_index = p_linear_pool_index;
 
-	VkDescriptorSetVariableDescriptorCountAllocateInfo variable_count_info = {};
-	if (variable_descriptor_count > 0) {
-		variable_count_info.pNext = nullptr;
-		variable_count_info.descriptorSetCount = 1;
-		variable_count_info.pDescriptorCounts = &variable_descriptor_count;
-		variable_count_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
-
-		descriptor_set_allocate_info.pNext = &variable_count_info;
-	}
-
+	DescriptorSetPools::Iterator pool_sets_it;
+	VkDescriptorPool vk_descriptor_pool = VK_NULL_HANDLE;
 	VkDescriptorSet vk_descriptor_set = VK_NULL_HANDLE;
-	for (KeyValue<VkDescriptorPool, uint32_t> &E : pool_sets_it->value) {
-		if (E.value < max_descriptor_sets_per_pool) {
-			descriptor_set_allocate_info.descriptorPool = E.key;
-			VkResult res = vkAllocateDescriptorSets(vk_device, &descriptor_set_allocate_info, &vk_descriptor_set);
+	bool descriptor_set_cached = true;
 
-			// Break early on success.
-			if (res == VK_SUCCESS) {
-				break;
+	{
+		MutexLock lock(descriptor_set_cache_mutex);
+
+		HashMap<DescriptorSetCacheKey, DescriptorSetCacheEntry>::Iterator cache_it = descriptor_set_cache.find(descriptor_set_cache_key);
+		if (cache_it && cache_it->value.pending_evict && cache_it->value.reference_count == 0) {
+			_descriptor_set_cache_evict_entry(cache_it->key, cache_it->value);
+			cache_it = descriptor_set_cache.end();
+		}
+
+		if (cache_it && !cache_it->value.pending_evict) {
+			cache_it->value.reference_count++;
+			cache_it->value.last_used_frame = descriptor_set_cache_frame;
+			vk_descriptor_set = cache_it->value.vk_descriptor_set;
+			vk_descriptor_pool = cache_it->value.vk_descriptor_pool;
+			pool_sets_it = cache_it->value.pool_sets_it;
+		} else {
+			if (cache_it) {
+				descriptor_set_cached = false;
 			}
 
-			// "Fragmented pool" and "out of memory pool" errors are handled by creating more pools. Any other error is unexpected.
-			if (res != VK_ERROR_FRAGMENTED_POOL && res != VK_ERROR_OUT_OF_POOL_MEMORY) {
-				ERR_FAIL_V_MSG(UniformSetID(), vformat("Couldn't allocate Vulkan descriptor sets (VkResult error %d).", res));
+			pool_sets_it = linear_pool ? linear_descriptor_set_pools[p_linear_pool_index].find(pool_key) : descriptor_set_pools.find(pool_key);
+			if (!pool_sets_it) {
+				if (linear_pool) {
+					pool_sets_it = linear_descriptor_set_pools[p_linear_pool_index].insert(pool_key, HashMap<VkDescriptorPool, uint32_t>());
+				} else {
+					pool_sets_it = descriptor_set_pools.insert(pool_key, HashMap<VkDescriptorPool, uint32_t>());
+				}
+			}
+
+			VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {};
+			descriptor_set_allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+			descriptor_set_allocate_info.descriptorSetCount = 1;
+			descriptor_set_allocate_info.pSetLayouts = &shader_info->vk_descriptor_set_layouts[p_set_index];
+
+			VkDescriptorSetVariableDescriptorCountAllocateInfo variable_count_info = {};
+			if (variable_descriptor_count > 0) {
+				variable_count_info.pNext = nullptr;
+				variable_count_info.descriptorSetCount = 1;
+				variable_count_info.pDescriptorCounts = &variable_descriptor_count;
+				variable_count_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
+
+				descriptor_set_allocate_info.pNext = &variable_count_info;
+			}
+
+			for (KeyValue<VkDescriptorPool, uint32_t> &E : pool_sets_it->value) {
+				if (E.value < max_descriptor_sets_per_pool) {
+					descriptor_set_allocate_info.descriptorPool = E.key;
+					VkResult res = vkAllocateDescriptorSets(vk_device, &descriptor_set_allocate_info, &vk_descriptor_set);
+
+					// Break early on success.
+					if (res == VK_SUCCESS) {
+						break;
+					}
+
+					// "Fragmented pool" and "out of memory pool" errors are handled by creating more pools. Any other error is unexpected.
+					if (res != VK_ERROR_FRAGMENTED_POOL && res != VK_ERROR_OUT_OF_POOL_MEMORY) {
+						ERR_FAIL_V_MSG(UniformSetID(), vformat("Couldn't allocate Vulkan descriptor sets (VkResult error %d).", res));
+					}
+				}
+			}
+
+			// Create a new pool when no allocations could be made from the existing pools.
+			if (vk_descriptor_set == VK_NULL_HANDLE) {
+				descriptor_set_allocate_info.descriptorPool = _descriptor_set_pool_create(pool_key, linear_pool);
+				VkResult res = vkAllocateDescriptorSets(vk_device, &descriptor_set_allocate_info, &vk_descriptor_set);
+
+				// All errors are unexpected at this stage.
+				if (res) {
+					vkDestroyDescriptorPool(vk_device, descriptor_set_allocate_info.descriptorPool, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_DESCRIPTOR_POOL));
+					ERR_FAIL_V_MSG(UniformSetID(), vformat("Couldn't allocate Vulkan descriptor sets (VkResult error %d).", res));
+				}
+			}
+
+			DEV_ASSERT(descriptor_set_allocate_info.descriptorPool != VK_NULL_HANDLE && vk_descriptor_set != VK_NULL_HANDLE);
+			vk_descriptor_pool = descriptor_set_allocate_info.descriptorPool;
+			pool_sets_it->value[vk_descriptor_pool]++;
+
+			for (uint32_t i = 0; i < writes_amount; i++) {
+				vk_writes[i].dstSet = vk_descriptor_set;
+			}
+			vkUpdateDescriptorSets(vk_device, writes_amount, vk_writes, 0, nullptr);
+
+			if (descriptor_set_cached) {
+				DescriptorSetCacheEntry cache_entry;
+				cache_entry.vk_descriptor_set = vk_descriptor_set;
+				cache_entry.vk_descriptor_pool = vk_descriptor_pool;
+				cache_entry.pool_sets_it = pool_sets_it;
+				cache_entry.resources = descriptor_set_cache_resources;
+				cache_entry.reference_count = 1;
+				cache_entry.last_used_frame = descriptor_set_cache_frame;
+				descriptor_set_cache.insert(descriptor_set_cache_key, cache_entry);
 			}
 		}
 	}
-
-	// Create a new pool when no allocations could be made from the existing pools.
-	if (vk_descriptor_set == VK_NULL_HANDLE) {
-		descriptor_set_allocate_info.descriptorPool = _descriptor_set_pool_create(pool_key, linear_pool);
-		VkResult res = vkAllocateDescriptorSets(vk_device, &descriptor_set_allocate_info, &vk_descriptor_set);
-
-		// All errors are unexpected at this stage.
-		if (res) {
-			vkDestroyDescriptorPool(vk_device, descriptor_set_allocate_info.descriptorPool, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_DESCRIPTOR_POOL));
-			ERR_FAIL_V_MSG(UniformSetID(), vformat("Couldn't allocate Vulkan descriptor sets (VkResult error %d).", res));
-		}
-	}
-
-	DEV_ASSERT(descriptor_set_allocate_info.descriptorPool != VK_NULL_HANDLE && vk_descriptor_set != VK_NULL_HANDLE);
-	pool_sets_it->value[descriptor_set_allocate_info.descriptorPool]++;
-
-	for (uint32_t i = 0; i < writes_amount; i++) {
-		vk_writes[i].dstSet = vk_descriptor_set;
-	}
-	vkUpdateDescriptorSets(vk_device, writes_amount, vk_writes, 0, nullptr);
 
 	// Bookkeep.
 
 	UniformSetInfo *usi = VersatileResource::allocate<UniformSetInfo>(resources_allocator);
 	usi->vk_descriptor_set = vk_descriptor_set;
 	if (p_linear_pool_index >= 0) {
-		usi->vk_linear_descriptor_pool = descriptor_set_allocate_info.descriptorPool;
+		usi->vk_linear_descriptor_pool = vk_descriptor_pool;
 	} else {
-		usi->vk_descriptor_pool = descriptor_set_allocate_info.descriptorPool;
+		usi->vk_descriptor_pool = vk_descriptor_pool;
 	}
+	usi->descriptor_set_cache_key = descriptor_set_cache_key;
+	usi->descriptor_set_cached = descriptor_set_cached;
 	usi->pool_sets_it = pool_sets_it;
 	usi->dynamic_buffers.resize(num_dynamic_buffers);
 	for (uint32_t i = 0u; i < num_dynamic_buffers; ++i) {
@@ -5213,7 +5644,19 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 void RenderingDeviceDriverVulkan::uniform_set_free(UniformSetID p_uniform_set) {
 	UniformSetInfo *usi = (UniformSetInfo *)p_uniform_set.id;
 
-	if (usi->vk_linear_descriptor_pool) {
+	if (usi->descriptor_set_cached) {
+		MutexLock lock(descriptor_set_cache_mutex);
+		HashMap<DescriptorSetCacheKey, DescriptorSetCacheEntry>::Iterator E = descriptor_set_cache.find(usi->descriptor_set_cache_key);
+		if (E) {
+			DEV_ASSERT(E->value.reference_count > 0);
+			if (E->value.reference_count > 0) {
+				E->value.reference_count--;
+			}
+			if (E->value.reference_count == 0 && E->value.pending_evict) {
+				_descriptor_set_cache_evict_entry(E->key, E->value);
+			}
+		}
+	} else if (usi->vk_linear_descriptor_pool) {
 		// Nothing to do. All sets are freed at once using vkResetDescriptorPool.
 		//
 		// We can NOT decrease the reference count (i.e. call _descriptor_set_pool_unreference())
@@ -5259,6 +5702,8 @@ uint32_t RenderingDeviceDriverVulkan::uniform_sets_get_dynamic_offsets(VectorVie
 
 void RenderingDeviceDriverVulkan::linear_uniform_set_pools_reset(int p_linear_pool_index) {
 	if (linear_descriptor_pools_enabled) {
+		_descriptor_set_cache_evict_linear_pool(p_linear_pool_index);
+
 		DescriptorSetPools &pools_to_reset = linear_descriptor_set_pools[p_linear_pool_index];
 		DescriptorSetPools::Iterator curr_pool = pools_to_reset.begin();
 
@@ -6694,6 +7139,8 @@ void RenderingDeviceDriverVulkan::_acceleration_structure_create(VkAccelerationS
 
 void RenderingDeviceDriverVulkan::acceleration_structure_free(AccelerationStructureID p_acceleration_structure) {
 #if VULKAN_RAYTRACING_ENABLED
+	_descriptor_set_cache_evict_resource(DESCRIPTOR_SET_CACHE_RESOURCE_ACCELERATION_STRUCTURE, p_acceleration_structure.id);
+
 	AccelerationStructureInfo *accel_info = (AccelerationStructureInfo *)p_acceleration_structure.id;
 	ERR_FAIL_NULL_MSG(accel_info, "Vulkan raytracing acceleration structure input parameter is not valid.");
 	if (accel_info->buffer) {
@@ -7429,7 +7876,8 @@ inline String RenderingDeviceDriverVulkan::get_vulkan_result(VkResult err) {
 /********************/
 
 void RenderingDeviceDriverVulkan::begin_segment(uint32_t p_frame_index, uint32_t p_frames_drawn) {
-	// Per-frame segments are not required in Vulkan.
+	descriptor_set_cache_frame = p_frames_drawn;
+	_descriptor_set_cache_gc();
 }
 
 void RenderingDeviceDriverVulkan::end_segment() {
@@ -7787,6 +8235,15 @@ RenderingDeviceDriverVulkan::~RenderingDeviceDriverVulkan() {
 		small_allocs_pools.remove(E);
 	}
 	vmaDestroyAllocator(allocator);
+
+	{
+		MutexLock lock(descriptor_set_cache_mutex);
+		while (descriptor_set_cache.begin()) {
+			HashMap<DescriptorSetCacheKey, DescriptorSetCacheEntry>::Iterator E = descriptor_set_cache.begin();
+			E->value.reference_count = 0;
+			_descriptor_set_cache_evict_entry(E->key, E->value);
+		}
+	}
 
 	// Destroy linearly allocated descriptor pools.
 	for (KeyValue<int, DescriptorSetPools> &pool_map : linear_descriptor_set_pools) {

@@ -61,15 +61,17 @@ The feature is exposed on `Environment`, so it appears through the same
     normal non-RT rendering path. This is off by default for new environments.
 - `rtgi_backend`
   - `Vulkan Generic`: uses the current built-in Vulkan ray tracing
-    implementation. This is the default and the only available runtime backend
-    in this phase.
-  - `NVIDIA RTXPT`: exposed as a future renderer-port target. Until that path is
-    implemented, the selection is kept on the environment and the renderer
-    warns once before falling back to `Vulkan Generic` for the viewport.
-  - `AMD HIP RT`: exposed for the HIP RT backend plan. It falls back to
-    `Vulkan Generic` until HIP/Vulkan interop is implemented and validated.
-  - `Intel Embree`: exposed for the Embree/OSPRay exploration track. It falls
-    back to `Vulkan Generic` until an in-frame GPU interop path exists.
+    implementation. This is the default backend.
+  - `NVIDIA RTXPT`: uses the NVIDIA Godot fork-compatible RenderingDevice/Vulkan
+    ray tracing dispatch path when the RTXPT module is compiled. Optional
+    NVIDIA denoising remains runtime-gated.
+  - `AMD HIP RT`: uses HIP RT scene and trace-kernel dispatch when the HIP RT
+    module, runtime libraries, and Vulkan/HIP external memory and semaphore
+    exchange are available. It reports unavailable instead of using readbacks
+    when external interop cannot be established.
+  - `Intel Embree`: uses Embree/OSPRay-capable CPU rendering when the backend is
+    compiled, then uploads the result into the RD-owned RTGI output. Probe
+    updates may still use the Vulkan Generic path in mixed mode.
 - `rtgi_mode`
   - `Reflections RT Only`: keeps the normal Forward+ raster path and raster GI
     systems responsible for diffuse GI, then uses ray tracing for specular and
@@ -137,15 +139,16 @@ The feature is exposed on `Environment`, so it appears through the same
     atrous passes. It uses RT velocity, normal/roughness, albedo/metalness,
     linear view-Z, hit distance, validity masks, and history IDs to preserve
     edges and reject invalid samples.
-  - `NVIDIA`: requests the NVIDIA denoiser path. The first target is NRD on top
-    of `Vulkan Generic`; DLSS Ray Reconstruction remains gated by Streamline,
-    API, platform, and SDK requirements. Until available, this warns once and
-    falls back to ASVFG without rewriting the scene.
+  - `NVIDIA`: requests the NVIDIA denoiser path. NRD and DLSS Ray
+    Reconstruction remain gated by Streamline/API/platform/runtime requirements.
+    Until available, this warns once and falls back to ASVFG without rewriting
+    the scene.
   - `AMD`: requests the AMD denoiser path. The current renderer maps this to
     the available FidelityFX-style multi-signal path; future AMD-specific
-    denoising remains gated by a Vulkan-compatible SDK and hardware path.
-  - `Intel`: requests the Intel denoiser path. It warns once and falls back to
-    ASVFG until a supported runtime path is available.
+    denoising remains gated by a Vulkan-compatible SDK handoff.
+  - `Intel`: requests the Intel denoiser path. For the real-time Forward+ path,
+    this targets the same cross-vendor FidelityFX denoiser handoff as AMD, not
+    Open Image Denoise. It falls back to ASVFG until that handoff is available.
   - `None`: disables the RT denoiser so the raw sampled RT result is visible.
     This is useful for debugging sample distribution, material hits, and TLAS
     coverage, but it is expected to show more noise.

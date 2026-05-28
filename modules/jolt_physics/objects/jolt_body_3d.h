@@ -57,6 +57,7 @@ public:
 
 private:
 	friend class JoltBodyActivationListener3D;
+	friend class JoltSpace3D;
 
 	SelfList<JoltBody3D> call_queries_element;
 
@@ -103,6 +104,7 @@ private:
 	bool sleep_initially = false;
 	bool custom_center_of_mass = false;
 	bool custom_integrator = false;
+	bool call_queries_enqueued = false;
 
 	virtual JPH::BroadPhaseLayer _get_broad_phase_layer() const override;
 	virtual JPH::ObjectLayer _get_object_layer() const override;

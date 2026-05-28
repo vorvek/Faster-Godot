@@ -1807,6 +1807,7 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 	texture.is_resolve_buffer = format.is_resolve_buffer;
 	texture.is_discardable = format.is_discardable;
 	texture.is_subsampled = format.is_subsampled;
+	texture.is_external_memory_exportable = format.is_external_memory_exportable;
 	texture.usage_flags = format.usage_bits & ~forced_usage_bits;
 	texture.samples = format.samples;
 	texture.allowed_shared_formats = format.shareable_formats;
@@ -1856,6 +1857,14 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 	}
 
 	return id;
+}
+
+RID RenderingDevice::texture_create_exportable(const TextureFormat &p_format, const TextureView &p_view) {
+	ERR_RENDER_THREAD_GUARD_V(RID());
+
+	TextureFormat format = p_format;
+	format.is_external_memory_exportable = true;
+	return texture_create(format, p_view);
 }
 
 RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with_texture) {
@@ -3031,8 +3040,22 @@ RD::TextureFormat RenderingDevice::texture_get_format(RID p_texture) {
 	tf.shareable_formats = tex->allowed_shared_formats;
 	tf.is_resolve_buffer = tex->is_resolve_buffer;
 	tf.is_discardable = tex->is_discardable;
+	tf.is_subsampled = tex->is_subsampled;
+	tf.is_external_memory_exportable = tex->is_external_memory_exportable;
 
 	return tf;
+}
+
+bool RenderingDevice::texture_get_external_memory_handle(RID p_texture, RDD::ExternalMemoryHandleInfo &r_info) {
+	ERR_RENDER_THREAD_GUARD_V(false);
+
+	Texture *tex = texture_owner.get_or_null(p_texture);
+	ERR_FAIL_NULL_V(tex, false);
+	ERR_FAIL_COND_V_MSG(tex->owner.is_valid(), false, "External memory handles can only be exported from an owning texture RID.");
+	ERR_FAIL_COND_V_MSG(!tex->is_external_memory_exportable, false, "Texture was not created with external memory export enabled.");
+
+	r_info = RDD::ExternalMemoryHandleInfo();
+	return driver->texture_get_external_memory_handle(tex->driver_id, r_info);
 }
 
 Size2i RenderingDevice::texture_size(RID p_texture) {
@@ -3207,6 +3230,49 @@ bool RenderingDevice::texture_is_discardable(RID p_texture) {
 	ERR_FAIL_NULL_V(texture, false);
 
 	return texture->is_discardable;
+}
+
+RDD::SemaphoreID RenderingDevice::external_semaphore_create(bool p_timeline, uint64_t p_initial_value) {
+	ERR_RENDER_THREAD_GUARD_V(RDD::SemaphoreID());
+
+	return driver->external_semaphore_create(p_timeline, p_initial_value);
+}
+
+bool RenderingDevice::external_semaphore_get_handle(RDD::SemaphoreID p_semaphore, bool p_timeline, uint64_t p_timeline_value, RDD::ExternalSemaphoreHandleInfo &r_info) {
+	ERR_RENDER_THREAD_GUARD_V(false);
+
+	ERR_FAIL_COND_V(!p_semaphore, false);
+	r_info = RDD::ExternalSemaphoreHandleInfo();
+	return driver->semaphore_get_external_handle(p_semaphore, p_timeline, p_timeline_value, r_info);
+}
+
+Error RenderingDevice::external_semaphore_wait_on_current_frame(RDD::SemaphoreID p_semaphore) {
+	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
+
+	ERR_FAIL_COND_V(!p_semaphore, ERR_INVALID_PARAMETER);
+	frames[frame].semaphores_to_wait_on.push_back(p_semaphore);
+	return OK;
+}
+
+Error RenderingDevice::external_resource_handoff_sync(RDD::SemaphoreID p_signal_semaphore) {
+	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
+	ERR_FAIL_COND_V_MSG(local_device_processing, ERR_BUSY, "External resource handoff cannot run while a local RenderingDevice submit is already processing.");
+	ERR_FAIL_COND_V_MSG(draw_list.active || compute_list.active || raytracing_list.active, ERR_BUSY, "External resource handoff cannot run while a RenderingDevice draw, compute, or ray tracing list is active.");
+
+	_stall_for_previous_frames();
+	_end_frame();
+	execute_chained_cmds(false, frames[frame].fence, p_signal_semaphore);
+	frames[frame].fence_signaled = true;
+	_begin_frame(false);
+	return OK;
+}
+
+void RenderingDevice::external_semaphore_free(RDD::SemaphoreID p_semaphore) {
+	ERR_RENDER_THREAD_GUARD();
+
+	if (p_semaphore) {
+		driver->semaphore_free(p_semaphore);
+	}
 }
 
 Error RenderingDevice::texture_clear(RID p_texture, const Color &p_color, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers) {
