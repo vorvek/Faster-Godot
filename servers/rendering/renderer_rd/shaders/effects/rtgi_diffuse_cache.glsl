@@ -63,8 +63,118 @@ float relative_delta(float a, float b, float floor_value) {
 	return abs(a - b) / max(max(a, b), floor_value);
 }
 
-vec3 clamp_current_diffuse_outlier(ivec2 pos, vec3 current, vec4 current_normal_roughness, vec4 current_viewz_hitdist) {
-	return current;
+float signal_clamp_risk(vec4 confidence_signal) {
+	return clamp(confidence_signal.r * 0.35 + confidence_signal.g * 0.55, 0.0, 1.0);
+}
+
+vec3 clamp_current_diffuse_outlier(ivec2 pos, vec3 current, vec4 current_normal_roughness, vec4 current_viewz_hitdist, vec4 confidence_signal, out float clamp_activity) {
+	clamp_activity = 0.0;
+	current = sanitize_color(current);
+	float current_luma = luminance(current);
+	if (current_luma <= 0.03 || current_viewz_hitdist.x >= 60000.0) {
+		return current;
+	}
+
+	float roughness = clamp(current_normal_roughness.a, 0.0, 1.0);
+	float current_risk = signal_clamp_risk(confidence_signal);
+	vec3 current_normal = decode_normal(current_normal_roughness);
+	vec4 current_history_id = texelFetch(history_id_buffer, pos, 0);
+	const ivec2 offsets[8] = ivec2[](
+			ivec2(-1, -1),
+			ivec2(0, -1),
+			ivec2(1, -1),
+			ivec2(-1, 0),
+			ivec2(1, 0),
+			ivec2(-1, 1),
+			ivec2(0, 1),
+			ivec2(1, 1));
+
+	float weight_sum = 0.0;
+	float luma_sum = 0.0;
+	float luma_sq_sum = 0.0;
+	float max_support_luma = 0.0;
+	float support_count = 0.0;
+
+	for (int i = 0; i < 8; i++) {
+		ivec2 candidate_pos = pos + offsets[i];
+		if (candidate_pos.x < 0 || candidate_pos.y < 0 || candidate_pos.x >= int(params.resolution.x) || candidate_pos.y >= int(params.resolution.y)) {
+			continue;
+		}
+		if (texelFetch(history_validity_buffer, candidate_pos, 0).r < 0.5) {
+			continue;
+		}
+		if (!history_id_matches(current_history_id, texelFetch(history_id_buffer, candidate_pos, 0))) {
+			continue;
+		}
+
+		vec4 candidate_normal_roughness = texelFetch(normal_roughness_buffer, candidate_pos, 0);
+		vec4 candidate_viewz_hitdist = texelFetch(viewz_hitdist_buffer, candidate_pos, 0);
+		if (candidate_viewz_hitdist.x >= 60000.0) {
+			continue;
+		}
+
+		float normal_dot = dot(current_normal, decode_normal(candidate_normal_roughness));
+		float normal_threshold = mix(0.82, 0.10, roughness);
+		if (normal_dot < normal_threshold) {
+			continue;
+		}
+
+		float depth_delta = relative_delta(current_viewz_hitdist.x, candidate_viewz_hitdist.x, 0.25);
+		float hit_delta = relative_delta(current_viewz_hitdist.y, candidate_viewz_hitdist.y, 0.25);
+		float depth_threshold = mix(0.055, 0.22, roughness);
+		float hit_threshold = mix(0.16, 1.00, roughness);
+		if (depth_delta > depth_threshold || hit_delta > hit_threshold) {
+			continue;
+		}
+
+		float normal_weight = smoothstep(normal_threshold, 0.995, normal_dot);
+		float depth_weight = 1.0 - smoothstep(depth_threshold * 0.35, depth_threshold, depth_delta);
+		float hit_weight = 1.0 - smoothstep(hit_threshold * 0.35, hit_threshold, hit_delta);
+		float candidate_risk = signal_clamp_risk(texelFetch(signal_confidence_buffer, candidate_pos, 0));
+		float signal_weight = mix(1.0, 0.35, candidate_risk);
+		float weight = normal_weight * depth_weight * hit_weight * signal_weight;
+		if (weight <= 0.02) {
+			continue;
+		}
+
+		float candidate_luma = luminance(sanitize_color(imageLoad(source_image, candidate_pos).rgb));
+		weight_sum += weight;
+		luma_sum += candidate_luma * weight;
+		luma_sq_sum += candidate_luma * candidate_luma * weight;
+		max_support_luma = max(max_support_luma, candidate_luma);
+		support_count += weight > 0.12 ? 1.0 : 0.0;
+	}
+
+	if (weight_sum < 0.90 || support_count < 2.0) {
+		return current;
+	}
+
+	float local_mean = luma_sum / max(weight_sum, 1e-5);
+	float local_variance = max(luma_sq_sum / max(weight_sum, 1e-5) - local_mean * local_mean, 0.0);
+	float local_sigma = sqrt(local_variance);
+	float isolated_delta = relative_delta(current_luma, local_mean, 0.08);
+	float unsupported_spike = smoothstep(0.22, 0.75, isolated_delta) * (1.0 - smoothstep(0.80, 1.30, max_support_luma / max(current_luma, 1e-4)));
+	float risk_tightening = smoothstep(0.05, 0.65, current_risk);
+	float clamp_strength = max(risk_tightening, unsupported_spike * smoothstep(1.10, 2.50, current_luma / max(local_mean + local_sigma + 0.05, 0.05)));
+	if (clamp_strength <= 0.01) {
+		return current;
+	}
+
+	float slack = mix(0.08, 0.16, roughness);
+	float statistical_limit = local_mean + local_sigma * mix(2.75, 1.25, clamp_strength) + slack;
+	float support_limit = max_support_luma * mix(1.55, 1.12, clamp_strength) + slack;
+	float max_current_luma = max(max(statistical_limit, support_limit), 0.035);
+	if (current_luma <= max_current_luma) {
+		return current;
+	}
+
+	float clamp_blend = smoothstep(max_current_luma * 1.02, max_current_luma * 1.75 + 0.05, current_luma) * max(clamp_strength, current_risk);
+	if (clamp_blend <= 0.03) {
+		return current;
+	}
+
+	clamp_activity = mix(0.35, 0.70, risk_tightening);
+	return clamp_luminance(current, mix(current_luma, max_current_luma, clamp(clamp_blend, 0.0, 1.0)));
 }
 
 float variance_ratio_from_stats(vec4 stats_sample) {
@@ -142,15 +252,17 @@ void main() {
 	}
 
 	vec3 current = sanitize_color(imageLoad(source_image, pos).rgb);
-	float current_luma = luminance(current);
+	float raw_current_luma = luminance(current);
 	vec4 current_normal_roughness = texelFetch(normal_roughness_buffer, pos, 0);
 	vec4 current_viewz_hitdist = texelFetch(viewz_hitdist_buffer, pos, 0);
-	current = clamp_current_diffuse_outlier(pos, current, current_normal_roughness, current_viewz_hitdist);
-	current_luma = luminance(current);
 	vec4 confidence_signal = texelFetch(signal_confidence_buffer, pos, 0);
+	float clamp_activity = 0.0;
+	current = clamp_current_diffuse_outlier(pos, current, current_normal_roughness, current_viewz_hitdist, confidence_signal, clamp_activity);
+	float current_luma = luminance(current);
+	float clamp_luma_delta = max(raw_current_luma - current_luma, 0.0);
 	float current_valid = texelFetch(history_validity_buffer, pos, 0).r >= 0.5 ? 1.0 : 0.0;
 	float guide_valid = current_viewz_hitdist.x < 60000.0 ? 1.0 : 0.0;
-	float clamp_risk = clamp(confidence_signal.r * 0.35 + confidence_signal.g * 0.55, 0.0, 1.0);
+	float clamp_risk = signal_clamp_risk(confidence_signal);
 	float current_confidence = current_valid * guide_valid * clamp(1.0 - clamp_risk, 0.0, 1.0);
 
 	vec3 filtered = current;
@@ -297,7 +409,10 @@ void main() {
 		float base_max_previous_luma = max(current_luma * 3.15 + 0.08, previous_mean + previous_sigma * 2.50 + 0.05);
 		float tight_max_previous_luma = max(current_luma * (recovered ? 1.55 : 2.10) + 0.05, previous_mean + previous_sigma * (recovered ? 1.35 : 1.85) + 0.035);
 		float max_previous_luma = mix(base_max_previous_luma, tight_max_previous_luma, directional_strength);
-		vec3 clamped_previous = previous;
+		vec3 clamped_previous = clamp_luminance(previous, max_previous_luma);
+		float previous_clamp_delta = max(previous_luma - luminance(clamped_previous), 0.0);
+		clamp_luma_delta = max(clamp_luma_delta, previous_clamp_delta);
+		clamp_activity = max(clamp_activity, previous_clamp_delta > 1e-4 ? 1.0 : 0.0);
 		filtered = sanitize_color(mix(current, clamped_previous, history_weight));
 		out_age = min(previous_age + 1.0, params.max_history);
 		out_confidence = clamp(mix(current_confidence, previous_confidence, history_weight) + 0.05, 0.0, 1.0);
@@ -305,14 +420,15 @@ void main() {
 
 	float filtered_luma = luminance(filtered);
 	float moment_weight = reusable ? min(0.94, 0.48 + out_age * 0.035) * out_confidence : 0.0;
+	float filtered_second = filtered_luma * filtered_luma + clamp_luma_delta * clamp_luma_delta;
 	float next_mean = mix(filtered_luma, previous_mean, moment_weight);
-	float next_second = mix(filtered_luma * filtered_luma, previous_second, moment_weight);
+	float next_second = max(mix(filtered_second, previous_second, moment_weight), next_mean * next_mean + clamp_luma_delta * clamp_luma_delta * mix(0.35, 0.08, moment_weight));
 
 	imageStore(output_image, pos, vec4(filtered, 1.0));
 	imageStore(next_radiance_image, pos, vec4(filtered, out_confidence));
 	imageStore(next_meta_image, pos, vec4(current_normal_roughness.xyz, current_viewz_hitdist.x));
 	imageStore(next_stats_image, pos, vec4(current_viewz_hitdist.y, next_mean, next_second, out_age));
-	imageStore(diagnostic_image, pos, vec4(hit, out_confidence, clamp(out_age / max(params.max_history, 1.0), 0.0, 1.0), rejection / 8.0));
+	imageStore(diagnostic_image, pos, vec4(hit, out_confidence, clamp(clamp_activity, 0.0, 1.0), rejection / 8.0));
 	imageStore(age_image, pos, vec4(clamp(out_age / max(params.max_history, 1.0), 0.0, 1.0)));
 	imageStore(rejection_image, pos, vec4(rejection / 8.0));
 }
