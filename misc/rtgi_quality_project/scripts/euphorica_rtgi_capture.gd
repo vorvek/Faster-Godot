@@ -11,20 +11,18 @@ const RTGI_KNOB_STAGES = {
 	"rtgi_max_bounces": "RT raygen path depth",
 	"rtgi_energy": "RTGI composite energy",
 	"rtgi_denoiser": "RTGI denoise dispatch",
-	"rtgi_denoiser_strength": "SVGF temporal, spatial, composite, blotch stabilization",
-	"rtgi_denoiser_history_weight": "SVGF temporal accumulation",
-	"rtgi_denoiser_firefly_suppression": "SVGF temporal, prefilter, composite, split composite",
-	"rtgi_denoiser_detail_preservation": "SVGF spatial/composite detail guards",
+	"rtgi_denoiser_strength": "RTGI temporal, spatial, composite, blotch stabilization",
+	"rtgi_denoiser_history_weight": "RTGI temporal accumulation",
+	"rtgi_denoiser_firefly_suppression": "RTGI temporal, prefilter, composite, split composite",
+	"rtgi_denoiser_detail_preservation": "RTGI spatial/composite detail guards",
 	"rtgi_denoiser_split_signals": "RT diffuse/specular split denoise",
-	"rtgi_denoiser_specular_history_weight": "SVGF specular temporal accumulation",
-	"rtgi_denoiser_specular_spatial_strength": "SVGF specular spatial strength",
+	"rtgi_denoiser_specular_history_weight": "RTGI specular temporal accumulation",
+	"rtgi_denoiser_specular_spatial_strength": "RTGI specular spatial strength",
 	"rtgi_ray_firefly_suppression": "RT ray/path contribution clamp",
 	"rtgi_ray_max_radiance": "RT ray/path contribution clamp",
 	"rtgi_analytic_light_sampling_enabled": "RTGI analytic direct source sampling",
 	"rtgi_explicit_emissive_sampling_enabled": "RTGI explicit emissive source sampling",
-	"rtgi_diffuse_radiance_cache_enabled": "RTGI pre-SVGF diffuse radiance cache",
-	"rtgi_overscan_horizontal": "Path Traced camera pan overscan",
-	"rtgi_overscan_vertical": "Path Traced camera pan overscan",
+	"rtgi_diffuse_radiance_cache_enabled": "RTGI pre-ASVFG diffuse radiance cache",
 	"rtgi_debug_mode": "RT raygen debug visualization",
 }
 
@@ -428,10 +426,10 @@ func _record_stage_timing(timings: Dictionary, stage: String, start_msec: int) -
 func _apply_environment(test_case: Dictionary, env: Environment) -> void:
 	env.rtgi_enabled = test_case["rtgi_enabled"]
 	env.rtgi_disable_in_editor = false
-	env.rtgi_mode = Environment.RTGI_MODE_HYBRID if test_case["mode"] == "simple_rt" else Environment.RTGI_MODE_PATH_TRACED
+	env.rtgi_mode = Environment.RTGI_MODE_REFLECTIONS_RT_ONLY if test_case["mode"] == "simple_rt" else Environment.RTGI_MODE_FULL_PATH_TRACING
 	env.rtgi_samples_per_pixel = int(test_case.get("spp", 1))
 	env.rtgi_max_bounces = int(test_case.get("max_bounces", 3))
-	env.rtgi_denoiser = Environment.RTGI_DENOISER_SVGF
+	env.rtgi_denoiser = int(test_case.get("denoiser", Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL))
 	env.rtgi_denoiser_strength = test_case["denoise"]
 	env.rtgi_denoiser_history_weight = test_case["history"]
 	env.rtgi_denoiser_firefly_suppression = float(test_case.get("firefly_suppression", 1.0))

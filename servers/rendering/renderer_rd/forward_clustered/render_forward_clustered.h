@@ -942,6 +942,10 @@ protected:
 public:
 	static RenderForwardClustered *get_singleton() { return singleton; }
 
+	virtual Dictionary pathtracing_get_backend_status() const override;
+	virtual Dictionary pathtracing_get_backend_status_for_backend(RSE::PathtracingBackend p_backend) const override;
+	virtual Array pathtracing_get_backend_capabilities() const override;
+
 	ClusterBuilderSharedDataRD *get_cluster_builder_shared() { return &cluster_builder_shared; }
 	RendererRD::SSEffects *get_ss_effects() { return ss_effects; }
 

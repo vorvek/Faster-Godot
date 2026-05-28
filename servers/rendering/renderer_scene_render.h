@@ -32,6 +32,7 @@
 
 #include "core/math/projection.h"
 #include "core/templates/paged_array.h"
+#include "core/variant/array.h"
 #include "servers/rendering/renderer_geometry_instance.h"
 #include "servers/rendering/rendering_server_types.h"
 #include "servers/rendering/storage/compositor_storage.h"
@@ -258,6 +259,9 @@ public:
 	bool environment_get_pathtracing_enabled(RID p_env) const;
 	void environment_set_pathtracing_params(RID p_env, const PackedFloat32Array &p_params);
 	PackedFloat32Array environment_get_pathtracing_params(RID p_env) const;
+	virtual Dictionary pathtracing_get_backend_status() const;
+	virtual Dictionary pathtracing_get_backend_status_for_backend(RSE::PathtracingBackend p_backend) const;
+	virtual Array pathtracing_get_backend_capabilities() const;
 
 	// Adjustment
 	void environment_set_adjustment(RID p_env, bool p_enable, float p_brightness, float p_contrast, float p_saturation, bool p_use_1d_color_correction, RID p_color_correction);

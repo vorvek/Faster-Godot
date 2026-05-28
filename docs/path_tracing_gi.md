@@ -14,9 +14,14 @@ The feature is exposed on `Environment`, so it appears through the same
 `WorldEnvironment` workflow as SDFGI:
 
 - `rtgi_enabled`
+- `rtgi_backend`
+  - `Vulkan Generic`
+  - `NVIDIA RTXPT`
+  - `AMD HIP RT`
+  - `Intel Embree`
 - `rtgi_mode`
-  - `Simple RT`
-  - `Path Traced`
+  - `Reflections RT Only`
+  - `Full Path Tracing`
 - `rtgi_samples_per_pixel`
 - `rtgi_max_bounces`
 - `rtgi_energy`
@@ -30,8 +35,20 @@ The feature is exposed on `Environment`, so it appears through the same
 - `rtgi_overscan_horizontal`
 - `rtgi_overscan_vertical`
 - `rtgi_denoiser`
-  - `SVGF (Default)`
+  - `ASVFG (Experimental)`
+  - `NVIDIA`
+  - `AMD`
+  - `Intel`
   - `None`
+- `rtgi_strc_enabled`
+- `rtgi_strc_strength`
+- `rtgi_strc_cascade_count`
+- `rtgi_strc_grid_size`
+- `rtgi_strc_base_probe_spacing`
+- `rtgi_strc_rays_per_frame`
+- `rtgi_strc_temporal_weight`
+- `rtgi_strc_static_visual_layers`
+- `rtgi_strc_dynamic_visual_layers`
 - RTGI debug draw modes for noisy input, guides, motion vectors, variance,
   history length, rejection mask, and final denoised output.
 
@@ -42,12 +59,22 @@ The feature is exposed on `Environment`, so it appears through the same
     active renderer is desktop Forward+ Vulkan and the selected GPU exposes
     Vulkan ray tracing. If support is missing, the scene falls back to the
     normal non-RT rendering path. This is off by default for new environments.
+- `rtgi_backend`
+  - `Vulkan Generic`: uses the current built-in Vulkan ray tracing
+    implementation. This is the default and the only available runtime backend
+    in this phase.
+  - `NVIDIA RTXPT`: exposed as a future renderer-port target. Until that path is
+    implemented, the selection is kept on the environment and the renderer
+    warns once before falling back to `Vulkan Generic` for the viewport.
+  - `AMD HIP RT`: exposed for the HIP RT backend plan. It falls back to
+    `Vulkan Generic` until HIP/Vulkan interop is implemented and validated.
+  - `Intel Embree`: exposed for the Embree/OSPRay exploration track. It falls
+    back to `Vulkan Generic` until an in-frame GPU interop path exists.
 - `rtgi_mode`
-  - `Simple RT`: keeps the normal Forward+ raster path for primary visibility
-    and direct rendering, then injects ray-traced indirect diffuse/specular
-    lighting into the GI composition. This is the practical mode for normal game
-    scenes that need moving-light bounce lighting.
-  - `Path Traced`: routes full opaque lighting through the ray tracing path for
+  - `Reflections RT Only`: keeps the normal Forward+ raster path and raster GI
+    systems responsible for diffuse GI, then uses ray tracing for specular and
+    reflection paths only.
+  - `Full Path Tracing`: routes full opaque lighting through the ray tracing path for
     the view. It disables incompatible baked and screen-space GI contributions
     and then composites transparent raster overlays after RT denoising. This is
     heavier and is intended for high-quality dark scenes, captures, and RT
@@ -68,14 +95,14 @@ The feature is exposed on `Environment`, so it appears through the same
     keep RTGI enabled for the running project and exported builds without
     making normal editor navigation pay the RTGI cost. The default is `true`.
 - `rtgi_denoiser_strength`
-  - Controls the SVGF RTGI denoiser's current-frame spatial filtering,
+  - Controls the RTGI denoiser's current-frame spatial filtering,
     variance cleanup, broad blotch stabilization, and firefly suppression.
     Higher values hide more 1 SPP speckles, but can soften texture-driven
     indirect lighting and small dynamic light changes. The default is `0.90`.
     Lower values preserve more detail and response while leaving more raw RT
     noise.
 - `rtgi_denoiser_history_weight`
-  - Controls valid previous-frame radiance reuse in the SVGF temporal pass.
+  - Controls valid previous-frame radiance reuse in the temporal denoiser.
     Higher values improve stability on static surfaces; lower values reduce
     ghosting and response lag. `0.0` disables temporal RTGI radiance reuse, and
     `rtgi_denoiser_strength = 0.0` also forces history off.
@@ -89,7 +116,7 @@ The feature is exposed on `Environment`, so it appears through the same
     surfaces get flattened at high denoiser strength; lower it if textured
     surfaces keep too much residual grain.
 - `rtgi_ray_firefly_suppression`
-  - Applies a biased linear-HDR contribution clamp before the SVGF denoiser.
+  - Applies a biased linear-HDR contribution clamp before the RTGI denoiser.
     It affects direct-light samples, secondary emissive/sky hits, and secondary
     throughput before those values enter temporal history. Primary sky/background
     rays are not clamped by this control. Raise it when dark 1 SPP scenes show
@@ -100,26 +127,127 @@ The feature is exposed on `Environment`, so it appears through the same
     `0.0` disables this source-side clamp. The default is conservative and is
     intended to stop extreme path samples rather than flatten authored lighting.
 - `rtgi_overscan_horizontal` and `rtgi_overscan_vertical`
-  - Add an opt-in path-traced RTGI render margin around the visible viewport.
-    The values are fractions of the visible viewport size. For example, `0.05`
-    allocates 5% extra pixels on both sides of that axis.
-  - The visible crop is moved using camera motion so the leading edge can use up
-    to twice the configured margin while the trailing edge uses less. This
-    traces pixels just outside the current viewport and can reduce edge-local
-    speckles or bright strips from newly revealed pixels during camera motion.
-  - Overscan increases the ray tracing resolution before denoising and is
-    currently applied to Path Traced mode. It does not add samples to interior
-    pixels or replace denoiser tuning for full-frame motion noise. Keep it at
-    `0.0` when the extra edge stability is not worth the RT cost.
+  - Add an opt-in RTGI render margin around the visible viewport. The values are
+    fractions of the visible viewport size. Higher values can reduce edge
+    speckles from newly revealed pixels while moving, but increase RT cost and
+    do not add samples to the interior of the image.
 - `rtgi_denoiser`
-  - `SVGF (Default)`: uses the built-in GPU SVGF denoiser. It is a
+  - `ASVFG (Experimental)`: uses the built-in GPU ASVFG denoiser. It is a
     vendor-neutral RD effect with guided stabilization, moment, variance, and
     atrous passes. It uses RT velocity, normal/roughness, albedo/metalness,
     linear view-Z, hit distance, validity masks, and history IDs to preserve
     edges and reject invalid samples.
+  - `NVIDIA`: requests the NVIDIA denoiser path. The first target is NRD on top
+    of `Vulkan Generic`; DLSS Ray Reconstruction remains gated by Streamline,
+    API, platform, and SDK requirements. Until available, this warns once and
+    falls back to ASVFG without rewriting the scene.
+  - `AMD`: requests the AMD denoiser path. The current renderer maps this to
+    the available FidelityFX-style multi-signal path; future AMD-specific
+    denoising remains gated by a Vulkan-compatible SDK and hardware path.
+  - `Intel`: requests the Intel denoiser path. It warns once and falls back to
+    ASVFG until a supported runtime path is available.
   - `None`: disables the RT denoiser so the raw sampled RT result is visible.
     This is useful for debugging sample distribution, material hits, and TLAS
     coverage, but it is expected to show more noise.
+- `rtgi_strc_*`
+  - Controls the spatiotemporal RTGI radiance cache used for rough secondary
+    diffuse paths. The static and dynamic visual layer masks select which
+    render layers participate in STRC probe updates and cache sampling; objects
+    outside both masks are ignored by STRC. Layers present in both masks are
+    treated as static, while dynamic-only layers are traced into the cache with
+    lower temporal confidence so they refresh more aggressively.
+
+## Backend Capability Contract
+
+The backend API exposes `RenderingServer.pathtracing_get_backend_capabilities()`,
+`RenderingServer.pathtracing_get_backend_status()`, and
+`RenderingServer.pathtracing_get_backend_status_for_backend(backend)` so UI and
+tooling can distinguish a serialized backend request from a runtime-available
+backend. The no-argument status reports the active renderer's last request; the
+request-scoped status reports the fallback decision for a specific backend
+without changing the current `Environment`. Status dictionaries include the
+requested backend, active backend, `using_fallback`, `fallback_backend`,
+`fallback_backend_name`, `fallback_reason`, and the requested/active capability
+dictionaries. `fallback_backend` is `-1` when no fallback is active; otherwise
+it names the backend that will render instead of the request.
+
+Each capability dictionary includes:
+
+- `backend`, `name`, `runtime_name`, `integration_path`,
+  `rendering_device_family`, `rendering_device_name`,
+  `rendering_device_vendor`, and `rendering_device_vendor_id`
+- `available` and `initialized`
+- `vulkan_runtime`
+- `exchange`, with explicit `rendering_device`, `external_memory`,
+  `external_semaphore`, `timeline_semaphore`, and `staged_copy` booleans
+- `availability_checks`
+  - `backend_compiled`
+  - `runtime_detected`
+  - `device_supported`
+  - `resource_exchange_supported`
+  - `implementation_ready`
+  - `failure`, one of `none`, `backend_not_compiled`,
+    `runtime_not_detected`, `device_not_supported`,
+    `resource_exchange_unavailable`, or `implementation_unavailable`
+  - `compile_failure_reason`, `runtime_failure_reason`,
+    `device_failure_reason`, `resource_exchange_failure_reason`, and
+    `implementation_failure_reason`, which provide the human-readable reason
+    for the corresponding failed check
+- `denoiser_handoff`
+- `fallback_reason`
+
+`available` must only become true when the backend is compiled in, its runtime
+is detected through the active `RenderingDevice`, the active device family,
+vendor, and features are supported, one complete resource exchange route is
+available, and the backend has a real scene import/dispatch implementation:
+`rendering_device`, `external_memory` plus
+`external_semaphore`, `timeline_semaphore`, or `staged_copy`. Vendor backends
+stay unavailable until those checks and the implementation-ready gate are real.
+Selecting an unavailable vendor backend leaves the `Environment` request intact,
+emits one clear warning per backend, and falls back to `Vulkan Generic` for
+rendering.
+The Vulkan `RenderingDevice` reports external-memory, external-semaphore, and
+timeline-semaphore support as driver capabilities; vendor backends may expose
+those bits in their status even while their runtime probe or
+implementation-ready gate keeps them unavailable. Vendor runtime probes are
+conservative dynamic-library checks against the executable directory, `PATH`,
+and the expected SDK root variables (`RTXPT_SDK_PATH`/`RTXPT_PATH`,
+`HIPRT_PATH`/`HIP_PATH`/`ROCM_PATH`, and
+`EMBREE_ROOT`/`EMBREE_DIR`/`OSPRAY_ROOT`/`OSPRAY_DIR`/`ONEAPI_ROOT`).
+Where the public ABI is stable enough for this phase, probes also require one
+expected entry point (`hipInit`, `rtcNewDevice`, or `ospInit`) before reporting
+the runtime as detected.
+Backend-specific compile checks are intentionally tied to their own optional
+modules: `module_rtxpt_enabled`, `module_hiprt_enabled`, and
+`module_embree_enabled` or `module_ospray_enabled`. Unrelated modules do not
+make a vendor RTGI backend compiled or available.
+Unavailable backends also report `denoiser_handoff = false`; denoiser handoff
+only describes a path the active backend can actually reach.
+The per-frame backend context also carries an explicit scene resource snapshot:
+the Vulkan-owned TLAS, BLAS RID list, geometry/material/motion/emissive buffers,
+light buffer, environment/parameter buffer, and resource counts. Vendor
+backends must import or mirror from that snapshot instead of reaching around the
+contract for hidden renderer state.
+Backends that use external Vulkan memory/semaphore or timeline-semaphore
+exchange must provide explicit `RenderingDevice` acquire and release driver
+callbacks. The acquire callback is recorded before backend scene import,
+material/light/environment upload, and dispatch; the release callback is
+recorded after backend synchronization. Both phases must declare the output
+texture as a writable callback resource so the frame graph tracks the ownership
+handoff. External-memory exchange must also declare typed platform handles
+(`opaque FD` or `opaque Win32`), binary semaphore handles, output image layout
+expectations before and after backend work, and an RD-to-backend-to-RD ownership
+direction. Timeline-semaphore exchange uses `RenderingDevice` semaphore RIDs,
+timeline values, the same image layout metadata, and the same ownership
+direction. Staged-copy exchange is deliberately callback-managed in this phase:
+the backend release callback performs the copy into the Vulkan-owned output
+texture, must declare a backend-to-RD copy ownership direction, must use that
+same texture as the staged copy target, and must declare the source buffer as
+readable and target texture as writable. It must also declare the
+`RDD::BufferTextureCopyRegion` list and target texture layout for the copy; the
+shared backend validator rejects empty regions, invalid aspects, negative
+texture offsets, zero row pitch, and non-positive copy extents. RD-internal
+backends can dispatch directly through `RenderingDevice`.
 - RTGI debug draw modes
   - `VIEWPORT_DEBUG_DRAW_RTGI_NOISY`: raw path-traced RTGI input before
     denoising.
@@ -133,13 +261,13 @@ The feature is exposed on `Environment`, so it appears through the same
   - `VIEWPORT_DEBUG_DRAW_RTGI_FINAL`: final denoised RTGI texture before crop or
     composition.
   - `VIEWPORT_DEBUG_DRAW_RTGI_CACHE_FILTERED_DIFFUSE`: split-signal diffuse
-    radiance after the diffuse cache and before SVGF consumes it. This view is
+    radiance after the diffuse cache and before ASVFG consumes it. This view is
     available only when the RTGI diffuse radiance cache is active.
   - `VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_CANDIDATE`: source-selection diagnostic
     for RTGI. Red marks the selected source class, green marks
     source confidence, blue marks normalized candidate weight, and alpha stores
     normalized contribution luminance for harness metrics. It is intended for
-    source-side variance attribution before the diffuse cache and SVGF.
+    source-side variance attribution before the diffuse cache and ASVFG.
   - `VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_HISTORY`: source-history diagnostic for
     RTGI. Red marks the current selected source class, green marks
     whether previous source history exists for the pixel, and blue marks source
@@ -156,14 +284,13 @@ The feature is exposed on `Environment`, so it appears through the same
 ## Rendering Behavior
 
 RTGI is a view-time override. Existing SDFGI and VoxelGI resources stay in the
-scene for fallback and comparison, but they are not sampled as indirect lighting
-while RTGI is enabled and hardware ray tracing support is available. Simple RT
-keeps raster lightmaps and lightmap capture SH in the primary Forward+ pass so
-scenes that rely on baked/static lighting do not collapse to a black base image;
-Path Traced mode still disables those baked contributions.
+scene for fallback and comparison. `Reflections RT Only` preserves raster GI
+ownership for diffuse lighting and suppresses diffuse RT paths, while
+`Full Path Tracing` disables incompatible baked and screen-space GI
+contributions for the view.
 
-Simple RT writes ray-traced indirect diffuse/specular lighting into the
-existing Forward+ GI composition path. Path Traced mode routes full lighting
+`Reflections RT Only` writes ray-traced specular/reflection lighting into the
+existing Forward+ composition path. `Full Path Tracing` routes full lighting
 through the ray tracing path and disables incompatible screen-space or baked GI
 contributions for that view.
 
@@ -176,21 +303,29 @@ billboard particle geometry.
 
 RTGI writes noisy radiance, depth, velocity, normal/roughness,
 albedo/metalness, view-Z, hit-distance, validity, and history ID guides at RT
-texture size. The SVGF path consumes those guides directly on the GPU and uses
+texture size. The RTGI denoiser consumes those guides directly on the GPU and uses
 previous-frame radiance history controlled by `rtgi_denoiser_history_weight`.
 Fast movement and disocclusion favor current-frame samples through guide-based
 rejection.
 
-The `SVGF (Default)` option uses the dedicated `RTGIDenoise` RD effect for
-both Simple RT and Path Traced mode. It runs temporal reprojection, guided
+The `ASVFG (Experimental)` option uses the dedicated `RTGIDenoise` RD effect for
+both RTGI modes. It runs temporal reprojection, guided
 stabilization, light-change reactivity, luminance moments, variance
 prefiltering, and edge-aware atrous filtering before the path-traced output is
-cropped back to the visible viewport. Newly visible geometry, newly loaded
+written at the visible internal render size. Newly visible geometry, newly loaded
 materials, and geometry that has just become RT-ready therefore start from fresh
 samples instead of borrowing stale accumulated lighting.
 
+The AMD/FidelityFX-compatible path runs a separate RTGI denoise graph for
+the split lighting signals. Low-frequency diffuse GI, dominant direct light,
+emissive, sky, and specular radiance each keep their own temporal/spatial
+resources, then a FidelityFX-style composite pass remodulates the denoised
+signals into the final RTGI output. Switching between ASVFG, vendor selections, and
+raw output clears the inactive denoiser resources so stale histories are not
+reused across modes.
+
 The ray tracing path now applies optional source-side contribution clamping in
-linear HDR space before SVGF sees the sample. The high-strength denoiser path
+linear HDR space before denoising. The high-strength denoiser path
 then treats isolated bright pixels in dark, unsupported neighborhoods as
 firefly candidates before they enter temporal moments/history. Broad diffuse
 cleanup is reduced on textured rough surfaces, while glossy and metallic
@@ -206,7 +341,7 @@ the existing non-ray-traced path instead of destructively changing scene data.
 
 - `scene/resources/environment.*`
   - Adds RTGI properties, inspector bindings, enum values, and defaults.
-  - Low-SPP stability is handled by the SVGF denoiser with a dedicated RTGI
+  - Low-SPP stability is handled by the RTGI denoiser with a dedicated RTGI
     history-weight control.
 - `servers/rendering/storage/environment_storage.*`
   - Stores RTGI state in rendering-server environment data.
@@ -242,16 +377,17 @@ the existing non-ray-traced path instead of destructively changing scene data.
     hit-distance, validity, and history ID.
   - Applies clean-room, biased linear-HDR contribution limits to extreme direct
     samples, secondary emissive/sky hits, and secondary path throughput before
-    SVGF history.
+    ASVFG history.
 - `servers/rendering/renderer_rd/effects/rtgi_denoise.*`
-  - Adds the SVGF/RELAX-style RTGI denoiser as a separate RD effect.
+  - Adds the ASVFG/RELAX-style RTGI denoiser and FidelityFX-style RTGI denoiser
+    as separate RD effect paths.
     It maintains moments, variance, rejection, noisy-input, and guide textures,
     then runs a current-frame guided stabilizer to reduce broad diffuse
     blotches. Max denoiser strength uses stronger isolated-outlier suppression
     instead of forcing an extra large-radius atrous pass.
 - `servers/rendering/renderer_rd/effects/taa.*`
   - Remains the normal viewport TAA path and fallback temporal resolve. Path
-    traced RTGI uses its dedicated SVGF denoiser before transparent rendering.
+    traced RTGI uses its dedicated RTGI denoiser before transparent rendering.
 - `servers/rendering/renderer_rd/shaders/effects/taa_resolve.glsl`
   - Rejects reprojected history when RT validity or history ID checks fail in
     fallback RT temporal resolves.
@@ -297,7 +433,8 @@ Current RTGI buffer coverage compared with NRD:
 - Missing for SIGMA import: dedicated penumbra/translucency shadow inputs and
   a shadow denoiser dispatch path.
 
-The default shipped RTGI denoiser is now SVGF for interactive motion stability.
+The default shipped RTGI denoiser is now ASVFG for interactive motion stability,
+with FidelityFX available as an experimental multi-signal alternative.
 Future NRD or vendor-specific work should start from the existing guide
 textures, split diffuse/specular signals to match the target backend's resource
 model, then add an optional backend that consumes those guides without changing
@@ -369,8 +506,8 @@ PDF/weight accounting.
 ## Cons And Limitations
 
 - Requires Vulkan hardware ray tracing support for the RTGI path.
-- Mobile, Compatibility, Metal, D3D12, XR, and non-Forward+ renderer paths are
-  out of scope for this fork profile.
+- Mobile, Compatibility, Metal, XR, non-Vulkan, and non-Forward+ renderer paths
+  are out of scope for this fork profile.
 - Performance depends heavily on scene complexity, samples per pixel, bounce
   count, denoising settings, and GPU class.
 - Transparent particles are raster-only in this implementation; they do not

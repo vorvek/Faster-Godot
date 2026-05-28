@@ -32,20 +32,44 @@ layout(set = 0, binding = 14, std430) readonly buffer GlobalShaderUniformData {
 }
 global_shader_uniforms;
 
-#ifndef RT_STAGE_ANY_HIT
-
 layout(set = 0, binding = 6, std140) uniform RaytracingParams {
 	vec4 rt_params[10];
 	mat4 prev_vp_unjittered;
 	mat4 curr_vp_unjittered;
 	mat4 inv_projection_unjittered;
-	vec4 rt_overscan;
-	vec4 rt_prev_overscan;
+	vec4 rt_view_rect;
+	vec4 rt_prev_view_rect;
 };
 
 float get_rt_param(uint idx) {
 	return rt_params[idx >> 2u][idx & 3u];
 }
+
+bool rt_strc_probe_update_mode() {
+	return (RT_FLAGS & RT_FLAG_STRC_PROBE_UPDATE) != 0u;
+}
+
+uint rt_strc_static_visual_layer_mask() {
+	return uint(get_rt_param(RT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS)) & 0xfffffu;
+}
+
+uint rt_strc_dynamic_visual_layer_mask() {
+	return (uint(get_rt_param(RT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS)) & ~rt_strc_static_visual_layer_mask()) & 0xfffffu;
+}
+
+uint rt_strc_visual_layer_mask() {
+	return rt_strc_static_visual_layer_mask() | rt_strc_dynamic_visual_layer_mask();
+}
+
+bool rt_strc_visual_layer_visible(uint p_layer_mask) {
+	return (p_layer_mask & rt_strc_visual_layer_mask()) != 0u;
+}
+
+bool rt_strc_visual_layer_dynamic(uint p_layer_mask) {
+	return (p_layer_mask & rt_strc_dynamic_visual_layer_mask()) != 0u;
+}
+
+#ifndef RT_STAGE_ANY_HIT
 
 vec3 rt_clamp_luminance(vec3 color, float max_luma) {
 	float luma = rt_luminance(color);
@@ -104,19 +128,19 @@ bool project_uv_checked(vec3 world_pos, mat4 vp, out vec2 uv) {
 }
 
 vec2 rt_visible_size() {
-	return max(rt_overscan.zw, vec2(1.0));
+	return max(rt_view_rect.zw, vec2(1.0));
 }
 
 vec2 rt_extent() {
-	return max(rt_prev_overscan.zw, vec2(1.0));
+	return max(rt_prev_view_rect.zw, vec2(1.0));
 }
 
 vec2 rt_current_origin() {
-	return rt_overscan.xy;
+	return rt_view_rect.xy;
 }
 
 vec2 rt_previous_origin() {
-	return rt_prev_overscan.xy;
+	return rt_prev_view_rect.xy;
 }
 
 vec2 rt_current_visible_uv(ivec2 pixel) {
@@ -233,10 +257,6 @@ layout(set = 0, binding = 66, std430) buffer RTGISTRCProbeRayResultBuffer {
 
 bool rt_strc_enabled() {
 	return (RT_FLAGS & RT_FLAG_STRC_ENABLED) != 0u && get_rt_param(RT_PARAM_RTGI_STRC_ENABLED) > 0.5 && get_rt_param(RT_PARAM_RTGI_STRC_STRENGTH) > 0.001;
-}
-
-bool rt_strc_probe_update_mode() {
-	return (RT_FLAGS & RT_FLAG_STRC_PROBE_UPDATE) != 0u;
 }
 
 vec3 rt_camera_world_origin() {

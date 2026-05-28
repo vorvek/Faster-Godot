@@ -46,24 +46,24 @@ Useful options:
 - `--rtgi-camera-pan`
 - `--rtgi-write-reference`
 
-`--rtgi-capture-comparison` writes beauty-frame Path Traced split-signal,
-Path Traced single-beauty fallback, Hybrid RT, no-RTGI, and high-SPP reference
+`--rtgi-capture-comparison` writes beauty-frame Full Path Tracing split-signal,
+Full Path Tracing single-beauty fallback, Reflections RT Only, no-RTGI, and high-SPP reference
 captures plus a comparison grid for visual
 inspection. `final` is still captured by `--rtgi-capture-debug` as the denoised
 RTGI debug buffer.
 
 ## Coexistence Modes
 
-The `sdfgi`, `voxelgi`, `lightmap`, and `lightprobe` scenes validate Simple RT
+The `sdfgi`, `voxelgi`, `lightmap`, and `lightprobe` scenes validate Reflections RT Only
 coexisting with raster GI owners. Each mode captures the RTGI frame and a
 temporary no-RTGI raster fallback frame, then checks that the raster GI
-contribution remains visible without a large Simple RT diffuse boost.
+contribution remains visible without a large Reflections RT Only diffuse boost.
 
 `lightmap` builds a tiny procedural `Texture2DArray` and `LightmapGIData` at
 runtime, so it does not require baked assets. `lightprobe` creates procedural
 LightmapGI probe capture data for a dynamic object. `voxelgi` bakes a small
 procedural VoxelGI during scene setup. `path_traced_sdfgi_exclusive` keeps SDFGI
-enabled in the environment, but expects the Path Traced frame to stay exclusive
+enabled in the environment, but expects the Full Path Tracing frame to stay exclusive
 while the temporary raster fallback still shows SDFGI lighting.
 
 ## Euphorica RTGI Capture
@@ -79,11 +79,11 @@ D:\dev\faster-godot-4.6.3\bin\faster-godot.windows.editor.dev.x86_64.faster_godo
 
 Profiles:
 
-- `compare`: no-RTGI baseline plus Simple RT, Path Traced, glow/fog, lantern
+- `compare`: no-RTGI baseline plus Reflections RT Only, Full Path Tracing, glow/fog, lantern
   emissive, shadowed OmniLight, and normal-deviation debug captures.
-- `split_ab`: no-RTGI baseline plus split-signal on/off pairs for Simple RT and
-  Path Traced at `640x360` and `1280x720`, plus content toggles.
-- `matrix`: full Simple RT/Path Traced sweep for denoise `0.90`, `0.95`,
+- `split_ab`: no-RTGI baseline plus split-signal on/off pairs for Reflections RT Only and
+  Full Path Tracing at `640x360` and `1280x720`, plus content toggles.
+- `matrix`: full Reflections RT Only/Full Path Tracing sweep for denoise `0.90`, `0.95`,
   `0.98`, `1.0`, history `0.95`, `0.98`, `640x360`/`1280x720`, content
   toggles, and split-signal on/off comparisons. For Euphorica-centered RTGI
   work, use Cornell plus Euphorica validation; Sponza is optional and not part

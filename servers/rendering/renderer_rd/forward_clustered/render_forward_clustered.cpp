@@ -111,12 +111,13 @@ static uint64_t _rtgi_diffuse_cache_signature_mix_float(uint64_t p_signature, fl
 	return _rtgi_diffuse_cache_signature_mix(p_signature, value.u);
 }
 
-static uint64_t _rtgi_diffuse_cache_signature(uint32_t p_rt_flags, const float *p_rt_env_params, const Size2i &p_size, uint32_t p_view_count) {
+static uint64_t _rtgi_diffuse_cache_signature(uint32_t p_rt_flags, RSE::PathtracingBackend p_active_backend, const float *p_rt_env_params, const Size2i &p_size, uint32_t p_view_count) {
 	uint64_t signature = 0xcbf29ce484222325ull;
 	signature = _rtgi_diffuse_cache_signature_mix(signature, p_rt_flags);
 	signature = _rtgi_diffuse_cache_signature_mix(signature, (uint64_t)(uint32_t)p_size.x);
 	signature = _rtgi_diffuse_cache_signature_mix(signature, (uint64_t)(uint32_t)p_size.y);
 	signature = _rtgi_diffuse_cache_signature_mix(signature, p_view_count);
+	signature = _rtgi_diffuse_cache_signature_mix(signature, (uint32_t)p_active_backend);
 
 	if (p_rt_env_params) {
 		signature = _rtgi_diffuse_cache_signature_mix_float(signature, p_rt_env_params[RSE::PT_PARAM_MODE]);
@@ -130,6 +131,25 @@ static uint64_t _rtgi_diffuse_cache_signature(uint32_t p_rt_flags, const float *
 	}
 
 	return signature != 0 ? signature : 1;
+}
+
+static const char *_rtgi_denoiser_name(uint32_t p_denoiser) {
+	switch (p_denoiser) {
+		case RSE::PT_DENOISER_NONE:
+			return "None";
+		case RSE::PT_DENOISER_INTERNAL:
+			return "ASVFG";
+		case RSE::PT_DENOISER_FIDELITYFX:
+			return "FidelityFX";
+		case RSE::PT_DENOISER_NVIDIA:
+			return "NVIDIA";
+		case RSE::PT_DENOISER_AMD:
+			return "AMD";
+		case RSE::PT_DENOISER_INTEL:
+			return "Intel";
+		default:
+			return "Unknown";
+	}
 }
 
 static bool _rt_camera_history_cut_detected(const RenderDataRD *p_render_data) {
@@ -260,6 +280,13 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_clear_textures
 	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
 	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
 	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE_COMPOSITE);
+	render_buffers->clear_context(RB_SCOPE_RTGI_FIDELITYFX);
+	render_buffers->clear_context(RB_SCOPE_RTGI_FIDELITYFX_DIFFUSE);
+	render_buffers->clear_context(RB_SCOPE_RTGI_FIDELITYFX_DIRECT);
+	render_buffers->clear_context(RB_SCOPE_RTGI_FIDELITYFX_EMISSIVE);
+	render_buffers->clear_context(RB_SCOPE_RTGI_FIDELITYFX_INDIRECT);
+	render_buffers->clear_context(RB_SCOPE_RTGI_FIDELITYFX_SKY);
+	render_buffers->clear_context(RB_SCOPE_RTGI_FIDELITYFX_SPECULAR);
 	render_buffers->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
 	render_buffers->clear_context(RB_SCOPE_RTGI_STRC);
 	rt_diffuse_cache_signature = 0;
@@ -2334,11 +2361,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	const float *rt_env_params = scene_features.rt && p_render_data->environment.is_valid()
 			? RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment)
 			: nullptr;
-	bool rt_replaces_opaque = scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_PATH_TRACED;
+	bool rt_replaces_opaque = scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING;
 	scene_features.rt_replaces_opaque = rt_replaces_opaque;
 	const uint32_t rt_denoiser = rt_env_params ? (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
-	const bool rt_svgf_denoiser = rt_denoiser != RSE::PT_DENOISER_NONE;
-	const bool rt_temporal_denoiser = rt_svgf_denoiser;
+	if (scene_features.rt && (rt_denoiser == RSE::PT_DENOISER_NVIDIA || rt_denoiser == RSE::PT_DENOISER_AMD || rt_denoiser == RSE::PT_DENOISER_INTEL)) {
+		WARN_PRINT_ONCE(vformat("RTGI denoiser '%s' is not available in the Vulkan renderer yet. Falling back to ASVFG for this viewport without changing the Environment resource.", _rtgi_denoiser_name(rt_denoiser)));
+	}
+	const bool rt_asvfg_denoiser = rt_denoiser == RSE::PT_DENOISER_INTERNAL || rt_denoiser == RSE::PT_DENOISER_NVIDIA || rt_denoiser == RSE::PT_DENOISER_AMD || rt_denoiser == RSE::PT_DENOISER_INTEL;
+	const bool rt_fidelityfx_denoiser = rt_denoiser == RSE::PT_DENOISER_FIDELITYFX;
+	const bool rt_temporal_denoiser = rt_asvfg_denoiser || rt_fidelityfx_denoiser;
 
 	static const int texture_multisamples[RSE::VIEWPORT_MSAA_MAX] = { 1, 2, 4, 8 };
 
@@ -2582,12 +2613,17 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RTViewportState *rt_state = nullptr;
 	RID rt_uniform_set;
 	RID rt_pipeline;
+	RTGIBackendFrameContext rt_backend_context;
+	RTGIBackendStatus rt_backend_status;
+	RSE::PathtracingBackend rt_path_output_backend = RSE::PT_BACKEND_VULKAN_GENERIC;
 	bool rt_strc_enabled = false;
 	uint32_t rt_strc_cascade_count = 3;
 	uint32_t rt_strc_grid_size = 24;
 	uint32_t rt_strc_rays_per_frame = 4096;
 	float rt_strc_base_probe_spacing = 1.5f;
 	float rt_strc_temporal_weight = 0.97f;
+	uint32_t rt_strc_static_visual_layers = 0xfffff;
+	uint32_t rt_strc_dynamic_visual_layers = 0xfffff;
 	const bool rt_requested = scene_features.rt;
 	const bool rt_setup_deferred = scene_features.rt && !rt_replaces_opaque;
 	auto invalidate_rt_temporal_history = [&]() {
@@ -2624,6 +2660,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		rb->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
 		rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
 		rb->clear_context(RB_SCOPE_RTGI_DENOISE_COMPOSITE);
+		rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX);
+		rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_DIFFUSE);
+		rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_DIRECT);
+		rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_EMISSIVE);
+		rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_INDIRECT);
+		rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_SKY);
+		rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_SPECULAR);
 		rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
 		rb->clear_context(RB_SCOPE_RTGI_STRC);
 		rb_data->rt_strc_scroll_valid = false;
@@ -2658,7 +2701,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 	};
 	auto setup_rt_state = [&]() -> bool {
-		if (!scene_features.rt || !rb_data.is_valid() || !raytracing || !raytracing->get_shader()) {
+		if (!scene_features.rt || !rb_data.is_valid() || !raytracing) {
 			return false;
 		}
 
@@ -2668,6 +2711,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		const float *env_params = (p_render_data && p_render_data->environment.is_valid())
 				? RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment)
 				: nullptr;
+		const RSE::PathtracingBackend requested_rtgi_backend = env_params ? RenderRaytracing::backend_from_env_param(env_params[RSE::PT_PARAM_RTGI_BACKEND]) : RSE::PT_BACKEND_VULKAN_GENERIC;
+		raytracing->resolve_backend(requested_rtgi_backend);
+		rt_backend_status = raytracing->get_backend_status();
 		const bool fog_enabled = p_render_data && p_render_data->environment.is_valid() && environment_get_fog_enabled(p_render_data->environment);
 		rt_flags = SceneShaderRaytracing::compute_rt_flags(env_params, fog_enabled);
 		rt_strc_enabled = (rt_flags & SceneShaderRaytracing::RT_FLAG_STRC_ENABLED) != 0;
@@ -2676,11 +2722,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		rt_strc_rays_per_frame = env_params ? CLAMP((uint32_t)env_params[RSE::PT_PARAM_RTGI_STRC_RAYS_PER_FRAME], 0u, 32768u) : 4096u;
 		rt_strc_base_probe_spacing = env_params ? CLAMP(env_params[RSE::PT_PARAM_RTGI_STRC_BASE_PROBE_SPACING], 0.25f, 8.0f) : 1.5f;
 		rt_strc_temporal_weight = env_params ? CLAMP(env_params[RSE::PT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT], 0.0f, 0.995f) : 0.97f;
+		rt_strc_static_visual_layers = env_params ? ((uint32_t)env_params[RSE::PT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS] & 0xfffff) : 0xfffff;
+		rt_strc_dynamic_visual_layers = env_params ? ((uint32_t)env_params[RSE::PT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS] & 0xfffff) : 0xfffff;
 		if (rtgi_strc) {
 			uint64_t strc_signature = _rtgi_diffuse_cache_signature_mix(0x727473747263ULL, rt_flags);
 			strc_signature = _rtgi_diffuse_cache_signature_mix(strc_signature, rt_strc_cascade_count);
 			strc_signature = _rtgi_diffuse_cache_signature_mix(strc_signature, rt_strc_grid_size);
 			strc_signature = _rtgi_diffuse_cache_signature_mix_float(strc_signature, rt_strc_base_probe_spacing);
+			strc_signature = _rtgi_diffuse_cache_signature_mix(strc_signature, rt_strc_static_visual_layers);
+			strc_signature = _rtgi_diffuse_cache_signature_mix(strc_signature, rt_strc_dynamic_visual_layers);
 			if (rtgi_strc->ensure_resources(rb, rt_strc_cascade_count, rt_strc_grid_size, MAX(rt_strc_rays_per_frame, 1u), strc_signature)) {
 				rb_data->rt_strc_scroll_valid = false;
 			}
@@ -2709,28 +2759,36 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_COMPOSITE);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_DIFFUSE);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_DIRECT);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_EMISSIVE);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_INDIRECT);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_SKY);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_SPECULAR);
 			rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
 			rb->clear_context(RB_SCOPE_RTGI_STRC);
 			rb_data->rt_strc_scroll_valid = false;
 		}
 
-		rt_state = raytracing->build_tlas(p_render_data, rt_flags);
-		if (rt_state) {
-			rt_uniform_set = raytracing->update_uniform_set(rt_state, p_render_data, rt_flags);
-			if (rt_state->radiance_history_invalidated) {
-				reject_rt_previous_history();
-				rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
-				if (rb_data.is_valid()) {
-					rb_data->rt_diffuse_cache_signature_valid = false;
-				}
+		if (!raytracing->prepare_backend_frame(p_render_data, rt_flags, rt_backend_context)) {
+			return false;
+		}
+		rt_state = rt_backend_context.viewport_state;
+		rt_uniform_set = rt_backend_context.uniform_set;
+		rt_pipeline = rt_backend_context.pipeline;
+		if (rt_backend_context.radiance_history_invalidated) {
+			reject_rt_previous_history();
+			rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
+			if (rb_data.is_valid()) {
+				rb_data->rt_diffuse_cache_signature_valid = false;
+			}
+			if (rt_state) {
 				rt_state->radiance_history_invalidated = false;
 			}
 		}
-		if (rt_uniform_set.is_valid()) {
-			rt_pipeline = raytracing->get_shader()->get_raytracing_pipeline(rt_flags);
-		}
 
-		return rt_uniform_set.is_valid() && rt_pipeline.is_valid();
+		return true;
 	};
 
 	bool rt_setup_ready = false;
@@ -2743,7 +2801,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 		invalidate_rt_temporal_history();
 	}
-	if (!rt_setup_deferred && rt_requested && (!rt_pipeline.is_valid() || !rt_uniform_set.is_valid())) {
+	if (!rt_setup_deferred && rt_requested && !rt_setup_ready) {
 		ERR_PRINT_ONCE_ED("Failed to initialize raytracing pipeline or uniform set. Falling back to raster opaque rendering for this frame.");
 		scene_features.rt = false;
 		rt_replaces_opaque = false;
@@ -3164,7 +3222,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	// Execute raytracing if enabled. Simple RT produces an indirect-light
 	// texture; Path Traced mode replaces the opaque/motion vector pass.
-	if (scene_features.rt && rb_data.is_valid() && raytracing && raytracing->get_shader()) {
+	if (scene_features.rt && rb_data.is_valid() && raytracing) {
 		auto composite_rt_volumetric_fog = [&]() {
 			if (!rt_replaces_opaque || !rt_needs_volumetric_fog || !rb->has_custom_data(RB_SCOPE_FOG)) {
 				return;
@@ -3187,110 +3245,79 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		RENDER_TIMESTAMP("Pathtracer");
 
-		RD::RaytracingListID raytracing_list = RD::get_singleton()->raytracing_list_begin();
-		RD::get_singleton()->raytracing_list_bind_raytracing_pipeline(raytracing_list, rt_pipeline);
-		RD::get_singleton()->raytracing_list_bind_uniform_set(raytracing_list, rt_uniform_set, 0);
-		// Bindless set 1 can legitimately be unset when no bindless textures
-		// are live (e.g. first frame, no materials referencing textures yet);
-		// skip binding it in that case instead of tripping validation.
-		RID bindless_set = raytracing->get_bindless_uniform_set();
-		if (bindless_set.is_valid()) {
-			RD::get_singleton()->raytracing_list_bind_uniform_set(raytracing_list, bindless_set, 1);
-		}
-
-		// Critical: Mat UBO pool buffer dependency for correctness.
-		// TODO: Materials larger than 512 bytes are currently not taken into account. This can be very bad. (they produce a warning whenever they are used)
-		//       Better to avoid >512 bytes per material anyway, but this could cause GPU hangs in case that path is taken.
-		//       So either we support that properly (keep a running tally of which ones are referenced), or we drop support for these.
-		const uint32_t rt_dependency_count =
-				1 + raytracing->get_material_ubo_dependencies().size() +
-				raytracing->get_geometry_buffer_dependencies().size() +
-				raytracing->get_deformed_buffer_dependencies().size();
-		raytracing->begin_unique_buffer_dependencies(rt_dependency_count);
-		RID mat_ubo_pool = raytracing->get_mat_ubo_pool_buffer();
-		raytracing->add_unique_buffer_dependency(raytracing_list, mat_ubo_pool);
-		for (const RID &material_ubo : raytracing->get_material_ubo_dependencies()) {
-			raytracing->add_unique_buffer_dependency(raytracing_list, material_ubo);
-		}
-		for (const RID &geometry_buffer : raytracing->get_geometry_buffer_dependencies()) {
-			raytracing->add_unique_buffer_dependency(raytracing_list, geometry_buffer);
-		}
-		for (const RID &deformed_buffer : raytracing->get_deformed_buffer_dependencies()) {
-			raytracing->add_unique_buffer_dependency(raytracing_list, deformed_buffer);
-		}
-
-		// Raytracing dispatches at its own RT size. Path-traced RTGI may add
-		// overscan around the visible viewport so temporal history exists just
-		// outside the final crop.
-		Size2i rt_size = rb_data->rt_get_size();
-		RD::get_singleton()->raytracing_list_trace_rays(raytracing_list, 0, raytracing->get_shader()->get_hit_sbt(rt_flags), rt_size.width, rt_size.height, 1);
-		RD::get_singleton()->raytracing_list_end();
-
-		if (rt_strc_enabled && rtgi_strc && rt_state && rt_strc_rays_per_frame > 0 && rtgi_strc->get_ray_result_buffer().is_valid()) {
-			RD::get_singleton()->draw_command_begin_label("RTGI STRC Probe Update");
-			const uint32_t probe_flags = rt_flags | SceneShaderRaytracing::RT_FLAG_STRC_PROBE_UPDATE;
-			RID probe_uniform_set = raytracing->update_uniform_set(rt_state, p_render_data, probe_flags);
-			RID probe_pipeline = raytracing->get_shader()->get_raytracing_pipeline(probe_flags);
-			if (probe_uniform_set.is_valid() && probe_pipeline.is_valid()) {
-				RD::RaytracingListID probe_list = RD::get_singleton()->raytracing_list_begin();
-				RD::get_singleton()->raytracing_list_bind_raytracing_pipeline(probe_list, probe_pipeline);
-				RD::get_singleton()->raytracing_list_bind_uniform_set(probe_list, probe_uniform_set, 0);
-				RID probe_bindless_set = raytracing->get_bindless_uniform_set();
-				if (probe_bindless_set.is_valid()) {
-					RD::get_singleton()->raytracing_list_bind_uniform_set(probe_list, probe_bindless_set, 1);
-				}
-				const uint32_t probe_dependency_count =
-						2 + raytracing->get_material_ubo_dependencies().size() +
-						raytracing->get_geometry_buffer_dependencies().size() +
-						raytracing->get_deformed_buffer_dependencies().size();
-				raytracing->begin_unique_buffer_dependencies(probe_dependency_count);
-				RID probe_mat_ubo_pool = raytracing->get_mat_ubo_pool_buffer();
-				raytracing->add_unique_buffer_dependency(probe_list, probe_mat_ubo_pool);
-				for (const RID &material_ubo : raytracing->get_material_ubo_dependencies()) {
-					raytracing->add_unique_buffer_dependency(probe_list, material_ubo);
-				}
-				for (const RID &geometry_buffer : raytracing->get_geometry_buffer_dependencies()) {
-					raytracing->add_unique_buffer_dependency(probe_list, geometry_buffer);
-				}
-				for (const RID &deformed_buffer : raytracing->get_deformed_buffer_dependencies()) {
-					raytracing->add_unique_buffer_dependency(probe_list, deformed_buffer);
-				}
-				RD::get_singleton()->raytracing_list_add_buffer_dependency(probe_list, rtgi_strc->get_ray_result_buffer(), true);
-				RD::get_singleton()->raytracing_list_trace_rays(probe_list, 0, raytracing->get_shader()->get_hit_sbt(probe_flags), rt_strc_rays_per_frame, 1, 1);
-				RD::get_singleton()->raytracing_list_end();
-				uint64_t process_strc_signature = _rtgi_diffuse_cache_signature_mix(0x727473747263ULL, rt_flags);
-				process_strc_signature = _rtgi_diffuse_cache_signature_mix(process_strc_signature, rt_strc_cascade_count);
-				process_strc_signature = _rtgi_diffuse_cache_signature_mix(process_strc_signature, rt_strc_grid_size);
-				process_strc_signature = _rtgi_diffuse_cache_signature_mix_float(process_strc_signature, rt_strc_base_probe_spacing);
-				if (rtgi_strc->ensure_resources(rb, rt_strc_cascade_count, rt_strc_grid_size, MAX(rt_strc_rays_per_frame, 1u), process_strc_signature)) {
-					rb_data->rt_strc_scroll_valid = false;
-				}
-				Vector3i current_probe_origins[4];
-				Vector3i cascade_scroll[4];
-				const Vector3 camera_origin = p_render_data->scene_data->cam_transform.origin;
-				for (uint32_t cascade = 0; cascade < 4; cascade++) {
-					const double spacing = double(rt_strc_base_probe_spacing) * Math::pow(2.0, double(cascade));
-					current_probe_origins[cascade] = Vector3i(
-							Math::floor(camera_origin.x / spacing),
-							Math::floor(camera_origin.y / spacing),
-							Math::floor(camera_origin.z / spacing));
-					cascade_scroll[cascade] = rb_data->rt_strc_scroll_valid ? current_probe_origins[cascade] - rb_data->rt_strc_probe_origins[cascade] : Vector3i();
-				}
-				rtgi_strc->process(rb, rt_strc_cascade_count, rt_strc_grid_size, rt_strc_rays_per_frame, rt_strc_temporal_weight, rt_state->frame_counter, cascade_scroll, rb_data->rt_strc_scroll_valid, 0);
-				for (uint32_t cascade = 0; cascade < 4; cascade++) {
-					rb_data->rt_strc_probe_origins[cascade] = current_probe_origins[cascade];
-				}
-				rb_data->rt_strc_scroll_valid = true;
-			}
+		const RTGIBackendDispatchResult rt_dispatch_result = raytracing->dispatch_path_trace_backend(rt_backend_context);
+		bool rt_dispatch_ok = rt_dispatch_result == RTGI_BACKEND_DISPATCH_OK;
+		if (!rt_dispatch_ok) {
+			ERR_PRINT_ONCE_ED(rt_dispatch_result == RTGI_BACKEND_DISPATCH_SAFE_FAILURE ? "Failed to dispatch the active RTGI backend after recovering RTGI output ownership. Rendering will continue with RT disabled for this frame." : "Failed to dispatch the active RTGI backend and recover RTGI output ownership. Rendering will continue with RT disabled for this frame.");
+			scene_features.rt = false;
+			scene_features.rt_replaces_opaque = false;
+			rt_replaces_opaque = false;
+			using_rt_denoise = false;
 			RD::get_singleton()->draw_command_end_label();
 		}
 
-		RD::get_singleton()->texture_copy(rb_data->rt_get_source_candidate(), rb_data->rt_get_source_candidate_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
-		RD::get_singleton()->texture_copy(rb_data->rt_get_source_candidate_key(), rb_data->rt_get_source_candidate_key_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
-		RD::get_singleton()->texture_copy(rb_data->rt_get_source_direct_candidate(), rb_data->rt_get_source_direct_candidate_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
-		RD::get_singleton()->texture_copy(rb_data->rt_get_source_direct_candidate_key(), rb_data->rt_get_source_direct_candidate_key_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
-		RD::get_singleton()->texture_copy(rb_data->rt_get_normal_roughness(), rb_data->rt_get_source_normal_roughness_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
-		RD::get_singleton()->texture_copy(rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_source_viewz_hitdist_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
+		if (rt_dispatch_ok) {
+			rt_backend_status = raytracing->get_backend_status();
+			rt_path_output_backend = rt_backend_status.active_backend;
+			rt_state = rt_backend_context.viewport_state;
+			bool rt_post_safe = true;
+			Size2i rt_size = rb_data->rt_get_size();
+			if (rt_strc_enabled && rtgi_strc && rt_state && rt_strc_rays_per_frame > 0 && rtgi_strc->get_ray_result_buffer().is_valid()) {
+				RD::get_singleton()->draw_command_begin_label("RTGI STRC Probe Update");
+				const uint32_t probe_flags = rt_flags | SceneShaderRaytracing::RT_FLAG_STRC_PROBE_UPDATE;
+				const RTGIBackendDispatchResult probe_dispatch_result = raytracing->dispatch_probe_update_backend(rt_backend_context, probe_flags, rtgi_strc->get_ray_result_buffer(), rt_strc_rays_per_frame);
+				if (probe_dispatch_result == RTGI_BACKEND_DISPATCH_OK) {
+					rt_state = rt_backend_context.viewport_state;
+					uint64_t process_strc_signature = _rtgi_diffuse_cache_signature_mix(0x727473747263ULL, rt_flags);
+					process_strc_signature = _rtgi_diffuse_cache_signature_mix(process_strc_signature, rt_strc_cascade_count);
+					process_strc_signature = _rtgi_diffuse_cache_signature_mix(process_strc_signature, rt_strc_grid_size);
+					process_strc_signature = _rtgi_diffuse_cache_signature_mix_float(process_strc_signature, rt_strc_base_probe_spacing);
+					process_strc_signature = _rtgi_diffuse_cache_signature_mix(process_strc_signature, rt_strc_static_visual_layers);
+					process_strc_signature = _rtgi_diffuse_cache_signature_mix(process_strc_signature, rt_strc_dynamic_visual_layers);
+					if (rtgi_strc->ensure_resources(rb, rt_strc_cascade_count, rt_strc_grid_size, MAX(rt_strc_rays_per_frame, 1u), process_strc_signature)) {
+						rb_data->rt_strc_scroll_valid = false;
+					}
+					Vector3i current_probe_origins[4];
+					Vector3i cascade_scroll[4];
+					const Vector3 camera_origin = p_render_data->scene_data->cam_transform.origin;
+					for (uint32_t cascade = 0; cascade < 4; cascade++) {
+						const double spacing = double(rt_strc_base_probe_spacing) * Math::pow(2.0, double(cascade));
+						current_probe_origins[cascade] = Vector3i(
+								Math::floor(camera_origin.x / spacing),
+								Math::floor(camera_origin.y / spacing),
+								Math::floor(camera_origin.z / spacing));
+						cascade_scroll[cascade] = rb_data->rt_strc_scroll_valid ? current_probe_origins[cascade] - rb_data->rt_strc_probe_origins[cascade] : Vector3i();
+					}
+					rtgi_strc->process(rb, rt_strc_cascade_count, rt_strc_grid_size, rt_strc_rays_per_frame, rt_strc_temporal_weight, rt_state->frame_counter, cascade_scroll, rb_data->rt_strc_scroll_valid, 0);
+					for (uint32_t cascade = 0; cascade < 4; cascade++) {
+						rb_data->rt_strc_probe_origins[cascade] = current_probe_origins[cascade];
+					}
+					rb_data->rt_strc_scroll_valid = true;
+				} else {
+					rt_post_safe = probe_dispatch_result == RTGI_BACKEND_DISPATCH_SAFE_FAILURE;
+					rb_data->rt_strc_scroll_valid = false;
+					ERR_PRINT_ONCE_ED(rt_post_safe ? "Failed to dispatch RTGI STRC probe update. Continuing with the path traced frame without updating STRC probes." : "Failed to dispatch RTGI STRC probe update and recover RTGI output ownership. Skipping RT post-processing for this frame.");
+					if (!rt_post_safe) {
+						scene_features.rt = false;
+						scene_features.rt_replaces_opaque = false;
+						rt_replaces_opaque = false;
+						using_rt_denoise = false;
+					}
+				}
+				RD::get_singleton()->draw_command_end_label();
+			}
+
+			if (!rt_post_safe) {
+				RD::get_singleton()->draw_command_end_label();
+			}
+
+			if (rt_post_safe) {
+				RD::get_singleton()->texture_copy(rb_data->rt_get_source_candidate(), rb_data->rt_get_source_candidate_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
+				RD::get_singleton()->texture_copy(rb_data->rt_get_source_candidate_key(), rb_data->rt_get_source_candidate_key_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
+				RD::get_singleton()->texture_copy(rb_data->rt_get_source_direct_candidate(), rb_data->rt_get_source_direct_candidate_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
+				RD::get_singleton()->texture_copy(rb_data->rt_get_source_direct_candidate_key(), rb_data->rt_get_source_direct_candidate_key_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
+				RD::get_singleton()->texture_copy(rb_data->rt_get_normal_roughness(), rb_data->rt_get_source_normal_roughness_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
+				RD::get_singleton()->texture_copy(rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_source_viewz_hitdist_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
 
 		RD::get_singleton()->draw_command_end_label();
 
@@ -3346,12 +3373,19 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			if (rt_specular_history_weight > 0.0f && time_step > 0.0) {
 				rt_specular_history_weight = Math::pow(rt_specular_history_weight, (float)time_step * 60.0f);
 			}
-			if (rt_svgf_denoiser) {
+			if (rt_asvfg_denoiser) {
+				rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX);
+				rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_DIFFUSE);
+				rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_DIRECT);
+				rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_EMISSIVE);
+				rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_INDIRECT);
+				rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_SKY);
+				rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_SPECULAR);
 				if (rt_split_signals) {
 					rb->clear_context(RB_SCOPE_RTGI_DENOISE);
 					rtgi_denoise->capture_noisy(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, RB_SCOPE_RTGI_DENOISE, rb_data->rt_get_size(), 0);
 					if (rt_diffuse_cache_enabled && rt_history_weight > 0.001f && rtgi_diffuse_cache) {
-						const uint64_t cache_signature = _rtgi_diffuse_cache_signature(rt_flags, rt_env_params, rb_data->rt_get_size(), rb->get_view_count());
+						const uint64_t cache_signature = _rtgi_diffuse_cache_signature(rt_flags, rt_path_output_backend, rt_env_params, rb_data->rt_get_size(), rb->get_view_count());
 						if (!rb_data->rt_diffuse_cache_signature_valid || rb_data->rt_diffuse_cache_signature != cache_signature) {
 							rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
 							rb_data->rt_diffuse_cache_signature = cache_signature;
@@ -3385,6 +3419,36 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					composite_rt_volumetric_fog();
 					raytracing->copy_output_texture(p_render_data);
 				}
+			} else if (rt_fidelityfx_denoiser) {
+				rb->clear_context(RB_SCOPE_RTGI_DENOISE);
+				rb->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
+				rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
+				rb->clear_context(RB_SCOPE_RTGI_DENOISE_COMPOSITE);
+				rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
+				rb_data->rt_diffuse_cache_signature = 0;
+				rb_data->rt_diffuse_cache_signature_valid = false;
+
+				const float diffuse_signal_history_weight = rt_history_weight;
+				const float direct_signal_strength = CLAMP(rt_denoise_strength * 0.85f, 0.0f, 1.0f);
+				const float emissive_signal_strength = CLAMP(rt_denoise_strength * 0.75f, 0.0f, 1.0f);
+				const float indirect_signal_strength = CLAMP(rt_denoise_strength, 0.0f, 1.0f);
+				const float sky_signal_strength = CLAMP(rt_denoise_strength * 0.65f, 0.0f, 1.0f);
+				const float specular_denoise_strength = rt_denoise_strength * rt_specular_spatial_strength;
+
+				rtgi_denoise->capture_noisy(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, RB_SCOPE_RTGI_FIDELITYFX, rb_data->rt_get_size(), 0);
+				rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DIFFUSE_RADIANCE, RB_SCOPE_RTGI_FIDELITYFX_DIFFUSE, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), RID(), RID(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), diffuse_signal_history_weight, rt_denoise_strength, rt_firefly_suppression, rt_detail_preservation, false, true, false, rb_data->rt_get_size(), 0, 5);
+				rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_DIRECT_LIGHT, RB_SCOPE_RTGI_FIDELITYFX_DIRECT, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), RID(), RID(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), diffuse_signal_history_weight, direct_signal_strength, rt_firefly_suppression, rt_detail_preservation, false, true, false, rb_data->rt_get_size(), 0, 4);
+				rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_EMISSIVE, RB_SCOPE_RTGI_FIDELITYFX_EMISSIVE, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), RID(), RID(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), diffuse_signal_history_weight, emissive_signal_strength, rt_firefly_suppression, rt_detail_preservation, false, true, false, rb_data->rt_get_size(), 0, 4);
+				rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_INDIRECT, RB_SCOPE_RTGI_FIDELITYFX_INDIRECT, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), RID(), RID(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), diffuse_signal_history_weight, indirect_signal_strength, rt_firefly_suppression, rt_detail_preservation, false, true, false, rb_data->rt_get_size(), 0, 5);
+				rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_SKY, RB_SCOPE_RTGI_FIDELITYFX_SKY, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), RID(), RID(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), diffuse_signal_history_weight * 0.85f, sky_signal_strength, rt_firefly_suppression, rt_detail_preservation, false, false, false, rb_data->rt_get_size(), 0, 3);
+				rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_RADIANCE, RB_SCOPE_RTGI_FIDELITYFX_SPECULAR, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_specular_guide(), rb_data->rt_get_specular_reprojection(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_specular_history_weight, specular_denoise_strength, rt_firefly_suppression, rt_detail_preservation, true, false, false, rb_data->rt_get_size(), 0, 5);
+				rtgi_denoise->composite_fidelityfx(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_DIRECT_LIGHT, RB_TEX_RT_SIGNAL_EMISSIVE, RB_TEX_RT_SIGNAL_INDIRECT, RB_TEX_RT_SIGNAL_SKY, RB_TEX_RT_SPECULAR_RADIANCE, RB_TEX_RT_DIFFUSE_RADIANCE, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_specular_guide(), RB_TEX_RAYTRACING, rt_denoise_strength, rt_firefly_suppression, rb_data->rt_get_size(), 0);
+				RD::get_singleton()->texture_copy(rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), Vector3(), Vector3(), Vector3(rb_data->rt_get_size().x, rb_data->rt_get_size().y, 1), 0, 0, 0, 0);
+				RD::get_singleton()->texture_copy(rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), Vector3(), Vector3(), Vector3(rb_data->rt_get_size().x, rb_data->rt_get_size().y, 1), 0, 0, 0, 0);
+				if (rt_replaces_opaque) {
+					composite_rt_volumetric_fog();
+					raytracing->copy_output_texture(p_render_data);
+				}
 			}
 			RD::get_singleton()->draw_command_end_label();
 		} else if (rt_replaces_opaque && using_viewport_taa) {
@@ -3394,6 +3458,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_COMPOSITE);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_DIFFUSE);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_DIRECT);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_EMISSIVE);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_INDIRECT);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_SKY);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_SPECULAR);
 			rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
 			taa->process_texture(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, SNAME("rtgi_taa"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, rb_data->rt_get_velocity_texture(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, false, rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), 0.94f, rb_data->rt_get_size(), rb_data->rt_get_depth_texture());
 			composite_rt_volumetric_fog();
@@ -3410,6 +3481,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
 			rb->clear_context(RB_SCOPE_RTGI_DENOISE_COMPOSITE);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_DIFFUSE);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_DIRECT);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_EMISSIVE);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_INDIRECT);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_SKY);
+			rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_SPECULAR);
 			rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
 			if (rt_replaces_opaque) {
 				composite_rt_volumetric_fog();
@@ -3427,6 +3505,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			copy_effects->additive_blend(color_only_framebuffer, rb_data->rt_get_texture(), p_render_data->scene_data->view_count);
 			RD::get_singleton()->draw_command_end_label();
 		}
+		}
+	}
 	}
 
 	{
@@ -6499,6 +6579,30 @@ String RenderForwardClustered::get_name() const {
 	return "forward_clustered";
 }
 
+Dictionary RenderForwardClustered::pathtracing_get_backend_status() const {
+	if (raytracing) {
+		return raytracing->get_backend_status_dictionary();
+	}
+
+	return RenderRaytracing::get_static_backend_status_dictionary();
+}
+
+Dictionary RenderForwardClustered::pathtracing_get_backend_status_for_backend(RSE::PathtracingBackend p_backend) const {
+	if (raytracing) {
+		return raytracing->get_backend_status_dictionary(p_backend);
+	}
+
+	return RenderRaytracing::get_static_backend_status_dictionary(p_backend);
+}
+
+Array RenderForwardClustered::pathtracing_get_backend_capabilities() const {
+	if (raytracing) {
+		return raytracing->get_backend_capabilities_dictionaries();
+	}
+
+	return RenderRaytracing::get_static_backend_capabilities_dictionaries();
+}
+
 void RenderForwardClustered::GeometryInstanceForwardClustered::pair_voxel_gi_instances(const RID *p_voxel_gi_instances, uint32_t p_voxel_gi_instance_count) {
 	if (p_voxel_gi_instance_count > 0) {
 		voxel_gi_instances[0] = p_voxel_gi_instances[0];
@@ -6545,19 +6649,18 @@ void RenderForwardClustered::_update_shader_quality_settings() {
 // Raytracing methods
 
 bool RenderForwardClustered::_setup_rt() {
-	if (!RD::get_singleton()->has_feature(RD::SUPPORTS_RAYTRACING_PIPELINE)) {
-		WARN_PRINT_ONCE("Raytracing not supported on this device.");
-		return false;
-	}
-
 	if (!raytracing) {
 		raytracing = memnew(RenderRaytracing);
 		raytracing->initialize(this);
-		raytracing->shader = SceneShaderRaytracing::get_singleton();
-		String rt_defines;
-		rt_defines += "\n#define RT 1\n";
-		rt_defines += "\n#define MAX_ROUGHNESS_LOD " + itos(get_roughness_layers() - 1) + ".0\n";
-		raytracing->shader->init(rt_defines);
+		if (RD::get_singleton()->has_feature(RD::SUPPORTS_RAYTRACING_PIPELINE)) {
+			raytracing->shader = SceneShaderRaytracing::get_singleton();
+			String rt_defines;
+			rt_defines += "\n#define RT 1\n";
+			rt_defines += "\n#define MAX_ROUGHNESS_LOD " + itos(get_roughness_layers() - 1) + ".0\n";
+			raytracing->shader->init(rt_defines);
+		} else {
+			WARN_PRINT_ONCE("Vulkan Generic ray tracing is not supported on this device. RTGI vendor backends may still report availability independently.");
+		}
 	}
 
 	return true;

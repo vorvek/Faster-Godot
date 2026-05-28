@@ -31,6 +31,138 @@
 #include "renderer_scene_render.h"
 
 #include "core/variant/typed_array.h"
+#include "modules/modules_enabled.gen.h"
+
+/////////////////////////////////////////////////////////////////////////////
+
+static const char *_pathtracing_backend_name(RSE::PathtracingBackend p_backend) {
+	switch (p_backend) {
+		case RSE::PT_BACKEND_NVIDIA_RTXPT:
+			return "NVIDIA RTXPT";
+		case RSE::PT_BACKEND_AMD_HIP_RT:
+			return "AMD HIP RT";
+		case RSE::PT_BACKEND_INTEL_EMBREE:
+			return "Intel Embree/OSPRay";
+		case RSE::PT_BACKEND_VULKAN_GENERIC:
+		default:
+			return "Vulkan Generic";
+	}
+}
+
+static const char *_pathtracing_backend_runtime_name(RSE::PathtracingBackend p_backend) {
+	switch (p_backend) {
+		case RSE::PT_BACKEND_NVIDIA_RTXPT:
+			return "RTXPT Vulkan";
+		case RSE::PT_BACKEND_AMD_HIP_RT:
+			return "HIP RT compute runtime";
+		case RSE::PT_BACKEND_INTEL_EMBREE:
+			return "CPU/SYCL";
+		case RSE::PT_BACKEND_VULKAN_GENERIC:
+		default:
+			return "Vulkan ray tracing pipeline";
+	}
+}
+
+static const char *_pathtracing_backend_integration_path(RSE::PathtracingBackend p_backend) {
+	switch (p_backend) {
+		case RSE::PT_BACKEND_NVIDIA_RTXPT:
+			return "Vulkan external memory/semaphore resource exchange";
+		case RSE::PT_BACKEND_AMD_HIP_RT:
+			return "Vulkan/HIP external memory and semaphore interop";
+		case RSE::PT_BACKEND_INTEL_EMBREE:
+			return "Vulkan upload/import or deliberate staged copy";
+		case RSE::PT_BACKEND_VULKAN_GENERIC:
+		default:
+			return "RenderingDevice-owned Vulkan resources";
+	}
+}
+
+static bool _pathtracing_backend_compiled(RSE::PathtracingBackend p_backend) {
+	switch (p_backend) {
+		case RSE::PT_BACKEND_NVIDIA_RTXPT:
+#ifdef MODULE_RTXPT_ENABLED
+			return true;
+#else
+			return false;
+#endif
+		case RSE::PT_BACKEND_AMD_HIP_RT:
+#ifdef MODULE_HIPRT_ENABLED
+			return true;
+#else
+			return false;
+#endif
+		case RSE::PT_BACKEND_INTEL_EMBREE:
+#if defined(MODULE_EMBREE_ENABLED) || defined(MODULE_OSPRAY_ENABLED)
+			return true;
+#else
+			return false;
+#endif
+		case RSE::PT_BACKEND_VULKAN_GENERIC:
+		default:
+			return true;
+	}
+}
+
+static String _pathtracing_backend_availability_failure(bool p_backend_compiled, bool p_runtime_detected, bool p_device_supported, bool p_resource_exchange_supported, bool p_implementation_ready) {
+	if (!p_backend_compiled) {
+		return "backend_not_compiled";
+	}
+	if (!p_runtime_detected) {
+		return "runtime_not_detected";
+	}
+	if (!p_device_supported) {
+		return "device_not_supported";
+	}
+	if (!p_resource_exchange_supported) {
+		return "resource_exchange_unavailable";
+	}
+	if (!p_implementation_ready) {
+		return "implementation_unavailable";
+	}
+	return "none";
+}
+
+static Dictionary _make_unavailable_pathtracing_capabilities(RSE::PathtracingBackend p_backend, const String &p_reason) {
+	Dictionary exchange;
+	exchange["rendering_device"] = false;
+	exchange["external_memory"] = false;
+	exchange["external_semaphore"] = false;
+	exchange["timeline_semaphore"] = false;
+	exchange["staged_copy"] = false;
+
+	const bool backend_compiled = _pathtracing_backend_compiled(p_backend);
+	Dictionary availability_checks;
+	availability_checks["backend_compiled"] = backend_compiled;
+	availability_checks["runtime_detected"] = false;
+	availability_checks["device_supported"] = false;
+	availability_checks["resource_exchange_supported"] = false;
+	availability_checks["implementation_ready"] = false;
+	availability_checks["failure"] = _pathtracing_backend_availability_failure(backend_compiled, false, false, false, false);
+	availability_checks["compile_failure_reason"] = backend_compiled ? String() : p_reason;
+	availability_checks["runtime_failure_reason"] = backend_compiled ? p_reason : String();
+	availability_checks["device_failure_reason"] = String();
+	availability_checks["resource_exchange_failure_reason"] = String();
+	availability_checks["implementation_failure_reason"] = String();
+
+	Dictionary capabilities;
+	capabilities["backend"] = int(p_backend);
+	capabilities["name"] = _pathtracing_backend_name(p_backend);
+	capabilities["available"] = false;
+	capabilities["initialized"] = false;
+	capabilities["runtime_name"] = _pathtracing_backend_runtime_name(p_backend);
+	capabilities["integration_path"] = _pathtracing_backend_integration_path(p_backend);
+	capabilities["rendering_device_family"] = "unknown";
+	capabilities["rendering_device_name"] = "unknown";
+	capabilities["rendering_device_vendor"] = "unknown";
+	capabilities["rendering_device_vendor_id"] = int64_t(0);
+	capabilities["vulkan_runtime"] = false;
+	capabilities["exchange"] = exchange;
+	capabilities["exchange_summary"] = "none";
+	capabilities["availability_checks"] = availability_checks;
+	capabilities["denoiser_handoff"] = false;
+	capabilities["fallback_reason"] = p_reason;
+	return capabilities;
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // CameraData
@@ -723,6 +855,62 @@ void RendererSceneRender::environment_set_pathtracing_params(RID p_env, const Pa
 
 PackedFloat32Array RendererSceneRender::environment_get_pathtracing_params(RID p_env) const {
 	return environment_storage.environment_get_pathtracing_params(p_env);
+}
+
+Dictionary RendererSceneRender::pathtracing_get_backend_status() const {
+	const String reason = "RTGI backend status is unavailable until the forward clustered path tracing renderer is initialized.";
+	Dictionary status;
+	status["requested_backend"] = int(RSE::PT_BACKEND_VULKAN_GENERIC);
+	status["requested_backend_name"] = "Vulkan Generic";
+	status["active_backend"] = int(RSE::PT_BACKEND_VULKAN_GENERIC);
+	status["active_backend_name"] = "Vulkan Generic";
+	status["requested_backend_available"] = false;
+	status["active_backend_available"] = false;
+	status["requested_backend_initialized"] = false;
+	status["active_backend_initialized"] = false;
+	status["using_fallback"] = false;
+	status["fallback_backend"] = -1;
+	status["fallback_backend_name"] = String();
+	status["fallback_reason"] = reason;
+	status["requested_capabilities"] = _make_unavailable_pathtracing_capabilities(RSE::PT_BACKEND_VULKAN_GENERIC, reason);
+	status["active_capabilities"] = _make_unavailable_pathtracing_capabilities(RSE::PT_BACKEND_VULKAN_GENERIC, reason);
+	return status;
+}
+
+Dictionary RendererSceneRender::pathtracing_get_backend_status_for_backend(RSE::PathtracingBackend p_backend) const {
+	if (p_backend < 0 || p_backend >= RSE::PT_BACKEND_MAX) {
+		p_backend = RSE::PT_BACKEND_VULKAN_GENERIC;
+	}
+
+	const String requested_reason = vformat("RTGI backend '%s' status is unavailable until the forward clustered path tracing renderer is initialized.", _pathtracing_backend_name(p_backend));
+	const String generic_reason = "RTGI backend status is unavailable until the forward clustered path tracing renderer is initialized.";
+	const bool use_fallback = p_backend != RSE::PT_BACKEND_VULKAN_GENERIC;
+
+	Dictionary status;
+	status["requested_backend"] = int(p_backend);
+	status["requested_backend_name"] = _pathtracing_backend_name(p_backend);
+	status["active_backend"] = int(use_fallback ? RSE::PT_BACKEND_VULKAN_GENERIC : p_backend);
+	status["active_backend_name"] = _pathtracing_backend_name(use_fallback ? RSE::PT_BACKEND_VULKAN_GENERIC : p_backend);
+	status["requested_backend_available"] = false;
+	status["active_backend_available"] = false;
+	status["requested_backend_initialized"] = false;
+	status["active_backend_initialized"] = false;
+	status["using_fallback"] = use_fallback;
+	status["fallback_backend"] = use_fallback ? int(RSE::PT_BACKEND_VULKAN_GENERIC) : -1;
+	status["fallback_backend_name"] = use_fallback ? String("Vulkan Generic") : String();
+	status["fallback_reason"] = use_fallback ? requested_reason + " Vulkan Generic fallback is also unavailable: " + generic_reason : generic_reason;
+	status["requested_capabilities"] = _make_unavailable_pathtracing_capabilities(p_backend, requested_reason);
+	status["active_capabilities"] = _make_unavailable_pathtracing_capabilities(use_fallback ? RSE::PT_BACKEND_VULKAN_GENERIC : p_backend, use_fallback ? generic_reason : requested_reason);
+	return status;
+}
+
+Array RendererSceneRender::pathtracing_get_backend_capabilities() const {
+	Array capabilities;
+	for (int i = 0; i < RSE::PT_BACKEND_MAX; i++) {
+		const RSE::PathtracingBackend backend = (RSE::PathtracingBackend)i;
+		capabilities.push_back(_make_unavailable_pathtracing_capabilities(backend, vformat("RTGI backend '%s' capability detection is unavailable until the forward clustered path tracing renderer is initialized.", _pathtracing_backend_name(backend))));
+	}
+	return capabilities;
 }
 
 void RendererSceneRender::environment_set_adjustment(RID p_env, bool p_enable, float p_brightness, float p_contrast, float p_saturation, bool p_use_1d_color_correction, RID p_color_correction) {

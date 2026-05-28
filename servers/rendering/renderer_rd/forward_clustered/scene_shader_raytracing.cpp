@@ -786,7 +786,10 @@ uint32_t SceneShaderRaytracing::compute_rt_flags(const float *p_env_params, bool
 		if (p_env_params[RT_PARAM_VIS_MODE] != 0.0f) {
 			flags |= RT_FLAG_DEBUG_VIS_ENABLED;
 		}
-		if (p_env_params[RT_PARAM_RTGI_STRC_ENABLED] > 0.5f && p_env_params[RT_PARAM_RTGI_STRC_STRENGTH] > 0.001f && p_env_params[RT_PARAM_RTGI_STRC_RAYS_PER_FRAME] > 0.5f) {
+		const uint32_t strc_static_layer_mask = (uint32_t)p_env_params[RT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS] & 0xfffff;
+		const uint32_t strc_dynamic_layer_mask = ((uint32_t)p_env_params[RT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS] & ~strc_static_layer_mask) & 0xfffff;
+		const uint32_t strc_layer_mask = strc_static_layer_mask | strc_dynamic_layer_mask;
+		if (p_env_params[RT_PARAM_RTGI_STRC_ENABLED] > 0.5f && p_env_params[RT_PARAM_RTGI_STRC_STRENGTH] > 0.001f && p_env_params[RT_PARAM_RTGI_STRC_RAYS_PER_FRAME] > 0.5f && strc_layer_mask != 0u) {
 			flags |= RT_FLAG_STRC_ENABLED;
 		}
 		sample_count = MAX(1u, (uint32_t)p_env_params[RT_PARAM_SAMPLE_COUNT]);

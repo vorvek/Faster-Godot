@@ -20,6 +20,7 @@ RTGIDenoise::RTGIDenoise() {
 	modes.push_back("\n#define MODE_COMPOSITE");
 	modes.push_back("\n#define MODE_BLOTCH_STABILIZE");
 	modes.push_back("\n#define MODE_SPLIT_COMPOSITE");
+	modes.push_back("\n#define MODE_FIDELITYFX_COMPOSITE");
 	modes.push_back("\n#define MODE_VOLUMETRIC_FOG");
 
 	shader.initialize(modes);
@@ -260,6 +261,35 @@ void RTGIDenoise::_dispatch_split_composite(const PushConstant &p_push_constant,
 	RD::get_singleton()->compute_list_end();
 }
 
+void RTGIDenoise::_dispatch_fidelityfx_composite(const PushConstant &p_push_constant, RID p_direct, RID p_emissive, RID p_indirect, RID p_sky, RID p_specular, RID p_diffuse, RID p_velocity, RID p_normal_roughness, RID p_albedo_metalness, RID p_specular_guide, RID p_output) {
+	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
+	ERR_FAIL_NULL(uniform_set_cache);
+	MaterialStorage *material_storage = MaterialStorage::get_singleton();
+	ERR_FAIL_NULL(material_storage);
+
+	RID nearest_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID shader_rd = shader.version_get_shader(shader_version, MODE_FIDELITYFX_COMPOSITE);
+
+	RD::Uniform u_direct(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ nearest_sampler, p_direct }));
+	RD::Uniform u_emissive(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ nearest_sampler, p_emissive }));
+	RD::Uniform u_indirect(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, Vector<RID>({ nearest_sampler, p_indirect }));
+	RD::Uniform u_sky(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 3, Vector<RID>({ nearest_sampler, p_sky }));
+	RD::Uniform u_specular(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 4, Vector<RID>({ nearest_sampler, p_specular }));
+	RD::Uniform u_diffuse(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 5, Vector<RID>({ nearest_sampler, p_diffuse }));
+	RD::Uniform u_output(RD::UNIFORM_TYPE_IMAGE, 6, p_output);
+	RD::Uniform u_velocity(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 7, Vector<RID>({ nearest_sampler, p_velocity }));
+	RD::Uniform u_normal_roughness(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 8, Vector<RID>({ nearest_sampler, p_normal_roughness }));
+	RD::Uniform u_albedo_metalness(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 9, Vector<RID>({ nearest_sampler, p_albedo_metalness }));
+	RD::Uniform u_specular_guide(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 10, Vector<RID>({ nearest_sampler, p_specular_guide }));
+
+	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[MODE_FIDELITYFX_COMPOSITE]);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_rd, 0, u_direct, u_emissive, u_indirect, u_sky, u_specular, u_diffuse, u_output, u_velocity, u_normal_roughness, u_albedo_metalness, u_specular_guide), 0);
+	RD::get_singleton()->compute_list_set_push_constant(compute_list, &p_push_constant, sizeof(PushConstant));
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, (uint32_t)p_push_constant.resolution_width, (uint32_t)p_push_constant.resolution_height, 1);
+	RD::get_singleton()->compute_list_end();
+}
+
 void RTGIDenoise::_dispatch_volumetric_fog(const PushConstant &p_push_constant, RID p_color, RID p_viewz_hitdist, RID p_fog_map) {
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
@@ -479,6 +509,54 @@ void RTGIDenoise::composite_split(Ref<RenderSceneBuffersRD> p_render_buffers,
 	push_constant.firefly_suppression = CLAMP(p_firefly_suppression, 0.0f, 1.0f);
 
 	_dispatch_split_composite(push_constant, diffuse, specular, p_velocity, p_normal_roughness, p_albedo_metalness, p_specular_guide, output);
+}
+
+void RTGIDenoise::composite_fidelityfx(Ref<RenderSceneBuffersRD> p_render_buffers,
+		const StringName &p_source_context,
+		const StringName &p_direct_texture,
+		const StringName &p_emissive_texture,
+		const StringName &p_indirect_texture,
+		const StringName &p_sky_texture,
+		const StringName &p_specular_texture,
+		const StringName &p_diffuse_texture,
+		RID p_velocity,
+		RID p_normal_roughness,
+		RID p_albedo_metalness,
+		RID p_specular_guide,
+		const StringName &p_output_texture,
+		float p_denoise_strength,
+		float p_firefly_suppression,
+		const Size2i &p_process_size,
+		uint32_t p_view) {
+	ERR_FAIL_COND(p_render_buffers.is_null());
+	ERR_FAIL_COND(p_process_size.x <= 0 || p_process_size.y <= 0);
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_source_context, p_direct_texture));
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_source_context, p_emissive_texture));
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_source_context, p_indirect_texture));
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_source_context, p_sky_texture));
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_source_context, p_specular_texture));
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_source_context, p_diffuse_texture));
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_source_context, p_output_texture));
+	ERR_FAIL_COND(!p_velocity.is_valid());
+	ERR_FAIL_COND(!p_normal_roughness.is_valid() || !p_albedo_metalness.is_valid() || !p_specular_guide.is_valid());
+	ERR_FAIL_UNSIGNED_INDEX(p_view, p_render_buffers->get_view_count());
+
+	RID direct = p_render_buffers->get_texture_slice(p_source_context, p_direct_texture, p_view, 0);
+	RID emissive = p_render_buffers->get_texture_slice(p_source_context, p_emissive_texture, p_view, 0);
+	RID indirect = p_render_buffers->get_texture_slice(p_source_context, p_indirect_texture, p_view, 0);
+	RID sky = p_render_buffers->get_texture_slice(p_source_context, p_sky_texture, p_view, 0);
+	RID specular = p_render_buffers->get_texture_slice(p_source_context, p_specular_texture, p_view, 0);
+	RID diffuse = p_render_buffers->get_texture_slice(p_source_context, p_diffuse_texture, p_view, 0);
+	RID output = p_render_buffers->get_texture_slice(p_source_context, p_output_texture, p_view, 0);
+
+	PushConstant push_constant;
+	memset(&push_constant, 0, sizeof(PushConstant));
+	push_constant.resolution_width = (float)p_process_size.x;
+	push_constant.resolution_height = (float)p_process_size.y;
+	push_constant.denoise_strength = CLAMP(p_denoise_strength, 0.0f, 1.0f);
+	push_constant.firefly_suppression = CLAMP(p_firefly_suppression, 0.0f, 1.0f);
+
+	_dispatch_fidelityfx_composite(push_constant, direct, emissive, indirect, sky, specular, diffuse, p_velocity, p_normal_roughness, p_albedo_metalness, p_specular_guide, output);
 }
 
 void RTGIDenoise::composite_volumetric_fog(Ref<RenderSceneBuffersRD> p_render_buffers,

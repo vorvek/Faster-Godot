@@ -32,10 +32,13 @@
 
 #include "core/math/transform_3d.h"
 #include "core/string/string_name.h"
+#include "core/string/ustring.h"
 #include "core/templates/hash_map.h"
 #include "core/templates/hash_set.h"
 #include "core/templates/local_vector.h"
 #include "core/templates/vector.h"
+#include "core/variant/array.h"
+#include "core/variant/dictionary.h"
 #include "servers/rendering/renderer_rd/bindless_block.h"
 #include "servers/rendering/renderer_rd/shaders/raytracing/multimesh_merge.glsl.gen.h"
 #include "servers/rendering/rendering_device.h"
@@ -87,6 +90,7 @@ class RenderSceneBuffersRD;
 namespace RendererSceneRenderImplementation {
 
 class RenderForwardClustered;
+class RenderRaytracing;
 class SceneShaderRaytracing;
 
 // Must match GLSL GeometryData (std430, 128 bytes).
@@ -380,6 +384,7 @@ struct RTMaterialCacheEntry {
 struct RTViewportState {
 	RID tlas;
 	uint32_t tlas_max_instances = 0;
+	uint32_t tlas_instance_count = 0;
 
 	RID geometry_buffer;
 	uint32_t geometry_buffer_capacity = 0;
@@ -412,6 +417,179 @@ struct RTViewportState {
 	bool previous_light_data_valid = false;
 	HashSet<uint64_t> previous_history_keys;
 	HashSet<uint64_t> current_history_keys;
+};
+
+struct RTGIBackendCapabilities {
+	RSE::PathtracingBackend backend = RSE::PT_BACKEND_VULKAN_GENERIC;
+	String name;
+	bool available = false;
+	String runtime_name;
+	String integration_path;
+	String rendering_device_family;
+	String rendering_device_name;
+	String rendering_device_vendor;
+	uint32_t rendering_device_vendor_id = 0;
+	// Backend integrations must exchange images, buffers, and synchronization
+	// through RenderingDevice-owned RIDs/capabilities. The active implementation
+	// is Vulkan-only; this keeps the contract driver-neutral enough for a future
+	// RD backend to grow equivalent support without adding a D3D12 runtime path.
+	bool rendering_device_exchange = false;
+	bool vulkan_runtime = false;
+	bool external_memory = false;
+	bool external_semaphore = false;
+	bool timeline_semaphore = false;
+	bool staged_copy = false;
+	bool denoiser_handoff = false;
+	bool backend_compiled = false;
+	bool runtime_detected = false;
+	bool device_supported = false;
+	bool resource_exchange_supported = false;
+	bool implementation_ready = false;
+	String availability_failure;
+	String compile_failure_reason;
+	String runtime_failure_reason;
+	String device_failure_reason;
+	String resource_exchange_failure_reason;
+	String implementation_failure_reason;
+	String fallback_reason;
+};
+
+struct RTGIBackendStatus {
+	RSE::PathtracingBackend requested_backend = RSE::PT_BACKEND_VULKAN_GENERIC;
+	RSE::PathtracingBackend active_backend = RSE::PT_BACKEND_VULKAN_GENERIC;
+	RTGIBackendCapabilities requested_capabilities;
+	RTGIBackendCapabilities active_capabilities;
+	bool requested_backend_available = false;
+	bool active_backend_available = false;
+	bool requested_backend_initialized = false;
+	bool active_backend_initialized = false;
+	bool using_fallback = false;
+	String fallback_reason;
+};
+
+enum RTGIBackendExchangeMode {
+	RTGI_BACKEND_EXCHANGE_RD_INTERNAL,
+	RTGI_BACKEND_EXCHANGE_EXTERNAL_MEMORY_SEMAPHORE,
+	RTGI_BACKEND_EXCHANGE_TIMELINE_SEMAPHORE,
+	RTGI_BACKEND_EXCHANGE_STAGED_COPY,
+};
+
+enum RTGIBackendExternalHandleType {
+	RTGI_BACKEND_EXTERNAL_HANDLE_NONE,
+	RTGI_BACKEND_EXTERNAL_HANDLE_OPAQUE_FD,
+	RTGI_BACKEND_EXTERNAL_HANDLE_OPAQUE_WIN32,
+};
+
+enum RTGIBackendExternalSemaphoreKind {
+	RTGI_BACKEND_EXTERNAL_SEMAPHORE_BINARY,
+	RTGI_BACKEND_EXTERNAL_SEMAPHORE_TIMELINE,
+};
+
+enum RTGIBackendOwnershipDirection {
+	RTGI_BACKEND_OWNERSHIP_RD_INTERNAL,
+	RTGI_BACKEND_OWNERSHIP_RD_TO_BACKEND_TO_RD,
+	RTGI_BACKEND_OWNERSHIP_BACKEND_TO_RD_COPY,
+};
+
+struct RTGIBackendResourceExchange {
+	RTGIBackendExchangeMode mode = RTGI_BACKEND_EXCHANGE_RD_INTERNAL;
+	RTGIBackendOwnershipDirection ownership_direction = RTGI_BACKEND_OWNERSHIP_RD_INTERNAL;
+	RID output_texture;
+	RID depth_texture;
+	RID diffuse_radiance_texture;
+	RID specular_radiance_texture;
+	Vector<RenderingDevice::CallbackResource> acquire_callback_resources;
+	RDD::DriverCallback acquire_driver_callback = nullptr;
+	void *acquire_driver_callback_userdata = nullptr;
+	Vector<RenderingDevice::CallbackResource> release_callback_resources;
+	RDD::DriverCallback release_driver_callback = nullptr;
+	void *release_driver_callback_userdata = nullptr;
+	uint64_t external_memory_handle = 0;
+	RTGIBackendExternalHandleType external_memory_handle_type = RTGI_BACKEND_EXTERNAL_HANDLE_NONE;
+	uint64_t external_wait_semaphore_handle = 0;
+	RTGIBackendExternalHandleType external_wait_semaphore_handle_type = RTGI_BACKEND_EXTERNAL_HANDLE_NONE;
+	uint64_t external_signal_semaphore_handle = 0;
+	RTGIBackendExternalHandleType external_signal_semaphore_handle_type = RTGI_BACKEND_EXTERNAL_HANDLE_NONE;
+	RTGIBackendExternalSemaphoreKind external_semaphore_kind = RTGI_BACKEND_EXTERNAL_SEMAPHORE_BINARY;
+	RDD::TextureLayout external_output_layout_before_backend = RDD::TEXTURE_LAYOUT_GENERAL;
+	RDD::TextureLayout external_output_layout_after_backend = RDD::TEXTURE_LAYOUT_GENERAL;
+	RID wait_semaphore;
+	RID signal_semaphore;
+	uint64_t wait_timeline_value = 0;
+	uint64_t signal_timeline_value = 0;
+	RID staged_copy_source_buffer;
+	RID staged_copy_target_texture;
+	// Staged copy mode is callback-managed in this phase. The backend release
+	// callback performs the actual copy, but must declare the exact RD/RDD copy
+	// metadata it intends to execute so validation can reject underspecified
+	// buffer-to-texture handoffs.
+	Vector<RDD::BufferTextureCopyRegion> staged_copy_regions;
+	RDD::TextureLayout staged_copy_target_layout = RDD::TEXTURE_LAYOUT_COPY_DST_OPTIMAL;
+	bool rd_owns_output_before_dispatch = true;
+	bool rd_owns_output_after_dispatch = true;
+};
+
+struct RTGIBackendSceneResources {
+	RID tlas;
+	LocalVector<RID> blases;
+	uint32_t tlas_instance_count = 0;
+
+	RID geometry_buffer;
+	uint32_t geometry_count = 0;
+	RID material_buffer;
+	uint32_t material_count = 0;
+	RID motion_index_buffer;
+	uint32_t motion_index_count = 0;
+	RID motion_transform_buffer;
+	uint32_t motion_transform_count = 0;
+	RID emissive_candidate_buffer;
+	uint32_t emissive_candidate_count = 0;
+	float emissive_candidate_total_weight = 0.0f;
+	uint64_t emissive_candidate_signature = 0;
+
+	RID light_buffer;
+	uint32_t light_count = 0;
+	RID params_buffer;
+};
+
+struct RTGIBackendFrameContext {
+	RenderingDevice *rd = nullptr;
+	RenderRaytracing *raytracing = nullptr;
+	const RenderDataRD *render_data = nullptr;
+	RTViewportState *viewport_state = nullptr;
+	RID pipeline;
+	RID uniform_set;
+	uint32_t rt_flags = 0;
+	Size2i output_size;
+	RTGIBackendSceneResources scene_resources;
+	RTGIBackendResourceExchange exchange;
+	bool radiance_history_invalidated = false;
+	bool acquire_callback_recorded = false;
+	bool release_callback_recorded = false;
+};
+
+enum RTGIBackendDispatchResult {
+	RTGI_BACKEND_DISPATCH_OK,
+	RTGI_BACKEND_DISPATCH_SAFE_FAILURE,
+	RTGI_BACKEND_DISPATCH_UNSAFE_FAILURE,
+};
+
+class RTGIBackend {
+public:
+	virtual ~RTGIBackend() {}
+
+	virtual RTGIBackendCapabilities query_capabilities() const = 0;
+	virtual bool initialize(RenderForwardClustered *p_owner, RenderRaytracing *p_raytracing, String *r_fallback_reason) = 0;
+	virtual void shutdown() = 0;
+	virtual bool prepare_frame(RTGIBackendFrameContext &r_context, String *r_fallback_reason) = 0;
+	virtual bool upload_or_import_scene(RTGIBackendFrameContext &p_context, String *r_fallback_reason) = 0;
+	virtual bool upload_materials_lights_environment(RTGIBackendFrameContext &p_context, String *r_fallback_reason) = 0;
+	virtual bool prepare_probe_update(RTGIBackendFrameContext &p_context, uint32_t p_probe_flags, RID p_probe_output_buffer, uint32_t p_ray_count, RID &r_probe_pipeline, RID &r_probe_uniform_set, String *r_fallback_reason) = 0;
+	virtual bool dispatch_path_trace(RTGIBackendFrameContext &p_context, String *r_fallback_reason) = 0;
+	virtual bool dispatch_probe_update(RTGIBackendFrameContext &p_context, uint32_t p_probe_flags, RID p_probe_pipeline, RID p_probe_uniform_set, RID p_probe_output_buffer, uint32_t p_ray_count, String *r_fallback_reason) = 0;
+	virtual bool handoff_denoiser(RTGIBackendFrameContext &p_context, String *r_fallback_reason) = 0;
+	virtual bool synchronize_output(RTGIBackendFrameContext &p_context, String *r_fallback_reason) = 0;
+	virtual bool abort_frame(RTGIBackendFrameContext &p_context, String *r_fallback_reason) = 0;
 };
 
 class RenderRaytracing {
@@ -480,10 +658,18 @@ class RenderRaytracing {
 	LocalVector<uint32_t> sbt_offsets; // 0 = default material hit group
 
 	HashMap<RenderSceneBuffersRD *, RTViewportState *> viewport_states;
+	RTGIBackend *rtgi_backends[RSE::PT_BACKEND_MAX] = {};
+	bool rtgi_backend_initialized[RSE::PT_BACKEND_MAX] = {};
+	bool rtgi_backend_unavailable_warned[RSE::PT_BACKEND_MAX] = {};
+	RSE::PathtracingBackend active_backend = RSE::PT_BACKEND_VULKAN_GENERIC;
+	RSE::PathtracingBackend last_requested_backend = RSE::PT_BACKEND_VULKAN_GENERIC;
+	String active_backend_fallback_reason;
 
 	RTViewportState *_get_or_create_viewport_state(const RenderDataRD *p_render_data);
 	RTViewportState *_get_viewport_state(const RenderDataRD *p_render_data) const;
 	void _free_viewport_state_internal(RTViewportState *p_state);
+	bool _initialize_backend(RSE::PathtracingBackend p_backend, String *r_fallback_reason);
+	void _activate_backend(RSE::PathtracingBackend p_backend);
 
 	// Material UBO sub-allocation pool. One large device-address buffer divided
 	// into fixed-size slots for performance reasons, and easier to debug.
@@ -552,9 +738,28 @@ public:
 
 	void cleanup_caches();
 
+	RTGIBackendCapabilities get_backend_capabilities(RSE::PathtracingBackend p_backend) const;
+	Dictionary get_backend_capabilities_dictionary(RSE::PathtracingBackend p_backend) const;
+	Array get_backend_capabilities_dictionaries() const;
+	static Array get_static_backend_capabilities_dictionaries();
+	static Dictionary get_static_backend_status_dictionary();
+	static Dictionary get_static_backend_status_dictionary(RSE::PathtracingBackend p_requested);
+	RSE::PathtracingBackend resolve_backend(RSE::PathtracingBackend p_requested);
+	RSE::PathtracingBackend get_active_backend() const { return active_backend; }
+	String get_active_backend_fallback_reason() const { return active_backend_fallback_reason; }
+	RTGIBackendStatus get_backend_status() const;
+	Dictionary get_backend_status_dictionary() const;
+	Dictionary get_backend_status_dictionary(RSE::PathtracingBackend p_requested) const;
+	static RSE::PathtracingBackend backend_from_env_param(float p_backend);
+	static const char *backend_get_name(RSE::PathtracingBackend p_backend);
+
 	RTViewportState *build_tlas(const RenderDataRD *p_render_data, uint32_t p_rt_flags);
+	void populate_backend_scene_resources(RTViewportState *p_state, RTGIBackendSceneResources &r_resources) const;
 	uint32_t gather_lights(const RenderDataRD *p_render_data, RT_LightData *r_light_data, uint32_t p_max_lights);
 	RID update_uniform_set(RTViewportState *p_state, const RenderDataRD *p_render_data, uint32_t p_rt_flags);
+	bool prepare_backend_frame(const RenderDataRD *p_render_data, uint32_t p_rt_flags, RTGIBackendFrameContext &r_context);
+	RTGIBackendDispatchResult dispatch_path_trace_backend(RTGIBackendFrameContext &r_context);
+	RTGIBackendDispatchResult dispatch_probe_update_backend(RTGIBackendFrameContext &p_context, uint32_t p_probe_flags, RID p_probe_output_buffer, uint32_t p_ray_count);
 
 	void copy_output_texture(const RenderDataRD *p_render_data);
 	void free_viewport_state(RenderSceneBuffersRD *p_render_buffers);

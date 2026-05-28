@@ -738,8 +738,18 @@ public:
 	static constexpr PathtracingDenoiser PT_DENOISER_NONE = RSE::PT_DENOISER_NONE;
 	static constexpr PathtracingDenoiser PT_DENOISER_RESERVED_1 = RSE::PT_DENOISER_RESERVED_1;
 	static constexpr PathtracingDenoiser PT_DENOISER_INTERNAL = RSE::PT_DENOISER_INTERNAL;
-	static constexpr PathtracingDenoiser PT_DENOISER_RESERVED_3 = RSE::PT_DENOISER_RESERVED_3;
+	static constexpr PathtracingDenoiser PT_DENOISER_FIDELITYFX = RSE::PT_DENOISER_FIDELITYFX;
 	static constexpr PathtracingDenoiser PT_DENOISER_RESERVED_4 = RSE::PT_DENOISER_RESERVED_4;
+	static constexpr PathtracingDenoiser PT_DENOISER_NVIDIA = RSE::PT_DENOISER_NVIDIA;
+	static constexpr PathtracingDenoiser PT_DENOISER_AMD = RSE::PT_DENOISER_AMD;
+	static constexpr PathtracingDenoiser PT_DENOISER_INTEL = RSE::PT_DENOISER_INTEL;
+
+	using PathtracingBackend = RSE::PathtracingBackend;
+	static constexpr PathtracingBackend PT_BACKEND_VULKAN_GENERIC = RSE::PT_BACKEND_VULKAN_GENERIC;
+	static constexpr PathtracingBackend PT_BACKEND_NVIDIA_RTXPT = RSE::PT_BACKEND_NVIDIA_RTXPT;
+	static constexpr PathtracingBackend PT_BACKEND_AMD_HIP_RT = RSE::PT_BACKEND_AMD_HIP_RT;
+	static constexpr PathtracingBackend PT_BACKEND_INTEL_EMBREE = RSE::PT_BACKEND_INTEL_EMBREE;
+	static constexpr PathtracingBackend PT_BACKEND_MAX = RSE::PT_BACKEND_MAX;
 
 	using PathtracingParamIndex = RSE::PathtracingParamIndex;
 	static constexpr PathtracingParamIndex PT_PARAM_VIS_MODE = RSE::PT_PARAM_VIS_MODE;
@@ -763,6 +773,16 @@ public:
 	static constexpr PathtracingParamIndex PT_PARAM_DENOISER_SPECULAR_SPATIAL_STRENGTH = RSE::PT_PARAM_DENOISER_SPECULAR_SPATIAL_STRENGTH;
 	static constexpr PathtracingParamIndex PT_PARAM_RTGI_SAMPLING_CONTROLS = RSE::PT_PARAM_RTGI_SAMPLING_CONTROLS;
 	static constexpr PathtracingParamIndex PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED = RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED;
+	static constexpr PathtracingParamIndex PT_PARAM_RTGI_STRC_ENABLED = RSE::PT_PARAM_RTGI_STRC_ENABLED;
+	static constexpr PathtracingParamIndex PT_PARAM_RTGI_STRC_STRENGTH = RSE::PT_PARAM_RTGI_STRC_STRENGTH;
+	static constexpr PathtracingParamIndex PT_PARAM_RTGI_STRC_CASCADE_COUNT = RSE::PT_PARAM_RTGI_STRC_CASCADE_COUNT;
+	static constexpr PathtracingParamIndex PT_PARAM_RTGI_STRC_GRID_SIZE = RSE::PT_PARAM_RTGI_STRC_GRID_SIZE;
+	static constexpr PathtracingParamIndex PT_PARAM_RTGI_STRC_BASE_PROBE_SPACING = RSE::PT_PARAM_RTGI_STRC_BASE_PROBE_SPACING;
+	static constexpr PathtracingParamIndex PT_PARAM_RTGI_STRC_RAYS_PER_FRAME = RSE::PT_PARAM_RTGI_STRC_RAYS_PER_FRAME;
+	static constexpr PathtracingParamIndex PT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT = RSE::PT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT;
+	static constexpr PathtracingParamIndex PT_PARAM_RTGI_BACKEND = RSE::PT_PARAM_RTGI_BACKEND;
+	static constexpr PathtracingParamIndex PT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS = RSE::PT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS;
+	static constexpr PathtracingParamIndex PT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS = RSE::PT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS;
 	static constexpr PathtracingParamIndex PT_PARAM_MAX = RSE::PT_PARAM_MAX;
 
 	using SubSurfaceScatteringQuality = RSE::SubSurfaceScatteringQuality;
@@ -1505,6 +1525,9 @@ public:
 	virtual void environment_set_pathtracing(RID p_env, bool p_enable) = 0;
 	virtual void environment_set_pathtracing_params(RID p_env, const PackedFloat32Array &p_params) = 0;
 	virtual PackedFloat32Array environment_get_pathtracing_params(RID p_env) const = 0;
+	virtual Dictionary pathtracing_get_backend_status() const = 0;
+	virtual Dictionary pathtracing_get_backend_status_for_backend(RSE::PathtracingBackend p_backend) const = 0;
+	virtual Array pathtracing_get_backend_capabilities() const = 0;
 
 	virtual void environment_set_fog(RID p_env, bool p_enable, const Color &p_light_color, float p_light_energy, float p_sun_scatter, float p_density, float p_height, float p_height_density, float p_aerial_perspective, float p_sky_affect, RSE::EnvironmentFogMode p_mode = RSE::EnvironmentFogMode::ENV_FOG_MODE_EXPONENTIAL) = 0;
 	virtual void environment_set_fog_depth(RID p_env, float p_curve, float p_begin, float p_end) = 0;
@@ -1978,6 +2001,7 @@ VARIANT_ENUM_CAST_EXT(RSE::EnvironmentSDFGIRayCount, RenderingServer::Environmen
 VARIANT_ENUM_CAST_EXT(RSE::EnvironmentSDFGIFramesToUpdateLight, RenderingServer::EnvironmentSDFGIFramesToUpdateLight);
 VARIANT_ENUM_CAST_EXT(RSE::EnvironmentSDFGIYScale, RenderingServer::EnvironmentSDFGIYScale);
 VARIANT_ENUM_CAST_EXT(RSE::PathtracingDenoiser, RenderingServer::PathtracingDenoiser);
+VARIANT_ENUM_CAST_EXT(RSE::PathtracingBackend, RenderingServer::PathtracingBackend);
 VARIANT_ENUM_CAST_EXT(RSE::SubSurfaceScatteringQuality, RenderingServer::SubSurfaceScatteringQuality);
 VARIANT_ENUM_CAST_EXT(RSE::DOFBlurQuality, RenderingServer::DOFBlurQuality);
 VARIANT_ENUM_CAST_EXT(RSE::DOFBokehShape, RenderingServer::DOFBokehShape);

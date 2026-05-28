@@ -18,27 +18,28 @@
 #define RT_PARAM_VIS_MODE 0 // rt_params[0].x - Debug visualization mode (0 = disabled)
 #define RT_PARAM_SAMPLE_COUNT 1 // rt_params[0].y - Samples per pixel
 #define RT_PARAM_MAX_BOUNCES 2 // rt_params[0].z - Maximum ray bounces
-#define RT_PARAM_DENOISER 3 // rt_params[0].w - Denoiser selection (0=none, non-zero=SVGF)
+#define RT_PARAM_DENOISER 3 // rt_params[0].w - Denoiser selection
 #define RT_PARAM_ENERGY 4 // rt_params[1].x - RTGI energy multiplier
 #define RT_PARAM_RESERVED_5 5 // rt_params[1].y - Reserved
-#define RT_PARAM_MODE 6 // rt_params[1].z - 0=Simple RT, 1=Path Traced
+#define RT_PARAM_MODE 6 // rt_params[1].z - 0=Reflections RT Only, 1=Full Path Tracing
 #define RT_PARAM_BACKGROUND_USES_SKY 7 // rt_params[1].w - Miss shader samples sky radiance
 #define RT_PARAM_BACKGROUND_R 8 // rt_params[2].x - Linear fallback background color
 #define RT_PARAM_BACKGROUND_G 9 // rt_params[2].y
 #define RT_PARAM_BACKGROUND_B 10 // rt_params[2].z
 #define RT_PARAM_RESERVED_11 11 // rt_params[2].w - Reserved
-#define RT_PARAM_OVERSCAN_HORIZONTAL 12 // rt_params[3].x - Path traced RTGI horizontal overscan fraction
-#define RT_PARAM_OVERSCAN_VERTICAL 13 // rt_params[3].y - Path traced RTGI vertical overscan fraction
+#define RT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED 11 // rt_params[2].w - RTGI diffuse cache toggle alias
+#define RT_PARAM_OVERSCAN_HORIZONTAL 12 // rt_params[3].x - Horizontal RTGI overscan fraction
+#define RT_PARAM_OVERSCAN_VERTICAL 13 // rt_params[3].y - Vertical RTGI overscan fraction
 #define RT_PARAM_LIGHT_COUNT 14 // rt_params[3].z - Number of active lights in light buffer
 #define RT_PARAM_FRAME_INDEX 15 // rt_params[3].w - Frame counter for temporal variation
-#define RT_PARAM_DENOISER_STRENGTH 16 // rt_params[4].x - SVGF strength, included for history invalidation
-#define RT_PARAM_DENOISER_HISTORY_WEIGHT 17 // rt_params[4].y - SVGF history weight
-#define RT_PARAM_DENOISER_FIREFLY_SUPPRESSION 18 // rt_params[4].z - SVGF firefly suppression
-#define RT_PARAM_DENOISER_DETAIL_PRESERVATION 19 // rt_params[4].w - SVGF detail preservation
+#define RT_PARAM_DENOISER_STRENGTH 16 // rt_params[4].x - RTGI denoiser strength, included for history invalidation
+#define RT_PARAM_DENOISER_HISTORY_WEIGHT 17 // rt_params[4].y - RTGI denoiser history weight
+#define RT_PARAM_DENOISER_FIREFLY_SUPPRESSION 18 // rt_params[4].z - RTGI denoiser firefly suppression
+#define RT_PARAM_DENOISER_DETAIL_PRESERVATION 19 // rt_params[4].w - RTGI denoiser detail preservation
 #define RT_PARAM_RAY_FIREFLY_SUPPRESSION 20 // rt_params[5].x - Pre-denoiser path contribution clamp strength
 #define RT_PARAM_RAY_MAX_RADIANCE 21 // rt_params[5].y - Pre-denoiser linear HDR luminance limit
 #define RT_PARAM_DENOISER_SPLIT_SIGNALS 22 // rt_params[5].z - Separate diffuse/specular denoising
-#define RT_PARAM_DENOISER_SPECULAR_HISTORY_WEIGHT 23 // rt_params[5].w - Specular SVGF history weight
+#define RT_PARAM_DENOISER_SPECULAR_HISTORY_WEIGHT 23 // rt_params[5].w - Specular RTGI denoiser history weight
 #define RT_PARAM_DENOISER_SPECULAR_SPATIAL_STRENGTH 24 // rt_params[6].x - Specular spatial filtering strength
 #define RT_PARAM_RTGI_SAMPLING_CONTROLS 25 // rt_params[6].y - Bitfield for analytic/emissive sampling controls
 #define RT_PARAM_EMISSIVE_CANDIDATE_COUNT 26 // rt_params[6].z - Renderer-selected emissive candidate count
@@ -50,12 +51,17 @@
 #define RT_PARAM_RTGI_STRC_BASE_PROBE_SPACING 32 // rt_params[8].x - Cascade 0 spacing in world units
 #define RT_PARAM_RTGI_STRC_RAYS_PER_FRAME 33 // rt_params[8].y - Probe update ray budget
 #define RT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT 34 // rt_params[8].z - Probe temporal accumulation weight
+#define RT_PARAM_RTGI_BACKEND 35 // rt_params[8].w - Requested vendor backend
+#define RT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS 36 // rt_params[9].x - Static STRC visual layer mask
+#define RT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS 37 // rt_params[9].y - Dynamic STRC visual layer mask
 
 #define RTGI_SAMPLING_ANALYTIC_LIGHTS_BIT 1u
 #define RTGI_SAMPLING_EXPLICIT_EMISSIVE_BIT 2u
 
-#define RT_MODE_HYBRID 0u // Compatibility name for Simple RT.
-#define RT_MODE_PATH_TRACED 1u
+#define RT_MODE_REFLECTIONS_RT_ONLY 0u
+#define RT_MODE_FULL_PATH_TRACING 1u
+#define RT_MODE_HYBRID RT_MODE_REFLECTIONS_RT_ONLY // Compatibility name.
+#define RT_MODE_PATH_TRACED RT_MODE_FULL_PATH_TRACING // Compatibility name.
 
 // ============================================================================
 // PATHTRACING PAYLOAD (32 bytes, fp16/unorm-packed)
@@ -213,6 +219,14 @@ uint set_primary_raster_gi_owner(uint packed) {
 }
 bool has_primary_raster_gi_owner(uint packed) {
 	return (packed & PRIMARY_RASTER_GI_OWNER_FLAG) != 0u;
+}
+
+const uint STRC_DYNAMIC_HIT_FLAG = (1u << 28);
+uint set_strc_dynamic_hit(uint packed) {
+	return packed | STRC_DYNAMIC_HIT_FLAG;
+}
+bool has_strc_dynamic_hit(uint packed) {
+	return (packed & STRC_DYNAMIC_HIT_FLAG) != 0u;
 }
 
 // Bounce limits

@@ -914,6 +914,9 @@ public:
 	FUNC2(environment_set_pathtracing, RID, bool)
 	FUNC2(environment_set_pathtracing_params, RID, const PackedFloat32Array &)
 	FUNC1RC(PackedFloat32Array, environment_get_pathtracing_params, RID)
+	FUNC0RC(Dictionary, pathtracing_get_backend_status)
+	FUNC1RC(Dictionary, pathtracing_get_backend_status_for_backend, RSE::PathtracingBackend)
+	FUNC0RC(Array, pathtracing_get_backend_capabilities)
 
 	FUNC3R(Ref<Image>, environment_bake_panorama, RID, bool, const Size2i &)
 

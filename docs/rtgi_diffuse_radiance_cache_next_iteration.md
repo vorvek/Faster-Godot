@@ -1,10 +1,10 @@
 # RTGI Diffuse Radiance Cache Next Iteration
 
-This is the next RTGI upstream reconstruction step after explicit analytic and emissive source sampling. It is intentionally not implemented in the current emissive reconstruction phase. SVGF remains the final cleanup stage; the cache is meant to reduce raw diffuse variance before denoise.
+This is the next RTGI upstream reconstruction step after explicit analytic and emissive source sampling. It is intentionally not implemented in the current emissive reconstruction phase. ASVFG remains the final cleanup stage for the default denoiser path; the cache is meant to reduce raw diffuse variance before denoise.
 
 ## Goals
 
-- Reduce raw diffuse p99, visible speckles, fireflies, and frame-delta sparkle before SVGF.
+- Reduce raw diffuse p99, visible speckles, fireflies, and frame-delta sparkle before ASVFG.
 - Preserve RTGI-off behavior and raster GI coexistence.
 - Keep path-traced SDFGI exclusive behavior isolated from hybrid raster GI paths.
 - Provide clear per-source attribution proving whether cache reuse reduces upstream diffuse instability.
@@ -25,7 +25,7 @@ Each cache entry stores:
 - Confidence.
 - Last update frame index.
 
-Use a fixed-size per-viewport buffer sized from render resolution and tile size, for example 8x8 or 16x16 pixels. Keep the layout independent from SVGF history buffers so cache invalidation and metrics can be measured separately.
+Use a fixed-size per-viewport buffer sized from render resolution and tile size, for example 8x8 or 16x16 pixels. Keep the layout independent from ASVFG history buffers so cache invalidation and metrics can be measured separately.
 
 ## Update Cadence
 
@@ -67,14 +67,14 @@ Do not cache raster GI owner primary contribution in hybrid mode.
 
 ## Integration Point
 
-Integrate before SVGF:
+Integrate before ASVFG:
 
 1. Generate direct, explicit emissive, sky, and raw indirect signals.
 2. Resolve or blend the diffuse radiance cache estimate for eligible diffuse hits.
 3. Feed the cache-refined diffuse estimate into the existing RTGI signal split.
-4. Let SVGF continue as the final temporal/spatial cleanup pass.
+4. Let ASVFG continue as the final temporal/spatial cleanup pass.
 
-The cache must be disabled by a separate internal guard during development so direct comparisons can capture raw 1-spp, explicit emissive only, cache only, and cache plus SVGF modes.
+The cache must be disabled by a separate internal guard during development so direct comparisons can capture raw 1-spp, explicit emissive only, cache only, and cache plus ASVFG modes.
 
 ## Metrics
 
@@ -92,7 +92,7 @@ The quality harness should report full-frame and ROI metrics for cache-off versu
 - Many-light/emissive dark-wall and specular/detail ROIs.
 - High-spp reference deltas in the controlled validation scene.
 
-Acceptance requires measurable raw diffuse variance reduction before SVGF, not just cleaner final denoised output.
+Acceptance requires measurable raw diffuse variance reduction before ASVFG, not just cleaner final denoised output.
 
 ## Raster GI Coexistence Risks
 
@@ -103,7 +103,7 @@ Acceptance requires measurable raw diffuse variance reduction before SVGF, not j
 
 ## v2 Validation Notes
 
-The v2 implementation keeps the cache screen-space, full resolution, per viewport, and limited to split-signal RTGI diffuse before SVGF. It adds a post-cache pre-SVGF debug draw named `cache_filtered_diffuse`, diagnostic metric extraction for cache hit/confidence/age/rejection buckets, and a per-render-buffer signature that clears the cache when relevant RTGI mode, quality, sampling, render-size, view-count, or RT radiance-history state changes.
+The v2 implementation keeps the cache screen-space, full resolution, per viewport, and limited to split-signal RTGI diffuse before ASVFG. It adds a post-cache pre-ASVFG debug draw named `cache_filtered_diffuse`, diagnostic metric extraction for cache hit/confidence/age/rejection buckets, and a per-render-buffer signature that clears the cache when relevant RTGI mode, quality, sampling, render-size, view-count, or RT radiance-history state changes.
 
 Reuse remains primary-reprojection first. Stable-neighborhood recovery is limited to a five-tap cross after geometric or reprojection failure, and candidates must pass history-id, previous-validity, normal, depth, hit-distance, variance, confidence, age, and radiance-delta checks. The variance-guided weighting is dynamic: the stricter firefly-control path only engages for mature, high-confidence history when the current diffuse sample is a local bright outlier over stable darker history. This avoids a scene-specific cutoff while preserving Cornell's broad bright wall energy.
 

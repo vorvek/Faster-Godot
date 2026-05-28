@@ -77,14 +77,28 @@ public:
 		SDFGI_Y_SCALE_100_PERCENT,
 	};
 
+	enum RTGIBackend {
+		RTGI_BACKEND_VULKAN_GENERIC = RSE::PT_BACKEND_VULKAN_GENERIC,
+		RTGI_BACKEND_NVIDIA_RTXPT = RSE::PT_BACKEND_NVIDIA_RTXPT,
+		RTGI_BACKEND_AMD_HIP_RT = RSE::PT_BACKEND_AMD_HIP_RT,
+		RTGI_BACKEND_INTEL_EMBREE = RSE::PT_BACKEND_INTEL_EMBREE,
+	};
+
 	enum RTGIMode {
-		RTGI_MODE_HYBRID,
-		RTGI_MODE_PATH_TRACED,
+		RTGI_MODE_REFLECTIONS_RT_ONLY,
+		RTGI_MODE_FULL_PATH_TRACING,
+		RTGI_MODE_HYBRID = RTGI_MODE_REFLECTIONS_RT_ONLY,
+		RTGI_MODE_PATH_TRACED = RTGI_MODE_FULL_PATH_TRACING,
 	};
 
 	enum RTGIDenoiser {
-		RTGI_DENOISER_SVGF = 8,
+		RTGI_DENOISER_ASVFG_EXPERIMENTAL = 8,
 		RTGI_DENOISER_NONE = 9,
+		RTGI_DENOISER_FIDELITYFX = 10,
+		RTGI_DENOISER_NVIDIA = 11,
+		RTGI_DENOISER_AMD = 12,
+		RTGI_DENOISER_INTEL = 13,
+		RTGI_DENOISER_SVGF = RTGI_DENOISER_ASVFG_EXPERIMENTAL,
 	};
 
 	enum PathtracingDebugMode {
@@ -210,7 +224,8 @@ private:
 	int pathtracing_samples_per_pixel = 1;
 	int pathtracing_max_bounces = 3;
 	RSE::PathtracingDenoiser pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL;
-	RTGIMode rtgi_mode = RTGI_MODE_HYBRID;
+	RTGIBackend rtgi_backend = RTGI_BACKEND_VULKAN_GENERIC;
+	RTGIMode rtgi_mode = RTGI_MODE_REFLECTIONS_RT_ONLY;
 	float rtgi_energy = 1.0;
 	bool rtgi_disable_in_editor = true;
 	float rtgi_denoiser_strength = 0.90f;
@@ -234,7 +249,9 @@ private:
 	float rtgi_strc_temporal_weight = 0.97f;
 	float rtgi_overscan_horizontal = 0.0f;
 	float rtgi_overscan_vertical = 0.0f;
-	RTGIDenoiser rtgi_denoiser = RTGI_DENOISER_SVGF;
+	uint32_t rtgi_strc_static_visual_layers = 0xfffff;
+	uint32_t rtgi_strc_dynamic_visual_layers = 0xfffff;
+	RTGIDenoiser rtgi_denoiser = RTGI_DENOISER_ASVFG_EXPERIMENTAL;
 	void _update_pathtracing();
 
 	// Glow
@@ -438,6 +455,8 @@ public:
 
 	void set_rtgi_enabled(bool p_enabled);
 	bool is_rtgi_enabled() const;
+	void set_rtgi_backend(RTGIBackend p_backend);
+	RTGIBackend get_rtgi_backend() const;
 	void set_rtgi_mode(RTGIMode p_mode);
 	RTGIMode get_rtgi_mode() const;
 	void set_rtgi_samples_per_pixel(int p_samples);
@@ -490,6 +509,10 @@ public:
 	float get_rtgi_overscan_horizontal() const;
 	void set_rtgi_overscan_vertical(float p_overscan);
 	float get_rtgi_overscan_vertical() const;
+	void set_rtgi_strc_static_visual_layers(uint32_t p_layers);
+	uint32_t get_rtgi_strc_static_visual_layers() const;
+	void set_rtgi_strc_dynamic_visual_layers(uint32_t p_layers);
+	uint32_t get_rtgi_strc_dynamic_visual_layers() const;
 	void set_rtgi_denoiser(RTGIDenoiser p_denoiser);
 	RTGIDenoiser get_rtgi_denoiser() const;
 	void set_rtgi_debug_mode(PathtracingDebugMode p_mode);
@@ -604,6 +627,7 @@ VARIANT_ENUM_CAST(Environment::AmbientSource)
 VARIANT_ENUM_CAST(Environment::ReflectionSource)
 VARIANT_ENUM_CAST(Environment::ToneMapper)
 VARIANT_ENUM_CAST(Environment::SDFGIYScale)
+VARIANT_ENUM_CAST(Environment::RTGIBackend)
 VARIANT_ENUM_CAST(Environment::RTGIMode)
 VARIANT_ENUM_CAST(Environment::RTGIDenoiser)
 VARIANT_ENUM_CAST(Environment::GlowBlendMode)

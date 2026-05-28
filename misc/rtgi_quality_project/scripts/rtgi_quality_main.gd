@@ -172,11 +172,11 @@ func _build_scene() -> void:
 	env.glow_enabled = false
 	env.rtgi_enabled = true
 	env.rtgi_disable_in_editor = false
-	env.rtgi_mode = Environment.RTGI_MODE_PATH_TRACED
+	env.rtgi_mode = Environment.RTGI_MODE_FULL_PATH_TRACING
 	env.rtgi_samples_per_pixel = 1
 	env.rtgi_max_bounces = 3
 	env.rtgi_energy = 1.0
-	env.rtgi_denoiser = Environment.RTGI_DENOISER_SVGF
+	env.rtgi_denoiser = Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL
 	env.rtgi_denoiser_strength = _denoise_strength
 	env.rtgi_denoiser_history_weight = _history_weight
 	env.rtgi_denoiser_firefly_suppression = _firefly_suppression
@@ -480,7 +480,7 @@ func _build_coexistence_scene(env: Environment) -> void:
 	env.ambient_light_color = Color(0.018, 0.019, 0.022)
 	env.ambient_light_energy = 0.08
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.rtgi_mode = Environment.RTGI_MODE_PATH_TRACED if _scene_mode == "path_traced_sdfgi_exclusive" else Environment.RTGI_MODE_HYBRID
+	env.rtgi_mode = Environment.RTGI_MODE_FULL_PATH_TRACING if _scene_mode == "path_traced_sdfgi_exclusive" else Environment.RTGI_MODE_REFLECTIONS_RT_ONLY
 	env.rtgi_max_bounces = 4
 	env.sdfgi_enabled = _scene_mode in ["sdfgi", "path_traced_sdfgi_exclusive"]
 	if env.sdfgi_enabled:
@@ -1377,7 +1377,7 @@ func _capture_comparison_grid(base_name: String) -> void:
 		{
 			"name": "random_emissive_discovery_raw",
 			"enabled": true,
-			"mode": Environment.RTGI_MODE_PATH_TRACED,
+			"mode": Environment.RTGI_MODE_FULL_PATH_TRACING,
 			"spp": 1,
 			"denoiser": Environment.RTGI_DENOISER_NONE,
 			"max_bounces": 5,
@@ -1390,7 +1390,7 @@ func _capture_comparison_grid(base_name: String) -> void:
 		{
 			"name": "analytic_direct_only_raw",
 			"enabled": true,
-			"mode": Environment.RTGI_MODE_PATH_TRACED,
+			"mode": Environment.RTGI_MODE_FULL_PATH_TRACING,
 			"spp": 1,
 			"denoiser": Environment.RTGI_DENOISER_NONE,
 			"max_bounces": 5,
@@ -1403,7 +1403,7 @@ func _capture_comparison_grid(base_name: String) -> void:
 		{
 			"name": "analytic_explicit_emissive_raw",
 			"enabled": true,
-			"mode": Environment.RTGI_MODE_PATH_TRACED,
+			"mode": Environment.RTGI_MODE_FULL_PATH_TRACING,
 			"spp": 1,
 			"denoiser": Environment.RTGI_DENOISER_NONE,
 			"max_bounces": 5,
@@ -1414,11 +1414,11 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"ray_max_radiance": _ray_max_radiance,
 		},
 		{
-			"name": "path_traced_split_1spp",
+			"name": "path_traced_asvfg_split_1spp",
 			"enabled": true,
-			"mode": Environment.RTGI_MODE_PATH_TRACED,
+			"mode": Environment.RTGI_MODE_FULL_PATH_TRACING,
 			"spp": 1,
-			"denoiser": Environment.RTGI_DENOISER_SVGF,
+			"denoiser": Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL,
 			"max_bounces": 3,
 			"split_signals": true,
 			"analytic_light_sampling": _analytic_light_sampling,
@@ -1427,11 +1427,24 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"ray_max_radiance": _ray_max_radiance,
 		},
 		{
-			"name": "path_traced_single_beauty_1spp",
+			"name": "path_traced_amd_fallback_1spp",
 			"enabled": true,
-			"mode": Environment.RTGI_MODE_PATH_TRACED,
+			"mode": Environment.RTGI_MODE_FULL_PATH_TRACING,
 			"spp": 1,
-			"denoiser": Environment.RTGI_DENOISER_SVGF,
+			"denoiser": Environment.RTGI_DENOISER_AMD,
+			"max_bounces": 3,
+			"split_signals": true,
+			"analytic_light_sampling": _analytic_light_sampling,
+			"explicit_emissive_sampling": _explicit_emissive_sampling,
+			"ray_firefly_suppression": _ray_firefly_suppression,
+			"ray_max_radiance": _ray_max_radiance,
+		},
+		{
+			"name": "path_traced_asvfg_single_beauty_1spp",
+			"enabled": true,
+			"mode": Environment.RTGI_MODE_FULL_PATH_TRACING,
+			"spp": 1,
+			"denoiser": Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL,
 			"max_bounces": 3,
 			"split_signals": false,
 			"analytic_light_sampling": _analytic_light_sampling,
@@ -1440,11 +1453,11 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"ray_max_radiance": _ray_max_radiance,
 		},
 		{
-			"name": "hybrid_1spp",
+			"name": "reflections_only_asvfg_1spp",
 			"enabled": true,
-			"mode": Environment.RTGI_MODE_HYBRID,
+			"mode": Environment.RTGI_MODE_REFLECTIONS_RT_ONLY,
 			"spp": 1,
-			"denoiser": Environment.RTGI_DENOISER_SVGF,
+			"denoiser": Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL,
 			"max_bounces": 3,
 			"split_signals": _split_signals,
 			"analytic_light_sampling": _analytic_light_sampling,
@@ -1453,11 +1466,24 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"ray_max_radiance": _ray_max_radiance,
 		},
 		{
-			"name": "path_traced_strc_off_1spp",
+			"name": "reflections_only_amd_fallback_1spp",
 			"enabled": true,
-			"mode": Environment.RTGI_MODE_PATH_TRACED,
+			"mode": Environment.RTGI_MODE_REFLECTIONS_RT_ONLY,
 			"spp": 1,
-			"denoiser": Environment.RTGI_DENOISER_SVGF,
+			"denoiser": Environment.RTGI_DENOISER_AMD,
+			"max_bounces": 3,
+			"split_signals": true,
+			"analytic_light_sampling": _analytic_light_sampling,
+			"explicit_emissive_sampling": _explicit_emissive_sampling,
+			"ray_firefly_suppression": _ray_firefly_suppression,
+			"ray_max_radiance": _ray_max_radiance,
+		},
+		{
+			"name": "path_traced_asvfg_strc_off_1spp",
+			"enabled": true,
+			"mode": Environment.RTGI_MODE_FULL_PATH_TRACING,
+			"spp": 1,
+			"denoiser": Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL,
 			"max_bounces": 3,
 			"split_signals": _split_signals,
 			"analytic_light_sampling": _analytic_light_sampling,
@@ -1467,9 +1493,55 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"strc_enabled": false,
 		},
 		{
+			"name": "vendor_denoiser_fallback_nvidia",
+			"enabled": true,
+			"backend": Environment.RTGI_BACKEND_NVIDIA_RTXPT,
+			"mode": Environment.RTGI_MODE_FULL_PATH_TRACING,
+			"spp": 1,
+			"denoiser": Environment.RTGI_DENOISER_NVIDIA,
+			"max_bounces": 3,
+			"split_signals": _split_signals,
+			"analytic_light_sampling": _analytic_light_sampling,
+			"explicit_emissive_sampling": _explicit_emissive_sampling,
+			"ray_firefly_suppression": _ray_firefly_suppression,
+			"ray_max_radiance": _ray_max_radiance,
+		},
+		{
+			"name": "strc_static_layers_only",
+			"enabled": true,
+			"mode": Environment.RTGI_MODE_FULL_PATH_TRACING,
+			"spp": 1,
+			"denoiser": Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL,
+			"max_bounces": 3,
+			"split_signals": _split_signals,
+			"analytic_light_sampling": _analytic_light_sampling,
+			"explicit_emissive_sampling": _explicit_emissive_sampling,
+			"ray_firefly_suppression": _ray_firefly_suppression,
+			"ray_max_radiance": _ray_max_radiance,
+			"strc_enabled": true,
+			"strc_static_layers": 1,
+			"strc_dynamic_layers": 0,
+		},
+		{
+			"name": "strc_ignored_layers",
+			"enabled": true,
+			"mode": Environment.RTGI_MODE_FULL_PATH_TRACING,
+			"spp": 1,
+			"denoiser": Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL,
+			"max_bounces": 3,
+			"split_signals": _split_signals,
+			"analytic_light_sampling": _analytic_light_sampling,
+			"explicit_emissive_sampling": _explicit_emissive_sampling,
+			"ray_firefly_suppression": _ray_firefly_suppression,
+			"ray_max_radiance": _ray_max_radiance,
+			"strc_enabled": true,
+			"strc_static_layers": 0,
+			"strc_dynamic_layers": 0,
+		},
+		{
 			"name": "no_rtgi",
 			"enabled": false,
-			"mode": Environment.RTGI_MODE_HYBRID,
+			"mode": Environment.RTGI_MODE_REFLECTIONS_RT_ONLY,
 			"spp": 1,
 			"denoiser": Environment.RTGI_DENOISER_NONE,
 			"max_bounces": 3,
@@ -1482,7 +1554,7 @@ func _capture_comparison_grid(base_name: String) -> void:
 		{
 			"name": "path_traced_reference_%dspp" % _reference_spp,
 			"enabled": true,
-			"mode": Environment.RTGI_MODE_PATH_TRACED,
+			"mode": Environment.RTGI_MODE_FULL_PATH_TRACING,
 			"spp": _reference_spp,
 			"denoiser": Environment.RTGI_DENOISER_NONE,
 				"max_bounces": 8,
@@ -1504,6 +1576,7 @@ func _capture_comparison_grid(base_name: String) -> void:
 	for config in configs:
 		_environment.rtgi_enabled = false
 		await _wait_render_frame()
+		_environment.rtgi_backend = config.get("backend", Environment.RTGI_BACKEND_VULKAN_GENERIC)
 		_environment.rtgi_enabled = config["enabled"]
 		_environment.rtgi_mode = config["mode"]
 		_environment.rtgi_samples_per_pixel = config["spp"]
@@ -1515,6 +1588,8 @@ func _capture_comparison_grid(base_name: String) -> void:
 		_environment.rtgi_ray_firefly_suppression = config["ray_firefly_suppression"]
 		_environment.rtgi_ray_max_radiance = config["ray_max_radiance"]
 		_environment.rtgi_strc_enabled = config.get("strc_enabled", _strc_enabled)
+		_environment.rtgi_strc_static_visual_layers = config.get("strc_static_layers", 1048575)
+		_environment.rtgi_strc_dynamic_visual_layers = config.get("strc_dynamic_layers", 1048575)
 		_apply_debug_view("beauty")
 		for frame in range(comparison_warmup):
 			await _wait_render_frame()
@@ -1527,6 +1602,7 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"name": config["name"],
 			"path": ProjectSettings.globalize_path(path),
 			"rtgi_enabled": config["enabled"],
+			"rtgi_backend": config.get("backend", Environment.RTGI_BACKEND_VULKAN_GENERIC),
 			"rtgi_mode": config["mode"],
 			"spp": config["spp"],
 			"denoiser": config["denoiser"],
@@ -1536,6 +1612,8 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"explicit_emissive_sampling": config["explicit_emissive_sampling"],
 			"ray_firefly_suppression": config["ray_firefly_suppression"],
 			"strc_enabled": config.get("strc_enabled", _strc_enabled),
+			"strc_static_layers": config.get("strc_static_layers", 1048575),
+			"strc_dynamic_layers": config.get("strc_dynamic_layers", 1048575),
 			"ray_max_radiance": config["ray_max_radiance"],
 		})
 

@@ -791,8 +791,19 @@ enum PathtracingDenoiser {
 	PT_DENOISER_NONE = 0,
 	PT_DENOISER_RESERVED_1 = 1,
 	PT_DENOISER_INTERNAL = 2,
-	PT_DENOISER_RESERVED_3 = 3,
+	PT_DENOISER_FIDELITYFX = 3,
 	PT_DENOISER_RESERVED_4 = 4,
+	PT_DENOISER_NVIDIA = 5,
+	PT_DENOISER_AMD = 6,
+	PT_DENOISER_INTEL = 7,
+};
+
+enum PathtracingBackend {
+	PT_BACKEND_VULKAN_GENERIC = 0,
+	PT_BACKEND_NVIDIA_RTXPT = 1,
+	PT_BACKEND_AMD_HIP_RT = 2,
+	PT_BACKEND_INTEL_EMBREE = 3,
+	PT_BACKEND_MAX,
 };
 
 // Pathtracing parameter indices. Indices copied into the ray tracing shader
@@ -808,7 +819,7 @@ enum PathtracingParamIndex {
 	PT_PARAM_RESERVED_11 = 11,
 	PT_PARAM_OVERSCAN_HORIZONTAL = 12,
 	PT_PARAM_OVERSCAN_VERTICAL = 13,
-	// Indices 5, 7-11 are reserved or renderer-internal RT params.
+	// Indices 5 and 7-13 are reserved or renderer-internal RT params.
 	PT_PARAM_LIGHT_COUNT = 14,
 	PT_PARAM_FRAME_INDEX = 15,
 	PT_PARAM_DENOISER_STRENGTH = 16,
@@ -821,6 +832,7 @@ enum PathtracingParamIndex {
 	PT_PARAM_DENOISER_SPECULAR_HISTORY_WEIGHT = 23,
 	PT_PARAM_DENOISER_SPECULAR_SPATIAL_STRENGTH = 24,
 	PT_PARAM_RTGI_SAMPLING_CONTROLS = 25,
+	// Compatibility alias for the RTGI diffuse cache toggle. Index 11 was previously reserved in the generic RT table.
 	PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED = 11,
 	PT_PARAM_RTGI_STRC_ENABLED = 28,
 	PT_PARAM_RTGI_STRC_STRENGTH = 29,
@@ -829,7 +841,10 @@ enum PathtracingParamIndex {
 	PT_PARAM_RTGI_STRC_BASE_PROBE_SPACING = 32,
 	PT_PARAM_RTGI_STRC_RAYS_PER_FRAME = 33,
 	PT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT = 34,
-	PT_PARAM_MAX = 35,
+	PT_PARAM_RTGI_BACKEND = 35,
+	PT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS = 36,
+	PT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS = 37,
+	PT_PARAM_MAX = 38,
 };
 
 enum SubSurfaceScatteringQuality {

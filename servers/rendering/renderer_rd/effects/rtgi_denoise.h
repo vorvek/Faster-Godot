@@ -14,6 +14,13 @@
 #define RB_SCOPE_RTGI_DENOISE_DIFFUSE SNAME("rtgi_denoise_diffuse")
 #define RB_SCOPE_RTGI_DENOISE_SPECULAR SNAME("rtgi_denoise_specular")
 #define RB_SCOPE_RTGI_DENOISE_COMPOSITE SNAME("rtgi_denoise_composite")
+#define RB_SCOPE_RTGI_FIDELITYFX SNAME("rtgi_fidelityfx")
+#define RB_SCOPE_RTGI_FIDELITYFX_DIFFUSE SNAME("rtgi_fidelityfx_diffuse")
+#define RB_SCOPE_RTGI_FIDELITYFX_DIRECT SNAME("rtgi_fidelityfx_direct")
+#define RB_SCOPE_RTGI_FIDELITYFX_EMISSIVE SNAME("rtgi_fidelityfx_emissive")
+#define RB_SCOPE_RTGI_FIDELITYFX_INDIRECT SNAME("rtgi_fidelityfx_indirect")
+#define RB_SCOPE_RTGI_FIDELITYFX_SKY SNAME("rtgi_fidelityfx_sky")
+#define RB_SCOPE_RTGI_FIDELITYFX_SPECULAR SNAME("rtgi_fidelityfx_specular")
 #define RB_TEX_RTGI_DENOISE_HISTORY SNAME("history")
 #define RB_TEX_RTGI_DENOISE_NOISY SNAME("noisy")
 #define RB_TEX_RTGI_DENOISE_MOMENTS SNAME("moments")
@@ -101,6 +108,24 @@ public:
 			const Size2i &p_process_size,
 			uint32_t p_view = 0);
 
+	void composite_fidelityfx(Ref<RenderSceneBuffersRD> p_render_buffers,
+			const StringName &p_source_context,
+			const StringName &p_direct_texture,
+			const StringName &p_emissive_texture,
+			const StringName &p_indirect_texture,
+			const StringName &p_sky_texture,
+			const StringName &p_specular_texture,
+			const StringName &p_diffuse_texture,
+			RID p_velocity,
+			RID p_normal_roughness,
+			RID p_albedo_metalness,
+			RID p_specular_guide,
+			const StringName &p_output_texture,
+			float p_denoise_strength,
+			float p_firefly_suppression,
+			const Size2i &p_process_size,
+			uint32_t p_view = 0);
+
 	void composite_volumetric_fog(Ref<RenderSceneBuffersRD> p_render_buffers,
 			const StringName &p_source_context,
 			const StringName &p_source_texture,
@@ -123,6 +148,7 @@ private:
 		MODE_COMPOSITE,
 		MODE_BLOTCH_STABILIZE,
 		MODE_SPLIT_COMPOSITE,
+		MODE_FIDELITYFX_COMPOSITE,
 		MODE_VOLUMETRIC_FOG,
 		MODE_MAX
 	};
@@ -165,6 +191,7 @@ private:
 	void _dispatch_composite(const PushConstant &p_push_constant, RID p_filtered, RID p_temporal, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_reactivity, RID p_specular_guide, RID p_history_id, RID p_output);
 	void _dispatch_blotch_stabilize(const PushConstant &p_push_constant, RID p_input, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_velocity, RID p_reactivity, RID p_output);
 	void _dispatch_split_composite(const PushConstant &p_push_constant, RID p_diffuse, RID p_specular, RID p_velocity, RID p_normal_roughness, RID p_albedo_metalness, RID p_specular_guide, RID p_output);
+	void _dispatch_fidelityfx_composite(const PushConstant &p_push_constant, RID p_direct, RID p_emissive, RID p_indirect, RID p_sky, RID p_specular, RID p_diffuse, RID p_velocity, RID p_normal_roughness, RID p_albedo_metalness, RID p_specular_guide, RID p_output);
 	void _dispatch_volumetric_fog(const PushConstant &p_push_constant, RID p_color, RID p_viewz_hitdist, RID p_fog_map);
 };
 

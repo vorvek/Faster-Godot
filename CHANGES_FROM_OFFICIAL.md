@@ -11,7 +11,7 @@ desktop Forward+ profile. The detailed notes are split by change area:
 | Windows and Linux target profile | [docs/windows_linux_target_profile.md](docs/windows_linux_target_profile.md) |
 | Rapier 2D physics backend | [docs/rapier_2d_physics.md](docs/rapier_2d_physics.md) |
 | Rapier/Jolt physics profile | [docs/rapier_jolt_physics.md](docs/rapier_jolt_physics.md) |
-| Hardware RTGI, path tracing, SVGF denoising, and particle stability | [docs/path_tracing_gi.md](docs/path_tracing_gi.md) |
+| Hardware RTGI, path tracing, RTGI denoising, and particle stability | [docs/path_tracing_gi.md](docs/path_tracing_gi.md) |
 | TAA quality controls | [docs/taa_quality_controls.md](docs/taa_quality_controls.md) |
 | Editor frame-rate limits while testing | [docs/editor_frame_rate_limits.md](docs/editor_frame_rate_limits.md) |
 | Forward+/RTGI rendering hot-path tuning | [docs/rendering_hot_path_tuning.md](docs/rendering_hot_path_tuning.md) |
@@ -27,12 +27,15 @@ desktop Forward+ profile. The detailed notes are split by change area:
 
 ## RTGI Denoiser Status
 
-RTGI ships two denoiser choices: `SVGF (Default)` and `None`.
+RTGI ships three denoiser choices: `ASVFG (Experimental)`,
+`FidelityFX (Experimental)`, and `None`.
 
 The local renderer emits RT radiance, depth, velocity, normal/roughness,
 albedo/metalness, view-Z, hit-distance, and history validity/identity masks for
-RTGI denoising. SVGF consumes those guides on the GPU and applies an additional
-current-frame guided stabilizer for larger diffuse blotches.
+RTGI denoising. ASVFG consumes those guides on the GPU and applies an additional
+current-frame guided stabilizer for larger diffuse blotches, while the
+experimental FidelityFX path denoises RTGI's direct-light, emissive, indirect,
+sky, and specular signals before recomposition.
 
 ## Current Benchmark Snapshot
 

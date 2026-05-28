@@ -967,6 +967,9 @@ public:
 		DeviceFamily device_family = DEVICE_UNKNOWN;
 		uint32_t version_major = 1;
 		uint32_t version_minor = 0;
+		bool external_memory_supported = false;
+		bool external_semaphore_supported = false;
+		bool timeline_semaphore_supported = false;
 	};
 
 	virtual void set_object_name(ObjectType p_type, ID p_driver_id, const String &p_name) = 0;

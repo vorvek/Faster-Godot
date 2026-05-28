@@ -3140,6 +3140,9 @@ void RenderingServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("environment_set_sdfgi_frames_to_update_light", "frames"), &RenderingServer::environment_set_sdfgi_frames_to_update_light);
 	ClassDB::bind_method(D_METHOD("environment_set_volumetric_fog_volume_size", "size", "depth"), &RenderingServer::environment_set_volumetric_fog_volume_size);
 	ClassDB::bind_method(D_METHOD("environment_set_volumetric_fog_filter_active", "active"), &RenderingServer::environment_set_volumetric_fog_filter_active);
+	ClassDB::bind_method(D_METHOD("pathtracing_get_backend_status"), &RenderingServer::pathtracing_get_backend_status);
+	ClassDB::bind_method(D_METHOD("pathtracing_get_backend_status_for_backend", "backend"), &RenderingServer::pathtracing_get_backend_status_for_backend);
+	ClassDB::bind_method(D_METHOD("pathtracing_get_backend_capabilities"), &RenderingServer::pathtracing_get_backend_capabilities);
 
 	ClassDB::bind_method(D_METHOD("environment_bake_panorama", "environment", "bake_irradiance", "size"), &RenderingServer::environment_bake_panorama);
 
@@ -3223,6 +3226,12 @@ void RenderingServer::_bind_methods() {
 	BIND_ENUM_CONSTANT(ENV_SDFGI_UPDATE_LIGHT_IN_8_FRAMES);
 	BIND_ENUM_CONSTANT(ENV_SDFGI_UPDATE_LIGHT_IN_16_FRAMES);
 	BIND_ENUM_CONSTANT(ENV_SDFGI_UPDATE_LIGHT_MAX);
+
+	BIND_ENUM_CONSTANT(PT_BACKEND_VULKAN_GENERIC);
+	BIND_ENUM_CONSTANT(PT_BACKEND_NVIDIA_RTXPT);
+	BIND_ENUM_CONSTANT(PT_BACKEND_AMD_HIP_RT);
+	BIND_ENUM_CONSTANT(PT_BACKEND_INTEL_EMBREE);
+	BIND_ENUM_CONSTANT(PT_BACKEND_MAX);
 
 	BIND_ENUM_CONSTANT(SUB_SURFACE_SCATTERING_QUALITY_DISABLED);
 	BIND_ENUM_CONSTANT(SUB_SURFACE_SCATTERING_QUALITY_LOW);

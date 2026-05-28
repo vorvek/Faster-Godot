@@ -1404,6 +1404,9 @@ public:
 
 	PASS1RC(bool, environment_get_pathtracing_enabled, RID)
 	PASS1RC(PackedFloat32Array, environment_get_pathtracing_params, RID)
+	PASS0RC(Dictionary, pathtracing_get_backend_status)
+	PASS1RC(Dictionary, pathtracing_get_backend_status_for_backend, RSE::PathtracingBackend)
+	PASS0RC(Array, pathtracing_get_backend_capabilities)
 
 	// Adjustment
 	PASS7(environment_set_adjustment, RID, bool, float, float, float, bool, RID)

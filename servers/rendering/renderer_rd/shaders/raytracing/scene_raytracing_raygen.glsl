@@ -126,7 +126,8 @@ void rt_strc_probe_update_main() {
 	}
 
 	vec3 radiance = sanitize_payload_vec3(ps.radiance);
-	float confidence = clamp(rt_luminance(radiance) > 0.0 ? 1.0 : 0.35, 0.0, 1.0);
+	bool dynamic_hit = has_strc_dynamic_hit(ps.packed_bounces_flags);
+	float confidence = clamp(rt_luminance(radiance) > 0.0 ? (dynamic_hit ? 0.45 : 1.0) : 0.35, 0.0, 1.0);
 	rt_strc_probe_ray_results[ray_index].radiance_distance = vec4(radiance, clamp(ps.hit_t, 0.0, 65504.0));
 	rt_strc_probe_ray_results[ray_index].normal_confidence = vec4(ps.offset_normal * 0.5 + 0.5, confidence);
 }
@@ -722,6 +723,11 @@ vec3 rt_orthonormalize_tangent(vec3 world_tangent, vec3 world_normal) {
 void main() {
 	uint geometry_idx = gl_InstanceCustomIndexEXT;
 	GeometryData geom = geometries[geometry_idx];
+
+	if (rt_strc_probe_update_mode() && !rt_strc_visual_layer_visible(geom.layer_mask)) {
+		ignoreIntersectionEXT;
+		return;
+	}
 
 	bool shadow_ray = is_shadow_ray(payload.packed_bounces_flags);
 	if (shadow_ray && (geom.layer_mask & payload.rng_state) == 0u) {

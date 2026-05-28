@@ -1034,6 +1034,7 @@ public:
 	RenderingContextDriver *get_context_driver() const { return context; }
 
 	const RDD::Capabilities &get_device_capabilities() const { return driver->get_capabilities(); }
+	const RenderingContextDriver::Device &get_device() const { return device; }
 
 	bool has_feature(const Features p_feature) const;
 

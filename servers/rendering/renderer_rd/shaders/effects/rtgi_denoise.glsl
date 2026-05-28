@@ -852,6 +852,109 @@ void main() {
 
 #endif
 
+#ifdef MODE_FIDELITYFX_COMPOSITE
+
+layout(set = 0, binding = 0) uniform sampler2D direct_buffer;
+layout(set = 0, binding = 1) uniform sampler2D emissive_buffer;
+layout(set = 0, binding = 2) uniform sampler2D indirect_buffer;
+layout(set = 0, binding = 3) uniform sampler2D sky_buffer;
+layout(set = 0, binding = 4) uniform sampler2D specular_buffer;
+layout(set = 0, binding = 5) uniform sampler2D diffuse_buffer;
+layout(rgba16f, set = 0, binding = 6) uniform restrict writeonly image2D output_image;
+layout(set = 0, binding = 7) uniform sampler2D velocity_buffer;
+layout(set = 0, binding = 8) uniform sampler2D normal_roughness_buffer;
+layout(set = 0, binding = 9) uniform sampler2D albedo_metalness_buffer;
+layout(set = 0, binding = 10) uniform sampler2D specular_guide_buffer;
+
+float fidelityfx_signal_activity(ivec2 pos) {
+	vec3 direct = sanitize_color(texelFetch(direct_buffer, pos, 0).rgb);
+	vec3 emissive = sanitize_color(texelFetch(emissive_buffer, pos, 0).rgb);
+	vec3 indirect = sanitize_color(texelFetch(indirect_buffer, pos, 0).rgb);
+	vec3 sky = sanitize_color(texelFetch(sky_buffer, pos, 0).rgb);
+	float activity = luminance(direct) + luminance(emissive) + luminance(sky);
+	activity += luminance(indirect) * 0.25;
+	return tonemap_luma(activity);
+}
+
+vec3 fidelityfx_full_color(ivec2 pos) {
+	vec4 normal_roughness = texelFetch(normal_roughness_buffer, pos, 0);
+	vec4 albedo_metalness = texelFetch(albedo_metalness_buffer, pos, 0);
+	vec4 specular_guide = texelFetch(specular_guide_buffer, pos, 0);
+	vec3 diffuse = sanitize_color(texelFetch(diffuse_buffer, pos, 0).rgb);
+	vec3 specular = remodulate_specular_radiance(sanitize_color(texelFetch(specular_buffer, pos, 0).rgb), normal_roughness, albedo_metalness, specular_guide);
+	return sanitize_color(diffuse + specular);
+}
+
+void main() {
+	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+	if (any(greaterThanEqual(pos, ivec2(params.resolution)))) {
+		return;
+	}
+
+	vec4 normal_roughness = texelFetch(normal_roughness_buffer, pos, 0);
+	vec4 albedo_metalness = texelFetch(albedo_metalness_buffer, pos, 0);
+	vec4 specular_guide = texelFetch(specular_guide_buffer, pos, 0);
+	vec3 center_n = decode_normal(normal_roughness);
+	float center_signal_activity = fidelityfx_signal_activity(pos);
+	vec3 output_color = fidelityfx_full_color(pos);
+	float center_luma = luminance(output_color);
+
+	vec3 neighbor_sum = vec3(0.0);
+	float neighbor_luma_sum = 0.0;
+	float neighbor_luma_sq_sum = 0.0;
+	float neighbor_weight_sum = 0.0;
+	float bright_support_sum = 0.0;
+	for (int y = -2; y <= 2; y++) {
+		for (int x = -2; x <= 2; x++) {
+			if (x == 0 && y == 0) {
+				continue;
+			}
+			ivec2 tap_pos = clamp(pos + ivec2(x, y), ivec2(0), ivec2(params.resolution) - ivec2(1));
+			vec4 tap_nr = texelFetch(normal_roughness_buffer, tap_pos, 0);
+			vec4 tap_albedo = texelFetch(albedo_metalness_buffer, tap_pos, 0);
+			vec4 tap_guide = texelFetch(specular_guide_buffer, tap_pos, 0);
+			float normal_similarity = max(dot(center_n, decode_normal(tap_nr)), 0.0);
+			float albedo_delta = length(tap_albedo.rgb - albedo_metalness.rgb) + abs(tap_albedo.a - albedo_metalness.a);
+			float guide_hitdist_scale = max(max(specular_guide.y, tap_guide.y), 1.0);
+			float guide_hitdist_error = abs(specular_guide.y - tap_guide.y) / guide_hitdist_scale;
+			float specular_surface = guide_specular_risk(specular_guide, normal_roughness, albedo_metalness);
+			float guide_w = exp(-guide_hitdist_error / max(mix(0.48, 0.16, specular_surface), 1e-4));
+			float signal_delta = abs(fidelityfx_signal_activity(tap_pos) - center_signal_activity);
+			float signal_w = exp(-signal_delta * 4.0);
+			float w = exp(-dot(vec2(x, y), vec2(x, y)) * 0.20) * pow(normal_similarity, 6.0) * exp(-albedo_delta * 3.0) * signal_w * mix(1.0, guide_w, guide_active(specular_guide) * smoothstep(0.25, 0.85, specular_surface));
+			vec3 tap_color = fidelityfx_full_color(tap_pos);
+			float tap_luma = luminance(tap_color);
+			neighbor_sum += tap_color * w;
+			neighbor_luma_sum += tap_luma * w;
+			neighbor_luma_sq_sum += tap_luma * tap_luma * w;
+			bright_support_sum += (tap_luma > max(center_luma * 0.55, 0.08)) ? w : 0.0;
+			neighbor_weight_sum += w;
+		}
+	}
+
+	if (neighbor_weight_sum > 1e-5) {
+		vec3 neighbor_color = neighbor_sum / neighbor_weight_sum;
+		float neighbor_luma = neighbor_luma_sum / neighbor_weight_sum;
+		float neighbor_variance = max(neighbor_luma_sq_sum / neighbor_weight_sum - neighbor_luma * neighbor_luma, 0.0);
+		float bright_support = bright_support_sum / neighbor_weight_sum;
+		float center_motion_px = velocity_pixels(texelFetch(velocity_buffer, pos, 0).xy);
+		float low_roughness = 1.0 - clamp(normal_roughness.a, 0.0, 1.0);
+		float metallic = clamp(albedo_metalness.a, 0.0, 1.0);
+		float specular_surface = max(max(low_roughness, metallic), guide_specular_risk(specular_guide, normal_roughness, albedo_metalness));
+		float sigma = sqrt(neighbor_variance);
+		float outlier_limit = neighbor_luma + sigma * mix(1.25, 0.70, specular_surface) + mix(0.06, 0.02, specular_surface);
+		float unsupported = smoothstep(outlier_limit, outlier_limit + mix(0.12, 0.04, specular_surface), center_luma);
+		unsupported *= 1.0 - smoothstep(0.10, 0.38, bright_support);
+		unsupported *= mix(0.75, 1.0, smoothstep(0.5, 7.0, center_motion_px));
+		float suppress = clamp(unsupported * params.denoise_strength * params.firefly_suppression * low_resolution_firefly_boost(), 0.0, 1.0);
+		output_color = sanitize_color(mix(output_color, neighbor_color, suppress));
+	}
+
+	imageStore(output_image, pos, vec4(output_color, 1.0));
+}
+
+#endif
+
 #ifdef MODE_VOLUMETRIC_FOG
 
 layout(rgba16f, set = 0, binding = 0) uniform restrict image2D color_image;

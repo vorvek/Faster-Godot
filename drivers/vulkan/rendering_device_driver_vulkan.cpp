@@ -625,10 +625,33 @@ Error RenderingDeviceDriverVulkan::_initialize_device_extensions() {
 #endif
 	_register_requested_device_extension(VK_NV_RAY_TRACING_VALIDATION_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME, false);
+#ifdef VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME
+	_register_requested_device_extension(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME, false);
+#endif
+#ifdef VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME
+	_register_requested_device_extension(VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME, false);
+#endif
+#ifdef VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME
+	_register_requested_device_extension(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME, false);
+#endif
 
 	// We don't actually use this extension, but some runtime components on some platforms
 	// can and will fill the validation layers with useless info otherwise if not enabled.
+#if defined(WINDOWS_ENABLED)
+#ifdef VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME
+	_register_requested_device_extension(VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME, false);
+#endif
+#ifdef VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME
+	_register_requested_device_extension(VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME, false);
+#endif
+#else
+#ifdef VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME
 	_register_requested_device_extension(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME, false);
+#endif
+#ifdef VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME
+	_register_requested_device_extension(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME, false);
+#endif
+#endif
 
 	if (Engine::get_singleton()->is_generate_spirv_debug_info_enabled()) {
 		_register_requested_device_extension(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME, true);
@@ -847,6 +870,25 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 
 	// Cache extension availability we query often.
 	framebuffer_depth_resolve = enabled_device_extension_names.has(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME);
+	bool external_memory_handle_support = false;
+	bool external_semaphore_handle_support = false;
+#if defined(WINDOWS_ENABLED)
+#ifdef VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME
+	external_memory_handle_support = enabled_device_extension_names.has(VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME);
+#endif
+#ifdef VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME
+	external_semaphore_handle_support = enabled_device_extension_names.has(VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME);
+#endif
+#else
+#ifdef VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME
+	external_memory_handle_support = enabled_device_extension_names.has(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+#endif
+#ifdef VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME
+	external_semaphore_handle_support = enabled_device_extension_names.has(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME);
+#endif
+#endif
+	device_capabilities.external_memory_supported = external_memory_handle_support;
+	device_capabilities.external_semaphore_supported = external_semaphore_handle_support;
 
 	bool use_fdm_offsets = false;
 	if (VulkanHooks::get_singleton() != nullptr) {
@@ -881,6 +923,9 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		VkPhysicalDeviceRayQueryFeaturesKHR ray_query_features = {};
 		VkPhysicalDeviceSynchronization2FeaturesKHR sync_2_features = {};
 		VkPhysicalDeviceRayTracingValidationFeaturesNV raytracing_validation_features = {};
+#ifdef VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME
+		VkPhysicalDeviceTimelineSemaphoreFeaturesKHR timeline_semaphore_features = {};
+#endif
 
 		const bool use_1_2_features = physical_device_properties.apiVersion >= VK_API_VERSION_1_2;
 		if (use_1_2_features) {
@@ -903,6 +948,13 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 				vulkan_memory_model_features.pNext = next_features;
 				next_features = &vulkan_memory_model_features;
 			}
+#ifdef VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME
+			if (enabled_device_extension_names.has(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME)) {
+				timeline_semaphore_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR;
+				timeline_semaphore_features.pNext = next_features;
+				next_features = &timeline_semaphore_features;
+			}
+#endif
 		}
 
 		if (enabled_device_extension_names.has(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME)) {
@@ -1010,6 +1062,7 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 			descriptor_indexing_capabilities.descriptor_binding_partially_bound = device_features_vk_1_2.descriptorBindingPartiallyBound;
 			descriptor_indexing_capabilities.descriptor_binding_variable_descriptor_count = device_features_vk_1_2.descriptorBindingVariableDescriptorCount;
 			descriptor_indexing_capabilities.runtime_descriptor_array = device_features_vk_1_2.runtimeDescriptorArray;
+			timeline_semaphore_support = device_features_vk_1_2.timelineSemaphore;
 		} else {
 			if (enabled_device_extension_names.has(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME)) {
 				shader_capabilities.shader_float16_is_supported = shader_features.shaderFloat16;
@@ -1022,7 +1075,13 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 				vulkan_memory_model_support = vulkan_memory_model_features.vulkanMemoryModel;
 				vulkan_memory_model_device_scope_support = vulkan_memory_model_features.vulkanMemoryModelDeviceScope;
 			}
+#ifdef VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME
+			if (enabled_device_extension_names.has(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME)) {
+				timeline_semaphore_support = timeline_semaphore_features.timelineSemaphore;
+			}
+#endif
 		}
+		device_capabilities.timeline_semaphore_supported = timeline_semaphore_support;
 
 		if (enabled_device_extension_names.has(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME)) {
 			fsr_capabilities.pipeline_supported = fsr_features.pipelineFragmentShadingRate;
@@ -1459,6 +1518,9 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 	VkPhysicalDeviceVulkan12Features vulkan_1_2_features = {};
 	VkPhysicalDevice16BitStorageFeaturesKHR storage_features = {};
 	VkPhysicalDeviceMultiviewFeatures multiview_features = {};
+#ifdef VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME
+	VkPhysicalDeviceTimelineSemaphoreFeaturesKHR timeline_semaphore_features = {};
+#endif
 	const bool enable_1_2_features = physical_device_properties.apiVersion >= VK_API_VERSION_1_2;
 	if (enable_1_2_features) {
 		// In Vulkan 1.2 and newer we use a newer struct to enable various features.
@@ -1468,6 +1530,7 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 		vulkan_1_2_features.bufferDeviceAddress = buffer_device_address_support;
 		vulkan_1_2_features.vulkanMemoryModel = vulkan_memory_model_support;
 		vulkan_1_2_features.vulkanMemoryModelDeviceScope = vulkan_memory_model_device_scope_support;
+		vulkan_1_2_features.timelineSemaphore = timeline_semaphore_support;
 		vulkan_1_2_features.shaderFloat16 = shader_capabilities.shader_float16_is_supported;
 		vulkan_1_2_features.shaderInt8 = shader_capabilities.shader_int8_is_supported;
 		// Descriptor indexing features for bindless textures.
@@ -1493,6 +1556,15 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 		vulkan_1_1_features.shaderDrawParameters = 0;
 		create_info_next = &vulkan_1_1_features;
 	} else {
+#ifdef VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME
+		if (timeline_semaphore_support) {
+			timeline_semaphore_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR;
+			timeline_semaphore_features.pNext = create_info_next;
+			timeline_semaphore_features.timelineSemaphore = VK_TRUE;
+			create_info_next = &timeline_semaphore_features;
+		}
+#endif
+
 		// On Vulkan 1.0 and 1.1 we use our older structs to initialize these features.
 		storage_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES_KHR;
 		storage_features.pNext = create_info_next;

@@ -29,8 +29,11 @@
 /**************************************************************************/
 
 #include "core/config/project_settings.h"
+#include "core/io/file_access.h"
 #include "core/io/image.h"
 #include "core/math/math_funcs.h"
+#include "core/os/os.h"
+#include "modules/modules_enabled.gen.h"
 #include "servers/rendering/renderer_rd/forward_clustered/rtgi_blue_noise_128_rgba.inc"
 #include "servers/rendering/renderer_rd/environment/sky.h"
 #include "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h"
@@ -44,6 +47,17 @@
 #include "servers/rendering/rendering_server_globals.h"
 #include "servers/rendering/storage/environment_storage.h"
 #include "servers/rendering/storage/variant_converters.h"
+
+#if defined(LINUXBSD_ENABLED)
+#include <dlfcn.h>
+#endif
+
+#if defined(WINDOWS_ENABLED)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 
 using namespace RendererSceneRenderImplementation;
 
@@ -80,6 +94,637 @@ static void _rt_free_uniform_set_if_alive(RID &r_rid) {
 		RD::get_singleton()->free_rid(r_rid);
 	}
 	r_rid = RID();
+}
+
+static String _rtgi_rd_device_family_name(RenderingDevice *p_rd) {
+	if (p_rd == nullptr) {
+		return "none";
+	}
+
+	switch (p_rd->get_device_capabilities().device_family) {
+		case RDD::DEVICE_VULKAN:
+			return "vulkan";
+		case RDD::DEVICE_DIRECTX:
+			return "directx";
+		case RDD::DEVICE_METAL:
+			return "metal";
+		case RDD::DEVICE_OPENGL:
+			return "opengl";
+		case RDD::DEVICE_UNKNOWN:
+		default:
+			return "unknown";
+	}
+}
+
+static String _rtgi_rd_device_vendor_name(uint32_t p_vendor) {
+	switch (p_vendor) {
+		case RenderingContextDriver::Vendor::VENDOR_AMD:
+			return "AMD";
+		case RenderingContextDriver::Vendor::VENDOR_APPLE:
+			return "Apple";
+		case RenderingContextDriver::Vendor::VENDOR_ARM:
+			return "Arm";
+		case RenderingContextDriver::Vendor::VENDOR_IMGTEC:
+			return "Imagination";
+		case RenderingContextDriver::Vendor::VENDOR_INTEL:
+			return "Intel";
+		case RenderingContextDriver::Vendor::VENDOR_MICROSOFT:
+			return "Microsoft";
+		case RenderingContextDriver::Vendor::VENDOR_NVIDIA:
+			return "NVIDIA";
+		case RenderingContextDriver::Vendor::VENDOR_QUALCOMM:
+			return "Qualcomm";
+		case RenderingContextDriver::Vendor::VENDOR_UNKNOWN:
+		default:
+			return "unknown";
+	}
+}
+
+static uint32_t _rtgi_rd_device_vendor_id(RenderingDevice *p_rd) {
+	return p_rd != nullptr ? p_rd->get_device().vendor : RenderingContextDriver::Vendor::VENDOR_UNKNOWN;
+}
+
+static String _rtgi_rd_device_name(RenderingDevice *p_rd) {
+	return p_rd != nullptr ? p_rd->get_device().name : "none";
+}
+
+static bool _rtgi_current_rd_device_family_is_vulkan(RenderingDevice *p_rd) {
+	return p_rd != nullptr && p_rd->get_device_capabilities().device_family == RDD::DEVICE_VULKAN;
+}
+
+static String _rtgi_rtxpt_unavailable_reason() {
+#ifdef MODULE_RTXPT_ENABLED
+	return "RTXPT Vulkan module is compiled, but the RTGI backend has no RTXPT scene import, dispatch, or Vulkan output handoff implementation yet.";
+#else
+	return "RTXPT Vulkan module is not compiled in.";
+#endif
+}
+
+static String _rtgi_hiprt_unavailable_reason() {
+#ifdef MODULE_HIPRT_ENABLED
+	return "HIP RT module is compiled, but the RTGI backend has no HIP RT scene mirror, Vulkan/HIP interop, synchronization, or dispatch implementation yet.";
+#else
+	return "HIP RT module is not compiled in.";
+#endif
+}
+
+static String _rtgi_embree_unavailable_reason() {
+#if defined(MODULE_EMBREE_ENABLED) || defined(MODULE_OSPRAY_ENABLED)
+	return "Embree/OSPRay module is compiled, but the RTGI backend has no CPU/SYCL renderer plus Vulkan upload/import or staged-copy path yet.";
+#else
+	return "Embree/OSPRay RTGI support is not compiled in and no Vulkan upload/import or staged-copy path is available.";
+#endif
+}
+
+static bool _rtgi_rtxpt_backend_compiled() {
+#ifdef MODULE_RTXPT_ENABLED
+	return true;
+#else
+	return false;
+#endif
+}
+
+static bool _rtgi_hiprt_backend_compiled() {
+#ifdef MODULE_HIPRT_ENABLED
+	return true;
+#else
+	return false;
+#endif
+}
+
+static bool _rtgi_embree_backend_compiled() {
+#if defined(MODULE_EMBREE_ENABLED) || defined(MODULE_OSPRAY_ENABLED)
+	return true;
+#else
+	return false;
+#endif
+}
+
+static String _rtgi_availability_failure(bool p_backend_compiled, bool p_runtime_detected, bool p_device_supported, bool p_resource_exchange_supported, bool p_implementation_ready) {
+	if (!p_backend_compiled) {
+		return "backend_not_compiled";
+	}
+	if (!p_runtime_detected) {
+		return "runtime_not_detected";
+	}
+	if (!p_device_supported) {
+		return "device_not_supported";
+	}
+	if (!p_resource_exchange_supported) {
+		return "resource_exchange_unavailable";
+	}
+	if (!p_implementation_ready) {
+		return "implementation_unavailable";
+	}
+	return "none";
+}
+
+static RTGIBackendCapabilities _rtgi_vulkan_generic_capabilities() {
+	RTGIBackendCapabilities caps;
+	caps.backend = RSE::PT_BACKEND_VULKAN_GENERIC;
+	caps.name = "Vulkan Generic";
+	RenderingDevice *rd = RD::get_singleton();
+	const bool vulkan_driver = _rtgi_current_rd_device_family_is_vulkan(rd);
+	caps.backend_compiled = true;
+	caps.runtime_detected = rd != nullptr && vulkan_driver;
+	caps.device_supported = vulkan_driver && rd->has_feature(RD::SUPPORTS_RAYTRACING_PIPELINE);
+	caps.resource_exchange_supported = vulkan_driver;
+	caps.implementation_ready = true;
+	caps.available = caps.runtime_detected && caps.device_supported && caps.resource_exchange_supported && caps.implementation_ready;
+	caps.runtime_name = "Vulkan ray tracing pipeline";
+	caps.integration_path = "RenderingDevice-owned Vulkan resources";
+	caps.rendering_device_family = _rtgi_rd_device_family_name(rd);
+	caps.rendering_device_name = _rtgi_rd_device_name(rd);
+	caps.rendering_device_vendor_id = _rtgi_rd_device_vendor_id(rd);
+	caps.rendering_device_vendor = _rtgi_rd_device_vendor_name(caps.rendering_device_vendor_id);
+	caps.rendering_device_exchange = vulkan_driver;
+	caps.vulkan_runtime = vulkan_driver;
+	caps.denoiser_handoff = caps.available;
+	caps.availability_failure = _rtgi_availability_failure(caps.backend_compiled, caps.runtime_detected, caps.device_supported, caps.resource_exchange_supported, caps.implementation_ready);
+	if (!caps.available) {
+		if (RD::get_singleton() == nullptr) {
+			caps.fallback_reason = "RenderingDevice is unavailable.";
+			caps.runtime_failure_reason = caps.fallback_reason;
+			caps.device_failure_reason = caps.fallback_reason;
+			caps.resource_exchange_failure_reason = "RenderingDevice-owned Vulkan resource exchange is unavailable without an active RenderingDevice.";
+		} else if (!vulkan_driver) {
+			caps.fallback_reason = "The active RenderingDevice driver is not Vulkan; the RTGI backend contract is Vulkan-only in this phase.";
+			caps.runtime_failure_reason = caps.fallback_reason;
+			caps.device_failure_reason = caps.fallback_reason;
+			caps.resource_exchange_failure_reason = "RenderingDevice-owned Vulkan resource exchange requires the active RenderingDevice driver to be Vulkan.";
+		} else {
+			caps.fallback_reason = "Vulkan ray tracing pipeline support is unavailable on this device.";
+			caps.device_failure_reason = caps.fallback_reason;
+		}
+	}
+	return caps;
+}
+
+static void _rtgi_append_capability_reason(String &r_reason, const String &p_reason) {
+	if (p_reason.is_empty()) {
+		return;
+	}
+	if (r_reason.is_empty()) {
+		r_reason = p_reason;
+	} else if (r_reason.find(p_reason) == -1) {
+		r_reason += " " + p_reason;
+	}
+}
+
+static String _rtgi_runtime_library_probe_cache_key(const String &p_path, const char *const *p_required_symbols, int p_required_symbol_count) {
+	String key = p_path;
+	for (int i = 0; i < p_required_symbol_count; i++) {
+		key += "|" + String(p_required_symbols[i]);
+	}
+	return key;
+}
+
+static bool _rtgi_try_open_runtime_library(const String &p_path, const char *const *p_required_symbols = nullptr, int p_required_symbol_count = 0) {
+	if (p_path.is_empty()) {
+		return false;
+	}
+
+	static HashMap<String, bool> library_probe_cache;
+	const String cache_key = _rtgi_runtime_library_probe_cache_key(p_path, p_required_symbols, p_required_symbol_count);
+	if (library_probe_cache.has(cache_key)) {
+		return library_probe_cache[cache_key];
+	}
+
+#if defined(LINUXBSD_ENABLED)
+	void *linux_library_handle = dlopen(p_path.utf8().get_data(), RTLD_LAZY | RTLD_LOCAL);
+	if (linux_library_handle != nullptr) {
+		bool required_symbols_found = true;
+		for (int i = 0; i < p_required_symbol_count; i++) {
+			if (dlsym(linux_library_handle, p_required_symbols[i]) == nullptr) {
+				required_symbols_found = false;
+				break;
+			}
+		}
+		dlclose(linux_library_handle);
+		library_probe_cache[cache_key] = required_symbols_found;
+		return required_symbols_found;
+	}
+#endif
+
+#if defined(WINDOWS_ENABLED)
+	if (!FileAccess::exists(p_path)) {
+		library_probe_cache[cache_key] = false;
+		return false;
+	}
+
+	const UINT previous_error_mode = SetErrorMode(SEM_FAILCRITICALERRORS);
+	const DWORD load_flags = p_path.is_absolute_path() ? LOAD_WITH_ALTERED_SEARCH_PATH : 0;
+	HMODULE windows_library_handle = LoadLibraryExW((LPCWSTR)(p_path.utf16().get_data()), nullptr, load_flags);
+	SetErrorMode(previous_error_mode);
+	if (windows_library_handle == nullptr) {
+		library_probe_cache[cache_key] = false;
+		return false;
+	}
+	bool required_symbols_found = true;
+	for (int i = 0; i < p_required_symbol_count; i++) {
+		if (GetProcAddress(windows_library_handle, p_required_symbols[i]) == nullptr) {
+			required_symbols_found = false;
+			break;
+		}
+	}
+	FreeLibrary(windows_library_handle);
+	library_probe_cache[cache_key] = required_symbols_found;
+	return required_symbols_found;
+#endif
+
+	library_probe_cache[cache_key] = false;
+	return false;
+}
+
+static void _rtgi_append_unique_library_search_dir(Vector<String> &r_dirs, const String &p_dir) {
+	if (p_dir.is_empty()) {
+		return;
+	}
+	for (const String &dir : r_dirs) {
+		if (dir == p_dir) {
+			return;
+		}
+	}
+	r_dirs.push_back(p_dir);
+}
+
+static Vector<String> _rtgi_make_runtime_library_search_dirs(const char *const *p_root_env_vars, int p_root_env_var_count) {
+	Vector<String> search_dirs;
+	OS *os = OS::get_singleton();
+	if (os == nullptr) {
+		return search_dirs;
+	}
+
+	const String executable_dir = os->get_executable_path().get_base_dir();
+	_rtgi_append_unique_library_search_dir(search_dirs, executable_dir);
+
+	for (int i = 0; i < p_root_env_var_count; i++) {
+		const String root = os->get_environment(p_root_env_vars[i]);
+		if (root.is_empty()) {
+			continue;
+		}
+		_rtgi_append_unique_library_search_dir(search_dirs, root);
+		_rtgi_append_unique_library_search_dir(search_dirs, root.path_join("bin"));
+		_rtgi_append_unique_library_search_dir(search_dirs, root.path_join("lib"));
+		_rtgi_append_unique_library_search_dir(search_dirs, root.path_join("lib64"));
+	}
+
+#if defined(WINDOWS_ENABLED)
+	const char *path_separator = ";";
+#else
+	const char *path_separator = ":";
+#endif
+	const Vector<String> path_dirs = os->get_environment("PATH").split(path_separator, false);
+	for (const String &path_dir : path_dirs) {
+		_rtgi_append_unique_library_search_dir(search_dirs, path_dir);
+	}
+
+	return search_dirs;
+}
+
+static bool _rtgi_find_runtime_library(const char *const *p_library_names, int p_library_name_count, const char *const *p_required_symbols, int p_required_symbol_count, const char *const *p_root_env_vars, int p_root_env_var_count, String *r_found_path) {
+	for (int i = 0; i < p_library_name_count; i++) {
+		const String library_name = p_library_names[i];
+#if defined(LINUXBSD_ENABLED)
+		if (_rtgi_try_open_runtime_library(library_name, p_required_symbols, p_required_symbol_count)) {
+			if (r_found_path != nullptr) {
+				*r_found_path = library_name;
+			}
+			return true;
+		}
+#endif
+		if (FileAccess::exists(library_name) && _rtgi_try_open_runtime_library(library_name, p_required_symbols, p_required_symbol_count)) {
+			if (r_found_path != nullptr) {
+				*r_found_path = library_name;
+			}
+			return true;
+		}
+	}
+
+	const Vector<String> search_dirs = _rtgi_make_runtime_library_search_dirs(p_root_env_vars, p_root_env_var_count);
+	for (const String &dir : search_dirs) {
+		for (int i = 0; i < p_library_name_count; i++) {
+			const String candidate = dir.path_join(p_library_names[i]);
+			if (_rtgi_try_open_runtime_library(candidate, p_required_symbols, p_required_symbol_count)) {
+				if (r_found_path != nullptr) {
+					*r_found_path = candidate;
+				}
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+struct RTGIVendorBackendRequirements {
+	RSE::PathtracingBackend backend = RSE::PT_BACKEND_VULKAN_GENERIC;
+	String name;
+	String runtime_name;
+	String integration_path;
+	uint32_t required_gpu_vendor = RenderingContextDriver::Vendor::VENDOR_UNKNOWN;
+	bool requires_raytracing_pipeline = false;
+	bool requires_external_memory_semaphore = false;
+	bool allows_staged_copy = false;
+};
+
+struct RTGIVendorBackendProbe {
+	bool backend_compiled = false;
+	bool runtime_detected = false;
+	bool device_supported = false;
+	bool resource_exchange_supported = false;
+	bool implementation_ready = false;
+	bool external_memory = false;
+	bool external_semaphore = false;
+	bool timeline_semaphore = false;
+	bool staged_copy = false;
+	String compile_failure_reason;
+	String runtime_failure_reason;
+	String device_failure_reason;
+	String resource_exchange_failure_reason;
+	String implementation_failure_reason;
+};
+
+static void _rtgi_probe_rtxpt_runtime(RTGIVendorBackendProbe &r_probe) {
+	r_probe.backend_compiled = _rtgi_rtxpt_backend_compiled();
+#ifdef MODULE_RTXPT_ENABLED
+	static const char *const rtxpt_runtime_libraries[] = {
+#if defined(WINDOWS_ENABLED)
+		"rtxpt.dll",
+		"RTXPT.dll",
+		"nvrtxpt.dll",
+		"nvidia_rtxpt.dll",
+#else
+		"librtxpt.so",
+		"libRTXPT.so",
+		"libnvrtxpt.so",
+		"libnvidia_rtxpt.so",
+#endif
+	};
+	static const char *const rtxpt_root_env_vars[] = {
+		"RTXPT_SDK_PATH",
+		"RTXPT_PATH",
+	};
+	String found_library;
+	r_probe.runtime_detected = _rtgi_find_runtime_library(rtxpt_runtime_libraries, sizeof(rtxpt_runtime_libraries) / sizeof(rtxpt_runtime_libraries[0]), nullptr, 0, rtxpt_root_env_vars, sizeof(rtxpt_root_env_vars) / sizeof(rtxpt_root_env_vars[0]), &found_library);
+	if (!r_probe.runtime_detected) {
+		r_probe.runtime_failure_reason = "RTXPT Vulkan runtime library was not found in RTXPT_SDK_PATH, RTXPT_PATH, PATH, or the executable directory.";
+	}
+	r_probe.implementation_ready = false;
+	r_probe.implementation_failure_reason = "RTXPT Vulkan runtime probing is present, but scene mapping, dispatch, and denoiser handoff are not implemented yet.";
+#else
+	r_probe.compile_failure_reason = _rtgi_rtxpt_unavailable_reason();
+#endif
+}
+
+static void _rtgi_probe_hiprt_runtime(RTGIVendorBackendProbe &r_probe) {
+	r_probe.backend_compiled = _rtgi_hiprt_backend_compiled();
+#ifdef MODULE_HIPRT_ENABLED
+	static const char *const hip_runtime_libraries[] = {
+#if defined(WINDOWS_ENABLED)
+		"amdhip64.dll",
+#else
+		"libamdhip64.so",
+#endif
+	};
+	static const char *const hip_runtime_symbols[] = {
+		"hipInit",
+	};
+	static const char *const hiprt_runtime_libraries[] = {
+#if defined(WINDOWS_ENABLED)
+		"hiprt64.dll",
+		"hiprt.dll",
+#else
+		"libhiprt64.so",
+		"libhiprt.so",
+#endif
+	};
+	static const char *const hiprt_root_env_vars[] = {
+		"HIPRT_PATH",
+		"HIP_PATH",
+		"ROCM_PATH",
+	};
+	String found_hip_library;
+	String found_hiprt_library;
+	const bool hip_runtime_detected = _rtgi_find_runtime_library(hip_runtime_libraries, sizeof(hip_runtime_libraries) / sizeof(hip_runtime_libraries[0]), hip_runtime_symbols, sizeof(hip_runtime_symbols) / sizeof(hip_runtime_symbols[0]), hiprt_root_env_vars, sizeof(hiprt_root_env_vars) / sizeof(hiprt_root_env_vars[0]), &found_hip_library);
+	const bool hiprt_runtime_detected = _rtgi_find_runtime_library(hiprt_runtime_libraries, sizeof(hiprt_runtime_libraries) / sizeof(hiprt_runtime_libraries[0]), nullptr, 0, hiprt_root_env_vars, sizeof(hiprt_root_env_vars) / sizeof(hiprt_root_env_vars[0]), &found_hiprt_library);
+	r_probe.runtime_detected = hip_runtime_detected && hiprt_runtime_detected;
+	if (!r_probe.runtime_detected) {
+		if (!hip_runtime_detected && !hiprt_runtime_detected) {
+			r_probe.runtime_failure_reason = "HIP and HIP RT runtime libraries were not found in HIPRT_PATH, HIP_PATH, ROCM_PATH, PATH, or the executable directory.";
+		} else if (!hip_runtime_detected) {
+			r_probe.runtime_failure_reason = "HIP runtime library was not found in HIPRT_PATH, HIP_PATH, ROCM_PATH, PATH, or the executable directory.";
+		} else {
+			r_probe.runtime_failure_reason = "HIP RT runtime library was not found in HIPRT_PATH, HIP_PATH, ROCM_PATH, PATH, or the executable directory.";
+		}
+	}
+	r_probe.implementation_ready = false;
+	r_probe.implementation_failure_reason = "HIP RT runtime probing is present, but Vulkan/HIP resource import, synchronization, and dispatch are not implemented yet.";
+#else
+	r_probe.compile_failure_reason = _rtgi_hiprt_unavailable_reason();
+#endif
+}
+
+static void _rtgi_probe_embree_runtime(RTGIVendorBackendProbe &r_probe) {
+	r_probe.backend_compiled = _rtgi_embree_backend_compiled();
+#if defined(MODULE_EMBREE_ENABLED) || defined(MODULE_OSPRAY_ENABLED)
+	static const char *const embree_runtime_libraries[] = {
+#if defined(WINDOWS_ENABLED)
+		"embree4.dll",
+		"embree3.dll",
+#else
+		"libembree4.so",
+		"libembree3.so",
+#endif
+	};
+	static const char *const embree_runtime_symbols[] = {
+		"rtcNewDevice",
+	};
+	static const char *const ospray_runtime_libraries[] = {
+#if defined(WINDOWS_ENABLED)
+		"ospray.dll",
+		"ospray_module_cpu.dll",
+#else
+		"libospray.so",
+		"libospray_module_cpu.so",
+#endif
+	};
+	static const char *const ospray_runtime_symbols[] = {
+		"ospInit",
+	};
+	static const char *const embree_root_env_vars[] = {
+		"EMBREE_ROOT",
+		"EMBREE_DIR",
+		"OSPRAY_ROOT",
+		"OSPRAY_DIR",
+		"ONEAPI_ROOT",
+	};
+	String found_embree_library;
+	String found_ospray_library;
+	const bool embree_runtime_detected = _rtgi_find_runtime_library(embree_runtime_libraries, sizeof(embree_runtime_libraries) / sizeof(embree_runtime_libraries[0]), embree_runtime_symbols, sizeof(embree_runtime_symbols) / sizeof(embree_runtime_symbols[0]), embree_root_env_vars, sizeof(embree_root_env_vars) / sizeof(embree_root_env_vars[0]), &found_embree_library);
+	const bool ospray_runtime_detected = _rtgi_find_runtime_library(ospray_runtime_libraries, sizeof(ospray_runtime_libraries) / sizeof(ospray_runtime_libraries[0]), ospray_runtime_symbols, sizeof(ospray_runtime_symbols) / sizeof(ospray_runtime_symbols[0]), embree_root_env_vars, sizeof(embree_root_env_vars) / sizeof(embree_root_env_vars[0]), &found_ospray_library);
+	r_probe.runtime_detected = embree_runtime_detected || ospray_runtime_detected;
+	if (!r_probe.runtime_detected) {
+		r_probe.runtime_failure_reason = "Embree or OSPRay runtime library was not found in EMBREE_ROOT, EMBREE_DIR, OSPRAY_ROOT, OSPRAY_DIR, ONEAPI_ROOT, PATH, or the executable directory.";
+	}
+	r_probe.implementation_ready = false;
+	r_probe.implementation_failure_reason = "Embree/OSPRay runtime probing is present, but CPU/SYCL scene conversion, rendering, and Vulkan upload/staged-copy handoff are not implemented yet.";
+#else
+	r_probe.compile_failure_reason = _rtgi_embree_unavailable_reason();
+#endif
+}
+
+static void _rtgi_probe_vendor_device_exchange(const RTGIVendorBackendRequirements &p_requirements, RenderingDevice *p_rd, RTGIVendorBackendProbe &r_probe) {
+	const bool vulkan_driver = _rtgi_current_rd_device_family_is_vulkan(p_rd);
+	const RDD::Capabilities *rd_capabilities = p_rd != nullptr ? &p_rd->get_device_capabilities() : nullptr;
+	const uint32_t device_vendor = _rtgi_rd_device_vendor_id(p_rd);
+
+	r_probe.device_supported = vulkan_driver;
+	if (p_requirements.required_gpu_vendor != RenderingContextDriver::Vendor::VENDOR_UNKNOWN) {
+		r_probe.device_supported = r_probe.device_supported && device_vendor == p_requirements.required_gpu_vendor;
+	}
+	if (p_requirements.requires_raytracing_pipeline) {
+		r_probe.device_supported = r_probe.device_supported && p_rd != nullptr && p_rd->has_feature(RD::SUPPORTS_RAYTRACING_PIPELINE);
+	}
+
+	if (p_rd == nullptr) {
+		_rtgi_append_capability_reason(r_probe.device_failure_reason, "RenderingDevice is unavailable.");
+	} else if (!vulkan_driver) {
+		_rtgi_append_capability_reason(r_probe.device_failure_reason, "The active RenderingDevice driver is not Vulkan; the RTGI backend contract is Vulkan-only in this phase.");
+	}
+	if (p_requirements.required_gpu_vendor != RenderingContextDriver::Vendor::VENDOR_UNKNOWN && device_vendor != p_requirements.required_gpu_vendor) {
+		_rtgi_append_capability_reason(r_probe.device_failure_reason, vformat("%s requires a %s GPU; active device is %s (%s).", p_requirements.name, _rtgi_rd_device_vendor_name(p_requirements.required_gpu_vendor), _rtgi_rd_device_vendor_name(device_vendor), _rtgi_rd_device_name(p_rd)));
+	}
+	if (p_requirements.requires_raytracing_pipeline && p_rd != nullptr && !p_rd->has_feature(RD::SUPPORTS_RAYTRACING_PIPELINE)) {
+		_rtgi_append_capability_reason(r_probe.device_failure_reason, vformat("%s requires Vulkan ray tracing pipeline support on the active device.", p_requirements.name));
+	}
+
+	if (vulkan_driver && rd_capabilities != nullptr) {
+		r_probe.external_memory = rd_capabilities->external_memory_supported;
+		r_probe.external_semaphore = rd_capabilities->external_semaphore_supported;
+		r_probe.timeline_semaphore = rd_capabilities->timeline_semaphore_supported;
+		r_probe.staged_copy = p_requirements.allows_staged_copy;
+	}
+
+	const bool external_memory_semaphore_exchange = r_probe.external_memory && r_probe.external_semaphore;
+	if (p_requirements.requires_external_memory_semaphore) {
+		r_probe.resource_exchange_supported = external_memory_semaphore_exchange;
+	} else {
+		r_probe.resource_exchange_supported = external_memory_semaphore_exchange || r_probe.timeline_semaphore || r_probe.staged_copy;
+	}
+
+	if (p_requirements.requires_external_memory_semaphore && !external_memory_semaphore_exchange) {
+		_rtgi_append_capability_reason(r_probe.resource_exchange_failure_reason, "The active RenderingDevice does not expose a complete Vulkan external memory plus external semaphore exchange path.");
+	} else if (!p_requirements.requires_external_memory_semaphore && !r_probe.resource_exchange_supported) {
+		_rtgi_append_capability_reason(r_probe.resource_exchange_failure_reason, "The active RenderingDevice does not expose Vulkan external memory/semaphore, timeline semaphore, or staged-copy exchange for this backend.");
+	}
+}
+
+static RTGIVendorBackendProbe _rtgi_probe_vendor_backend(const RTGIVendorBackendRequirements &p_requirements) {
+	RTGIVendorBackendProbe probe;
+	switch (p_requirements.backend) {
+		case RSE::PT_BACKEND_NVIDIA_RTXPT:
+			_rtgi_probe_rtxpt_runtime(probe);
+			break;
+		case RSE::PT_BACKEND_AMD_HIP_RT:
+			_rtgi_probe_hiprt_runtime(probe);
+			break;
+		case RSE::PT_BACKEND_INTEL_EMBREE:
+			_rtgi_probe_embree_runtime(probe);
+			break;
+		case RSE::PT_BACKEND_VULKAN_GENERIC:
+		default:
+			break;
+	}
+	_rtgi_probe_vendor_device_exchange(p_requirements, RD::get_singleton(), probe);
+	return probe;
+}
+
+static RTGIBackendCapabilities _rtgi_vendor_backend_capabilities(const RTGIVendorBackendRequirements &p_requirements) {
+	RTGIBackendCapabilities caps;
+	RenderingDevice *rd = RD::get_singleton();
+	const bool vulkan_driver = _rtgi_current_rd_device_family_is_vulkan(rd);
+	const uint32_t device_vendor = _rtgi_rd_device_vendor_id(rd);
+	const RTGIVendorBackendProbe probe = _rtgi_probe_vendor_backend(p_requirements);
+
+	caps.backend = p_requirements.backend;
+	caps.name = p_requirements.name;
+	caps.available = probe.backend_compiled && probe.runtime_detected && probe.device_supported && probe.resource_exchange_supported && probe.implementation_ready;
+	caps.runtime_name = p_requirements.runtime_name;
+	caps.integration_path = p_requirements.integration_path;
+
+	caps.rendering_device_family = _rtgi_rd_device_family_name(rd);
+	caps.rendering_device_name = _rtgi_rd_device_name(rd);
+	caps.rendering_device_vendor_id = device_vendor;
+	caps.rendering_device_vendor = _rtgi_rd_device_vendor_name(device_vendor);
+	caps.rendering_device_exchange = vulkan_driver;
+	caps.vulkan_runtime = vulkan_driver;
+	caps.backend_compiled = probe.backend_compiled;
+	caps.runtime_detected = probe.runtime_detected;
+	caps.device_supported = probe.device_supported;
+	caps.resource_exchange_supported = probe.resource_exchange_supported;
+	caps.implementation_ready = probe.implementation_ready;
+	caps.external_memory = probe.external_memory;
+	caps.external_semaphore = probe.external_semaphore;
+	caps.timeline_semaphore = probe.timeline_semaphore;
+	caps.staged_copy = probe.staged_copy;
+	caps.denoiser_handoff = false;
+	caps.compile_failure_reason = probe.compile_failure_reason;
+	caps.runtime_failure_reason = probe.runtime_failure_reason;
+	caps.device_failure_reason = probe.device_failure_reason;
+	caps.resource_exchange_failure_reason = probe.resource_exchange_failure_reason;
+	caps.implementation_failure_reason = probe.implementation_failure_reason;
+	caps.availability_failure = _rtgi_availability_failure(caps.backend_compiled, caps.runtime_detected, caps.device_supported, caps.resource_exchange_supported, caps.implementation_ready);
+
+	String reason;
+	_rtgi_append_capability_reason(reason, caps.compile_failure_reason);
+	_rtgi_append_capability_reason(reason, caps.device_failure_reason);
+	_rtgi_append_capability_reason(reason, caps.resource_exchange_failure_reason);
+	_rtgi_append_capability_reason(reason, caps.runtime_failure_reason);
+	_rtgi_append_capability_reason(reason, caps.implementation_failure_reason);
+	caps.fallback_reason = reason;
+	if (caps.fallback_reason.is_empty()) {
+		caps.fallback_reason = caps.available ? String() : "RTGI backend is unavailable.";
+	}
+	return caps;
+}
+
+static RTGIBackendCapabilities _rtgi_static_backend_capabilities(RSE::PathtracingBackend p_backend) {
+	switch (p_backend) {
+		case RSE::PT_BACKEND_NVIDIA_RTXPT: {
+			RTGIVendorBackendRequirements requirements;
+			requirements.backend = RSE::PT_BACKEND_NVIDIA_RTXPT;
+			requirements.name = "NVIDIA RTXPT";
+			requirements.runtime_name = "RTXPT Vulkan";
+			requirements.integration_path = "Vulkan external memory/semaphore resource exchange";
+			requirements.required_gpu_vendor = RenderingContextDriver::Vendor::VENDOR_NVIDIA;
+			requirements.requires_raytracing_pipeline = true;
+			requirements.requires_external_memory_semaphore = true;
+			return _rtgi_vendor_backend_capabilities(requirements);
+		}
+		case RSE::PT_BACKEND_AMD_HIP_RT: {
+			RTGIVendorBackendRequirements requirements;
+			requirements.backend = RSE::PT_BACKEND_AMD_HIP_RT;
+			requirements.name = "AMD HIP RT";
+			requirements.runtime_name = "HIP RT compute runtime";
+			requirements.integration_path = "Vulkan/HIP external memory and semaphore interop";
+			requirements.required_gpu_vendor = RenderingContextDriver::Vendor::VENDOR_AMD;
+			requirements.requires_external_memory_semaphore = true;
+			return _rtgi_vendor_backend_capabilities(requirements);
+		}
+		case RSE::PT_BACKEND_INTEL_EMBREE: {
+			RTGIVendorBackendRequirements requirements;
+			requirements.backend = RSE::PT_BACKEND_INTEL_EMBREE;
+			requirements.name = "Intel Embree/OSPRay";
+			requirements.runtime_name = "CPU/SYCL";
+			requirements.integration_path = "Vulkan upload/import or deliberate staged copy";
+			requirements.allows_staged_copy = true;
+			return _rtgi_vendor_backend_capabilities(requirements);
+		}
+		case RSE::PT_BACKEND_VULKAN_GENERIC:
+		default:
+			return _rtgi_vulkan_generic_capabilities();
+	}
 }
 
 static uint64_t _rt_history_mix(uint64_t p_hash, uint64_t p_value) {
@@ -286,6 +931,671 @@ static bool _rt_instance_uses_alpha_overlay(const RenderGeometryInstanceBase *p_
 	return fade_alpha < RT_FADE_ALPHA_PASS_THRESHOLD;
 }
 
+class VulkanGenericRTGIBackend : public RTGIBackend {
+	RenderForwardClustered *owner = nullptr;
+	RenderRaytracing *raytracing = nullptr;
+
+	bool _add_generic_dependencies(RD::RaytracingListID p_list, uint32_t p_extra_dependency_count = 0) const {
+		ERR_FAIL_NULL_V(raytracing, false);
+
+		const uint32_t rt_dependency_count =
+				1 + p_extra_dependency_count +
+				raytracing->get_material_ubo_dependencies().size() +
+				raytracing->get_geometry_buffer_dependencies().size() +
+				raytracing->get_deformed_buffer_dependencies().size();
+		raytracing->begin_unique_buffer_dependencies(rt_dependency_count);
+		RID mat_ubo_pool = raytracing->get_mat_ubo_pool_buffer();
+		raytracing->add_unique_buffer_dependency(p_list, mat_ubo_pool);
+		for (const RID &material_ubo : raytracing->get_material_ubo_dependencies()) {
+			raytracing->add_unique_buffer_dependency(p_list, material_ubo);
+		}
+		for (const RID &geometry_buffer : raytracing->get_geometry_buffer_dependencies()) {
+			raytracing->add_unique_buffer_dependency(p_list, geometry_buffer);
+		}
+		for (const RID &deformed_buffer : raytracing->get_deformed_buffer_dependencies()) {
+			raytracing->add_unique_buffer_dependency(p_list, deformed_buffer);
+		}
+		return true;
+	}
+
+public:
+	virtual RTGIBackendCapabilities query_capabilities() const override {
+		return _rtgi_vulkan_generic_capabilities();
+	}
+
+	virtual bool initialize(RenderForwardClustered *p_owner, RenderRaytracing *p_raytracing, String *r_fallback_reason) override {
+		owner = p_owner;
+		raytracing = p_raytracing;
+		RTGIBackendCapabilities caps = query_capabilities();
+		if (!caps.available) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = caps.fallback_reason;
+			}
+			return false;
+		}
+		return true;
+	}
+
+	virtual void shutdown() override {
+		owner = nullptr;
+		raytracing = nullptr;
+	}
+
+	virtual bool prepare_frame(RTGIBackendFrameContext &r_context, String *r_fallback_reason) override {
+		if (raytracing == nullptr || raytracing->get_shader() == nullptr) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "Vulkan Generic ray tracing shader is not initialized.";
+			}
+			return false;
+		}
+
+		Ref<RenderForwardClustered::RenderBufferDataForwardClustered> rb_data;
+		if (r_context.render_data && r_context.render_data->render_buffers.is_valid() && r_context.render_data->render_buffers->has_custom_data(RB_SCOPE_FORWARD_CLUSTERED)) {
+			rb_data = r_context.render_data->render_buffers->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
+		}
+		if (rb_data.is_null()) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "Vulkan Generic render buffer data is unavailable.";
+			}
+			return false;
+		}
+
+		r_context.rd = RD::get_singleton();
+		r_context.viewport_state = raytracing->build_tlas(r_context.render_data, r_context.rt_flags);
+		if (r_context.viewport_state != nullptr) {
+			r_context.uniform_set = raytracing->update_uniform_set(r_context.viewport_state, r_context.render_data, r_context.rt_flags);
+			r_context.radiance_history_invalidated = r_context.viewport_state->radiance_history_invalidated;
+			raytracing->populate_backend_scene_resources(r_context.viewport_state, r_context.scene_resources);
+		}
+		if (r_context.uniform_set.is_valid()) {
+			r_context.pipeline = raytracing->get_shader()->get_raytracing_pipeline(r_context.rt_flags);
+		}
+		r_context.output_size = rb_data->rt_get_size();
+		r_context.exchange.mode = RTGI_BACKEND_EXCHANGE_RD_INTERNAL;
+		r_context.exchange.output_texture = rb_data->rt_get_texture();
+		r_context.exchange.depth_texture = rb_data->rt_has_depth_texture() ? rb_data->rt_get_depth_texture() : RID();
+		r_context.exchange.diffuse_radiance_texture = rb_data->rt_get_diffuse_radiance();
+		r_context.exchange.specular_radiance_texture = rb_data->rt_get_specular_radiance();
+		r_context.exchange.rd_owns_output_before_dispatch = true;
+		r_context.exchange.rd_owns_output_after_dispatch = true;
+		if (r_context.exchange.output_texture.is_valid()) {
+			r_context.exchange.release_callback_resources.push_back({ r_context.exchange.output_texture, RenderingDevice::CALLBACK_RESOURCE_TYPE_TEXTURE, RenderingDevice::CALLBACK_RESOURCE_USAGE_STORAGE_IMAGE_READ_WRITE });
+		}
+		if (r_context.exchange.depth_texture.is_valid()) {
+			r_context.exchange.release_callback_resources.push_back({ r_context.exchange.depth_texture, RenderingDevice::CALLBACK_RESOURCE_TYPE_TEXTURE, RenderingDevice::CALLBACK_RESOURCE_USAGE_STORAGE_IMAGE_READ_WRITE });
+		}
+		if (r_context.exchange.diffuse_radiance_texture.is_valid()) {
+			r_context.exchange.release_callback_resources.push_back({ r_context.exchange.diffuse_radiance_texture, RenderingDevice::CALLBACK_RESOURCE_TYPE_TEXTURE, RenderingDevice::CALLBACK_RESOURCE_USAGE_STORAGE_IMAGE_READ_WRITE });
+		}
+		if (r_context.exchange.specular_radiance_texture.is_valid()) {
+			r_context.exchange.release_callback_resources.push_back({ r_context.exchange.specular_radiance_texture, RenderingDevice::CALLBACK_RESOURCE_TYPE_TEXTURE, RenderingDevice::CALLBACK_RESOURCE_USAGE_STORAGE_IMAGE_READ_WRITE });
+		}
+
+		if (r_context.viewport_state == nullptr || !r_context.uniform_set.is_valid() || !r_context.pipeline.is_valid()) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "Vulkan Generic TLAS, uniform set, or pipeline is invalid.";
+			}
+			return false;
+		}
+		return true;
+	}
+
+	virtual bool upload_or_import_scene(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
+		if (p_context.viewport_state == nullptr || !p_context.scene_resources.tlas.is_valid()) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "Vulkan Generic TLAS/BLAS state was not built.";
+			}
+			return false;
+		}
+		return true;
+	}
+
+	virtual bool upload_materials_lights_environment(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
+		if (!p_context.uniform_set.is_valid()) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "Vulkan Generic material/light/environment uniform set is invalid.";
+			}
+			return false;
+		}
+		return true;
+	}
+
+	virtual bool prepare_probe_update(RTGIBackendFrameContext &p_context, uint32_t p_probe_flags, RID p_probe_output_buffer, uint32_t p_ray_count, RID &r_probe_pipeline, RID &r_probe_uniform_set, String *r_fallback_reason) override {
+		if (raytracing == nullptr || raytracing->get_shader() == nullptr || p_context.viewport_state == nullptr) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "Vulkan Generic STRC probe update is missing raytracing state.";
+			}
+			return false;
+		}
+		r_probe_uniform_set = raytracing->update_uniform_set(p_context.viewport_state, p_context.render_data, p_probe_flags);
+		r_probe_pipeline = raytracing->get_shader()->get_raytracing_pipeline(p_probe_flags);
+		if (!r_probe_uniform_set.is_valid() || !r_probe_pipeline.is_valid()) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "Vulkan Generic STRC probe pipeline or uniform set is invalid.";
+			}
+			return false;
+		}
+		return true;
+	}
+
+	virtual bool dispatch_path_trace(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
+		if (raytracing == nullptr || !p_context.pipeline.is_valid() || !p_context.uniform_set.is_valid()) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "Vulkan Generic path trace dispatch is missing a pipeline or uniform set.";
+			}
+			return false;
+		}
+
+		RD::RaytracingListID raytracing_list = RD::get_singleton()->raytracing_list_begin();
+		RD::get_singleton()->raytracing_list_bind_raytracing_pipeline(raytracing_list, p_context.pipeline);
+		RD::get_singleton()->raytracing_list_bind_uniform_set(raytracing_list, p_context.uniform_set, 0);
+		RID bindless_set = raytracing->get_bindless_uniform_set();
+		if (bindless_set.is_valid()) {
+			RD::get_singleton()->raytracing_list_bind_uniform_set(raytracing_list, bindless_set, 1);
+		}
+
+		if (!_add_generic_dependencies(raytracing_list)) {
+			RD::get_singleton()->raytracing_list_end();
+			return false;
+		}
+
+		RD::get_singleton()->raytracing_list_trace_rays(raytracing_list, 0, raytracing->get_shader()->get_hit_sbt(p_context.rt_flags), p_context.output_size.width, p_context.output_size.height, 1);
+		RD::get_singleton()->raytracing_list_end();
+		return true;
+	}
+
+	virtual bool dispatch_probe_update(RTGIBackendFrameContext &p_context, uint32_t p_probe_flags, RID p_probe_pipeline, RID p_probe_uniform_set, RID p_probe_output_buffer, uint32_t p_ray_count, String *r_fallback_reason) override {
+		if (raytracing == nullptr || !p_probe_pipeline.is_valid() || !p_probe_uniform_set.is_valid() || !p_probe_output_buffer.is_valid()) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "Vulkan Generic STRC probe dispatch is missing a pipeline, uniform set, or output buffer.";
+			}
+			return false;
+		}
+
+		RD::RaytracingListID probe_list = RD::get_singleton()->raytracing_list_begin();
+		RD::get_singleton()->raytracing_list_bind_raytracing_pipeline(probe_list, p_probe_pipeline);
+		RD::get_singleton()->raytracing_list_bind_uniform_set(probe_list, p_probe_uniform_set, 0);
+		RID probe_bindless_set = raytracing->get_bindless_uniform_set();
+		if (probe_bindless_set.is_valid()) {
+			RD::get_singleton()->raytracing_list_bind_uniform_set(probe_list, probe_bindless_set, 1);
+		}
+		if (!_add_generic_dependencies(probe_list, 1)) {
+			RD::get_singleton()->raytracing_list_end();
+			return false;
+		}
+		RD::get_singleton()->raytracing_list_add_buffer_dependency(probe_list, p_probe_output_buffer, true);
+		RD::get_singleton()->raytracing_list_trace_rays(probe_list, 0, raytracing->get_shader()->get_hit_sbt(p_probe_flags), p_ray_count, 1, 1);
+		RD::get_singleton()->raytracing_list_end();
+		return true;
+	}
+
+	virtual bool handoff_denoiser(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
+		return true;
+	}
+
+	virtual bool synchronize_output(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
+		return true;
+	}
+
+	virtual bool abort_frame(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
+		return true;
+	}
+};
+
+class UnavailableRTGIBackend : public RTGIBackend {
+	RTGIBackendCapabilities capabilities;
+
+public:
+	UnavailableRTGIBackend(RSE::PathtracingBackend p_backend) {
+		capabilities = _rtgi_static_backend_capabilities(p_backend);
+	}
+
+	virtual RTGIBackendCapabilities query_capabilities() const override {
+		return capabilities;
+	}
+
+	virtual bool initialize(RenderForwardClustered *p_owner, RenderRaytracing *p_raytracing, String *r_fallback_reason) override {
+		if (r_fallback_reason) {
+			*r_fallback_reason = capabilities.fallback_reason;
+		}
+		return false;
+	}
+
+	virtual void shutdown() override {}
+
+	virtual bool prepare_frame(RTGIBackendFrameContext &r_context, String *r_fallback_reason) override {
+		if (r_fallback_reason) {
+			*r_fallback_reason = capabilities.fallback_reason;
+		}
+		return false;
+	}
+
+	virtual bool upload_or_import_scene(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
+		if (r_fallback_reason) {
+			*r_fallback_reason = capabilities.fallback_reason;
+		}
+		return false;
+	}
+
+	virtual bool upload_materials_lights_environment(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
+		if (r_fallback_reason) {
+			*r_fallback_reason = capabilities.fallback_reason;
+		}
+		return false;
+	}
+
+	virtual bool prepare_probe_update(RTGIBackendFrameContext &p_context, uint32_t p_probe_flags, RID p_probe_output_buffer, uint32_t p_ray_count, RID &r_probe_pipeline, RID &r_probe_uniform_set, String *r_fallback_reason) override {
+		if (r_fallback_reason) {
+			*r_fallback_reason = capabilities.fallback_reason;
+		}
+		return false;
+	}
+
+	virtual bool dispatch_path_trace(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
+		if (r_fallback_reason) {
+			*r_fallback_reason = capabilities.fallback_reason;
+		}
+		return false;
+	}
+
+	virtual bool dispatch_probe_update(RTGIBackendFrameContext &p_context, uint32_t p_probe_flags, RID p_probe_pipeline, RID p_probe_uniform_set, RID p_probe_output_buffer, uint32_t p_ray_count, String *r_fallback_reason) override {
+		if (r_fallback_reason) {
+			*r_fallback_reason = capabilities.fallback_reason;
+		}
+		return false;
+	}
+
+	virtual bool handoff_denoiser(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
+		if (r_fallback_reason) {
+			*r_fallback_reason = capabilities.fallback_reason;
+		}
+		return false;
+	}
+
+	virtual bool synchronize_output(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
+		if (r_fallback_reason) {
+			*r_fallback_reason = capabilities.fallback_reason;
+		}
+		return false;
+	}
+
+	virtual bool abort_frame(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
+		return true;
+	}
+};
+
+static String _rtgi_backend_exchange_summary(const RTGIBackendCapabilities &p_capabilities) {
+	String exchange;
+	if (p_capabilities.rendering_device_exchange) {
+		exchange = "RenderingDevice";
+	}
+	if (p_capabilities.external_memory) {
+		exchange += exchange.is_empty() ? "external memory" : ", external memory";
+	}
+	if (p_capabilities.external_semaphore) {
+		exchange += exchange.is_empty() ? "external semaphores" : ", external semaphores";
+	}
+	if (p_capabilities.timeline_semaphore) {
+		exchange += exchange.is_empty() ? "timeline semaphores" : ", timeline semaphores";
+	}
+	if (p_capabilities.staged_copy) {
+		exchange += exchange.is_empty() ? "staged copy" : ", staged copy";
+	}
+	return exchange.is_empty() ? "none" : exchange;
+}
+
+static bool _rtgi_backend_has_explicit_exchange(const RTGIBackendCapabilities &p_capabilities) {
+	const bool rd_internal_exchange = p_capabilities.rendering_device_exchange;
+	const bool external_memory_semaphore_exchange = p_capabilities.external_memory && p_capabilities.external_semaphore;
+	const bool timeline_exchange = p_capabilities.timeline_semaphore;
+	const bool staged_copy_exchange = p_capabilities.staged_copy;
+	return rd_internal_exchange || external_memory_semaphore_exchange || timeline_exchange || staged_copy_exchange;
+}
+
+static RTGIBackendCapabilities _rtgi_backend_effective_capabilities(const RTGIBackendCapabilities &p_capabilities) {
+	RTGIBackendCapabilities effective = p_capabilities;
+	if (effective.available && !_rtgi_backend_has_explicit_exchange(effective)) {
+		effective.available = false;
+		effective.resource_exchange_supported = false;
+		effective.availability_failure = "resource_exchange_unavailable";
+		effective.fallback_reason = "RTGI backend did not declare an explicit RenderingDevice/Vulkan resource exchange path.";
+	}
+	return effective;
+}
+
+static bool _rtgi_backend_external_handle_type_is_valid(RTGIBackendExternalHandleType p_handle_type) {
+	switch (p_handle_type) {
+		case RTGI_BACKEND_EXTERNAL_HANDLE_OPAQUE_FD:
+		case RTGI_BACKEND_EXTERNAL_HANDLE_OPAQUE_WIN32:
+			return true;
+		case RTGI_BACKEND_EXTERNAL_HANDLE_NONE:
+		default:
+			return false;
+	}
+}
+
+static RTGIBackendExternalHandleType _rtgi_backend_platform_external_handle_type() {
+#if defined(WINDOWS_ENABLED)
+	return RTGI_BACKEND_EXTERNAL_HANDLE_OPAQUE_WIN32;
+#else
+	return RTGI_BACKEND_EXTERNAL_HANDLE_OPAQUE_FD;
+#endif
+}
+
+static bool _rtgi_backend_external_handle_types_match_platform(const RTGIBackendResourceExchange &p_exchange) {
+	const RTGIBackendExternalHandleType platform_handle_type = _rtgi_backend_platform_external_handle_type();
+	return p_exchange.external_memory_handle_type == platform_handle_type &&
+			p_exchange.external_wait_semaphore_handle_type == platform_handle_type &&
+			p_exchange.external_signal_semaphore_handle_type == platform_handle_type;
+}
+
+static bool _rtgi_backend_external_layout_is_valid(RDD::TextureLayout p_layout) {
+	return p_layout > RDD::TEXTURE_LAYOUT_UNDEFINED && p_layout < RDD::TEXTURE_LAYOUT_MAX;
+}
+
+static bool _rtgi_backend_staged_copy_regions_are_valid(const Vector<RDD::BufferTextureCopyRegion> &p_regions) {
+	if (p_regions.is_empty()) {
+		return false;
+	}
+	for (const RDD::BufferTextureCopyRegion &region : p_regions) {
+		if (region.row_pitch == 0 ||
+				region.texture_subresource.aspect < RDD::TEXTURE_ASPECT_COLOR ||
+				region.texture_subresource.aspect >= RDD::TEXTURE_ASPECT_MAX ||
+				region.texture_offset.x < 0 ||
+				region.texture_offset.y < 0 ||
+				region.texture_offset.z < 0 ||
+				region.texture_region_size.x <= 0 ||
+				region.texture_region_size.y <= 0 ||
+				region.texture_region_size.z <= 0) {
+			return false;
+		}
+	}
+	return true;
+}
+
+static void _rtgi_backend_append_fallback_reason(String &r_fallback_reason, const String &p_reason) {
+	if (p_reason.is_empty()) {
+		return;
+	}
+	if (r_fallback_reason.is_empty()) {
+		r_fallback_reason = p_reason;
+	} else if (r_fallback_reason.find(p_reason) == -1) {
+		r_fallback_reason += " " + p_reason;
+	}
+}
+
+static bool _rtgi_backend_validate_frame_exchange(const RTGIBackendCapabilities &p_capabilities, const RTGIBackendResourceExchange &p_exchange, String *r_fallback_reason) {
+	if (!p_exchange.rd_owns_output_before_dispatch) {
+		if (r_fallback_reason) {
+			*r_fallback_reason = "RTGI backend frame exchange starts without RenderingDevice output ownership.";
+		}
+		return false;
+	}
+
+	switch (p_exchange.mode) {
+		case RTGI_BACKEND_EXCHANGE_RD_INTERNAL: {
+			if (!p_capabilities.rendering_device_exchange || !p_exchange.output_texture.is_valid() || p_exchange.ownership_direction != RTGI_BACKEND_OWNERSHIP_RD_INTERNAL) {
+				if (r_fallback_reason) {
+					*r_fallback_reason = "RTGI backend frame exchange did not provide a valid RenderingDevice-owned output texture.";
+				}
+				return false;
+			}
+			return true;
+		}
+		case RTGI_BACKEND_EXCHANGE_EXTERNAL_MEMORY_SEMAPHORE: {
+			if (!p_capabilities.external_memory || !p_capabilities.external_semaphore ||
+					!p_exchange.output_texture.is_valid() ||
+					p_exchange.external_memory_handle == 0 ||
+					!_rtgi_backend_external_handle_type_is_valid(p_exchange.external_memory_handle_type) ||
+					p_exchange.external_wait_semaphore_handle == 0 ||
+					!_rtgi_backend_external_handle_type_is_valid(p_exchange.external_wait_semaphore_handle_type) ||
+					p_exchange.external_signal_semaphore_handle == 0 ||
+					!_rtgi_backend_external_handle_type_is_valid(p_exchange.external_signal_semaphore_handle_type) ||
+					!_rtgi_backend_external_handle_types_match_platform(p_exchange) ||
+					p_exchange.external_semaphore_kind != RTGI_BACKEND_EXTERNAL_SEMAPHORE_BINARY ||
+					p_exchange.ownership_direction != RTGI_BACKEND_OWNERSHIP_RD_TO_BACKEND_TO_RD ||
+					!_rtgi_backend_external_layout_is_valid(p_exchange.external_output_layout_before_backend) ||
+					!_rtgi_backend_external_layout_is_valid(p_exchange.external_output_layout_after_backend)) {
+				if (r_fallback_reason) {
+					*r_fallback_reason = "RTGI backend frame exchange did not provide a valid output texture plus platform-compatible typed external memory, binary semaphore handles, ownership, and image layout metadata.";
+				}
+				return false;
+			}
+			return true;
+		}
+		case RTGI_BACKEND_EXCHANGE_TIMELINE_SEMAPHORE: {
+			if (!p_capabilities.timeline_semaphore || !p_exchange.output_texture.is_valid() || !p_exchange.wait_semaphore.is_valid() || !p_exchange.signal_semaphore.is_valid() ||
+					p_exchange.external_semaphore_kind != RTGI_BACKEND_EXTERNAL_SEMAPHORE_TIMELINE ||
+					p_exchange.ownership_direction != RTGI_BACKEND_OWNERSHIP_RD_TO_BACKEND_TO_RD ||
+					!_rtgi_backend_external_layout_is_valid(p_exchange.external_output_layout_before_backend) ||
+					!_rtgi_backend_external_layout_is_valid(p_exchange.external_output_layout_after_backend) ||
+					p_exchange.signal_timeline_value <= p_exchange.wait_timeline_value) {
+				if (r_fallback_reason) {
+					*r_fallback_reason = "RTGI backend frame exchange did not provide a valid output texture, timeline semaphores, ownership, image layout metadata, and values.";
+				}
+				return false;
+			}
+			return true;
+		}
+		case RTGI_BACKEND_EXCHANGE_STAGED_COPY: {
+			if (!p_capabilities.staged_copy || !p_exchange.output_texture.is_valid() || !p_exchange.staged_copy_source_buffer.is_valid() || !p_exchange.staged_copy_target_texture.is_valid() ||
+					p_exchange.ownership_direction != RTGI_BACKEND_OWNERSHIP_BACKEND_TO_RD_COPY ||
+					!_rtgi_backend_external_layout_is_valid(p_exchange.staged_copy_target_layout) ||
+					!_rtgi_backend_staged_copy_regions_are_valid(p_exchange.staged_copy_regions)) {
+				if (r_fallback_reason) {
+					*r_fallback_reason = "RTGI backend frame exchange did not provide a valid output texture plus staged copy source, target, copy ownership direction, target layout, and buffer-to-texture copy regions.";
+				}
+				return false;
+			}
+			if (p_exchange.staged_copy_target_texture != p_exchange.output_texture) {
+				if (r_fallback_reason) {
+					*r_fallback_reason = "RTGI backend staged-copy target texture is not the declared output texture.";
+				}
+				return false;
+			}
+			return true;
+		}
+	}
+
+	if (r_fallback_reason) {
+		*r_fallback_reason = "RTGI backend frame exchange mode is unknown.";
+	}
+	return false;
+}
+
+static bool _rtgi_backend_callback_usage_can_write_texture(RenderingDevice::CallbackResourceUsage p_usage) {
+	switch (p_usage) {
+		case RenderingDevice::CALLBACK_RESOURCE_USAGE_COPY_TO:
+		case RenderingDevice::CALLBACK_RESOURCE_USAGE_RESOLVE_TO:
+		case RenderingDevice::CALLBACK_RESOURCE_USAGE_STORAGE_IMAGE_READ_WRITE:
+		case RenderingDevice::CALLBACK_RESOURCE_USAGE_ATTACHMENT_COLOR_READ_WRITE:
+		case RenderingDevice::CALLBACK_RESOURCE_USAGE_ATTACHMENT_DEPTH_STENCIL_READ_WRITE:
+		case RenderingDevice::CALLBACK_RESOURCE_USAGE_GENERAL:
+			return true;
+		default:
+			return false;
+	}
+}
+
+static bool _rtgi_backend_callback_usage_can_read_buffer(RenderingDevice::CallbackResourceUsage p_usage) {
+	switch (p_usage) {
+		case RenderingDevice::CALLBACK_RESOURCE_USAGE_COPY_FROM:
+		case RenderingDevice::CALLBACK_RESOURCE_USAGE_UNIFORM_BUFFER_READ:
+		case RenderingDevice::CALLBACK_RESOURCE_USAGE_INDIRECT_BUFFER_READ:
+		case RenderingDevice::CALLBACK_RESOURCE_USAGE_TEXTURE_BUFFER_READ:
+		case RenderingDevice::CALLBACK_RESOURCE_USAGE_STORAGE_BUFFER_READ:
+		case RenderingDevice::CALLBACK_RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE:
+		case RenderingDevice::CALLBACK_RESOURCE_USAGE_VERTEX_BUFFER_READ:
+		case RenderingDevice::CALLBACK_RESOURCE_USAGE_INDEX_BUFFER_READ:
+		case RenderingDevice::CALLBACK_RESOURCE_USAGE_GENERAL:
+			return true;
+		default:
+			return false;
+	}
+}
+
+enum RTGIBackendCallbackPhase {
+	RTGI_BACKEND_CALLBACK_ACQUIRE,
+	RTGI_BACKEND_CALLBACK_RELEASE,
+};
+
+static const Vector<RenderingDevice::CallbackResource> &_rtgi_backend_callback_resources_for_phase(const RTGIBackendResourceExchange &p_exchange, RTGIBackendCallbackPhase p_phase) {
+	return p_phase == RTGI_BACKEND_CALLBACK_ACQUIRE ? p_exchange.acquire_callback_resources : p_exchange.release_callback_resources;
+}
+
+static RDD::DriverCallback _rtgi_backend_driver_callback_for_phase(const RTGIBackendResourceExchange &p_exchange, RTGIBackendCallbackPhase p_phase) {
+	return p_phase == RTGI_BACKEND_CALLBACK_ACQUIRE ? p_exchange.acquire_driver_callback : p_exchange.release_driver_callback;
+}
+
+static void *_rtgi_backend_driver_callback_userdata_for_phase(const RTGIBackendResourceExchange &p_exchange, RTGIBackendCallbackPhase p_phase) {
+	return p_phase == RTGI_BACKEND_CALLBACK_ACQUIRE ? p_exchange.acquire_driver_callback_userdata : p_exchange.release_driver_callback_userdata;
+}
+
+static const char *_rtgi_backend_callback_phase_name(RTGIBackendCallbackPhase p_phase) {
+	return p_phase == RTGI_BACKEND_CALLBACK_ACQUIRE ? "acquire" : "release";
+}
+
+static bool _rtgi_backend_callback_tracks_output_texture(const RTGIBackendResourceExchange &p_exchange, RTGIBackendCallbackPhase p_phase) {
+	if (!p_exchange.output_texture.is_valid()) {
+		return false;
+	}
+	for (const RenderingDevice::CallbackResource &resource : _rtgi_backend_callback_resources_for_phase(p_exchange, p_phase)) {
+		if (resource.rid == p_exchange.output_texture &&
+				resource.type == RenderingDevice::CALLBACK_RESOURCE_TYPE_TEXTURE &&
+				_rtgi_backend_callback_usage_can_write_texture(resource.usage)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool _rtgi_backend_callback_tracks_staged_copy(const RTGIBackendResourceExchange &p_exchange, RTGIBackendCallbackPhase p_phase) {
+	bool source_tracked = false;
+	bool target_tracked = false;
+	for (const RenderingDevice::CallbackResource &resource : _rtgi_backend_callback_resources_for_phase(p_exchange, p_phase)) {
+		if (resource.rid == p_exchange.staged_copy_source_buffer &&
+				resource.type == RenderingDevice::CALLBACK_RESOURCE_TYPE_BUFFER &&
+				_rtgi_backend_callback_usage_can_read_buffer(resource.usage)) {
+			source_tracked = true;
+		}
+		if (resource.rid == p_exchange.staged_copy_target_texture &&
+				resource.type == RenderingDevice::CALLBACK_RESOURCE_TYPE_TEXTURE &&
+				_rtgi_backend_callback_usage_can_write_texture(resource.usage)) {
+			target_tracked = true;
+		}
+	}
+	return source_tracked && target_tracked;
+}
+
+static bool _rtgi_backend_validate_driver_callback_phase(const RTGIBackendFrameContext &p_context, RTGIBackendCallbackPhase p_phase, String *r_fallback_reason) {
+	const RTGIBackendResourceExchange &exchange = p_context.exchange;
+	const RDD::DriverCallback driver_callback = _rtgi_backend_driver_callback_for_phase(exchange, p_phase);
+	const Vector<RenderingDevice::CallbackResource> &callback_resources = _rtgi_backend_callback_resources_for_phase(exchange, p_phase);
+	if (driver_callback == nullptr) {
+		const bool phase_required =
+				(exchange.mode == RTGI_BACKEND_EXCHANGE_EXTERNAL_MEMORY_SEMAPHORE || exchange.mode == RTGI_BACKEND_EXCHANGE_TIMELINE_SEMAPHORE) ||
+				(exchange.mode == RTGI_BACKEND_EXCHANGE_STAGED_COPY && p_phase == RTGI_BACKEND_CALLBACK_RELEASE);
+		if (phase_required) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = vformat("RTGI backend selected an external or staged Vulkan exchange without a RenderingDevice %s driver callback.", _rtgi_backend_callback_phase_name(p_phase));
+			}
+			return false;
+		}
+		return true;
+	}
+
+	if (p_context.rd == nullptr) {
+		if (r_fallback_reason) {
+			*r_fallback_reason = "RTGI backend cannot record a driver callback without a RenderingDevice.";
+		}
+		return false;
+	}
+	if (callback_resources.is_empty()) {
+		if (r_fallback_reason) {
+			*r_fallback_reason = vformat("RTGI backend %s driver callback did not declare any RenderingDevice resources.", _rtgi_backend_callback_phase_name(p_phase));
+		}
+		return false;
+	}
+	if (exchange.mode == RTGI_BACKEND_EXCHANGE_STAGED_COPY && p_phase == RTGI_BACKEND_CALLBACK_RELEASE && !_rtgi_backend_callback_tracks_staged_copy(exchange, p_phase)) {
+		if (r_fallback_reason) {
+			*r_fallback_reason = "RTGI backend staged-copy release callback did not declare the source buffer as readable and target texture as writable RenderingDevice resources.";
+		}
+		return false;
+	}
+	if ((exchange.mode == RTGI_BACKEND_EXCHANGE_EXTERNAL_MEMORY_SEMAPHORE || exchange.mode == RTGI_BACKEND_EXCHANGE_TIMELINE_SEMAPHORE) &&
+			!_rtgi_backend_callback_tracks_output_texture(exchange, p_phase)) {
+		if (r_fallback_reason) {
+			*r_fallback_reason = vformat("RTGI backend %s driver callback did not declare the output texture as a writable RenderingDevice resource.", _rtgi_backend_callback_phase_name(p_phase));
+		}
+		return false;
+	}
+	return true;
+}
+
+static bool _rtgi_backend_validate_driver_callback_exchange(const RTGIBackendFrameContext &p_context, String *r_fallback_reason) {
+	return _rtgi_backend_validate_driver_callback_phase(p_context, RTGI_BACKEND_CALLBACK_ACQUIRE, r_fallback_reason) &&
+			_rtgi_backend_validate_driver_callback_phase(p_context, RTGI_BACKEND_CALLBACK_RELEASE, r_fallback_reason);
+}
+
+static bool _rtgi_backend_record_driver_callback(RTGIBackendFrameContext &p_context, RTGIBackendCallbackPhase p_phase, String *r_fallback_reason) {
+	if (!_rtgi_backend_validate_driver_callback_phase(p_context, p_phase, r_fallback_reason)) {
+		return false;
+	}
+
+	const RTGIBackendResourceExchange &exchange = p_context.exchange;
+	const RDD::DriverCallback driver_callback = _rtgi_backend_driver_callback_for_phase(exchange, p_phase);
+	if (driver_callback == nullptr) {
+		return true;
+	}
+
+	const Vector<RenderingDevice::CallbackResource> &callback_resources = _rtgi_backend_callback_resources_for_phase(exchange, p_phase);
+	const Error err = p_context.rd->driver_callback_add(driver_callback, _rtgi_backend_driver_callback_userdata_for_phase(exchange, p_phase), VectorView<RenderingDevice::CallbackResource>(callback_resources.ptr(), callback_resources.size()));
+	if (err != OK) {
+		if (r_fallback_reason) {
+			*r_fallback_reason = vformat("RTGI backend failed to record its RenderingDevice %s driver callback.", _rtgi_backend_callback_phase_name(p_phase));
+		}
+		return false;
+	}
+	if (p_phase == RTGI_BACKEND_CALLBACK_ACQUIRE) {
+		p_context.acquire_callback_recorded = true;
+	} else {
+		p_context.release_callback_recorded = true;
+	}
+	return true;
+}
+
+static bool _rtgi_backend_release_after_abort_if_needed(RTGIBackendFrameContext &p_context, String *r_fallback_reason) {
+	if (!p_context.acquire_callback_recorded || p_context.release_callback_recorded) {
+		return true;
+	}
+
+	String release_reason;
+	if (!_rtgi_backend_record_driver_callback(p_context, RTGI_BACKEND_CALLBACK_RELEASE, &release_reason)) {
+		p_context.exchange.rd_owns_output_after_dispatch = false;
+		if (r_fallback_reason) {
+			_rtgi_backend_append_fallback_reason(*r_fallback_reason, "RTGI backend recorded an acquire callback but could not record the matching release callback after abort: " + release_reason);
+		}
+		return false;
+	}
+	return true;
+}
+
+static String _rtgi_backend_capability_summary(const RTGIBackendCapabilities &p_capabilities) {
+	const String active_runtime = p_capabilities.available ? (p_capabilities.runtime_name.is_empty() ? (p_capabilities.vulkan_runtime ? "Vulkan" : "unspecified") : p_capabilities.runtime_name) : "none";
+	String summary = vformat(
+			"RTGI backend '%s': %s, runtime=%s, integration=%s, exchange=%s, denoiser_handoff=%s",
+			p_capabilities.name,
+			p_capabilities.available ? "available" : "unavailable",
+			active_runtime,
+			p_capabilities.integration_path.is_empty() ? "none" : p_capabilities.integration_path,
+			_rtgi_backend_exchange_summary(p_capabilities),
+			p_capabilities.denoiser_handoff ? "yes" : "no");
+	if (!p_capabilities.available && !p_capabilities.fallback_reason.is_empty()) {
+		summary += ". Fallback reason: " + p_capabilities.fallback_reason;
+	}
+	return summary;
+}
+
 // ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
@@ -293,6 +1603,17 @@ static bool _rt_instance_uses_alpha_overlay(const RenderGeometryInstanceBase *p_
 void RenderRaytracing::initialize(RenderForwardClustered *p_owner) {
 	owner = p_owner;
 	bindless_block = memnew(BindlessBlock);
+	rtgi_backends[RSE::PT_BACKEND_VULKAN_GENERIC] = memnew(VulkanGenericRTGIBackend);
+	rtgi_backends[RSE::PT_BACKEND_NVIDIA_RTXPT] = memnew(UnavailableRTGIBackend(RSE::PT_BACKEND_NVIDIA_RTXPT));
+	rtgi_backends[RSE::PT_BACKEND_AMD_HIP_RT] = memnew(UnavailableRTGIBackend(RSE::PT_BACKEND_AMD_HIP_RT));
+	rtgi_backends[RSE::PT_BACKEND_INTEL_EMBREE] = memnew(UnavailableRTGIBackend(RSE::PT_BACKEND_INTEL_EMBREE));
+	String fallback_reason;
+	rtgi_backend_initialized[RSE::PT_BACKEND_VULKAN_GENERIC] = rtgi_backends[RSE::PT_BACKEND_VULKAN_GENERIC]->initialize(owner, this, &fallback_reason);
+	for (uint32_t i = 0; i < RSE::PT_BACKEND_MAX; i++) {
+		if (rtgi_backends[i] != nullptr) {
+			print_line(_rtgi_backend_capability_summary(get_backend_capabilities((RSE::PathtracingBackend)i)));
+		}
+	}
 
 	// Initialize merged MultiMesh BLAS compute shader.
 	Vector<String> merge_modes;
@@ -307,6 +1628,15 @@ void RenderRaytracing::initialize(RenderForwardClustered *p_owner) {
 }
 
 RenderRaytracing::~RenderRaytracing() {
+	for (uint32_t i = 0; i < RSE::PT_BACKEND_MAX; i++) {
+		if (rtgi_backends[i] != nullptr) {
+			rtgi_backends[i]->shutdown();
+			rtgi_backend_initialized[i] = false;
+			memdelete(rtgi_backends[i]);
+			rtgi_backends[i] = nullptr;
+		}
+	}
+
 	for (KeyValue<RenderSceneBuffersRD *, RTViewportState *> &kv : viewport_states) {
 		_free_viewport_state_internal(kv.value);
 	}
@@ -333,6 +1663,594 @@ RenderRaytracing::~RenderRaytracing() {
 	}
 
 	mm_merge_shader.shader.version_free(mm_merge_shader.version);
+}
+
+bool RenderRaytracing::_initialize_backend(RSE::PathtracingBackend p_backend, String *r_fallback_reason) {
+	if (p_backend < 0 || p_backend >= RSE::PT_BACKEND_MAX || rtgi_backends[p_backend] == nullptr) {
+		if (r_fallback_reason) {
+			*r_fallback_reason = "Unknown RTGI backend.";
+		}
+		return false;
+	}
+	if (rtgi_backend_initialized[p_backend]) {
+		return true;
+	}
+	rtgi_backend_initialized[p_backend] = rtgi_backends[p_backend]->initialize(owner, this, r_fallback_reason);
+	if (rtgi_backend_initialized[p_backend]) {
+		const RTGIBackendCapabilities capabilities = get_backend_capabilities(p_backend);
+		if (!capabilities.available) {
+			rtgi_backends[p_backend]->shutdown();
+			rtgi_backend_initialized[p_backend] = false;
+			if (r_fallback_reason) {
+				*r_fallback_reason = capabilities.fallback_reason;
+			}
+		}
+	}
+	return rtgi_backend_initialized[p_backend];
+}
+
+void RenderRaytracing::_activate_backend(RSE::PathtracingBackend p_backend) {
+	if (p_backend < 0 || p_backend >= RSE::PT_BACKEND_MAX || active_backend == p_backend) {
+		return;
+	}
+	active_backend = p_backend;
+}
+
+RTGIBackendCapabilities RenderRaytracing::get_backend_capabilities(RSE::PathtracingBackend p_backend) const {
+	if (p_backend < 0 || p_backend >= RSE::PT_BACKEND_MAX || rtgi_backends[p_backend] == nullptr) {
+		RTGIBackendCapabilities caps;
+		caps.backend = p_backend >= 0 && p_backend < RSE::PT_BACKEND_MAX ? p_backend : RSE::PT_BACKEND_VULKAN_GENERIC;
+		caps.name = "Unknown";
+		caps.available = false;
+		caps.fallback_reason = "Unknown RTGI backend.";
+		return caps;
+	}
+	return _rtgi_backend_effective_capabilities(rtgi_backends[p_backend]->query_capabilities());
+}
+
+RSE::PathtracingBackend RenderRaytracing::resolve_backend(RSE::PathtracingBackend p_requested) {
+	if (p_requested < 0 || p_requested >= RSE::PT_BACKEND_MAX) {
+		p_requested = RSE::PT_BACKEND_VULKAN_GENERIC;
+	}
+
+	RTGIBackendCapabilities requested_caps = get_backend_capabilities(p_requested);
+	if (requested_caps.available) {
+		String fallback_reason;
+		if (_initialize_backend(p_requested, &fallback_reason)) {
+			_activate_backend(p_requested);
+			rtgi_backend_unavailable_warned[p_requested] = false;
+			last_requested_backend = p_requested;
+			active_backend_fallback_reason = String();
+			return active_backend;
+		}
+		requested_caps.available = false;
+		requested_caps.fallback_reason = fallback_reason;
+	}
+
+	if (p_requested != RSE::PT_BACKEND_VULKAN_GENERIC) {
+		active_backend_fallback_reason = requested_caps.fallback_reason;
+		if (!rtgi_backend_unavailable_warned[p_requested]) {
+			WARN_PRINT(vformat("RTGI backend '%s' is unavailable: %s Falling back to Vulkan Generic.", backend_get_name(p_requested), active_backend_fallback_reason));
+			rtgi_backend_unavailable_warned[p_requested] = true;
+		}
+	} else {
+		active_backend_fallback_reason = String();
+	}
+
+	String generic_reason;
+	if (_initialize_backend(RSE::PT_BACKEND_VULKAN_GENERIC, &generic_reason)) {
+		_activate_backend(RSE::PT_BACKEND_VULKAN_GENERIC);
+	} else {
+		active_backend = RSE::PT_BACKEND_VULKAN_GENERIC;
+		if (generic_reason.is_empty()) {
+			generic_reason = "Vulkan Generic backend could not be initialized.";
+		}
+		if (active_backend_fallback_reason.is_empty()) {
+			active_backend_fallback_reason = generic_reason;
+		} else {
+			active_backend_fallback_reason += " Vulkan Generic fallback is also unavailable: " + generic_reason;
+		}
+		WARN_PRINT_ONCE(vformat("RTGI Vulkan Generic fallback is unavailable: %s Path tracing will be disabled for this frame.", generic_reason));
+	}
+	last_requested_backend = p_requested;
+	return active_backend;
+}
+
+RTGIBackendStatus RenderRaytracing::get_backend_status() const {
+	RTGIBackendStatus status;
+	status.requested_backend = last_requested_backend;
+	status.active_backend = active_backend;
+	status.requested_capabilities = get_backend_capabilities(last_requested_backend);
+	status.active_capabilities = get_backend_capabilities(active_backend);
+	status.requested_backend_available = status.requested_capabilities.available;
+	status.requested_backend_initialized = last_requested_backend >= 0 && last_requested_backend < RSE::PT_BACKEND_MAX && rtgi_backend_initialized[last_requested_backend];
+	status.active_backend_initialized = active_backend >= 0 && active_backend < RSE::PT_BACKEND_MAX && rtgi_backend_initialized[active_backend];
+	status.active_backend_available = status.active_capabilities.available;
+	status.using_fallback = status.requested_backend != status.active_backend;
+	status.fallback_reason = active_backend_fallback_reason;
+	return status;
+}
+
+Dictionary RenderRaytracing::get_backend_status_dictionary() const {
+	const RTGIBackendStatus status = get_backend_status();
+	Dictionary result;
+	result["requested_backend"] = (int)status.requested_backend;
+	result["requested_backend_name"] = backend_get_name(status.requested_backend);
+	result["active_backend"] = (int)status.active_backend;
+	result["active_backend_name"] = backend_get_name(status.active_backend);
+	result["requested_backend_available"] = status.requested_backend_available;
+	result["active_backend_available"] = status.active_backend_available;
+	result["requested_backend_initialized"] = status.requested_backend_initialized;
+	result["active_backend_initialized"] = status.active_backend_initialized;
+	result["using_fallback"] = status.using_fallback;
+	result["fallback_backend"] = status.using_fallback ? int(status.active_backend) : -1;
+	result["fallback_backend_name"] = status.using_fallback ? backend_get_name(status.active_backend) : String();
+	result["fallback_reason"] = status.fallback_reason;
+	result["requested_capabilities"] = get_backend_capabilities_dictionary(status.requested_backend);
+	result["active_capabilities"] = get_backend_capabilities_dictionary(status.active_backend);
+	return result;
+}
+
+Dictionary RenderRaytracing::get_backend_status_dictionary(RSE::PathtracingBackend p_requested) const {
+	if (p_requested < 0 || p_requested >= RSE::PT_BACKEND_MAX) {
+		p_requested = RSE::PT_BACKEND_VULKAN_GENERIC;
+	}
+
+	const RTGIBackendCapabilities requested_capabilities = get_backend_capabilities(p_requested);
+	const RTGIBackendCapabilities generic_capabilities = get_backend_capabilities(RSE::PT_BACKEND_VULKAN_GENERIC);
+	const bool use_fallback = p_requested != RSE::PT_BACKEND_VULKAN_GENERIC && !requested_capabilities.available;
+	const RSE::PathtracingBackend active_backend_for_request = use_fallback ? RSE::PT_BACKEND_VULKAN_GENERIC : p_requested;
+	const RTGIBackendCapabilities active_capabilities = use_fallback ? generic_capabilities : requested_capabilities;
+
+	String fallback_reason;
+	if (use_fallback) {
+		fallback_reason = requested_capabilities.fallback_reason;
+		if (!generic_capabilities.available && !generic_capabilities.fallback_reason.is_empty()) {
+			_rtgi_backend_append_fallback_reason(fallback_reason, "Vulkan Generic fallback is also unavailable: " + generic_capabilities.fallback_reason);
+		}
+	}
+
+	Dictionary result;
+	result["requested_backend"] = (int)p_requested;
+	result["requested_backend_name"] = backend_get_name(p_requested);
+	result["active_backend"] = (int)active_backend_for_request;
+	result["active_backend_name"] = backend_get_name(active_backend_for_request);
+	result["requested_backend_available"] = requested_capabilities.available;
+	result["active_backend_available"] = active_capabilities.available;
+	result["requested_backend_initialized"] = rtgi_backend_initialized[p_requested];
+	result["active_backend_initialized"] = rtgi_backend_initialized[active_backend_for_request];
+	result["using_fallback"] = use_fallback;
+	result["fallback_backend"] = use_fallback ? int(active_backend_for_request) : -1;
+	result["fallback_backend_name"] = use_fallback ? backend_get_name(active_backend_for_request) : String();
+	result["fallback_reason"] = fallback_reason;
+	result["requested_capabilities"] = get_backend_capabilities_dictionary(p_requested);
+	result["active_capabilities"] = get_backend_capabilities_dictionary(active_backend_for_request);
+	return result;
+}
+
+RSE::PathtracingBackend RenderRaytracing::backend_from_env_param(float p_backend) {
+	const int backend = int(p_backend);
+	switch (backend) {
+		case RSE::PT_BACKEND_NVIDIA_RTXPT:
+			return RSE::PT_BACKEND_NVIDIA_RTXPT;
+		case RSE::PT_BACKEND_AMD_HIP_RT:
+			return RSE::PT_BACKEND_AMD_HIP_RT;
+		case RSE::PT_BACKEND_INTEL_EMBREE:
+			return RSE::PT_BACKEND_INTEL_EMBREE;
+		case RSE::PT_BACKEND_VULKAN_GENERIC:
+		default:
+			return RSE::PT_BACKEND_VULKAN_GENERIC;
+	}
+}
+
+const char *RenderRaytracing::backend_get_name(RSE::PathtracingBackend p_backend) {
+	switch (p_backend) {
+		case RSE::PT_BACKEND_NVIDIA_RTXPT:
+			return "NVIDIA RTXPT";
+		case RSE::PT_BACKEND_AMD_HIP_RT:
+			return "AMD HIP RT";
+		case RSE::PT_BACKEND_INTEL_EMBREE:
+			return "Intel Embree/OSPRay";
+		case RSE::PT_BACKEND_VULKAN_GENERIC:
+		default:
+			return "Vulkan Generic";
+	}
+}
+
+static Dictionary _rtgi_backend_capabilities_to_dictionary(const RTGIBackendCapabilities &p_capabilities, bool p_initialized) {
+	Dictionary exchange;
+	exchange["rendering_device"] = p_capabilities.rendering_device_exchange;
+	exchange["external_memory"] = p_capabilities.external_memory;
+	exchange["external_semaphore"] = p_capabilities.external_semaphore;
+	exchange["timeline_semaphore"] = p_capabilities.timeline_semaphore;
+	exchange["staged_copy"] = p_capabilities.staged_copy;
+
+	Dictionary availability_checks;
+	availability_checks["backend_compiled"] = p_capabilities.backend_compiled;
+	availability_checks["runtime_detected"] = p_capabilities.runtime_detected;
+	availability_checks["device_supported"] = p_capabilities.device_supported;
+	availability_checks["resource_exchange_supported"] = p_capabilities.resource_exchange_supported;
+	availability_checks["implementation_ready"] = p_capabilities.implementation_ready;
+	availability_checks["failure"] = p_capabilities.availability_failure.is_empty() ? _rtgi_availability_failure(p_capabilities.backend_compiled, p_capabilities.runtime_detected, p_capabilities.device_supported, p_capabilities.resource_exchange_supported, p_capabilities.implementation_ready) : p_capabilities.availability_failure;
+	availability_checks["compile_failure_reason"] = p_capabilities.compile_failure_reason;
+	availability_checks["runtime_failure_reason"] = p_capabilities.runtime_failure_reason;
+	availability_checks["device_failure_reason"] = p_capabilities.device_failure_reason;
+	availability_checks["resource_exchange_failure_reason"] = p_capabilities.resource_exchange_failure_reason;
+	availability_checks["implementation_failure_reason"] = p_capabilities.implementation_failure_reason;
+
+	Dictionary result;
+	result["backend"] = (int)p_capabilities.backend;
+	result["name"] = p_capabilities.name;
+	result["available"] = p_capabilities.available;
+	result["initialized"] = p_initialized;
+	result["runtime_name"] = p_capabilities.runtime_name;
+	result["integration_path"] = p_capabilities.integration_path;
+	result["rendering_device_family"] = p_capabilities.rendering_device_family;
+	result["rendering_device_name"] = p_capabilities.rendering_device_name;
+	result["rendering_device_vendor"] = p_capabilities.rendering_device_vendor;
+	result["rendering_device_vendor_id"] = (int64_t)p_capabilities.rendering_device_vendor_id;
+	result["vulkan_runtime"] = p_capabilities.vulkan_runtime;
+	result["exchange"] = exchange;
+	result["exchange_summary"] = _rtgi_backend_exchange_summary(p_capabilities);
+	result["availability_checks"] = availability_checks;
+	result["denoiser_handoff"] = p_capabilities.denoiser_handoff;
+	result["fallback_reason"] = p_capabilities.fallback_reason;
+	return result;
+}
+
+Dictionary RenderRaytracing::get_backend_capabilities_dictionary(RSE::PathtracingBackend p_backend) const {
+	const bool initialized = p_backend >= 0 && p_backend < RSE::PT_BACKEND_MAX && rtgi_backend_initialized[p_backend];
+	return _rtgi_backend_capabilities_to_dictionary(get_backend_capabilities(p_backend), initialized);
+}
+
+Array RenderRaytracing::get_backend_capabilities_dictionaries() const {
+	Array result;
+	for (int i = 0; i < RSE::PT_BACKEND_MAX; i++) {
+		result.push_back(get_backend_capabilities_dictionary((RSE::PathtracingBackend)i));
+	}
+	return result;
+}
+
+Array RenderRaytracing::get_static_backend_capabilities_dictionaries() {
+	Array result;
+	for (int i = 0; i < RSE::PT_BACKEND_MAX; i++) {
+		result.push_back(_rtgi_backend_capabilities_to_dictionary(_rtgi_backend_effective_capabilities(_rtgi_static_backend_capabilities((RSE::PathtracingBackend)i)), false));
+	}
+	return result;
+}
+
+Dictionary RenderRaytracing::get_static_backend_status_dictionary() {
+	const RTGIBackendCapabilities generic_capabilities = _rtgi_backend_effective_capabilities(_rtgi_static_backend_capabilities(RSE::PT_BACKEND_VULKAN_GENERIC));
+	const Dictionary generic_capabilities_dict = _rtgi_backend_capabilities_to_dictionary(generic_capabilities, false);
+
+	Dictionary result;
+	result["requested_backend"] = (int)RSE::PT_BACKEND_VULKAN_GENERIC;
+	result["requested_backend_name"] = backend_get_name(RSE::PT_BACKEND_VULKAN_GENERIC);
+	result["active_backend"] = (int)RSE::PT_BACKEND_VULKAN_GENERIC;
+	result["active_backend_name"] = backend_get_name(RSE::PT_BACKEND_VULKAN_GENERIC);
+	result["requested_backend_available"] = generic_capabilities.available;
+	result["active_backend_available"] = generic_capabilities.available;
+	result["requested_backend_initialized"] = false;
+	result["active_backend_initialized"] = false;
+	result["using_fallback"] = false;
+	result["fallback_backend"] = -1;
+	result["fallback_backend_name"] = String();
+	result["fallback_reason"] = "RTGI backend has not been initialized yet.";
+	result["requested_capabilities"] = generic_capabilities_dict;
+	result["active_capabilities"] = generic_capabilities_dict;
+	return result;
+}
+
+Dictionary RenderRaytracing::get_static_backend_status_dictionary(RSE::PathtracingBackend p_requested) {
+	if (p_requested < 0 || p_requested >= RSE::PT_BACKEND_MAX) {
+		p_requested = RSE::PT_BACKEND_VULKAN_GENERIC;
+	}
+
+	const RTGIBackendCapabilities requested_capabilities = _rtgi_backend_effective_capabilities(_rtgi_static_backend_capabilities(p_requested));
+	const RTGIBackendCapabilities generic_capabilities = _rtgi_backend_effective_capabilities(_rtgi_static_backend_capabilities(RSE::PT_BACKEND_VULKAN_GENERIC));
+	const bool use_fallback = p_requested != RSE::PT_BACKEND_VULKAN_GENERIC && !requested_capabilities.available;
+	const RSE::PathtracingBackend active_backend = use_fallback ? RSE::PT_BACKEND_VULKAN_GENERIC : p_requested;
+	const RTGIBackendCapabilities active_capabilities = use_fallback ? generic_capabilities : requested_capabilities;
+
+	String fallback_reason;
+	if (use_fallback) {
+		fallback_reason = requested_capabilities.fallback_reason;
+		if (!generic_capabilities.available && !generic_capabilities.fallback_reason.is_empty()) {
+			_rtgi_backend_append_fallback_reason(fallback_reason, "Vulkan Generic fallback is also unavailable: " + generic_capabilities.fallback_reason);
+		}
+	}
+
+	Dictionary result;
+	result["requested_backend"] = (int)p_requested;
+	result["requested_backend_name"] = backend_get_name(p_requested);
+	result["active_backend"] = (int)active_backend;
+	result["active_backend_name"] = backend_get_name(active_backend);
+	result["requested_backend_available"] = requested_capabilities.available;
+	result["active_backend_available"] = active_capabilities.available;
+	result["requested_backend_initialized"] = false;
+	result["active_backend_initialized"] = false;
+	result["using_fallback"] = use_fallback;
+	result["fallback_backend"] = use_fallback ? int(active_backend) : -1;
+	result["fallback_backend_name"] = use_fallback ? backend_get_name(active_backend) : String();
+	result["fallback_reason"] = fallback_reason;
+	result["requested_capabilities"] = _rtgi_backend_capabilities_to_dictionary(requested_capabilities, false);
+	result["active_capabilities"] = _rtgi_backend_capabilities_to_dictionary(active_capabilities, false);
+	return result;
+}
+
+bool RenderRaytracing::prepare_backend_frame(const RenderDataRD *p_render_data, uint32_t p_rt_flags, RTGIBackendFrameContext &r_context) {
+	RTGIBackend *backend = rtgi_backends[active_backend];
+	ERR_FAIL_NULL_V(backend, false);
+
+	r_context = RTGIBackendFrameContext();
+	r_context.rd = RD::get_singleton();
+	r_context.raytracing = this;
+	r_context.render_data = p_render_data;
+	r_context.rt_flags = p_rt_flags;
+
+	String fallback_reason;
+	auto prepare_and_validate = [](RTGIBackend *p_backend, RTGIBackendFrameContext &r_frame_context, String *r_reason) -> bool {
+		if (p_backend == nullptr || !p_backend->prepare_frame(r_frame_context, r_reason)) {
+			return false;
+		}
+		const RTGIBackendCapabilities capabilities = _rtgi_backend_effective_capabilities(p_backend->query_capabilities());
+		return _rtgi_backend_validate_frame_exchange(capabilities, r_frame_context.exchange, r_reason) &&
+				_rtgi_backend_validate_driver_callback_exchange(r_frame_context, r_reason);
+	};
+	if (!prepare_and_validate(backend, r_context, &fallback_reason)) {
+		if (active_backend != RSE::PT_BACKEND_VULKAN_GENERIC) {
+			const RSE::PathtracingBackend failed_backend = active_backend;
+			active_backend_fallback_reason = vformat("RTGI backend '%s' failed frame preparation: %s", backend_get_name(failed_backend), fallback_reason);
+			WARN_PRINT(vformat("%s Falling back to Vulkan Generic.", active_backend_fallback_reason));
+			String abort_reason;
+			const bool abort_ok = backend->abort_frame(r_context, &abort_reason);
+			const bool release_ok = _rtgi_backend_release_after_abort_if_needed(r_context, &abort_reason);
+			if (!abort_ok || !release_ok || !r_context.exchange.rd_owns_output_after_dispatch) {
+				active_backend_fallback_reason += vformat(" Could not safely return RD ownership: %s", abort_reason);
+				ERR_PRINT_ONCE(active_backend_fallback_reason);
+				return false;
+			}
+			String generic_reason;
+			if (_initialize_backend(RSE::PT_BACKEND_VULKAN_GENERIC, &generic_reason)) {
+				_activate_backend(RSE::PT_BACKEND_VULKAN_GENERIC);
+				RTGIBackend *generic_backend = rtgi_backends[RSE::PT_BACKEND_VULKAN_GENERIC];
+				r_context = RTGIBackendFrameContext();
+				r_context.rd = RD::get_singleton();
+				r_context.raytracing = this;
+				r_context.render_data = p_render_data;
+				r_context.rt_flags = p_rt_flags;
+				if (prepare_and_validate(generic_backend, r_context, &fallback_reason)) {
+					return true;
+				}
+				_rtgi_backend_append_fallback_reason(active_backend_fallback_reason, "Vulkan Generic fallback also failed frame preparation: " + fallback_reason);
+			} else {
+				_rtgi_backend_append_fallback_reason(active_backend_fallback_reason, "Vulkan Generic fallback could not be initialized: " + generic_reason);
+			}
+		}
+		_rtgi_backend_append_fallback_reason(active_backend_fallback_reason, vformat("RTGI backend '%s' failed frame preparation: %s", backend_get_name(active_backend), fallback_reason));
+		ERR_PRINT_ONCE(active_backend_fallback_reason);
+		return false;
+	}
+
+	return true;
+}
+
+RTGIBackendDispatchResult RenderRaytracing::dispatch_path_trace_backend(RTGIBackendFrameContext &r_context) {
+	RTGIBackend *backend = rtgi_backends[active_backend];
+	ERR_FAIL_NULL_V(backend, RTGI_BACKEND_DISPATCH_UNSAFE_FAILURE);
+
+	String fallback_reason;
+	auto run_backend = [&](RTGIBackend *p_backend, RTGIBackendFrameContext &p_context, String *r_fallback_reason) -> bool {
+		return _rtgi_backend_record_driver_callback(p_context, RTGI_BACKEND_CALLBACK_ACQUIRE, r_fallback_reason) &&
+				p_backend->upload_or_import_scene(p_context, r_fallback_reason) &&
+				p_backend->upload_materials_lights_environment(p_context, r_fallback_reason) &&
+				p_backend->dispatch_path_trace(p_context, r_fallback_reason) &&
+				p_backend->handoff_denoiser(p_context, r_fallback_reason) &&
+				p_backend->synchronize_output(p_context, r_fallback_reason) &&
+				_rtgi_backend_record_driver_callback(p_context, RTGI_BACKEND_CALLBACK_RELEASE, r_fallback_reason);
+	};
+	auto failure_result = [&r_context]() {
+		return r_context.exchange.rd_owns_output_after_dispatch ? RTGI_BACKEND_DISPATCH_SAFE_FAILURE : RTGI_BACKEND_DISPATCH_UNSAFE_FAILURE;
+	};
+	auto prepare_and_validate = [](RTGIBackend *p_backend, RTGIBackendFrameContext &r_frame_context, String *r_reason) -> bool {
+		if (p_backend == nullptr || !p_backend->prepare_frame(r_frame_context, r_reason)) {
+			return false;
+		}
+		const RTGIBackendCapabilities capabilities = _rtgi_backend_effective_capabilities(p_backend->query_capabilities());
+		return _rtgi_backend_validate_frame_exchange(capabilities, r_frame_context.exchange, r_reason) &&
+				_rtgi_backend_validate_driver_callback_exchange(r_frame_context, r_reason);
+	};
+	auto validate_rd_output_owner = [](RTGIBackendFrameContext &r_frame_context, String *r_reason) -> bool {
+		if (r_frame_context.exchange.rd_owns_output_after_dispatch) {
+			return true;
+		}
+		if (r_reason) {
+			*r_reason = "RTGI backend completed dispatch without returning output ownership to RenderingDevice.";
+		}
+		return false;
+	};
+
+	if (!run_backend(backend, r_context, &fallback_reason)) {
+		if (active_backend != RSE::PT_BACKEND_VULKAN_GENERIC) {
+			const RSE::PathtracingBackend failed_backend = active_backend;
+			active_backend_fallback_reason = vformat("RTGI backend '%s' failed during dispatch: %s", backend_get_name(failed_backend), fallback_reason);
+			WARN_PRINT(vformat("%s Falling back to Vulkan Generic.", active_backend_fallback_reason));
+			String abort_reason;
+			const bool abort_ok = backend->abort_frame(r_context, &abort_reason);
+			const bool release_ok = _rtgi_backend_release_after_abort_if_needed(r_context, &abort_reason);
+			if (!abort_ok || !release_ok || !r_context.exchange.rd_owns_output_after_dispatch) {
+				active_backend_fallback_reason += vformat(" Could not safely return RD ownership: %s", abort_reason);
+				ERR_PRINT_ONCE(active_backend_fallback_reason);
+				return RTGI_BACKEND_DISPATCH_UNSAFE_FAILURE;
+			}
+			const RenderDataRD *render_data = r_context.render_data;
+			const uint32_t rt_flags = r_context.rt_flags;
+			String generic_reason;
+			if (_initialize_backend(RSE::PT_BACKEND_VULKAN_GENERIC, &generic_reason)) {
+				_activate_backend(RSE::PT_BACKEND_VULKAN_GENERIC);
+				RTGIBackend *generic_backend = rtgi_backends[RSE::PT_BACKEND_VULKAN_GENERIC];
+				r_context = RTGIBackendFrameContext();
+				r_context.rd = RD::get_singleton();
+				r_context.raytracing = this;
+				r_context.render_data = render_data;
+				r_context.rt_flags = rt_flags;
+				fallback_reason = String();
+				if (prepare_and_validate(generic_backend, r_context, &fallback_reason) && run_backend(generic_backend, r_context, &fallback_reason)) {
+					if (!validate_rd_output_owner(r_context, &fallback_reason)) {
+						_rtgi_backend_append_fallback_reason(active_backend_fallback_reason, "Vulkan Generic fallback failed after dispatch: " + fallback_reason);
+						ERR_PRINT_ONCE(active_backend_fallback_reason);
+						return RTGI_BACKEND_DISPATCH_UNSAFE_FAILURE;
+					}
+					return RTGI_BACKEND_DISPATCH_OK;
+				}
+				_rtgi_backend_append_fallback_reason(active_backend_fallback_reason, "Vulkan Generic fallback failed during dispatch: " + fallback_reason);
+			} else {
+				_rtgi_backend_append_fallback_reason(active_backend_fallback_reason, "Vulkan Generic fallback could not be initialized: " + generic_reason);
+			}
+		}
+		_rtgi_backend_append_fallback_reason(active_backend_fallback_reason, vformat("RTGI backend '%s' failed during dispatch: %s", backend_get_name(active_backend), fallback_reason));
+		ERR_PRINT_ONCE(active_backend_fallback_reason);
+		return failure_result();
+	}
+	if (!validate_rd_output_owner(r_context, &fallback_reason)) {
+		active_backend_fallback_reason = vformat("RTGI backend '%s' failed after dispatch: %s", backend_get_name(active_backend), fallback_reason);
+		ERR_PRINT_ONCE(active_backend_fallback_reason);
+		return RTGI_BACKEND_DISPATCH_UNSAFE_FAILURE;
+	}
+
+	return RTGI_BACKEND_DISPATCH_OK;
+}
+
+RTGIBackendDispatchResult RenderRaytracing::dispatch_probe_update_backend(RTGIBackendFrameContext &p_context, uint32_t p_probe_flags, RID p_probe_output_buffer, uint32_t p_ray_count) {
+	RTGIBackend *backend = rtgi_backends[active_backend];
+	ERR_FAIL_NULL_V(backend, RTGI_BACKEND_DISPATCH_UNSAFE_FAILURE);
+
+	String fallback_reason;
+	RID probe_pipeline;
+	RID probe_uniform_set;
+	auto failure_result = [&p_context]() {
+		return p_context.exchange.rd_owns_output_after_dispatch ? RTGI_BACKEND_DISPATCH_SAFE_FAILURE : RTGI_BACKEND_DISPATCH_UNSAFE_FAILURE;
+	};
+	auto prepare_and_validate = [](RTGIBackend *p_backend, RTGIBackendFrameContext &r_frame_context, String *r_reason) -> bool {
+		if (p_backend == nullptr || !p_backend->prepare_frame(r_frame_context, r_reason)) {
+			return false;
+		}
+		const RTGIBackendCapabilities capabilities = _rtgi_backend_effective_capabilities(p_backend->query_capabilities());
+		return _rtgi_backend_validate_frame_exchange(capabilities, r_frame_context.exchange, r_reason) &&
+				_rtgi_backend_validate_driver_callback_exchange(r_frame_context, r_reason);
+	};
+	auto validate_rd_output_owner = [](RTGIBackendFrameContext &r_frame_context, String *r_reason) -> bool {
+		if (r_frame_context.exchange.rd_owns_output_after_dispatch) {
+			return true;
+		}
+		if (r_reason) {
+			*r_reason = "RTGI backend completed STRC probe dispatch without returning output ownership to RenderingDevice.";
+		}
+		return false;
+	};
+	if (!backend->prepare_probe_update(p_context, p_probe_flags, p_probe_output_buffer, p_ray_count, probe_pipeline, probe_uniform_set, &fallback_reason)) {
+		if (active_backend != RSE::PT_BACKEND_VULKAN_GENERIC) {
+			const RSE::PathtracingBackend failed_backend = active_backend;
+			active_backend_fallback_reason = vformat("RTGI backend '%s' failed STRC probe preparation: %s", backend_get_name(failed_backend), fallback_reason);
+			WARN_PRINT(vformat("%s Falling back to Vulkan Generic.", active_backend_fallback_reason));
+			String abort_reason;
+			const bool abort_ok = backend->abort_frame(p_context, &abort_reason);
+			const bool release_ok = _rtgi_backend_release_after_abort_if_needed(p_context, &abort_reason);
+			if (!abort_ok || !release_ok || !p_context.exchange.rd_owns_output_after_dispatch) {
+				active_backend_fallback_reason += vformat(" Could not safely return RD ownership: %s", abort_reason);
+				ERR_PRINT_ONCE(active_backend_fallback_reason);
+				return RTGI_BACKEND_DISPATCH_UNSAFE_FAILURE;
+			}
+			const RenderDataRD *render_data = p_context.render_data;
+			const uint32_t rt_flags = p_context.rt_flags;
+			String generic_reason;
+			if (_initialize_backend(RSE::PT_BACKEND_VULKAN_GENERIC, &generic_reason)) {
+				_activate_backend(RSE::PT_BACKEND_VULKAN_GENERIC);
+				RTGIBackend *generic_backend = rtgi_backends[RSE::PT_BACKEND_VULKAN_GENERIC];
+				p_context = RTGIBackendFrameContext();
+				p_context.rd = RD::get_singleton();
+				p_context.raytracing = this;
+				p_context.render_data = render_data;
+				p_context.rt_flags = rt_flags;
+				fallback_reason = String();
+				if (generic_backend != nullptr &&
+						prepare_and_validate(generic_backend, p_context, &fallback_reason) &&
+						_rtgi_backend_record_driver_callback(p_context, RTGI_BACKEND_CALLBACK_ACQUIRE, &fallback_reason) &&
+						generic_backend->prepare_probe_update(p_context, p_probe_flags, p_probe_output_buffer, p_ray_count, probe_pipeline, probe_uniform_set, &fallback_reason) &&
+						generic_backend->dispatch_probe_update(p_context, p_probe_flags, probe_pipeline, probe_uniform_set, p_probe_output_buffer, p_ray_count, &fallback_reason) &&
+						_rtgi_backend_record_driver_callback(p_context, RTGI_BACKEND_CALLBACK_RELEASE, &fallback_reason)) {
+					if (!validate_rd_output_owner(p_context, &fallback_reason)) {
+						_rtgi_backend_append_fallback_reason(active_backend_fallback_reason, "Vulkan Generic fallback failed after STRC probe dispatch: " + fallback_reason);
+						ERR_PRINT_ONCE(active_backend_fallback_reason);
+						return RTGI_BACKEND_DISPATCH_UNSAFE_FAILURE;
+					}
+					return RTGI_BACKEND_DISPATCH_OK;
+				}
+				_rtgi_backend_append_fallback_reason(active_backend_fallback_reason, "Vulkan Generic fallback failed STRC probe preparation or dispatch: " + fallback_reason);
+			} else {
+				_rtgi_backend_append_fallback_reason(active_backend_fallback_reason, "Vulkan Generic fallback could not be initialized: " + generic_reason);
+			}
+		}
+		_rtgi_backend_append_fallback_reason(active_backend_fallback_reason, vformat("RTGI backend '%s' failed STRC probe preparation: %s", backend_get_name(active_backend), fallback_reason));
+		ERR_PRINT_ONCE(active_backend_fallback_reason);
+		return failure_result();
+	}
+	if (!_rtgi_backend_record_driver_callback(p_context, RTGI_BACKEND_CALLBACK_ACQUIRE, &fallback_reason) || !backend->dispatch_probe_update(p_context, p_probe_flags, probe_pipeline, probe_uniform_set, p_probe_output_buffer, p_ray_count, &fallback_reason) || !_rtgi_backend_record_driver_callback(p_context, RTGI_BACKEND_CALLBACK_RELEASE, &fallback_reason)) {
+		if (active_backend != RSE::PT_BACKEND_VULKAN_GENERIC) {
+			const RSE::PathtracingBackend failed_backend = active_backend;
+			active_backend_fallback_reason = vformat("RTGI backend '%s' failed during STRC probe dispatch: %s", backend_get_name(failed_backend), fallback_reason);
+			WARN_PRINT(vformat("%s Falling back to Vulkan Generic.", active_backend_fallback_reason));
+			String abort_reason;
+			const bool abort_ok = backend->abort_frame(p_context, &abort_reason);
+			const bool release_ok = _rtgi_backend_release_after_abort_if_needed(p_context, &abort_reason);
+			if (!abort_ok || !release_ok || !p_context.exchange.rd_owns_output_after_dispatch) {
+				active_backend_fallback_reason += vformat(" Could not safely return RD ownership: %s", abort_reason);
+				ERR_PRINT_ONCE(active_backend_fallback_reason);
+				return RTGI_BACKEND_DISPATCH_UNSAFE_FAILURE;
+			}
+			const RenderDataRD *render_data = p_context.render_data;
+			const uint32_t rt_flags = p_context.rt_flags;
+			String generic_reason;
+			if (_initialize_backend(RSE::PT_BACKEND_VULKAN_GENERIC, &generic_reason)) {
+				_activate_backend(RSE::PT_BACKEND_VULKAN_GENERIC);
+				RTGIBackend *generic_backend = rtgi_backends[RSE::PT_BACKEND_VULKAN_GENERIC];
+				RID generic_probe_pipeline;
+				RID generic_probe_uniform_set;
+				p_context = RTGIBackendFrameContext();
+				p_context.rd = RD::get_singleton();
+				p_context.raytracing = this;
+				p_context.render_data = render_data;
+				p_context.rt_flags = rt_flags;
+				fallback_reason = String();
+				if (generic_backend != nullptr &&
+						prepare_and_validate(generic_backend, p_context, &fallback_reason) &&
+						_rtgi_backend_record_driver_callback(p_context, RTGI_BACKEND_CALLBACK_ACQUIRE, &fallback_reason) &&
+						generic_backend->prepare_probe_update(p_context, p_probe_flags, p_probe_output_buffer, p_ray_count, generic_probe_pipeline, generic_probe_uniform_set, &fallback_reason) &&
+						generic_backend->dispatch_probe_update(p_context, p_probe_flags, generic_probe_pipeline, generic_probe_uniform_set, p_probe_output_buffer, p_ray_count, &fallback_reason) &&
+						_rtgi_backend_record_driver_callback(p_context, RTGI_BACKEND_CALLBACK_RELEASE, &fallback_reason)) {
+					if (!validate_rd_output_owner(p_context, &fallback_reason)) {
+						_rtgi_backend_append_fallback_reason(active_backend_fallback_reason, "Vulkan Generic fallback failed after STRC probe dispatch: " + fallback_reason);
+						ERR_PRINT_ONCE(active_backend_fallback_reason);
+						return RTGI_BACKEND_DISPATCH_UNSAFE_FAILURE;
+					}
+					return RTGI_BACKEND_DISPATCH_OK;
+				}
+				_rtgi_backend_append_fallback_reason(active_backend_fallback_reason, "Vulkan Generic fallback failed during STRC probe dispatch: " + fallback_reason);
+			} else {
+				_rtgi_backend_append_fallback_reason(active_backend_fallback_reason, "Vulkan Generic fallback could not be initialized: " + generic_reason);
+			}
+		}
+		_rtgi_backend_append_fallback_reason(active_backend_fallback_reason, vformat("RTGI backend '%s' failed during STRC probe dispatch: %s", backend_get_name(active_backend), fallback_reason));
+		ERR_PRINT_ONCE(active_backend_fallback_reason);
+		return failure_result();
+	}
+	if (!validate_rd_output_owner(p_context, &fallback_reason)) {
+		active_backend_fallback_reason = vformat("RTGI backend '%s' failed after STRC probe dispatch: %s", backend_get_name(active_backend), fallback_reason);
+		ERR_PRINT_ONCE(active_backend_fallback_reason);
+		return RTGI_BACKEND_DISPATCH_UNSAFE_FAILURE;
+	}
+
+	return RTGI_BACKEND_DISPATCH_OK;
 }
 
 RID RenderRaytracing::_ensure_blue_noise_texture() {
@@ -2351,6 +4269,7 @@ void RenderRaytracing::build_acceleration_structures(RTViewportState *p_state, c
 	}
 
 	RD::get_singleton()->tlas_build(p_state->tlas, instances);
+	p_state->tlas_instance_count = valid_instance_count;
 }
 
 void RenderRaytracing::finalize_buffers(RTViewportState *p_state) {
@@ -2455,7 +4374,6 @@ bool RenderRaytracing::_build_merged_mm_blas(
 	entry.indexed = indexed;
 
 	if (structure_changed) {
-		RD *rd = RD::get_singleton();
 		if (entry.blas.is_valid()) {
 			_rt_free_acceleration_structure_if_alive(entry.blas);
 		}
@@ -3607,6 +5525,36 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 	return state;
 }
 
+void RenderRaytracing::populate_backend_scene_resources(RTViewportState *p_state, RTGIBackendSceneResources &r_resources) const {
+	r_resources = RTGIBackendSceneResources();
+	if (p_state == nullptr) {
+		return;
+	}
+
+	r_resources.tlas = p_state->tlas;
+	r_resources.tlas_instance_count = p_state->tlas_instance_count;
+	r_resources.blases.reserve(blass.size());
+	for (const RID &blas : blass) {
+		r_resources.blases.push_back(blas);
+	}
+
+	r_resources.geometry_buffer = p_state->geometry_buffer;
+	r_resources.geometry_count = geometry_data.size();
+	r_resources.material_buffer = p_state->material_buffer;
+	r_resources.material_count = material_data.size();
+	r_resources.motion_index_buffer = p_state->motion_index_buffer;
+	r_resources.motion_index_count = motion_indices.size();
+	r_resources.motion_transform_buffer = p_state->motion_transform_buffer;
+	r_resources.motion_transform_count = motion_transforms.size();
+	r_resources.emissive_candidate_buffer = p_state->emissive_candidate_buffer;
+	r_resources.emissive_candidate_count = emissive_candidates.size();
+	r_resources.emissive_candidate_total_weight = emissive_candidate_total_weight;
+	r_resources.emissive_candidate_signature = p_state->emissive_candidate_signature;
+	r_resources.light_buffer = p_state->light_buffer;
+	r_resources.light_count = p_state->previous_light_count;
+	r_resources.params_buffer = p_state->params_buffer;
+}
+
 // ---------------------------------------------------------------------------
 // Light gathering
 // ---------------------------------------------------------------------------
@@ -4036,8 +5984,8 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			float prev_vp_unjittered[16];
 			float curr_vp_unjittered[16];
 			float inv_projection_unjittered[16];
-			float rt_overscan[4];
-			float rt_prev_overscan[4];
+			float rt_view_rect[4];
+			float rt_prev_view_rect[4];
 		} rt_ubo = {};
 		static_assert(sizeof(rt_ubo) == 96 * sizeof(float));
 
@@ -4047,13 +5995,13 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 				memcpy(rt_ubo.params, env_params, sizeof(float) * MIN((uint32_t)RSE::PT_PARAM_MAX, SceneShaderRaytracing::RT_PARAM_SHADER_FLOAT_COUNT));
 			}
 		}
+		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_BACKEND] = float(active_backend);
 
 		// rt_params layout (see RaytracingParamIndex enum):
 		// [0] = VIS_MODE, [1] = SAMPLE_COUNT, [2] = MAX_BOUNCES,
 		// [3] = DENOISER, [5] and [11] = reserved,
-		// [12] = OVERSCAN_HORIZONTAL, [13] = OVERSCAN_VERTICAL,
 		// [14] = LIGHT_COUNT, [15] = FRAME_INDEX,
-		// [16-19] = SVGF controls, [20] = RAY_FIREFLY_SUPPRESSION,
+		// [16-19] = RTGI denoiser controls, [20] = RAY_FIREFLY_SUPPRESSION,
 		// [21] = RAY_MAX_RADIANCE, [22-24] = split-signal denoiser controls.
 		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_FRAME_INDEX] = float(p_state->frame_counter++);
 
@@ -4117,14 +6065,14 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		const Vector2i rt_prev_visible_origin = rb_data->rt_get_prev_visible_origin();
 		const Size2i rt_visible_size = rb_data->rt_get_visible_size();
 		const Size2i rt_size = rb_data->rt_get_size();
-		rt_ubo.rt_overscan[0] = (float)rt_visible_origin.x;
-		rt_ubo.rt_overscan[1] = (float)rt_visible_origin.y;
-		rt_ubo.rt_overscan[2] = (float)rt_visible_size.x;
-		rt_ubo.rt_overscan[3] = (float)rt_visible_size.y;
-		rt_ubo.rt_prev_overscan[0] = (float)rt_prev_visible_origin.x;
-		rt_ubo.rt_prev_overscan[1] = (float)rt_prev_visible_origin.y;
-		rt_ubo.rt_prev_overscan[2] = (float)rt_size.x;
-		rt_ubo.rt_prev_overscan[3] = (float)rt_size.y;
+		rt_ubo.rt_view_rect[0] = (float)rt_visible_origin.x;
+		rt_ubo.rt_view_rect[1] = (float)rt_visible_origin.y;
+		rt_ubo.rt_view_rect[2] = (float)rt_visible_size.x;
+		rt_ubo.rt_view_rect[3] = (float)rt_visible_size.y;
+		rt_ubo.rt_prev_view_rect[0] = (float)rt_prev_visible_origin.x;
+		rt_ubo.rt_prev_view_rect[1] = (float)rt_prev_visible_origin.y;
+		rt_ubo.rt_prev_view_rect[2] = (float)rt_size.x;
+		rt_ubo.rt_prev_view_rect[3] = (float)rt_size.y;
 
 		// --- Light gathering ---
 		uint32_t rt_light_count = 0;
