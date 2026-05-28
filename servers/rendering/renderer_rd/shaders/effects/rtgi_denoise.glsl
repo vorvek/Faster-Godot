@@ -201,13 +201,14 @@ bool previous_history_tap_valid(ivec2 tap_pos, vec4 current_nr, vec2 current_vie
 	float current_guide_active = guide_active(current_guide);
 	float previous_guide_active = guide_active(previous_guide);
 	float guide_risk = guide_specular_risk(current_guide, current_nr, current_albedo_metalness);
+	float slow_motion_relax = 1.0 - smoothstep(0.5, 4.0, motion_px);
 	float normal_similarity = dot(decode_normal(current_nr), decode_normal(previous_nr));
-	float normal_threshold = mix(0.68, 0.86, guide_risk * current_guide_active);
+	float normal_threshold = mix(0.68, 0.86, guide_risk * current_guide_active) * mix(1.0, 0.92, slow_motion_relax);
 	if (normal_similarity < normal_threshold) {
 		return false;
 	}
 
-	float roughness_threshold = mix(0.4, 0.11, guide_risk * current_guide_active);
+	float roughness_threshold = mix(0.4, 0.11, guide_risk * current_guide_active) * mix(1.0, 1.45, slow_motion_relax);
 	if (abs(current_nr.a - previous_nr.a) > roughness_threshold) {
 		return false;
 	}
@@ -239,7 +240,9 @@ bool previous_history_tap_valid(ivec2 tap_pos, vec4 current_nr, vec2 current_vie
 	vec4 previous_albedo_metalness = texelFetch(prev_albedo_metalness_buffer, tap_pos, 0);
 	float albedo_delta = length(current_albedo_metalness.rgb - previous_albedo_metalness.rgb);
 	float metalness_delta = abs(current_albedo_metalness.a - previous_albedo_metalness.a);
-	if (albedo_delta > 0.45 || metalness_delta > 0.25) {
+	float max_albedo_delta = mix(0.45, 0.58, slow_motion_relax);
+	float max_metalness_delta = mix(0.25, 0.35, slow_motion_relax);
+	if (albedo_delta > max_albedo_delta || metalness_delta > max_metalness_delta) {
 		return false;
 	}
 
@@ -581,7 +584,8 @@ void main() {
 	motion_history_cap = mix(motion_history_cap, 2.0, extreme_motion);
 	float specular_history_cap = mix(params.max_history, 10.0, specular_history_guard * (1.0 - guide_history_stability));
 	motion_history_cap = min(motion_history_cap, specular_history_cap);
-	float history_len = history_valid ? min(min(prev_history_len * history_confidence + 1.0, params.max_history), motion_history_cap) : 1.0;
+	float decay_factor = mix(0.85, 1.0, smoothstep(0.15, 0.75, history_confidence));
+	float history_len = history_valid ? min(min(prev_history_len * decay_factor + history_confidence, params.max_history), motion_history_cap) : 1.0;
 	history_len = borrowed_history ? min(history_len, 12.0) : history_len;
 	float base_alpha = max(pow(max(1.0 - params.history_weight, 0.001), 1.15), 0.025);
 	if (params.radiance_space_history > 0.5) {
@@ -612,7 +616,14 @@ void main() {
 	vec3 neighborhood_range = max(neighborhood_max - neighborhood_min, vec3(0.05));
 	float history_clip_variance = min(previous_variance, mix(previous_variance + 1e-4, 0.16, params.denoise_strength));
 	vec3 clip_expand = neighborhood_range * 0.45 + vec3(sqrt(history_clip_variance) * 0.85 + 0.02);
-	float sigma_k = max(params.history_clip_sigma, 0.25);
+
+	float current_luma = luminance(current);
+	float raw_history_luma = history_valid ? luminance(sanitize_color(prev_history.rgb)) : current_luma;
+	float center_history_change = relative_luma_delta(current_luma, raw_history_luma);
+
+	float relaxation = smoothstep(1.0, 8.0, history_len) * smoothstep(0.18, 0.85, history_confidence) * (1.0 - smoothstep(0.05, 0.20, center_history_change)) * (1.0 - smoothstep(1.0, 12.0, motion_px));
+	float sigma_k = max(params.history_clip_sigma, 0.25) * mix(1.0, 2.75, relaxation);
+
 	vec3 sigma_min = neighborhood_avg - neighborhood_sigma * sigma_k;
 	vec3 sigma_max = neighborhood_avg + neighborhood_sigma * sigma_k;
 	vec3 clip_min = max(neighborhood_min - clip_expand, sigma_min - vec3(0.025));
@@ -620,8 +631,6 @@ void main() {
 	clip_max = max(clip_max, clip_min + vec3(0.01));
 	vec3 history_color = history_valid ? clamp(sanitize_color(prev_history.rgb), clip_min, clip_max) : current;
 
-	float current_luma = luminance(current);
-	float raw_history_luma = history_valid ? luminance(sanitize_color(prev_history.rgb)) : current_luma;
 	float history_luma = luminance(history_color);
 	float history_support_luma = history_valid ? raw_history_luma : 0.0;
 	float local_neighbor_luma = neighbor_weight_sum > 0.0 ? luminance(neighbor_avg) : 0.0;
@@ -632,7 +641,6 @@ void main() {
 	float variance_sigma = sqrt(previous_variance);
 	float surface_firefly_risk = guide_specular_surface;
 	float neighborhood_history_change = relative_luma_delta(neighbor_luma, history_luma);
-	float center_history_change = relative_luma_delta(current_luma, raw_history_luma);
 	float neighborhood_agreement = (1.0 - smoothstep(0.18, 0.72, relative_luma_delta(current_luma, neighbor_luma))) * neighbor_support;
 	float history_agreement = history_valid ? (1.0 - smoothstep(0.18, 0.72, center_history_change)) * smoothstep(2.0, 10.0, history_len) * history_confidence : 0.0;
 	float temporal_or_local_agreement = max(neighborhood_agreement, history_agreement);
@@ -1226,7 +1234,14 @@ void main() {
 			float guide_w = mix(1.0, guarded_identity_w, guide_identity_guard);
 			float w = base_w * normal_w * depth_w * albedo_w * luma_w * bright_tap_w * velocity_w * step_w * clamp(metal_w, 0.0, 1.0) * guide_w;
 
-			color_sum += tap.rgb * w;
+			vec3 tap_color_filtered = tap.rgb;
+			if (x != 0 || y != 0) {
+				float tap_limit = center_luma + luma_sigma * mix(2.2, 1.1, params.firefly_suppression) + 0.15;
+				if (tap_luma > tap_limit) {
+					tap_color_filtered = tap.rgb * (tap_limit / max(tap_luma, 1e-4));
+				}
+			}
+			color_sum += tap_color_filtered * w;
 			variance_sum += tap.a * w * w;
 			weight_sum += w;
 		}
