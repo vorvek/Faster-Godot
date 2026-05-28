@@ -31,6 +31,7 @@
 #include "audio_rb_resampler.h"
 
 #include "core/math/audio_frame.h"
+#include "core/math/simd_defs.h"
 #include "core/os/memory.h"
 
 int AudioRBResampler::get_channel_count() const {
@@ -48,7 +49,51 @@ template <int C>
 uint32_t AudioRBResampler::_resample(AudioFrame *p_dest, int p_todo, int32_t p_increment) {
 	uint32_t read = offset & MIX_FRAC_MASK;
 
-	for (int i = 0; i < p_todo; i++) {
+	for (int i = 0; i < p_todo;) {
+		if constexpr (C == 2) {
+			if (p_todo - i >= 4 && p_increment > 0 && rb_bits + MIX_FRAC_BITS < 32) {
+				const uint32_t rb_offset_mask = (uint32_t(1) << (rb_bits + MIX_FRAC_BITS)) - 1;
+				const uint64_t offset_unwrapped = uint32_t(offset);
+				const uint64_t last_offset = offset_unwrapped + uint64_t(p_increment) * 4;
+
+				if (last_offset <= rb_offset_mask) {
+					const uint32_t sample_offset0 = uint32_t(offset_unwrapped + uint64_t(p_increment) * 1);
+					const uint32_t sample_offset1 = uint32_t(offset_unwrapped + uint64_t(p_increment) * 2);
+					const uint32_t sample_offset2 = uint32_t(offset_unwrapped + uint64_t(p_increment) * 3);
+					const uint32_t sample_offset3 = uint32_t(last_offset);
+
+					const uint32_t pos0 = sample_offset0 >> MIX_FRAC_BITS;
+					const uint32_t pos1 = sample_offset1 >> MIX_FRAC_BITS;
+					const uint32_t pos2 = sample_offset2 >> MIX_FRAC_BITS;
+					const uint32_t pos3 = sample_offset3 >> MIX_FRAC_BITS;
+
+					if (pos3 + 1 < rb_len) {
+						const __m256i current_indices = _mm256_setr_epi32(
+								int((pos0 << 1) + 0), int((pos0 << 1) + 1),
+								int((pos1 << 1) + 0), int((pos1 << 1) + 1),
+								int((pos2 << 1) + 0), int((pos2 << 1) + 1),
+								int((pos3 << 1) + 0), int((pos3 << 1) + 1));
+						const __m256i next_indices = _mm256_add_epi32(current_indices, _mm256_set1_epi32(2));
+
+						const __m256 current = _mm256_i32gather_ps(rb, current_indices, sizeof(float));
+						const __m256 next = _mm256_i32gather_ps(rb, next_indices, sizeof(float));
+						const float frac0 = float(sample_offset0 & MIX_FRAC_MASK) / float(MIX_FRAC_LEN);
+						const float frac1 = float(sample_offset1 & MIX_FRAC_MASK) / float(MIX_FRAC_LEN);
+						const float frac2 = float(sample_offset2 & MIX_FRAC_MASK) / float(MIX_FRAC_LEN);
+						const float frac3 = float(sample_offset3 & MIX_FRAC_MASK) / float(MIX_FRAC_LEN);
+						const __m256 frac = _mm256_setr_ps(frac0, frac0, frac1, frac1, frac2, frac2, frac3, frac3);
+						const __m256 mixed = Math::simd_fmadd_ps(_mm256_sub_ps(next, current), frac, current);
+
+						_mm256_storeu_ps(reinterpret_cast<float *>(&p_dest[i]), mixed);
+						offset = int32_t(uint32_t(last_offset) & rb_offset_mask);
+						read += uint32_t(p_increment) * 4;
+						i += 4;
+						continue;
+					}
+				}
+			}
+		}
+
 		offset = (offset + p_increment) & (((1 << (rb_bits + MIX_FRAC_BITS)) - 1));
 		read += p_increment;
 		uint32_t pos = offset >> MIX_FRAC_BITS;
@@ -110,6 +155,8 @@ uint32_t AudioRBResampler::_resample(AudioFrame *p_dest, int p_todo, int32_t p_i
 			v1 += (v1n - v1) * frac;
 			p_dest[i] = AudioFrame(v0, v1);
 		}
+
+		i++;
 	}
 
 	return read >> MIX_FRAC_BITS; //rb_read_pos = offset >> MIX_FRAC_BITS;

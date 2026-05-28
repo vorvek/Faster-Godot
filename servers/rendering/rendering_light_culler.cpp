@@ -30,6 +30,7 @@
 
 #include "rendering_light_culler.h"
 
+#include "core/math/aabb.h"
 #include "core/math/plane.h"
 #include "core/math/projection.h"
 #include "servers/rendering/rendering_server_globals.h"
@@ -37,6 +38,146 @@
 #ifdef LIGHT_CULLER_DEBUG_FLASH
 #include "core/config/engine.h"
 #endif
+
+namespace {
+
+_FORCE_INLINE_ bool _shadow_caster_aabb_rejected_by_planes_scalar(const AABB &p_aabb, const Plane *p_planes, int p_plane_count) {
+	real_t r_min;
+	real_t r_max;
+	for (int i = 0; i < p_plane_count; i++) {
+		p_aabb.project_range_in_plane(p_planes[i], r_min, r_max);
+		if (r_min > 0.0f) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+#if defined(MATH_SIMD_AVX2_FLOAT) && defined(MATH_SIMD_FMA_FLOAT)
+_FORCE_INLINE_ bool _shadow_caster_aabb_rejected_by_planes_avx2(const AABB &p_aabb, const Plane *p_planes, int p_plane_count) {
+	const Vector3 half_extents = p_aabb.size * 0.5f;
+	const Vector3 center = p_aabb.position + half_extents;
+
+	const __m256 half_x = _mm256_set1_ps(half_extents.x);
+	const __m256 half_y = _mm256_set1_ps(half_extents.y);
+	const __m256 half_z = _mm256_set1_ps(half_extents.z);
+	const __m256 center_x = _mm256_set1_ps(center.x);
+	const __m256 center_y = _mm256_set1_ps(center.y);
+	const __m256 center_z = _mm256_set1_ps(center.z);
+	const __m256 sign_mask = _mm256_set1_ps(-0.0f);
+
+	int i = 0;
+	for (; i + 8 <= p_plane_count; i += 8) {
+		const __m256 nx = _mm256_setr_ps(p_planes[i + 0].normal.x, p_planes[i + 1].normal.x, p_planes[i + 2].normal.x, p_planes[i + 3].normal.x, p_planes[i + 4].normal.x, p_planes[i + 5].normal.x, p_planes[i + 6].normal.x, p_planes[i + 7].normal.x);
+		const __m256 ny = _mm256_setr_ps(p_planes[i + 0].normal.y, p_planes[i + 1].normal.y, p_planes[i + 2].normal.y, p_planes[i + 3].normal.y, p_planes[i + 4].normal.y, p_planes[i + 5].normal.y, p_planes[i + 6].normal.y, p_planes[i + 7].normal.y);
+		const __m256 nz = _mm256_setr_ps(p_planes[i + 0].normal.z, p_planes[i + 1].normal.z, p_planes[i + 2].normal.z, p_planes[i + 3].normal.z, p_planes[i + 4].normal.z, p_planes[i + 5].normal.z, p_planes[i + 6].normal.z, p_planes[i + 7].normal.z);
+		const __m256 d = _mm256_setr_ps(p_planes[i + 0].d, p_planes[i + 1].d, p_planes[i + 2].d, p_planes[i + 3].d, p_planes[i + 4].d, p_planes[i + 5].d, p_planes[i + 6].d, p_planes[i + 7].d);
+
+		const __m256 abs_nx = _mm256_andnot_ps(sign_mask, nx);
+		const __m256 abs_ny = _mm256_andnot_ps(sign_mask, ny);
+		const __m256 abs_nz = _mm256_andnot_ps(sign_mask, nz);
+		const __m256 radius = Math::simd_fmadd_ps(abs_nz, half_z, Math::simd_fmadd_ps(abs_ny, half_y, _mm256_mul_ps(abs_nx, half_x)));
+		const __m256 center_dot = Math::simd_fmadd_ps(nz, center_z, Math::simd_fmadd_ps(ny, center_y, _mm256_mul_ps(nx, center_x)));
+		const __m256 support_dot = _mm256_sub_ps(center_dot, radius);
+
+		if (_mm256_movemask_ps(_mm256_cmp_ps(support_dot, d, _CMP_GT_OQ)) != 0) {
+			return true;
+		}
+	}
+
+	if (i + 4 <= p_plane_count) {
+		const __m256 nx = _mm256_setr_ps(p_planes[i + 0].normal.x, p_planes[i + 1].normal.x, p_planes[i + 2].normal.x, p_planes[i + 3].normal.x, 0.0f, 0.0f, 0.0f, 0.0f);
+		const __m256 ny = _mm256_setr_ps(p_planes[i + 0].normal.y, p_planes[i + 1].normal.y, p_planes[i + 2].normal.y, p_planes[i + 3].normal.y, 0.0f, 0.0f, 0.0f, 0.0f);
+		const __m256 nz = _mm256_setr_ps(p_planes[i + 0].normal.z, p_planes[i + 1].normal.z, p_planes[i + 2].normal.z, p_planes[i + 3].normal.z, 0.0f, 0.0f, 0.0f, 0.0f);
+		const __m256 d = _mm256_setr_ps(p_planes[i + 0].d, p_planes[i + 1].d, p_planes[i + 2].d, p_planes[i + 3].d, Math::INF, Math::INF, Math::INF, Math::INF);
+
+		const __m256 abs_nx = _mm256_andnot_ps(sign_mask, nx);
+		const __m256 abs_ny = _mm256_andnot_ps(sign_mask, ny);
+		const __m256 abs_nz = _mm256_andnot_ps(sign_mask, nz);
+		const __m256 radius = Math::simd_fmadd_ps(abs_nz, half_z, Math::simd_fmadd_ps(abs_ny, half_y, _mm256_mul_ps(abs_nx, half_x)));
+		const __m256 center_dot = Math::simd_fmadd_ps(nz, center_z, Math::simd_fmadd_ps(ny, center_y, _mm256_mul_ps(nx, center_x)));
+		const __m256 support_dot = _mm256_sub_ps(center_dot, radius);
+
+		if (_mm256_movemask_ps(_mm256_cmp_ps(support_dot, d, _CMP_GT_OQ)) != 0) {
+			return true;
+		}
+
+		i += 4;
+	}
+
+	return _shadow_caster_aabb_rejected_by_planes_scalar(p_aabb, p_planes + i, p_plane_count - i);
+}
+
+_FORCE_INLINE_ uint32_t _shadow_caster_aabb_batch_reject_mask_avx2(const PagedArray<RendererSceneCull::Instance *> &p_instances, uint64_t p_first, const Plane *p_planes, int p_plane_count) {
+	const AABB &bb0 = p_instances[p_first + 0]->transformed_aabb;
+	const AABB &bb1 = p_instances[p_first + 1]->transformed_aabb;
+	const AABB &bb2 = p_instances[p_first + 2]->transformed_aabb;
+	const AABB &bb3 = p_instances[p_first + 3]->transformed_aabb;
+	const AABB &bb4 = p_instances[p_first + 4]->transformed_aabb;
+	const AABB &bb5 = p_instances[p_first + 5]->transformed_aabb;
+	const AABB &bb6 = p_instances[p_first + 6]->transformed_aabb;
+	const AABB &bb7 = p_instances[p_first + 7]->transformed_aabb;
+
+	const Vector3 half0 = bb0.size * 0.5f;
+	const Vector3 half1 = bb1.size * 0.5f;
+	const Vector3 half2 = bb2.size * 0.5f;
+	const Vector3 half3 = bb3.size * 0.5f;
+	const Vector3 half4 = bb4.size * 0.5f;
+	const Vector3 half5 = bb5.size * 0.5f;
+	const Vector3 half6 = bb6.size * 0.5f;
+	const Vector3 half7 = bb7.size * 0.5f;
+
+	const Vector3 center0 = bb0.position + half0;
+	const Vector3 center1 = bb1.position + half1;
+	const Vector3 center2 = bb2.position + half2;
+	const Vector3 center3 = bb3.position + half3;
+	const Vector3 center4 = bb4.position + half4;
+	const Vector3 center5 = bb5.position + half5;
+	const Vector3 center6 = bb6.position + half6;
+	const Vector3 center7 = bb7.position + half7;
+
+	const __m256 half_x = _mm256_setr_ps(half0.x, half1.x, half2.x, half3.x, half4.x, half5.x, half6.x, half7.x);
+	const __m256 half_y = _mm256_setr_ps(half0.y, half1.y, half2.y, half3.y, half4.y, half5.y, half6.y, half7.y);
+	const __m256 half_z = _mm256_setr_ps(half0.z, half1.z, half2.z, half3.z, half4.z, half5.z, half6.z, half7.z);
+	const __m256 center_x = _mm256_setr_ps(center0.x, center1.x, center2.x, center3.x, center4.x, center5.x, center6.x, center7.x);
+	const __m256 center_y = _mm256_setr_ps(center0.y, center1.y, center2.y, center3.y, center4.y, center5.y, center6.y, center7.y);
+	const __m256 center_z = _mm256_setr_ps(center0.z, center1.z, center2.z, center3.z, center4.z, center5.z, center6.z, center7.z);
+
+	uint32_t reject_mask = 0;
+	for (int i = 0; i < p_plane_count; i++) {
+		const Plane &plane = p_planes[i];
+		const __m256 nx = _mm256_set1_ps(plane.normal.x);
+		const __m256 ny = _mm256_set1_ps(plane.normal.y);
+		const __m256 nz = _mm256_set1_ps(plane.normal.z);
+		const __m256 abs_nx = _mm256_set1_ps(Math::abs(plane.normal.x));
+		const __m256 abs_ny = _mm256_set1_ps(Math::abs(plane.normal.y));
+		const __m256 abs_nz = _mm256_set1_ps(Math::abs(plane.normal.z));
+		const __m256 d = _mm256_set1_ps(plane.d);
+
+		const __m256 radius = Math::simd_fmadd_ps(abs_nz, half_z, Math::simd_fmadd_ps(abs_ny, half_y, _mm256_mul_ps(abs_nx, half_x)));
+		const __m256 center_dot = Math::simd_fmadd_ps(nz, center_z, Math::simd_fmadd_ps(ny, center_y, _mm256_mul_ps(nx, center_x)));
+		const __m256 support_dot = _mm256_sub_ps(center_dot, radius);
+
+		reject_mask |= (uint32_t)_mm256_movemask_ps(_mm256_cmp_ps(support_dot, d, _CMP_GT_OQ));
+		if (reject_mask == 0xFFu) {
+			break;
+		}
+	}
+
+	return reject_mask;
+}
+#endif
+
+_FORCE_INLINE_ bool _shadow_caster_aabb_rejected_by_planes(const AABB &p_aabb, const Plane *p_planes, int p_plane_count) {
+#if defined(MATH_SIMD_AVX2_FLOAT) && defined(MATH_SIMD_FMA_FLOAT)
+	return _shadow_caster_aabb_rejected_by_planes_avx2(p_aabb, p_planes, p_plane_count);
+#else
+	return _shadow_caster_aabb_rejected_by_planes_scalar(p_aabb, p_planes, p_plane_count);
+#endif
+}
+
+} // namespace
 
 #ifdef RENDERING_LIGHT_CULLER_DEBUG_STRINGS
 const char *RenderingLightCuller::Data::string_planes[] = {
@@ -236,16 +377,12 @@ bool RenderingLightCuller::cull_directional_light(const RendererSceneCull::Insta
 	Vector3 maxs = Vector3(p_bound.bounds[3], p_bound.bounds[4], p_bound.bounds[5]);
 	AABB bb(mins, maxs - mins);
 
-	real_t r_min, r_max;
-	for (int p = 0; p < cull_planes.num_cull_planes; p++) {
-		bb.project_range_in_plane(cull_planes.cull_planes[p], r_min, r_max);
-		if (r_min > 0.0f) {
+	if (_shadow_caster_aabb_rejected_by_planes(bb, cull_planes.cull_planes, cull_planes.num_cull_planes)) {
 #ifdef LIGHT_CULLER_DEBUG_DIRECTIONAL_LIGHT
-			cull_planes.rejected_count++;
+		cull_planes.rejected_count++;
 #endif
 
-			return false;
-		}
+		return false;
 	}
 
 	return true;
@@ -270,45 +407,85 @@ void RenderingLightCuller::cull_regular_light(PagedArray<RendererSceneCull::Inst
 #endif
 
 	// Go through all the casters in the list (the list will hopefully shrink as we go).
-	for (int n = 0; n < (int)list.size(); n++) {
-		// World space aabb.
-		const AABB &bb = list[n]->transformed_aabb;
-
 #ifdef LIGHT_CULLER_DEBUG_LOGGING
-		if (is_logging()) {
+	if (is_logging()) {
+		for (int n = 0; n < (int)list.size(); n++) {
+			// World space aabb.
+			const AABB &bb = list[n]->transformed_aabb;
+
 			print_line("bb : " + String(bb));
-		}
-#endif
 
-		real_t r_min, r_max;
-		bool show = true;
+			real_t r_min, r_max;
+			bool show = true;
 
-		for (int p = 0; p < data.regular_cull_planes.num_cull_planes; p++) {
-			// As we only need r_min, could this be optimized?
-			bb.project_range_in_plane(data.regular_cull_planes.cull_planes[p], r_min, r_max);
+			for (int p = 0; p < data.regular_cull_planes.num_cull_planes; p++) {
+				// As we only need r_min, could this be optimized?
+				bb.project_range_in_plane(data.regular_cull_planes.cull_planes[p], r_min, r_max);
 
-#ifdef LIGHT_CULLER_DEBUG_LOGGING
-			if (is_logging()) {
 				print_line("\tplane " + itos(p) + " : " + String(data.regular_cull_planes.cull_planes[p]) + " r_min " + String(Variant(r_min)) + " r_max " + String(Variant(r_max)));
+
+				if (r_min > 0.0f) {
+					show = false;
+					break;
+				}
 			}
-#endif
 
-			if (r_min > 0.0f) {
-				show = false;
-				break;
-			}
-		}
+			// Remove.
+			if (!show) {
+				list.remove_at_unordered(n);
 
-		// Remove.
-		if (!show) {
-			list.remove_at_unordered(n);
-
-			// Repeat this element next iteration of the loop as it has been removed and replaced by the last.
-			n--;
+				// Repeat this element next iteration of the loop as it has been removed and replaced by the last.
+				n--;
 
 #ifdef LIGHT_CULLER_DEBUG_REGULAR_LIGHT
-			data.regular_rejected_count++;
+				data.regular_rejected_count++;
 #endif
+			}
+		}
+	} else
+#endif
+	{
+		uint64_t n = 0;
+
+#if defined(MATH_SIMD_AVX2_FLOAT) && defined(MATH_SIMD_FMA_FLOAT)
+		while (n + 8 <= list.size()) {
+			uint32_t reject_mask = _shadow_caster_aabb_batch_reject_mask_avx2(list, n, data.regular_cull_planes.cull_planes, data.regular_cull_planes.num_cull_planes);
+			if (reject_mask == 0) {
+				n += 8;
+				continue;
+			}
+
+			uint32_t first_rejected = 0;
+			while (((reject_mask >> first_rejected) & 1u) == 0) {
+				first_rejected++;
+			}
+
+			for (int lane = 7; lane >= 0; lane--) {
+				if (reject_mask & (1u << lane)) {
+					list.remove_at_unordered(n + lane);
+
+#ifdef LIGHT_CULLER_DEBUG_REGULAR_LIGHT
+					data.regular_rejected_count++;
+#endif
+				}
+			}
+
+			n += first_rejected;
+		}
+#endif
+
+		while (n < list.size()) {
+			const AABB &bb = list[n]->transformed_aabb;
+
+			if (_shadow_caster_aabb_rejected_by_planes(bb, data.regular_cull_planes.cull_planes, data.regular_cull_planes.num_cull_planes)) {
+				list.remove_at_unordered(n);
+
+#ifdef LIGHT_CULLER_DEBUG_REGULAR_LIGHT
+				data.regular_rejected_count++;
+#endif
+			} else {
+				n++;
+			}
 		}
 	}
 

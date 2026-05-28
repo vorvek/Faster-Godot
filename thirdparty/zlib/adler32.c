@@ -7,9 +7,16 @@
 
 #include "zutil.h"
 
+#if defined(ZLIB_ADLER32_AVX2) && (defined(__AVX2__) || defined(_MSC_VER)) && \
+    (defined(__x86_64__) || defined(__x86_64) || defined(_M_X64))
+#  include <immintrin.h>
+#  define ADLER32_AVX2_FAST
+#endif
+
 #define BASE 65521U     /* largest prime smaller than 65536 */
 #define NMAX 5552
 /* NMAX is the largest n such that 255n(n+1)/2 + (n+1)(BASE-1) <= 2^32-1 */
+#define AVX2_NMAX (NMAX - (NMAX % 32))
 
 #define DO1(buf,i)  {adler += (buf)[i]; sum2 += adler;}
 #define DO2(buf,i)  DO1(buf,i); DO1(buf,i+1);
@@ -58,7 +65,7 @@
 #endif
 
 /* ========================================================================= */
-uLong ZEXPORT adler32_z(uLong adler, const Bytef *buf, z_size_t len) {
+local uLong adler32_z_scalar(uLong adler, const Bytef *buf, z_size_t len) {
     unsigned long sum2;
     unsigned n;
 
@@ -122,6 +129,98 @@ uLong ZEXPORT adler32_z(uLong adler, const Bytef *buf, z_size_t len) {
 
     /* return recombined sums */
     return adler | (sum2 << 16);
+}
+
+#ifdef ADLER32_AVX2_FAST
+local unsigned adler32_avx2_hsum_epi64(__m256i v) {
+    __m128i lo;
+    __m128i hi;
+    __m128i sum;
+
+    lo = _mm256_castsi256_si128(v);
+    hi = _mm256_extracti128_si256(v, 1);
+    sum = _mm_add_epi64(lo, hi);
+    sum = _mm_add_epi64(sum, _mm_srli_si128(sum, 8));
+    return (unsigned)_mm_cvtsi128_si64(sum);
+}
+
+local unsigned adler32_avx2_hsum_epi32(__m256i v) {
+    __m128i lo;
+    __m128i hi;
+    __m128i sum;
+
+    lo = _mm256_castsi256_si128(v);
+    hi = _mm256_extracti128_si256(v, 1);
+    sum = _mm_add_epi32(lo, hi);
+    sum = _mm_hadd_epi32(sum, sum);
+    sum = _mm_hadd_epi32(sum, sum);
+    return (unsigned)_mm_cvtsi128_si32(sum);
+}
+
+local void adler32_avx2_32(const Bytef *buf, unsigned long *adler, unsigned long *sum2) {
+    const __m256i weights = _mm256_setr_epi8(
+        32, 31, 30, 29, 28, 27, 26, 25,
+        24, 23, 22, 21, 20, 19, 18, 17,
+        16, 15, 14, 13, 12, 11, 10, 9,
+        8, 7, 6, 5, 4, 3, 2, 1);
+    const __m256i ones = _mm256_set1_epi16(1);
+    const __m256i zero = _mm256_setzero_si256();
+    __m256i bytes;
+    __m256i byte_sums;
+    __m256i weighted_pairs;
+    __m256i weighted_sums;
+    unsigned sum1_add;
+    unsigned sum2_add;
+
+    bytes = _mm256_loadu_si256((const __m256i *)(const void *)buf);
+    byte_sums = _mm256_sad_epu8(bytes, zero);
+    weighted_pairs = _mm256_maddubs_epi16(bytes, weights);
+    weighted_sums = _mm256_madd_epi16(weighted_pairs, ones);
+
+    sum1_add = adler32_avx2_hsum_epi64(byte_sums);
+    sum2_add = adler32_avx2_hsum_epi32(weighted_sums);
+
+    *sum2 += 32 * *adler + sum2_add;
+    *adler += sum1_add;
+}
+
+local uLong adler32_z_avx2(uLong adler, const Bytef *buf, z_size_t len) {
+    unsigned long sum2;
+    z_size_t vector_len;
+    z_size_t blocks;
+
+    if (buf == Z_NULL || len < 128)
+        return adler32_z_scalar(adler, buf, len);
+
+    sum2 = (adler >> 16) & 0xffff;
+    adler &= 0xffff;
+
+    while (len >= 32) {
+        vector_len = len < AVX2_NMAX ? (len & ~((z_size_t)31)) : AVX2_NMAX;
+        blocks = vector_len >> 5;
+        len -= vector_len;
+        do {
+            adler32_avx2_32(buf, &adler, &sum2);
+            buf += 32;
+        } while (--blocks);
+        MOD(adler);
+        MOD(sum2);
+    }
+
+    if (len)
+        return adler32_z_scalar(adler | (sum2 << 16), buf, len);
+
+    return adler | (sum2 << 16);
+}
+#endif
+
+/* ========================================================================= */
+uLong ZEXPORT adler32_z(uLong adler, const Bytef *buf, z_size_t len) {
+#ifdef ADLER32_AVX2_FAST
+    return adler32_z_avx2(adler, buf, len);
+#else
+    return adler32_z_scalar(adler, buf, len);
+#endif
 }
 
 /* ========================================================================= */

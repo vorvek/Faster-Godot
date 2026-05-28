@@ -31,11 +31,80 @@
 #include "skeleton_3d.h"
 #include "skeleton_3d.compat.inc"
 
+#include "core/math/simd_defs.h"
 #include "scene/3d/skeleton_modifier_3d.h"
 #include "servers/rendering/rendering_server.h"
 #if !defined(DISABLE_DEPRECATED) && !defined(PHYSICS_3D_DISABLED)
 #include "scene/3d/physics/physical_bone_simulator_3d.h"
 #endif // _DISABLE_DEPRECATED && PHYSICS_3D_DISABLED
+
+namespace {
+
+#if defined(MATH_SIMD_AVX2_FLOAT) && defined(MATH_SIMD_FMA_FLOAT)
+_FORCE_INLINE_ void _store_skin_transform_palette_entry(const Transform3D &p_global_pose, const Transform3D &p_bind_pose, float *r_dst) {
+	const Basis &global_basis = p_global_pose.basis;
+	const Basis &bind_basis = p_bind_pose.basis;
+
+	const __m256 bind_row0 = _mm256_setr_ps(
+			bind_basis.rows[0][0], bind_basis.rows[0][1], bind_basis.rows[0][2], p_bind_pose.origin.x,
+			bind_basis.rows[0][0], bind_basis.rows[0][1], bind_basis.rows[0][2], p_bind_pose.origin.x);
+	const __m256 bind_row1 = _mm256_setr_ps(
+			bind_basis.rows[1][0], bind_basis.rows[1][1], bind_basis.rows[1][2], p_bind_pose.origin.y,
+			bind_basis.rows[1][0], bind_basis.rows[1][1], bind_basis.rows[1][2], p_bind_pose.origin.y);
+	const __m256 bind_row2 = _mm256_setr_ps(
+			bind_basis.rows[2][0], bind_basis.rows[2][1], bind_basis.rows[2][2], p_bind_pose.origin.z,
+			bind_basis.rows[2][0], bind_basis.rows[2][1], bind_basis.rows[2][2], p_bind_pose.origin.z);
+
+	const __m256 global_rows01_col0 = _mm256_setr_ps(
+			global_basis.rows[0][0], global_basis.rows[0][0], global_basis.rows[0][0], global_basis.rows[0][0],
+			global_basis.rows[1][0], global_basis.rows[1][0], global_basis.rows[1][0], global_basis.rows[1][0]);
+	const __m256 global_rows01_col1 = _mm256_setr_ps(
+			global_basis.rows[0][1], global_basis.rows[0][1], global_basis.rows[0][1], global_basis.rows[0][1],
+			global_basis.rows[1][1], global_basis.rows[1][1], global_basis.rows[1][1], global_basis.rows[1][1]);
+	const __m256 global_rows01_col2 = _mm256_setr_ps(
+			global_basis.rows[0][2], global_basis.rows[0][2], global_basis.rows[0][2], global_basis.rows[0][2],
+			global_basis.rows[1][2], global_basis.rows[1][2], global_basis.rows[1][2], global_basis.rows[1][2]);
+	const __m256 global_origin01 = _mm256_setr_ps(
+			0.0f, 0.0f, 0.0f, p_global_pose.origin.x,
+			0.0f, 0.0f, 0.0f, p_global_pose.origin.y);
+
+	const __m256 rows01 = Math::simd_fmadd_ps(
+			global_rows01_col2, bind_row2,
+			Math::simd_fmadd_ps(
+					global_rows01_col1, bind_row1,
+					Math::simd_fmadd_ps(global_rows01_col0, bind_row0, global_origin01)));
+	_mm256_storeu_ps(r_dst, rows01);
+
+	const __m128 bind_row0_128 = _mm256_castps256_ps128(bind_row0);
+	const __m128 bind_row1_128 = _mm256_castps256_ps128(bind_row1);
+	const __m128 bind_row2_128 = _mm256_castps256_ps128(bind_row2);
+	const __m128 global_origin2 = _mm_setr_ps(0.0f, 0.0f, 0.0f, p_global_pose.origin.z);
+	const __m128 row2 = _mm_fmadd_ps(
+			_mm_set1_ps(global_basis.rows[2][2]), bind_row2_128,
+			_mm_fmadd_ps(
+					_mm_set1_ps(global_basis.rows[2][1]), bind_row1_128,
+					_mm_fmadd_ps(_mm_set1_ps(global_basis.rows[2][0]), bind_row0_128, global_origin2)));
+	_mm_storeu_ps(r_dst + 8, row2);
+}
+#else
+_FORCE_INLINE_ void _store_skin_transform_palette_entry(const Transform3D &p_global_pose, const Transform3D &p_bind_pose, float *r_dst) {
+	const Transform3D skin_transform = p_global_pose * p_bind_pose;
+	r_dst[0] = skin_transform.basis.rows[0][0];
+	r_dst[1] = skin_transform.basis.rows[0][1];
+	r_dst[2] = skin_transform.basis.rows[0][2];
+	r_dst[3] = skin_transform.origin.x;
+	r_dst[4] = skin_transform.basis.rows[1][0];
+	r_dst[5] = skin_transform.basis.rows[1][1];
+	r_dst[6] = skin_transform.basis.rows[1][2];
+	r_dst[7] = skin_transform.origin.y;
+	r_dst[8] = skin_transform.basis.rows[2][0];
+	r_dst[9] = skin_transform.basis.rows[2][1];
+	r_dst[10] = skin_transform.basis.rows[2][2];
+	r_dst[11] = skin_transform.origin.z;
+}
+#endif
+
+} // namespace
 
 void SkinReference::_skin_changed() {
 	if (skeleton_node) {
@@ -411,19 +480,7 @@ void Skeleton3D::_notification(int p_what) {
 						memset(bone_transform_ptr, 0, 12 * sizeof(float));
 						ERR_CONTINUE(bone_index >= (uint32_t)len);
 					}
-					const Transform3D skin_transform = bonesptr[bone_index].global_pose * skin->get_bind_pose_unchecked(i);
-					bone_transform_ptr[0] = skin_transform.basis.rows[0][0];
-					bone_transform_ptr[1] = skin_transform.basis.rows[0][1];
-					bone_transform_ptr[2] = skin_transform.basis.rows[0][2];
-					bone_transform_ptr[3] = skin_transform.origin.x;
-					bone_transform_ptr[4] = skin_transform.basis.rows[1][0];
-					bone_transform_ptr[5] = skin_transform.basis.rows[1][1];
-					bone_transform_ptr[6] = skin_transform.basis.rows[1][2];
-					bone_transform_ptr[7] = skin_transform.origin.y;
-					bone_transform_ptr[8] = skin_transform.basis.rows[2][0];
-					bone_transform_ptr[9] = skin_transform.basis.rows[2][1];
-					bone_transform_ptr[10] = skin_transform.basis.rows[2][2];
-					bone_transform_ptr[11] = skin_transform.origin.z;
+					_store_skin_transform_palette_entry(bonesptr[bone_index].global_pose, skin->get_bind_pose_unchecked(i), bone_transform_ptr);
 				}
 
 				rs->skeleton_set_bone_data_3d(skeleton, skin_bone_transform_data);

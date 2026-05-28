@@ -24,12 +24,24 @@
 
 #if !defined(MBEDTLS_CHACHA20_ALT)
 
+#if defined(__AVX2__) && \
+    (defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64))
+#include <immintrin.h>
+#define MBEDTLS_CHACHA20_AVX2 1
+#endif
+
 #define ROTL32(value, amount) \
     ((uint32_t) ((value) << (amount)) | ((value) >> (32 - (amount))))
 
 #define CHACHA20_CTR_INDEX (12U)
 
 #define CHACHA20_BLOCK_SIZE_BYTES (4U * 16U)
+
+#if defined(MBEDTLS_CHACHA20_AVX2)
+#define CHACHA20_AVX2_BLOCKS (8U)
+#define CHACHA20_AVX2_BATCH_SIZE_BYTES \
+    (CHACHA20_AVX2_BLOCKS * CHACHA20_BLOCK_SIZE_BYTES)
+#endif
 
 /**
  * \brief           ChaCha20 quarter round operation.
@@ -140,6 +152,145 @@ static void chacha20_block(const uint32_t initial_state[16],
     mbedtls_platform_zeroize(working_state, sizeof(working_state));
 }
 
+#if defined(MBEDTLS_CHACHA20_AVX2)
+
+static inline __m256i chacha20_avx2_set1_u32(uint32_t value)
+{
+    return _mm256_set1_epi32((int) value);
+}
+
+#define CHACHA20_AVX2_ROTL32(value, amount)                                  \
+    _mm256_or_si256(_mm256_slli_epi32((value), (amount)),                    \
+                    _mm256_srli_epi32((value), 32 - (amount)))
+
+#define CHACHA20_AVX2_QUARTER_ROUND(a, b, c, d)  \
+    do                                            \
+    {                                             \
+        (a) = _mm256_add_epi32((a), (b));         \
+        (d) = _mm256_xor_si256((d), (a));         \
+        (d) = CHACHA20_AVX2_ROTL32((d), 16);      \
+        (c) = _mm256_add_epi32((c), (d));         \
+        (b) = _mm256_xor_si256((b), (c));         \
+        (b) = CHACHA20_AVX2_ROTL32((b), 12);      \
+        (a) = _mm256_add_epi32((a), (b));         \
+        (d) = _mm256_xor_si256((d), (a));         \
+        (d) = CHACHA20_AVX2_ROTL32((d), 8);       \
+        (c) = _mm256_add_epi32((c), (d));         \
+        (b) = _mm256_xor_si256((b), (c));         \
+        (b) = CHACHA20_AVX2_ROTL32((b), 7);       \
+    } while (0)
+
+static void chacha20_block_x8_avx2(const uint32_t initial_state[16],
+                                   unsigned char keystream[CHACHA20_AVX2_BATCH_SIZE_BYTES])
+{
+    __m256i state0, state1, state2, state3;
+    __m256i state4, state5, state6, state7;
+    __m256i state8, state9, state10, state11;
+    __m256i state12, state13, state14, state15;
+    __m256i x0, x1, x2, x3;
+    __m256i x4, x5, x6, x7;
+    __m256i x8, x9, x10, x11;
+    __m256i x12, x13, x14, x15;
+    uint32_t words[16][CHACHA20_AVX2_BLOCKS];
+    size_t block;
+    size_t word;
+    size_t round;
+
+    state0 = chacha20_avx2_set1_u32(initial_state[0]);
+    state1 = chacha20_avx2_set1_u32(initial_state[1]);
+    state2 = chacha20_avx2_set1_u32(initial_state[2]);
+    state3 = chacha20_avx2_set1_u32(initial_state[3]);
+    state4 = chacha20_avx2_set1_u32(initial_state[4]);
+    state5 = chacha20_avx2_set1_u32(initial_state[5]);
+    state6 = chacha20_avx2_set1_u32(initial_state[6]);
+    state7 = chacha20_avx2_set1_u32(initial_state[7]);
+    state8 = chacha20_avx2_set1_u32(initial_state[8]);
+    state9 = chacha20_avx2_set1_u32(initial_state[9]);
+    state10 = chacha20_avx2_set1_u32(initial_state[10]);
+    state11 = chacha20_avx2_set1_u32(initial_state[11]);
+    state12 = _mm256_add_epi32(
+        chacha20_avx2_set1_u32(initial_state[12]),
+        _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7));
+    state13 = chacha20_avx2_set1_u32(initial_state[13]);
+    state14 = chacha20_avx2_set1_u32(initial_state[14]);
+    state15 = chacha20_avx2_set1_u32(initial_state[15]);
+
+    x0 = state0;
+    x1 = state1;
+    x2 = state2;
+    x3 = state3;
+    x4 = state4;
+    x5 = state5;
+    x6 = state6;
+    x7 = state7;
+    x8 = state8;
+    x9 = state9;
+    x10 = state10;
+    x11 = state11;
+    x12 = state12;
+    x13 = state13;
+    x14 = state14;
+    x15 = state15;
+
+    for (round = 0U; round < 10U; round++) {
+        CHACHA20_AVX2_QUARTER_ROUND(x0, x4, x8,  x12);
+        CHACHA20_AVX2_QUARTER_ROUND(x1, x5, x9,  x13);
+        CHACHA20_AVX2_QUARTER_ROUND(x2, x6, x10, x14);
+        CHACHA20_AVX2_QUARTER_ROUND(x3, x7, x11, x15);
+
+        CHACHA20_AVX2_QUARTER_ROUND(x0, x5, x10, x15);
+        CHACHA20_AVX2_QUARTER_ROUND(x1, x6, x11, x12);
+        CHACHA20_AVX2_QUARTER_ROUND(x2, x7, x8,  x13);
+        CHACHA20_AVX2_QUARTER_ROUND(x3, x4, x9,  x14);
+    }
+
+    x0 = _mm256_add_epi32(x0, state0);
+    x1 = _mm256_add_epi32(x1, state1);
+    x2 = _mm256_add_epi32(x2, state2);
+    x3 = _mm256_add_epi32(x3, state3);
+    x4 = _mm256_add_epi32(x4, state4);
+    x5 = _mm256_add_epi32(x5, state5);
+    x6 = _mm256_add_epi32(x6, state6);
+    x7 = _mm256_add_epi32(x7, state7);
+    x8 = _mm256_add_epi32(x8, state8);
+    x9 = _mm256_add_epi32(x9, state9);
+    x10 = _mm256_add_epi32(x10, state10);
+    x11 = _mm256_add_epi32(x11, state11);
+    x12 = _mm256_add_epi32(x12, state12);
+    x13 = _mm256_add_epi32(x13, state13);
+    x14 = _mm256_add_epi32(x14, state14);
+    x15 = _mm256_add_epi32(x15, state15);
+
+    _mm256_storeu_si256((__m256i *) (void *) words[0], x0);
+    _mm256_storeu_si256((__m256i *) (void *) words[1], x1);
+    _mm256_storeu_si256((__m256i *) (void *) words[2], x2);
+    _mm256_storeu_si256((__m256i *) (void *) words[3], x3);
+    _mm256_storeu_si256((__m256i *) (void *) words[4], x4);
+    _mm256_storeu_si256((__m256i *) (void *) words[5], x5);
+    _mm256_storeu_si256((__m256i *) (void *) words[6], x6);
+    _mm256_storeu_si256((__m256i *) (void *) words[7], x7);
+    _mm256_storeu_si256((__m256i *) (void *) words[8], x8);
+    _mm256_storeu_si256((__m256i *) (void *) words[9], x9);
+    _mm256_storeu_si256((__m256i *) (void *) words[10], x10);
+    _mm256_storeu_si256((__m256i *) (void *) words[11], x11);
+    _mm256_storeu_si256((__m256i *) (void *) words[12], x12);
+    _mm256_storeu_si256((__m256i *) (void *) words[13], x13);
+    _mm256_storeu_si256((__m256i *) (void *) words[14], x14);
+    _mm256_storeu_si256((__m256i *) (void *) words[15], x15);
+
+    for (block = 0U; block < CHACHA20_AVX2_BLOCKS; block++) {
+        for (word = 0U; word < 16U; word++) {
+            MBEDTLS_PUT_UINT32_LE(words[word][block], keystream,
+                                  block * CHACHA20_BLOCK_SIZE_BYTES + word * 4U);
+        }
+    }
+
+    mbedtls_platform_zeroize(words, sizeof(words));
+    _mm256_zeroupper();
+}
+
+#endif /* MBEDTLS_CHACHA20_AVX2 */
+
 void mbedtls_chacha20_init(mbedtls_chacha20_context *ctx)
 {
     mbedtls_platform_zeroize(ctx->state, sizeof(ctx->state));
@@ -214,6 +365,22 @@ int mbedtls_chacha20_update(mbedtls_chacha20_context *ctx,
         offset++;
         size--;
     }
+
+#if defined(MBEDTLS_CHACHA20_AVX2)
+    while (size >= CHACHA20_AVX2_BATCH_SIZE_BYTES) {
+        unsigned char keystream[CHACHA20_AVX2_BATCH_SIZE_BYTES];
+
+        chacha20_block_x8_avx2(ctx->state, keystream);
+        ctx->state[CHACHA20_CTR_INDEX] += CHACHA20_AVX2_BLOCKS;
+
+        mbedtls_xor(output + offset, input + offset, keystream,
+                    CHACHA20_AVX2_BATCH_SIZE_BYTES);
+        mbedtls_platform_zeroize(keystream, sizeof(keystream));
+
+        offset += CHACHA20_AVX2_BATCH_SIZE_BYTES;
+        size   -= CHACHA20_AVX2_BATCH_SIZE_BYTES;
+    }
+#endif /* MBEDTLS_CHACHA20_AVX2 */
 
     /* Process full blocks */
     while (size >= CHACHA20_BLOCK_SIZE_BYTES) {
@@ -441,6 +608,54 @@ static const size_t test_lengths[2] =
     375U
 };
 
+#if defined(MBEDTLS_CHACHA20_AVX2)
+static int chacha20_avx2_self_test(void)
+{
+    uint32_t state[16];
+    unsigned char avx2_output[CHACHA20_AVX2_BATCH_SIZE_BYTES];
+    unsigned char scalar_output[CHACHA20_AVX2_BATCH_SIZE_BYTES];
+    size_t i;
+    int ret;
+
+    state[0] = 0x61707865;
+    state[1] = 0x3320646e;
+    state[2] = 0x79622d32;
+    state[3] = 0x6b206574;
+
+    state[4]  = MBEDTLS_GET_UINT32_LE(test_keys[1], 0);
+    state[5]  = MBEDTLS_GET_UINT32_LE(test_keys[1], 4);
+    state[6]  = MBEDTLS_GET_UINT32_LE(test_keys[1], 8);
+    state[7]  = MBEDTLS_GET_UINT32_LE(test_keys[1], 12);
+    state[8]  = MBEDTLS_GET_UINT32_LE(test_keys[1], 16);
+    state[9]  = MBEDTLS_GET_UINT32_LE(test_keys[1], 20);
+    state[10] = MBEDTLS_GET_UINT32_LE(test_keys[1], 24);
+    state[11] = MBEDTLS_GET_UINT32_LE(test_keys[1], 28);
+    state[12] = 0xFFFFFFFCU;
+    state[13] = MBEDTLS_GET_UINT32_LE(test_nonces[1], 0);
+    state[14] = MBEDTLS_GET_UINT32_LE(test_nonces[1], 4);
+    state[15] = MBEDTLS_GET_UINT32_LE(test_nonces[1], 8);
+
+    chacha20_block_x8_avx2(state, avx2_output);
+
+    for (i = 0U; i < CHACHA20_AVX2_BLOCKS; i++) {
+        uint32_t scalar_state[16];
+
+        memcpy(scalar_state, state, sizeof(scalar_state));
+        scalar_state[CHACHA20_CTR_INDEX] += (uint32_t) i;
+        chacha20_block(scalar_state,
+                       scalar_output + i * CHACHA20_BLOCK_SIZE_BYTES);
+    }
+
+    ret = (memcmp(avx2_output, scalar_output, sizeof(avx2_output)) == 0) ? 0 : -1;
+
+    mbedtls_platform_zeroize(state, sizeof(state));
+    mbedtls_platform_zeroize(avx2_output, sizeof(avx2_output));
+    mbedtls_platform_zeroize(scalar_output, sizeof(scalar_output));
+
+    return ret;
+}
+#endif /* MBEDTLS_CHACHA20_AVX2 */
+
 /* Make sure no other definition is already present. */
 #undef ASSERT
 
@@ -484,6 +699,19 @@ int mbedtls_chacha20_self_test(int verbose)
             mbedtls_printf("passed\n");
         }
     }
+
+#if defined(MBEDTLS_CHACHA20_AVX2)
+    if (verbose != 0) {
+        mbedtls_printf("  ChaCha20 AVX2 test ");
+    }
+
+    ret = chacha20_avx2_self_test();
+    ASSERT(0 == ret, ("failed (AVX2 scalar equivalence)\n"));
+
+    if (verbose != 0) {
+        mbedtls_printf("passed\n");
+    }
+#endif /* MBEDTLS_CHACHA20_AVX2 */
 
     if (verbose != 0) {
         mbedtls_printf("\n");

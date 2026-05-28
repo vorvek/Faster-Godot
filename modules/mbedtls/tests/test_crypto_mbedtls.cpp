@@ -36,6 +36,9 @@
 #include "tests/test_macros.h"
 #include "tests/test_utils.h"
 
+#include <mbedtls/chacha20.h>
+#include <mbedtls/poly1305.h>
+
 namespace TestCryptoMbedTLS {
 
 void hmac_digest_test(HashingContext::HashType ht, String expected_hex) {
@@ -61,6 +64,13 @@ void hmac_context_digest_test(HashingContext::HashType ht, String expected_hex) 
 	PackedByteArray digest = ctx.finish();
 	String hex = String::hex_encode_buffer(digest.ptr(), digest.size());
 	CHECK(hex == expected_hex);
+}
+
+void chacha20_poly1305_self_test() {
+#if defined(MBEDTLS_SELF_TEST)
+	CHECK(mbedtls_chacha20_self_test(0) == 0);
+	CHECK(mbedtls_poly1305_self_test(0) == 0);
+#endif
 }
 
 Ref<CryptoKey> create_crypto_key(const String &p_key_path, bool p_public_only) {

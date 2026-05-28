@@ -49,6 +49,9 @@
 #include "servers/rendering/storage/environment_storage.h"
 #include "servers/rendering/storage/variant_converters.h"
 
+#include <cstddef>
+#include <cstring>
+
 #if defined(LINUXBSD_ENABLED)
 #include <dlfcn.h>
 #endif
@@ -87,6 +90,112 @@ using namespace RendererSceneRenderImplementation;
 
 static constexpr real_t RT_COMPRESSED_AABB_EPSILON = 0.0001;
 static constexpr uint32_t RTGI_MAX_EMISSIVE_CANDIDATES = 512;
+
+template <typename PackedFloat3>
+static _ALWAYS_INLINE_ void _rtgi_store_packed_float3(PackedFloat3 &r_dst, float p_x, float p_y, float p_z) {
+	r_dst.x = p_x;
+	r_dst.y = p_y;
+	r_dst.z = p_z;
+}
+
+template <typename PackedFloat3>
+static void _rtgi_pack_transformed_vertices_float3_scalar(const Vector3 *p_src, uint32_t p_count, const Transform3D &p_transform, PackedFloat3 *r_dst) {
+	if (p_count == 0) {
+		return;
+	}
+
+	for (uint32_t i = 0; i < p_count; i++) {
+		const Vector3 transformed = p_transform.xform(p_src[i]);
+		_rtgi_store_packed_float3(r_dst[i], float(transformed.x), float(transformed.y), float(transformed.z));
+	}
+}
+
+#if defined(DEV_ENABLED)
+static _ALWAYS_INLINE_ bool _rtgi_float3_pack_component_matches(float p_packed, float p_scalar) {
+	const float scale = MAX(1.0f, MAX(Math::abs(p_packed), Math::abs(p_scalar)));
+	return Math::abs(p_packed - p_scalar) <= scale * 0.00001f;
+}
+
+template <typename PackedFloat3>
+static bool _rtgi_validate_transformed_vertices_float3_pack_sample(const Vector3 *p_src, uint32_t p_count, const Transform3D &p_transform, const PackedFloat3 *p_dst) {
+	if (p_count == 0) {
+		return true;
+	}
+
+	const uint32_t samples[] = {
+		0,
+		MIN(7u, p_count - 1),
+		p_count / 2,
+		p_count - 1,
+	};
+
+	for (uint32_t sample_index = 0; sample_index < sizeof(samples) / sizeof(samples[0]); sample_index++) {
+		const uint32_t vertex_index = samples[sample_index];
+		const Vector3 scalar = p_transform.xform(p_src[vertex_index]);
+		const PackedFloat3 &packed = p_dst[vertex_index];
+		if (!_rtgi_float3_pack_component_matches(packed.x, float(scalar.x)) ||
+				!_rtgi_float3_pack_component_matches(packed.y, float(scalar.y)) ||
+				!_rtgi_float3_pack_component_matches(packed.z, float(scalar.z))) {
+			return false;
+		}
+	}
+	return true;
+}
+#endif
+
+template <typename PackedFloat3>
+static void _rtgi_pack_transformed_vertices_float3(const Vector3 *p_src, uint32_t p_count, const Transform3D &p_transform, PackedFloat3 *r_dst) {
+	static_assert(sizeof(PackedFloat3) == sizeof(float) * 3, "Packed path tracing vertices must be tightly packed float3 values.");
+	if (p_count == 0) {
+		return;
+	}
+
+	uint32_t i = 0;
+#if defined(MATH_SIMD_AVX2_FLOAT) && defined(MATH_SIMD_FMA_FLOAT)
+	const __m256 b00 = _mm256_set1_ps(p_transform.basis[0][0]);
+	const __m256 b01 = _mm256_set1_ps(p_transform.basis[0][1]);
+	const __m256 b02 = _mm256_set1_ps(p_transform.basis[0][2]);
+	const __m256 b10 = _mm256_set1_ps(p_transform.basis[1][0]);
+	const __m256 b11 = _mm256_set1_ps(p_transform.basis[1][1]);
+	const __m256 b12 = _mm256_set1_ps(p_transform.basis[1][2]);
+	const __m256 b20 = _mm256_set1_ps(p_transform.basis[2][0]);
+	const __m256 b21 = _mm256_set1_ps(p_transform.basis[2][1]);
+	const __m256 b22 = _mm256_set1_ps(p_transform.basis[2][2]);
+	const __m256 ox = _mm256_set1_ps(p_transform.origin.x);
+	const __m256 oy = _mm256_set1_ps(p_transform.origin.y);
+	const __m256 oz = _mm256_set1_ps(p_transform.origin.z);
+
+	for (; i + 8 <= p_count; i += 8) {
+		const __m256 vx = _mm256_setr_ps(p_src[i + 0].x, p_src[i + 1].x, p_src[i + 2].x, p_src[i + 3].x, p_src[i + 4].x, p_src[i + 5].x, p_src[i + 6].x, p_src[i + 7].x);
+		const __m256 vy = _mm256_setr_ps(p_src[i + 0].y, p_src[i + 1].y, p_src[i + 2].y, p_src[i + 3].y, p_src[i + 4].y, p_src[i + 5].y, p_src[i + 6].y, p_src[i + 7].y);
+		const __m256 vz = _mm256_setr_ps(p_src[i + 0].z, p_src[i + 1].z, p_src[i + 2].z, p_src[i + 3].z, p_src[i + 4].z, p_src[i + 5].z, p_src[i + 6].z, p_src[i + 7].z);
+
+		const __m256 tx = Math::simd_fmadd_ps(b02, vz, Math::simd_fmadd_ps(b01, vy, Math::simd_fmadd_ps(b00, vx, ox)));
+		const __m256 ty = Math::simd_fmadd_ps(b12, vz, Math::simd_fmadd_ps(b11, vy, Math::simd_fmadd_ps(b10, vx, oy)));
+		const __m256 tz = Math::simd_fmadd_ps(b22, vz, Math::simd_fmadd_ps(b21, vy, Math::simd_fmadd_ps(b20, vx, oz)));
+
+		alignas(32) float out_x[8];
+		alignas(32) float out_y[8];
+		alignas(32) float out_z[8];
+		_mm256_store_ps(out_x, tx);
+		_mm256_store_ps(out_y, ty);
+		_mm256_store_ps(out_z, tz);
+
+		for (uint32_t j = 0; j < 8; j++) {
+			_rtgi_store_packed_float3(r_dst[i + j], out_x[j], out_y[j], out_z[j]);
+		}
+	}
+#endif
+
+	_rtgi_pack_transformed_vertices_float3_scalar(p_src + i, p_count - i, p_transform, r_dst + i);
+
+#if defined(DEV_ENABLED)
+	if (!_rtgi_validate_transformed_vertices_float3_pack_sample(p_src, p_count, p_transform, r_dst)) {
+		WARN_PRINT_ONCE("RTGI path tracing SIMD vertex packing diverged from scalar Transform3D::xform; restoring scalar-packed vertices for this upload.");
+		_rtgi_pack_transformed_vertices_float3_scalar(p_src, p_count, p_transform, r_dst);
+	}
+#endif
+}
 
 static AABB _rt_make_safe_compressed_aabb(const AABB &p_aabb) {
 	AABB safe_aabb = p_aabb;
@@ -1733,6 +1842,10 @@ struct RTGIOSPRayVec3f {
 	float y = 0.0f;
 	float z = 0.0f;
 };
+static_assert(sizeof(RTGIOSPRayVec3f) == sizeof(float) * 3, "RTGIOSPRayVec3f must be a tightly packed float3.");
+static_assert(offsetof(RTGIOSPRayVec3f, x) == 0, "RTGIOSPRayVec3f x offset must match OSPRay vec3f.");
+static_assert(offsetof(RTGIOSPRayVec3f, y) == sizeof(float), "RTGIOSPRayVec3f y offset must match OSPRay vec3f.");
+static_assert(offsetof(RTGIOSPRayVec3f, z) == sizeof(float) * 2, "RTGIOSPRayVec3f z offset must match OSPRay vec3f.");
 
 struct RTGIOSPRayVec4f {
 	float x = 0.0f;
@@ -1746,6 +1859,10 @@ struct RTGIOSPRayVec3ui {
 	uint32_t y = 0;
 	uint32_t z = 0;
 };
+static_assert(sizeof(RTGIOSPRayVec3ui) == sizeof(uint32_t) * 3, "RTGIOSPRayVec3ui must be a tightly packed uint3.");
+static_assert(offsetof(RTGIOSPRayVec3ui, x) == 0, "RTGIOSPRayVec3ui x offset must match OSPRay vec3ui.");
+static_assert(offsetof(RTGIOSPRayVec3ui, y) == sizeof(uint32_t), "RTGIOSPRayVec3ui y offset must match OSPRay vec3ui.");
+static_assert(offsetof(RTGIOSPRayVec3ui, z) == sizeof(uint32_t) * 2, "RTGIOSPRayVec3ui z offset must match OSPRay vec3ui.");
 
 enum RTGIOSPRayConstants {
 	RTGI_OSP_DATA = 0x8000000 + 100,
@@ -2132,22 +2249,12 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 			Vector<RTGIOSPRayVec3f> &vertices = ospray_vertex_storage[ospray_vertex_storage.size() - 1];
 			vertices.resize(cpu_geometry.vertices.size());
 			const Transform3D &transform = p_snapshot.blas_transforms[geometry_index];
-			for (uint32_t vertex_index = 0; vertex_index < cpu_geometry.vertices.size(); vertex_index++) {
-				const Vector3 world_vertex = transform.xform(cpu_geometry.vertices[vertex_index]);
-				vertices.write[vertex_index] = { float(world_vertex.x), float(world_vertex.y), float(world_vertex.z) };
-			}
+			_rtgi_pack_transformed_vertices_float3(cpu_geometry.vertices.ptr(), cpu_geometry.vertices.size(), transform, vertices.ptrw());
 
 			ospray_index_storage.push_back(Vector<RTGIOSPRayVec3ui>());
 			Vector<RTGIOSPRayVec3ui> &indices = ospray_index_storage[ospray_index_storage.size() - 1];
 			indices.resize(cpu_geometry.primitive_count);
-			for (uint32_t primitive_index = 0; primitive_index < cpu_geometry.primitive_count; primitive_index++) {
-				const uint32_t index_base = primitive_index * 3;
-				indices.write[primitive_index] = {
-					cpu_geometry.indices[index_base + 0],
-					cpu_geometry.indices[index_base + 1],
-					cpu_geometry.indices[index_base + 2],
-				};
-			}
+			memcpy(indices.ptrw(), cpu_geometry.indices.ptr(), uint64_t(cpu_geometry.primitive_count) * sizeof(RTGIOSPRayVec3ui));
 
 			void *vertex_data = ospray.new_shared_data(vertices.ptr(), RTGI_OSP_VEC3F, vertices.size(), sizeof(RTGIOSPRayVec3f), 1, 0, 1, 0, nullptr, nullptr);
 			void *index_data = ospray.new_shared_data(indices.ptr(), RTGI_OSP_VEC3UI, indices.size(), sizeof(RTGIOSPRayVec3ui), 1, 0, 1, 0, nullptr, nullptr);
@@ -6341,7 +6448,7 @@ static void _fill_surface_geometry_data(
 	Vector4 uv_scale = mesh_storage->mesh_surface_get_uv_scale(p_mesh_surface);
 	geom.uv_scale_packed = (uint32_t(Math::make_half_float(uv_scale.y)) << 16) | Math::make_half_float(uv_scale.x);
 
-	// Index format (no device address — caller fills those in)
+	// Index format (no device address â€” caller fills those in)
 	if (index_buffer.is_valid() && index_count > 0) {
 		bool is_16bit = vertex_count <= 65536 && vertex_count > 0;
 		geom.index_format = is_16bit ? RT_INDEX_FORMAT_UINT16 : RT_INDEX_FORMAT_UINT32;
@@ -7819,25 +7926,25 @@ bool RenderRaytracing::_build_merged_mm_blas(
 	bool has_tangent = surface_format & RSE::ARRAY_FORMAT_TANGENT;
 	bool has_tbn = has_normal;
 
-	// Layout of uncompressed vertex buffer: [float3 positions × V] + [packed TBN × V].
+	// Layout of uncompressed vertex buffer: [float3 positions Ã— V] + [packed TBN Ã— V].
 	// normal_stride = 8 when both normal+tangent present (two uint16x2 packed), 4 with normal only.
 	uint32_t tbn_stride = 0;
 	if (has_normal && has_tangent) {
-		tbn_stride = 8; // 2 × uint32 (normal oct, tangent oct+sign)
+		tbn_stride = 8; // 2 Ã— uint32 (normal oct, tangent oct+sign)
 	} else if (has_normal) {
-		tbn_stride = 4; // 1 × uint32 (normal oct only)
+		tbn_stride = 4; // 1 Ã— uint32 (normal oct only)
 	}
 	// Byte offset of the TBN block in the source vertex buffer.
 	uint32_t src_tbn_byte_offset = vertex_count * 12; // after all float3 positions
 
-	// Merged vertex buffer: [float3 pos × N*V] + [packed TBN × N*V] (if TBN present).
+	// Merged vertex buffer: [float3 pos Ã— N*V] + [packed TBN Ã— N*V] (if TBN present).
 	const uint64_t merged_vtx_bytes_u64 = total_vertices_u64 * 12u + (has_tbn ? total_vertices_u64 * tbn_stride : 0u);
 	if (merged_vtx_bytes_u64 > UINT32_MAX) {
 		return false;
 	}
 	uint32_t merged_vtx_bytes = (uint32_t)merged_vtx_bytes_u64;
 
-	// Attribute buffer: attribute_stride bytes × V, replicated N times.
+	// Attribute buffer: attribute_stride bytes Ã— V, replicated N times.
 	RTSurfaceData meta_sd;
 	_fill_surface_geometry_data(p_mesh_surface, false, &meta_sd);
 	uint32_t attrib_stride = meta_sd.geometry.attribute_stride;
@@ -8758,7 +8865,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 	}
 
 	// -----------------------------------------------------------------------
-	// Phase 2: GPU compute — merged MultiMesh BLAS dispatches.
+	// Phase 2: GPU compute â€” merged MultiMesh BLAS dispatches.
 	// -----------------------------------------------------------------------
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 

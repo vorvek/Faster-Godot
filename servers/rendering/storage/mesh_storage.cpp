@@ -30,11 +30,28 @@
 
 #include "mesh_storage.h"
 
+#include "core/math/simd_defs.h"
 #include "core/math/transform_interpolator.h"
 
 #if defined(DEBUG_ENABLED) && defined(TOOLS_ENABLED)
 #include "core/config/project_settings.h"
 #endif
+
+static _ALWAYS_INLINE_ void _multimesh_lerp_floats_avx2(const float *p_prev, const float *p_curr, float *r_interpolated, int p_count, float p_fraction) {
+	const __m256 fraction = _mm256_set1_ps(p_fraction);
+
+	int i = 0;
+	for (; i + 8 <= p_count; i += 8) {
+		const __m256 prev = _mm256_loadu_ps(p_prev + i);
+		const __m256 curr = _mm256_loadu_ps(p_curr + i);
+		const __m256 interpolated = Math::simd_fmadd_ps(_mm256_sub_ps(curr, prev), fraction, prev);
+		_mm256_storeu_ps(r_interpolated + i, interpolated);
+	}
+
+	for (; i < p_count; i++) {
+		r_interpolated[i] = Math::lerp(p_prev[i], p_curr[i], p_fraction);
+	}
+}
 
 RID RendererMeshStorage::multimesh_allocate() {
 	return _multimesh_allocate();
@@ -458,17 +475,14 @@ void RendererMeshStorage::update_interpolation_frame(bool p_process) {
 
 				bool use_lerp = mmi->quality == 0;
 
-				// Temporary transform (needed for swizzling).
-				Transform3D tp, tc, tr; // (transform prev, curr and result)
+				if (use_lerp) {
+					_multimesh_lerp_floats_avx2(pf_prev, pf_curr, pf_int, mmi->_data_curr.size(), f);
+				} else {
+					// Temporary transform (needed for swizzling).
+					Transform3D tp, tc, tr; // (transform prev, curr and result)
 
-				// Test for cache friendliness versus doing branchless.
-				for (int n = 0; n < num; n++) {
-					// Transform.
-					if (use_lerp) {
-						for (int i = 0; i < mmi->_vf_size_xform; i++) {
-							pf_int[i] = Math::lerp(pf_prev[i], pf_curr[i], f);
-						}
-					} else {
+					// Test for cache friendliness versus doing branchless.
+					for (int n = 0; n < num; n++) {
 						// Silly swizzling, this will slow things down.
 						// No idea why it is using this format...
 						// ... maybe due to the shader.
@@ -512,32 +526,32 @@ void RendererMeshStorage::update_interpolation_frame(bool p_process) {
 						pf_int[3] = tr.origin.x;
 						pf_int[7] = tr.origin.y;
 						pf_int[11] = tr.origin.z;
-					}
 
-					pf_prev += mmi->_vf_size_xform;
-					pf_curr += mmi->_vf_size_xform;
-					pf_int += mmi->_vf_size_xform;
+						pf_prev += mmi->_vf_size_xform;
+						pf_curr += mmi->_vf_size_xform;
+						pf_int += mmi->_vf_size_xform;
 
-					// Color.
-					if (mmi->_vf_size_color == 4) {
-						for (int i = 0; i < 4; i++) {
-							pf_int[i] = Math::lerp(pf_prev[i], pf_curr[i], f);
+						// Color.
+						if (mmi->_vf_size_color == 4) {
+							for (int i = 0; i < 4; i++) {
+								pf_int[i] = Math::lerp(pf_prev[i], pf_curr[i], f);
+							}
+
+							pf_prev += 4;
+							pf_curr += 4;
+							pf_int += 4;
 						}
 
-						pf_prev += 4;
-						pf_curr += 4;
-						pf_int += 4;
-					}
+						// Custom data.
+						if (mmi->_vf_size_data == 4) {
+							for (int i = 0; i < 4; i++) {
+								pf_int[i] = Math::lerp(pf_prev[i], pf_curr[i], f);
+							}
 
-					// Custom data.
-					if (mmi->_vf_size_data == 4) {
-						for (int i = 0; i < 4; i++) {
-							pf_int[i] = Math::lerp(pf_prev[i], pf_curr[i], f);
+							pf_prev += 4;
+							pf_curr += 4;
+							pf_int += 4;
 						}
-
-						pf_prev += 4;
-						pf_curr += 4;
-						pf_int += 4;
 					}
 				}
 

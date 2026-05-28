@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/math/dynamic_bvh.h"
+#include "core/math/simd_defs.h"
 #include "core/math/transform_interpolator.h"
 #include "core/templates/bin_sorted_array.h"
 #include "core/templates/local_vector.h"
@@ -162,7 +163,42 @@ public:
 		const PlaneSign *plane_signs_ptr;
 		uint32_t plane_count;
 
-		_ALWAYS_INLINE_ Frustum() {}
+		struct PlaneBatch6 {
+			float normal_x[8];
+			float normal_y[8];
+			float normal_z[8];
+			float neg_d[8];
+			bool valid = false;
+		};
+
+		PlaneBatch6 plane_batch6;
+
+		_ALWAYS_INLINE_ void update_plane_batch6() {
+			plane_batch6.valid = plane_count == 6;
+			if (!plane_batch6.valid) {
+				return;
+			}
+
+			for (uint32_t i = 0; i < 6; i++) {
+				plane_batch6.normal_x[i] = planes_ptr[i].normal.x;
+				plane_batch6.normal_y[i] = planes_ptr[i].normal.y;
+				plane_batch6.normal_z[i] = planes_ptr[i].normal.z;
+				plane_batch6.neg_d[i] = -planes_ptr[i].d;
+			}
+			for (uint32_t i = 6; i < 8; i++) {
+				plane_batch6.normal_x[i] = 0.0f;
+				plane_batch6.normal_y[i] = 0.0f;
+				plane_batch6.normal_z[i] = 0.0f;
+				plane_batch6.neg_d[i] = -Math::INF;
+			}
+		}
+
+		_ALWAYS_INLINE_ Frustum() {
+			planes_ptr = nullptr;
+			plane_signs_ptr = nullptr;
+			plane_count = 0;
+			update_plane_batch6();
+		}
 		_ALWAYS_INLINE_ Frustum(const Frustum &p_frustum) {
 			planes = p_frustum.planes;
 			plane_signs = p_frustum.plane_signs;
@@ -170,6 +206,7 @@ public:
 			planes_ptr = planes.ptr();
 			plane_signs_ptr = plane_signs.ptr();
 			plane_count = p_frustum.plane_count;
+			update_plane_batch6();
 		}
 		_ALWAYS_INLINE_ void operator=(const Frustum &p_frustum) {
 			planes = p_frustum.planes;
@@ -178,6 +215,7 @@ public:
 			planes_ptr = planes.ptr();
 			plane_signs_ptr = plane_signs.ptr();
 			plane_count = p_frustum.plane_count;
+			update_plane_batch6();
 		}
 		_ALWAYS_INLINE_ Frustum(const Vector<Plane> &p_planes) {
 			planes = p_planes;
@@ -189,6 +227,7 @@ public:
 			}
 
 			plane_signs_ptr = plane_signs.ptr();
+			update_plane_batch6();
 		}
 	};
 
@@ -208,7 +247,7 @@ public:
 			bounds[4] = p_aabb.position.y + p_aabb.size.y;
 			bounds[5] = p_aabb.position.z + p_aabb.size.z;
 		}
-		_ALWAYS_INLINE_ bool in_frustum(const Frustum &p_frustum) const {
+		_ALWAYS_INLINE_ bool in_frustum_scalar(const Frustum &p_frustum) const {
 			// This is not a full SAT check and the possibility of false positives exist,
 			// but the tradeoff vs performance is still very good.
 
@@ -224,6 +263,34 @@ public:
 			}
 
 			return true;
+		}
+		_ALWAYS_INLINE_ bool in_frustum_avx2_fma6(const Frustum &p_frustum) const {
+			const __m256 zero = _mm256_setzero_ps();
+			const __m256 min_x = _mm256_set1_ps(bounds[0]);
+			const __m256 min_y = _mm256_set1_ps(bounds[1]);
+			const __m256 min_z = _mm256_set1_ps(bounds[2]);
+			const __m256 max_x = _mm256_set1_ps(bounds[3]);
+			const __m256 max_y = _mm256_set1_ps(bounds[4]);
+			const __m256 max_z = _mm256_set1_ps(bounds[5]);
+
+			const __m256 nx = _mm256_loadu_ps(p_frustum.plane_batch6.normal_x);
+			const __m256 ny = _mm256_loadu_ps(p_frustum.plane_batch6.normal_y);
+			const __m256 nz = _mm256_loadu_ps(p_frustum.plane_batch6.normal_z);
+			const __m256 neg_d = _mm256_loadu_ps(p_frustum.plane_batch6.neg_d);
+
+			const __m256 px = _mm256_blendv_ps(max_x, min_x, _mm256_cmp_ps(nx, zero, _CMP_GT_OQ));
+			const __m256 py = _mm256_blendv_ps(max_y, min_y, _mm256_cmp_ps(ny, zero, _CMP_GT_OQ));
+			const __m256 pz = _mm256_blendv_ps(max_z, min_z, _mm256_cmp_ps(nz, zero, _CMP_GT_OQ));
+			const __m256 distance = Math::simd_fmadd_ps(nz, pz, Math::simd_fmadd_ps(ny, py, Math::simd_fmadd_ps(nx, px, neg_d)));
+
+			return _mm256_movemask_ps(_mm256_cmp_ps(distance, zero, _CMP_GE_OQ)) == 0;
+		}
+		_ALWAYS_INLINE_ bool in_frustum(const Frustum &p_frustum) const {
+			if (p_frustum.plane_batch6.valid) {
+				return in_frustum_avx2_fma6(p_frustum);
+			}
+
+			return in_frustum_scalar(p_frustum);
 		}
 		_ALWAYS_INLINE_ bool in_aabb(const AABB &p_aabb) const {
 			Vector3 end = p_aabb.position + p_aabb.size;

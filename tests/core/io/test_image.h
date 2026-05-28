@@ -215,6 +215,43 @@ TEST_CASE("[Image] Saving and loading") {
 #endif // MODULE_TGA_ENABLED
 }
 
+#if defined(MODULE_TINYEXR_ENABLED) && defined(TOOLS_ENABLED)
+TEST_CASE("[Image] EXR half round-trip preserves channel data") {
+	constexpr int width = 9;
+	constexpr int height = 3;
+
+	auto test_roundtrip = [=](Image::Format p_format, int p_channels) {
+		PackedByteArray data;
+		data.resize(width * height * p_channels * sizeof(uint16_t));
+		uint16_t *data_ptr = reinterpret_cast<uint16_t *>(data.ptrw());
+
+		for (int y = 0; y < height; y++) {
+			for (int x = 0; x < width; x++) {
+				for (int channel = 0; channel < p_channels; channel++) {
+					data_ptr[(y * width + x) * p_channels + channel] =
+							Math::make_half_float(float((y * width + x + 1) * (channel + 1)) / 31.0f);
+				}
+			}
+		}
+
+		Ref<Image> image = memnew(Image(width, height, false, p_format, data));
+		Vector<uint8_t> buffer = image->save_exr_to_buffer(false);
+		REQUIRE(!buffer.is_empty());
+
+		Ref<Image> loaded;
+		loaded.instantiate();
+		REQUIRE(loaded->load_exr_from_buffer(buffer) == OK);
+		CHECK(loaded->get_format() == p_format);
+		CHECK(loaded->get_width() == width);
+		CHECK(loaded->get_height() == height);
+		CHECK(loaded->get_data() == data);
+	};
+
+	test_roundtrip(Image::FORMAT_RGBH, 3);
+	test_roundtrip(Image::FORMAT_RGBAH, 4);
+}
+#endif // MODULE_TINYEXR_ENABLED && TOOLS_ENABLED
+
 TEST_CASE("[Image] Basic getters") {
 	Ref<Image> image = memnew(Image(8, 4, false, Image::FORMAT_LA8));
 	CHECK(image->get_width() == 8);
@@ -261,6 +298,54 @@ TEST_CASE("[Image] Resizing") {
 	CHECK_MESSAGE(
 			image_po_2->get_size() == Vector2(16, 32),
 			"get_size() should return the correct size after resize_to_po2().");
+}
+
+TEST_CASE("[Image] RGBAH mipmap generation") {
+	constexpr int width = 6;
+	constexpr int height = 4;
+	constexpr int channels = 4;
+
+	auto sample_half = [=](int p_x, int p_y, int p_channel) -> uint16_t {
+		return Math::make_half_float(float((p_y * width + p_x + 1) * (p_channel + 1)) / 128.0f);
+	};
+
+	PackedByteArray data;
+	data.resize(width * height * channels * sizeof(uint16_t));
+	uint16_t *data_ptr = reinterpret_cast<uint16_t *>(data.ptrw());
+
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			for (int channel = 0; channel < channels; channel++) {
+				data_ptr[(y * width + x) * channels + channel] = sample_half(x, y, channel);
+			}
+		}
+	}
+
+	Ref<Image> image = memnew(Image(width, height, false, Image::FORMAT_RGBAH, data));
+	image->generate_mipmaps(false);
+	REQUIRE(image->has_mipmaps());
+
+	Ref<Image> mip = image->get_image_from_mipmap(1);
+	REQUIRE(mip->get_size() == Size2i(3, 2));
+
+	PackedByteArray mip_data = mip->get_data();
+	const uint16_t *mip_ptr = reinterpret_cast<const uint16_t *>(mip_data.ptr());
+
+	for (int y = 0; y < mip->get_height(); y++) {
+		for (int x = 0; x < mip->get_width(); x++) {
+			for (int channel = 0; channel < channels; channel++) {
+				const float expected =
+						(Math::half_to_float(sample_half(x * 2 + 0, y * 2 + 0, channel)) +
+								Math::half_to_float(sample_half(x * 2 + 1, y * 2 + 0, channel)) +
+								Math::half_to_float(sample_half(x * 2 + 0, y * 2 + 1, channel)) +
+								Math::half_to_float(sample_half(x * 2 + 1, y * 2 + 1, channel))) *
+						0.25f;
+				CHECK_MESSAGE(
+						mip_ptr[(y * mip->get_width() + x) * channels + channel] == Math::make_half_float(expected),
+						"RGBAH mipmap generation should match the scalar half-float averaging oracle.");
+			}
+		}
+	}
 }
 
 TEST_CASE("[Image] Modifying pixels of an image") {

@@ -35,6 +35,7 @@
 #include "core/error/error_macros.h"
 #include "core/io/resource_loader.h"
 #include "core/math/audio_frame.h"
+#include "core/math/simd_defs.h"
 #include "core/os/os.h"
 #include "core/string/string_name.h"
 #include "core/templates/pair.h"
@@ -48,6 +49,55 @@
 #else
 #define MARK_EDITED
 #endif
+
+static_assert(sizeof(AudioFrame) == sizeof(float) * 2,
+		"AudioFrame must stay packed stereo floats for AVX2 mixing.");
+
+namespace {
+
+_ALWAYS_INLINE_ void mix_no_highshelf_scalar(AudioFrame *p_out_buf, const AudioFrame *p_source_buf, AudioFrame p_vol_start, AudioFrame p_vol_final, uint32_t p_frame_count, uint32_t p_start_frame = 0) {
+	for (uint32_t frame_idx = p_start_frame; frame_idx < p_frame_count; frame_idx++) {
+		// TODO: Make lerp speed buffer-size-invariant if buffer_size ever becomes a project setting to avoid very small buffer sizes causing pops due to too-fast lerps.
+		float lerp_param = (float)frame_idx / p_frame_count;
+		p_out_buf[frame_idx] += (p_vol_final * lerp_param + (1 - lerp_param) * p_vol_start) * p_source_buf[frame_idx];
+	}
+}
+
+_ALWAYS_INLINE_ void mix_no_highshelf_avx2(AudioFrame *p_out_buf, const AudioFrame *p_source_buf, AudioFrame p_vol_start, AudioFrame p_vol_final, uint32_t p_frame_count) {
+	uint32_t frame_idx = 0;
+
+	if (p_frame_count >= 4) {
+		const __m256 vol_start = _mm256_setr_ps(
+				p_vol_start.left, p_vol_start.right, p_vol_start.left, p_vol_start.right,
+				p_vol_start.left, p_vol_start.right, p_vol_start.left, p_vol_start.right);
+		const __m256 vol_final = _mm256_setr_ps(
+				p_vol_final.left, p_vol_final.right, p_vol_final.left, p_vol_final.right,
+				p_vol_final.left, p_vol_final.right, p_vol_final.left, p_vol_final.right);
+		const __m256 frame_offsets = _mm256_setr_ps(
+				0.0f, 0.0f, 1.0f, 1.0f,
+				2.0f, 2.0f, 3.0f, 3.0f);
+		const __m256 frame_count = _mm256_set1_ps((float)p_frame_count);
+		const __m256 one = _mm256_set1_ps(1.0f);
+
+		for (; frame_idx + 4 <= p_frame_count; frame_idx += 4) {
+			const __m256 frame_base = _mm256_set1_ps((float)frame_idx);
+			const __m256 lerp_param = _mm256_div_ps(_mm256_add_ps(frame_base, frame_offsets), frame_count);
+			const __m256 source = _mm256_loadu_ps(reinterpret_cast<const float *>(&p_source_buf[frame_idx]));
+			const __m256 out = _mm256_loadu_ps(reinterpret_cast<const float *>(&p_out_buf[frame_idx]));
+			const __m256 vol = _mm256_add_ps(
+					_mm256_mul_ps(vol_final, lerp_param),
+					_mm256_mul_ps(_mm256_sub_ps(one, lerp_param), vol_start));
+
+			_mm256_storeu_ps(
+					reinterpret_cast<float *>(&p_out_buf[frame_idx]),
+					Math::simd_fmadd_ps(vol, source, out));
+		}
+	}
+
+	mix_no_highshelf_scalar(p_out_buf, p_source_buf, p_vol_start, p_vol_final, p_frame_count, frame_idx);
+}
+
+} // namespace
 
 AudioDriver *AudioDriver::singleton = nullptr;
 AudioDriver *AudioDriver::get_singleton() {
@@ -695,11 +745,7 @@ void AudioServer::_mix_step_for_channel(AudioFrame *p_out_buf, AudioFrame *p_sou
 		}
 
 	} else {
-		for (unsigned int frame_idx = 0; frame_idx < buffer_size; frame_idx++) {
-			// TODO: Make lerp speed buffer-size-invariant if buffer_size ever becomes a project setting to avoid very small buffer sizes causing pops due to too-fast lerps.
-			float lerp_param = (float)frame_idx / buffer_size;
-			p_out_buf[frame_idx] += (p_vol_final * lerp_param + (1 - lerp_param) * p_vol_start) * p_source_buf[frame_idx];
-		}
+		mix_no_highshelf_avx2(p_out_buf, p_source_buf, p_vol_start, p_vol_final, buffer_size);
 	}
 }
 

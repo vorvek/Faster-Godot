@@ -32,6 +32,7 @@
 
 #include "core/math/math_funcs.h"
 #include "core/math/rect2.h"
+#include "core/math/simd_defs.h"
 #include "core/math/vector2.h"
 #include "core/templates/vector.h"
 
@@ -277,7 +278,21 @@ Vector<Vector2> Transform2D::xform(const Vector<Vector2> &p_array) const {
 	const Vector2 *r = p_array.ptr();
 	Vector2 *w = array.ptrw();
 
-	for (int i = 0; i < p_array.size(); ++i) {
+	int i = 0;
+	const int count = p_array.size();
+	const __m256 x_basis = _mm256_setr_ps(columns[0][0], columns[0][1], columns[0][0], columns[0][1], columns[0][0], columns[0][1], columns[0][0], columns[0][1]);
+	const __m256 y_basis = _mm256_setr_ps(columns[1][0], columns[1][1], columns[1][0], columns[1][1], columns[1][0], columns[1][1], columns[1][0], columns[1][1]);
+	const __m256 origin = _mm256_setr_ps(columns[2].x, columns[2].y, columns[2].x, columns[2].y, columns[2].x, columns[2].y, columns[2].x, columns[2].y);
+
+	for (; i + 4 <= count; i += 4) {
+		const __m256 xy = _mm256_loadu_ps(reinterpret_cast<const float *>(r + i));
+		const __m256 vx = _mm256_moveldup_ps(xy);
+		const __m256 vy = _mm256_movehdup_ps(xy);
+		const __m256 transformed = Math::simd_fmadd_ps(vy, y_basis, Math::simd_fmadd_ps(vx, x_basis, origin));
+		_mm256_storeu_ps(reinterpret_cast<float *>(w + i), transformed);
+	}
+
+	for (; i < count; ++i) {
 		w[i] = xform(r[i]);
 	}
 	return array;
@@ -290,7 +305,21 @@ Vector<Vector2> Transform2D::xform_inv(const Vector<Vector2> &p_array) const {
 	const Vector2 *r = p_array.ptr();
 	Vector2 *w = array.ptrw();
 
-	for (int i = 0; i < p_array.size(); ++i) {
+	int i = 0;
+	const int count = p_array.size();
+	const __m256 origin = _mm256_setr_ps(columns[2].x, columns[2].y, columns[2].x, columns[2].y, columns[2].x, columns[2].y, columns[2].x, columns[2].y);
+	const __m256 x_basis = _mm256_setr_ps(columns[0][0], columns[1][0], columns[0][0], columns[1][0], columns[0][0], columns[1][0], columns[0][0], columns[1][0]);
+	const __m256 y_basis = _mm256_setr_ps(columns[0][1], columns[1][1], columns[0][1], columns[1][1], columns[0][1], columns[1][1], columns[0][1], columns[1][1]);
+
+	for (; i + 4 <= count; i += 4) {
+		const __m256 xy = _mm256_sub_ps(_mm256_loadu_ps(reinterpret_cast<const float *>(r + i)), origin);
+		const __m256 vx = _mm256_moveldup_ps(xy);
+		const __m256 vy = _mm256_movehdup_ps(xy);
+		const __m256 transformed = Math::simd_fmadd_ps(vy, y_basis, _mm256_mul_ps(vx, x_basis));
+		_mm256_storeu_ps(reinterpret_cast<float *>(w + i), transformed);
+	}
+
+	for (; i < count; ++i) {
 		w[i] = xform_inv(r[i]);
 	}
 	return array;

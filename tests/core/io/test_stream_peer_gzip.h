@@ -33,14 +33,69 @@
 #include "core/io/stream_peer_gzip.h"
 #include "tests/test_macros.h"
 
+#include <zlib.h>
+
 namespace TestStreamPeerGZIP {
 
 const String hello = "Hello World!!!";
+
+static uLong adler32_small_chunks(const Vector<uint8_t> &p_data, int p_len) {
+	uLong adler = adler32(0L, Z_NULL, 0);
+	int offset = 0;
+	int step = 1;
+
+	while (offset < p_len) {
+		int chunk = ((step * 17) % 31) + 1;
+		if (chunk > p_len - offset) {
+			chunk = p_len - offset;
+		}
+		adler = adler32(adler, reinterpret_cast<const Bytef *>(p_data.ptr()) + offset, chunk);
+		offset += chunk;
+		step++;
+	}
+
+	return adler;
+}
 
 TEST_CASE("[StreamPeerGZIP] Initialization") {
 	Ref<StreamPeerGZIP> spgz;
 	spgz.instantiate();
 	CHECK_EQ(spgz->get_available_bytes(), 0);
+}
+
+TEST_CASE("[Zlib][Adler32] Known vectors and scalar chunk oracle") {
+	const char adler_text[] = "Wikipedia";
+	const char crc_text[] = "123456789";
+	CHECK_EQ(
+			adler32(adler32(0L, Z_NULL, 0), reinterpret_cast<const Bytef *>(adler_text), sizeof(adler_text) - 1),
+			0x11e60398UL);
+	CHECK_EQ(
+			crc32(crc32(0L, Z_NULL, 0), reinterpret_cast<const Bytef *>(crc_text), sizeof(crc_text) - 1),
+			0xcbf43926UL);
+
+	const int lengths[] = {
+		0, 1, 2, 15, 16, 31, 32, 33, 64, 127, 128, 129, 255, 256, 257,
+		1024, 2047, 2048, 4095, 4096, 5535, 5536, 5537, 5551, 5552, 5553,
+		8191, 16384, 65536
+	};
+	Vector<uint8_t> data;
+	uint32_t state = 0x1234567u;
+	data.resize(65536);
+
+	for (int i = 0; i < data.size(); i++) {
+		state = state * 1664525u + 1013904223u;
+		data.write[i] = uint8_t((state >> 24) ^ uint32_t(i));
+	}
+
+	for (uint32_t i = 0; i < sizeof(lengths) / sizeof(lengths[0]); i++) {
+		const int len = lengths[i];
+		const uLong whole = adler32(
+				adler32(0L, Z_NULL, 0),
+				reinterpret_cast<const Bytef *>(data.ptr()),
+				len);
+		const uLong chunked = adler32_small_chunks(data, len);
+		CHECK_MESSAGE(whole == chunked, "Adler-32 one-shot checksum should match scalar-sized chunk updates.");
+	}
 }
 
 TEST_CASE("[StreamPeerGZIP] Compress/Decompress") {

@@ -30,6 +30,7 @@
 
 #include "image_decompress_bcdec.h"
 
+#include "core/math/simd_defs.h"
 #include "core/os/os.h"
 #include "core/string/print_string.h"
 
@@ -42,6 +43,118 @@ inline void bcdec_bc6h_half_s(const void *compressedBlock, void *decompressedBlo
 
 inline void bcdec_bc6h_half_u(const void *compressedBlock, void *decompressedBlock, int destinationPitch) {
 	bcdec_bc6h_half(compressedBlock, decompressedBlock, destinationPitch, false);
+}
+
+static _ALWAYS_INLINE_ uint16_t bcdec_read_u16(const uint8_t *p_src) {
+	uint16_t value;
+	memcpy(&value, p_src, sizeof(value));
+	return value;
+}
+
+static _ALWAYS_INLINE_ uint32_t bcdec_read_u32(const uint8_t *p_src) {
+	uint32_t value;
+	memcpy(&value, p_src, sizeof(value));
+	return value;
+}
+
+static _ALWAYS_INLINE_ void bcdec_bc1_build_palette(uint16_t p_c0, uint16_t p_c1, uint32_t *r_palette) {
+	const uint32_t r0 = (p_c0 >> 11) & 0x1F;
+	const uint32_t g0 = (p_c0 >> 5) & 0x3F;
+	const uint32_t b0 = p_c0 & 0x1F;
+
+	const uint32_t r1 = (p_c1 >> 11) & 0x1F;
+	const uint32_t g1 = (p_c1 >> 5) & 0x3F;
+	const uint32_t b1 = p_c1 & 0x1F;
+
+	uint32_t r = (r0 * 527 + 23) >> 6;
+	uint32_t g = (g0 * 259 + 33) >> 6;
+	uint32_t b = (b0 * 527 + 23) >> 6;
+	r_palette[0] = 0xFF000000 | (b << 16) | (g << 8) | r;
+
+	r = (r1 * 527 + 23) >> 6;
+	g = (g1 * 259 + 33) >> 6;
+	b = (b1 * 527 + 23) >> 6;
+	r_palette[1] = 0xFF000000 | (b << 16) | (g << 8) | r;
+
+	if (p_c0 > p_c1) {
+		r = ((2 * r0 + r1) * 351 + 61) >> 7;
+		g = ((2 * g0 + g1) * 2763 + 1039) >> 11;
+		b = ((2 * b0 + b1) * 351 + 61) >> 7;
+		r_palette[2] = 0xFF000000 | (b << 16) | (g << 8) | r;
+
+		r = ((r0 + r1 * 2) * 351 + 61) >> 7;
+		g = ((g0 + g1 * 2) * 2763 + 1039) >> 11;
+		b = ((b0 + b1 * 2) * 351 + 61) >> 7;
+		r_palette[3] = 0xFF000000 | (b << 16) | (g << 8) | r;
+	} else {
+		r = ((r0 + r1) * 1053 + 125) >> 8;
+		g = ((g0 + g1) * 4145 + 1019) >> 11;
+		b = ((b0 + b1) * 1053 + 125) >> 8;
+		r_palette[2] = 0xFF000000 | (b << 16) | (g << 8) | r;
+
+		r_palette[3] = 0x00000000;
+	}
+}
+
+static _ALWAYS_INLINE_ __m256i bcdec_bc1_gather_2_blocks(const uint32_t *p_palette, uint32_t p_indices0, uint32_t p_indices1, int p_block_offset) {
+	const __m256i palette_indices = _mm256_setr_epi32(
+			p_indices0 & 0x03,
+			(p_indices0 >> 2) & 0x03,
+			(p_indices0 >> 4) & 0x03,
+			(p_indices0 >> 6) & 0x03,
+			p_block_offset + (p_indices1 & 0x03),
+			p_block_offset + ((p_indices1 >> 2) & 0x03),
+			p_block_offset + ((p_indices1 >> 4) & 0x03),
+			p_block_offset + ((p_indices1 >> 6) & 0x03));
+
+	return _mm256_i32gather_epi32(reinterpret_cast<const int *>(p_palette), palette_indices, 4);
+}
+
+static _ALWAYS_INLINE_ void bcdec_bc1_4_avx2(const uint8_t *p_src, uint8_t *p_dst, int p_destination_pitch) {
+	alignas(32) uint32_t palette[16];
+	uint32_t indices[4];
+
+	for (int block = 0; block < 4; block++) {
+		const uint8_t *src_block = p_src + block * BCDEC_BC1_BLOCK_SIZE;
+		bcdec_bc1_build_palette(bcdec_read_u16(src_block), bcdec_read_u16(src_block + 2), &palette[block * 4]);
+		indices[block] = bcdec_read_u32(src_block + 4);
+	}
+
+	for (int row = 0; row < 4; row++) {
+		uint8_t *dst_row = p_dst + row * p_destination_pitch;
+		const __m256i pixels01 = bcdec_bc1_gather_2_blocks(palette, indices[0] >> (row * 8), indices[1] >> (row * 8), 4);
+		const __m256i pixels23 = bcdec_bc1_gather_2_blocks(palette + 8, indices[2] >> (row * 8), indices[3] >> (row * 8), 4);
+
+		_mm256_storeu_si256(reinterpret_cast<__m256i *>(dst_row), pixels01);
+		_mm256_storeu_si256(reinterpret_cast<__m256i *>(dst_row + 32), pixels23);
+	}
+}
+
+static inline void _decompress_mipmap_bc1_avx2(int width, int height, const uint8_t *src, uint8_t *dst) {
+	size_t src_pos = 0;
+	size_t dst_pos = 0;
+
+	const int block_pitch = 4 * 4;
+	const int image_pitch = width * 4;
+	const int width_blocks = width / 4;
+
+	for (int y = 0; y < height; y += 4) {
+		int x = 0;
+		for (; x + 4 <= width_blocks; x += 4) {
+			bcdec_bc1_4_avx2(&src[src_pos], &dst[dst_pos], image_pitch);
+			src_pos += BCDEC_BC1_BLOCK_SIZE * 4;
+			dst_pos += block_pitch * 4;
+		}
+
+		for (; x < width_blocks; x++) {
+			bcdec_bc1(&src[src_pos], &dst[dst_pos], image_pitch);
+			src_pos += BCDEC_BC1_BLOCK_SIZE;
+			dst_pos += block_pitch;
+		}
+
+		// Skip to the next row of blocks, the current one has already been filled.
+		dst_pos += 3 * image_pitch;
+	}
 }
 
 template <void (*decompress_func)(const void *, void *, int), int block_size, int pixel_size, int component_size>
@@ -187,7 +300,7 @@ static void decompress_image(BCdecFormat format, const void *src, void *dst, con
 		// Just decompress as usual, as fast as possible.
 		switch (format) {
 			case BCdec_BC1: {
-				_decompress_mipmap<bcdec_bc1, BCDEC_BC1_BLOCK_SIZE, 4, 1>(width, height, src_blocks, dec_blocks);
+				_decompress_mipmap_bc1_avx2(width, height, src_blocks, dec_blocks);
 			} break;
 			case BCdec_BC2: {
 				_decompress_mipmap<bcdec_bc2, BCDEC_BC2_BLOCK_SIZE, 4, 1>(width, height, src_blocks, dec_blocks);

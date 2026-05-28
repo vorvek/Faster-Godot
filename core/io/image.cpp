@@ -1978,6 +1978,73 @@ static void _generate_po2_mipmap(const Component *p_src, Component *p_dst, uint3
 	}
 }
 
+static _ALWAYS_INLINE_ __m128 _average_rgbah_mipmap_pair_f16c(__m256 p_up, __m256 p_down) {
+	const __m128 up_left = _mm256_castps256_ps128(p_up);
+	const __m128 up_right = _mm256_extractf128_ps(p_up, 1);
+	const __m128 down_left = _mm256_castps256_ps128(p_down);
+	const __m128 down_right = _mm256_extractf128_ps(p_down, 1);
+	const __m128 sum = _mm_add_ps(_mm_add_ps(up_left, up_right), _mm_add_ps(down_left, down_right));
+	return _mm_mul_ps(sum, _mm_set1_ps(0.25f));
+}
+
+static void _average_rgbah_mipmap_pixel_scalar(const uint16_t *p_up, const uint16_t *p_down, uint16_t *p_dst) {
+	for (int i = 0; i < 4; i++) {
+		const float up_left = Math::half_to_float(p_up[i]);
+		const float up_right = Math::half_to_float(p_up[i + 4]);
+		const float down_left = Math::half_to_float(p_down[i]);
+		const float down_right = Math::half_to_float(p_down[i + 4]);
+		const float average = (up_left + up_right + down_left + down_right) * 0.25f;
+		p_dst[i] = Math::make_half_float(average);
+	}
+}
+
+static bool _generate_po2_mipmap_rgbah_f16c(const uint16_t *p_src, uint16_t *p_dst, uint32_t p_width, uint32_t p_height) {
+	if (p_width < 2 || p_height < 2) {
+		return false;
+	}
+
+	constexpr uint32_t CC = 4;
+
+	const uint32_t dst_w = p_width >> 1;
+	const uint32_t dst_h = p_height >> 1;
+	const uint32_t src_row_stride = p_width * CC;
+
+	for (uint32_t y = 0; y < dst_h; y++) {
+		const uint16_t *up_row = p_src + y * 2 * src_row_stride;
+		const uint16_t *down_row = up_row + src_row_stride;
+		uint16_t *dst_row = p_dst + y * dst_w * CC;
+
+		uint32_t x = 0;
+		for (; x + 1 < dst_w; x += 2) {
+			const uint16_t *up = up_row + x * 2 * CC;
+			const uint16_t *down = down_row + x * 2 * CC;
+
+			const __m256i up_half = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(up));
+			const __m256i down_half = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(down));
+
+			const __m128i up_half_left = _mm256_castsi256_si128(up_half);
+			const __m128i up_half_right = _mm256_extracti128_si256(up_half, 1);
+			const __m128i down_half_left = _mm256_castsi256_si128(down_half);
+			const __m128i down_half_right = _mm256_extracti128_si256(down_half, 1);
+
+			const __m128 avg_left = _average_rgbah_mipmap_pair_f16c(_mm256_cvtph_ps(up_half_left), _mm256_cvtph_ps(down_half_left));
+			const __m128 avg_right = _average_rgbah_mipmap_pair_f16c(_mm256_cvtph_ps(up_half_right), _mm256_cvtph_ps(down_half_right));
+			const __m256 avg = _mm256_insertf128_ps(_mm256_castps128_ps256(avg_left), avg_right, 1);
+			const __m128i out_half = _mm256_cvtps_ph(avg, 0);
+
+			_mm_storeu_si128(reinterpret_cast<__m128i *>(dst_row + x * CC), out_half);
+		}
+
+		for (; x < dst_w; x++) {
+			const uint16_t *up = up_row + x * 2 * CC;
+			const uint16_t *down = down_row + x * 2 * CC;
+			_average_rgbah_mipmap_pixel_scalar(up, down, dst_row + x * CC);
+		}
+	}
+
+	return true;
+}
+
 void Image::_generate_mipmap_from_format(Image::Format p_format, const uint8_t *p_src, uint8_t *p_dst, uint32_t p_width, uint32_t p_height, bool p_renormalize) {
 	const float *src_float = reinterpret_cast<const float *>(p_src);
 	float *dst_float = reinterpret_cast<float *>(p_dst);
@@ -2055,7 +2122,7 @@ void Image::_generate_mipmap_from_format(Image::Format p_format, const uint8_t *
 		case Image::FORMAT_RGBAH: {
 			if (p_renormalize) {
 				_generate_po2_mipmap<uint16_t, 4, true, Image::average_4_half, Image::renormalize_half>(src_u16, dst_u16, p_width, p_height);
-			} else {
+			} else if (!_generate_po2_mipmap_rgbah_f16c(src_u16, dst_u16, p_width, p_height)) {
 				_generate_po2_mipmap<uint16_t, 4, false, Image::average_4_half, Image::renormalize_half>(src_u16, dst_u16, p_width, p_height);
 			}
 		} break;

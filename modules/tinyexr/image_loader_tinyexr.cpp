@@ -30,11 +30,96 @@
 
 #include "image_loader_tinyexr.h"
 
+#include "core/math/simd_defs.h"
+
 #include <zlib.h> // Should come before including tinyexr.
 
 #include "thirdparty/tinyexr/tinyexr.h"
 
 #include "core/io/file_access_memory.h"
+
+static _ALWAYS_INLINE_ void _tinyexr_store_8_rgba_half(
+		__m128i p_r,
+		__m128i p_g,
+		__m128i p_b,
+		__m128i p_a,
+		uint16_t *p_dst) {
+	const __m128i rg_lo = _mm_unpacklo_epi16(p_r, p_g);
+	const __m128i rg_hi = _mm_unpackhi_epi16(p_r, p_g);
+	const __m128i ba_lo = _mm_unpacklo_epi16(p_b, p_a);
+	const __m128i ba_hi = _mm_unpackhi_epi16(p_b, p_a);
+
+	_mm_storeu_si128(reinterpret_cast<__m128i *>(p_dst), _mm_unpacklo_epi32(rg_lo, ba_lo));
+	_mm_storeu_si128(reinterpret_cast<__m128i *>(p_dst + 8), _mm_unpackhi_epi32(rg_lo, ba_lo));
+	_mm_storeu_si128(reinterpret_cast<__m128i *>(p_dst + 16), _mm_unpacklo_epi32(rg_hi, ba_hi));
+	_mm_storeu_si128(reinterpret_cast<__m128i *>(p_dst + 24), _mm_unpackhi_epi32(rg_hi, ba_hi));
+}
+
+static _ALWAYS_INLINE_ void _tinyexr_pack_row_float_to_half_f16c(
+		const float *p_r,
+		const float *p_g,
+		const float *p_b,
+		const float *p_a,
+		uint16_t *p_dst,
+		int p_width,
+		int p_output_channels) {
+	int x = 0;
+	for (; x + 8 <= p_width; x += 8) {
+		const __m128i r_half = _mm256_cvtps_ph(_mm256_loadu_ps(p_r + x), 0);
+
+		switch (p_output_channels) {
+			case 1: {
+				_mm_storeu_si128(reinterpret_cast<__m128i *>(p_dst + x), r_half);
+			} break;
+			case 2: {
+				const __m128i g_half = _mm256_cvtps_ph(_mm256_loadu_ps(p_g + x), 0);
+				const __m128i rg_lo = _mm_unpacklo_epi16(r_half, g_half);
+				const __m128i rg_hi = _mm_unpackhi_epi16(r_half, g_half);
+				_mm_storeu_si128(reinterpret_cast<__m128i *>(p_dst + x * 2), rg_lo);
+				_mm_storeu_si128(reinterpret_cast<__m128i *>(p_dst + x * 2 + 8), rg_hi);
+			} break;
+			case 3: {
+				const __m128i g_half = _mm256_cvtps_ph(_mm256_loadu_ps(p_g + x), 0);
+				const __m128i b_half = _mm256_cvtps_ph(_mm256_loadu_ps(p_b + x), 0);
+				alignas(16) uint16_t r_tmp[8];
+				alignas(16) uint16_t g_tmp[8];
+				alignas(16) uint16_t b_tmp[8];
+				_mm_store_si128(reinterpret_cast<__m128i *>(r_tmp), r_half);
+				_mm_store_si128(reinterpret_cast<__m128i *>(g_tmp), g_half);
+				_mm_store_si128(reinterpret_cast<__m128i *>(b_tmp), b_half);
+
+				uint16_t *dst = p_dst + x * 3;
+				for (int i = 0; i < 8; i++) {
+					*dst++ = r_tmp[i];
+					*dst++ = g_tmp[i];
+					*dst++ = b_tmp[i];
+				}
+			} break;
+			case 4: {
+				const __m128i g_half = _mm256_cvtps_ph(_mm256_loadu_ps(p_g + x), 0);
+				const __m128i b_half = _mm256_cvtps_ph(_mm256_loadu_ps(p_b + x), 0);
+				const __m128i a_half = _mm256_cvtps_ph(_mm256_loadu_ps(p_a + x), 0);
+				_tinyexr_store_8_rgba_half(r_half, g_half, b_half, a_half, p_dst + x * 4);
+			} break;
+			default:
+				CRASH_NOW();
+		}
+	}
+
+	uint16_t *dst = p_dst + x * p_output_channels;
+	for (; x < p_width; x++) {
+		*dst++ = Math::make_half_float(p_r[x]);
+		if (p_output_channels > 1) {
+			*dst++ = Math::make_half_float(p_g[x]);
+		}
+		if (p_output_channels > 2) {
+			*dst++ = Math::make_half_float(p_b[x]);
+		}
+		if (p_output_channels > 3) {
+			*dst++ = Math::make_half_float(p_a[x]);
+		}
+	}
+}
 
 Error ImageLoaderTinyEXR::load_image(Ref<Image> p_image, Ref<FileAccess> f, BitField<ImageFormatLoader::LoaderFlags> p_flags, float p_scale) {
 	Vector<uint8_t> src_image;
@@ -217,33 +302,34 @@ Error ImageLoaderTinyEXR::load_image(Ref<Image> p_image, Ref<FileAccess> f, BitF
 				if (use_float16) {
 					uint16_t *row_w = first_row_w16 + (y * exr_image.width * output_channels);
 
-					for (int x = 0; x < tw; x++) {
-						Color color;
-						color.r = *r_channel++;
-						if (g_channel) {
-							color.g = *g_channel++;
-						}
-						if (b_channel) {
-							color.b = *b_channel++;
-						}
-						if (a_channel) {
-							color.a = *a_channel++;
-						}
-
-						if (p_flags & FLAG_FORCE_LINEAR) {
+					if (p_flags & FLAG_FORCE_LINEAR) {
+						for (int x = 0; x < tw; x++) {
+							Color color;
+							color.r = *r_channel++;
+							if (g_channel) {
+								color.g = *g_channel++;
+							}
+							if (b_channel) {
+								color.b = *b_channel++;
+							}
+							if (a_channel) {
+								color.a = *a_channel++;
+							}
 							color = color.srgb_to_linear();
-						}
 
-						*row_w++ = Math::make_half_float(color.r);
-						if (g_channel) {
-							*row_w++ = Math::make_half_float(color.g);
+							*row_w++ = Math::make_half_float(color.r);
+							if (g_channel) {
+								*row_w++ = Math::make_half_float(color.g);
+							}
+							if (b_channel) {
+								*row_w++ = Math::make_half_float(color.b);
+							}
+							if (a_channel) {
+								*row_w++ = Math::make_half_float(color.a);
+							}
 						}
-						if (b_channel) {
-							*row_w++ = Math::make_half_float(color.b);
-						}
-						if (a_channel) {
-							*row_w++ = Math::make_half_float(color.a);
-						}
+					} else {
+						_tinyexr_pack_row_float_to_half_f16c(r_channel, g_channel, b_channel, a_channel, row_w, tw, output_channels);
 					}
 				} else {
 					float *row_w = first_row_w32 + (y * exr_image.width * output_channels);

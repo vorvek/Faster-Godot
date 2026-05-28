@@ -58,6 +58,12 @@ TEST_CASE("[HMACContext] HMAC digest") {
 	hmac_context_digest_test(HashingContext::HashType::HASH_SHA1, "a0ac4cd68a2f4812c355983d94e8d025afe7dddf");
 }
 
+void chacha20_poly1305_self_test();
+
+TEST_CASE("[CryptoMbedTLS] ChaCha20 and Poly1305 RFC self tests") {
+	chacha20_poly1305_self_test();
+}
+
 void crypto_key_public_only_test(const String &p_key_path, bool public_only);
 
 TEST_CASE("[Crypto] CryptoKey is_public_only") {

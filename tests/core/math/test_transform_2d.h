@@ -90,6 +90,28 @@ TEST_CASE("[Transform2D] xform") {
 	CHECK(T.xform(v) == expected);
 }
 
+TEST_CASE("[Transform2D] Array transforms match per-vector transforms") {
+	const Transform2D transform = Transform2D(
+			Vector2(1.25, -0.5),
+			Vector2(0.25, 2.0),
+			Vector2(3.0, -2.0));
+
+	Vector<Vector2> points;
+	for (int i = 0; i < 17; i++) {
+		points.push_back(Vector2(i * 0.25f - 2.0f, i * -0.5f + 1.25f));
+	}
+
+	const Vector<Vector2> transformed = transform.xform(points);
+	const Vector<Vector2> inverse_transformed = transform.xform_inv(points);
+	REQUIRE(transformed.size() == points.size());
+	REQUIRE(inverse_transformed.size() == points.size());
+
+	for (int i = 0; i < points.size(); i++) {
+		CHECK_MESSAGE(transformed[i].is_equal_approx(transform.xform(points[i])), "Array xform result should match scalar xform.");
+		CHECK_MESSAGE(inverse_transformed[i].is_equal_approx(transform.xform_inv(points[i])), "Array inverse xform result should match scalar inverse xform.");
+	}
+}
+
 TEST_CASE("[Transform2D] Basis xform") {
 	constexpr Vector2 v = Vector2(2, 2);
 	constexpr Transform2D T1 = Transform2D(Vector2(1, 2), Vector2(3, 4), Vector2(0, 0));
