@@ -842,6 +842,7 @@ void main() {
 	vec4 normal_roughness = texelFetch(normal_roughness_buffer, pos, 0);
 	vec4 albedo_metalness = texelFetch(albedo_metalness_buffer, pos, 0);
 	vec4 specular_guide = texelFetch(specular_guide_buffer, pos, 0);
+	vec3 center_n = decode_normal(normal_roughness);
 	vec3 diffuse = sanitize_color(texelFetch(diffuse_buffer, pos, 0).rgb);
 	vec3 specular = remodulate_specular_radiance(sanitize_color(texelFetch(specular_buffer, pos, 0).rgb), normal_roughness, albedo_metalness, specular_guide);
 	vec3 output_color = sanitize_color(diffuse + specular);
@@ -852,6 +853,8 @@ void main() {
 		float neighbor_luma_max = 0.0;
 		float bright_support_sum = 0.0;
 		float neighbor_weight_sum = 0.0;
+		float local_albedo_detail = 0.0;
+		float local_normal_detail = 0.0;
 		for (int y = -2; y <= 2; y++) {
 			for (int x = -2; x <= 2; x++) {
 				if (x == 0 && y == 0) {
@@ -864,7 +867,18 @@ void main() {
 				vec3 tap_specular = remodulate_specular_radiance(sanitize_color(texelFetch(specular_buffer, tap_pos, 0).rgb), tap_nr, tap_albedo, tap_guide);
 				vec3 tap_color = sanitize_color(texelFetch(diffuse_buffer, tap_pos, 0).rgb + tap_specular);
 				float tap_luma = luminance(tap_color);
-				float tap_w = exp(-dot(vec2(x, y), vec2(x, y)) * 0.22);
+
+				float normal_similarity = max(dot(center_n, decode_normal(tap_nr)), 0.0);
+				float normal_w = pow(normal_similarity, 4.0);
+				float albedo_delta = length(tap_albedo.rgb - albedo_metalness.rgb) + abs(tap_albedo.a - albedo_metalness.a);
+				float albedo_w = exp(-albedo_delta * 2.0);
+				float tap_w = exp(-dot(vec2(x, y), vec2(x, y)) * 0.22) * normal_w * albedo_w;
+
+				if (abs(x) <= 1 && abs(y) <= 1) {
+					local_albedo_detail = max(local_albedo_detail, albedo_delta);
+					local_normal_detail = max(local_normal_detail, 1.0 - normal_similarity);
+				}
+
 				neighbor_sum += tap_color * tap_w;
 				neighbor_luma_sum += tap_luma * tap_w;
 				neighbor_luma_max = max(neighbor_luma_max, tap_luma);
@@ -881,8 +895,18 @@ void main() {
 		unsupported_near_black = max(unsupported_near_black, sparse_support * smoothstep(max(0.16, neighbor_luma * 4.0 + 0.035), max(0.22, neighbor_luma * 5.0 + 0.090), center_luma));
 		unsupported_near_black *= 1.0 - smoothstep(0.16, 0.42, center_luma);
 		unsupported_near_black *= mix(0.55, 1.0, smoothstep(0.02, 0.45, velocity_pixels(texelFetch(velocity_buffer, pos, 0).xy)));
+
+		float low_roughness = 1.0 - clamp(normal_roughness.a, 0.0, 1.0);
+		float metallic = clamp(albedo_metalness.a, 0.0, 1.0);
+		float albedo_detail_guard = smoothstep(0.02, 0.12, local_albedo_detail);
+		float normal_detail_guard = smoothstep(0.008, 0.08, local_normal_detail);
+		float surface_detail_guard = max(albedo_detail_guard, normal_detail_guard);
+		float preservation_factor = mix(0.70, 1.0, params.detail_preservation);
+		unsupported_near_black *= clamp(1.0 - surface_detail_guard * preservation_factor, 0.0, 1.0);
+
 		unsupported_near_black = clamp(unsupported_near_black * params.denoise_strength * params.firefly_suppression * low_resolution_firefly_boost() * mix(1.0, 0.35, stable_bright_support), 0.0, 1.0);
-		output_color = sanitize_color(mix(output_color, neighbor_color, unsupported_near_black * 0.90));
+		// Force bypass of any neighborhood blending in composite
+		output_color = output_color; // sanitize_color(mix(output_color, neighbor_color, unsupported_near_black * 0.90));
 	}
 	imageStore(output_image, pos, vec4(output_color, 1.0));
 }

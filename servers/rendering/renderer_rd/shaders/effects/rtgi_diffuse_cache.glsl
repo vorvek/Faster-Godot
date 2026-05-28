@@ -64,51 +64,7 @@ float relative_delta(float a, float b, float floor_value) {
 }
 
 vec3 clamp_current_diffuse_outlier(ivec2 pos, vec3 current, vec4 current_normal_roughness, vec4 current_viewz_hitdist) {
-	vec3 current_normal = decode_normal(current_normal_roughness);
-	float current_luma = luminance(current);
-	vec3 color_sum = vec3(0.0);
-	float luma_sum = 0.0;
-	float luma_sq_sum = 0.0;
-	float weight_sum = 0.0;
-
-	for (int y = -2; y <= 2; y++) {
-		for (int x = -2; x <= 2; x++) {
-			if (x == 0 && y == 0) {
-				continue;
-			}
-			ivec2 tap_pos = clamp(pos + ivec2(x, y), ivec2(0), ivec2(params.resolution) - ivec2(1));
-			vec4 tap_normal_roughness = texelFetch(normal_roughness_buffer, tap_pos, 0);
-			vec4 tap_viewz_hitdist = texelFetch(viewz_hitdist_buffer, tap_pos, 0);
-			float normal_similarity = max(dot(current_normal, decode_normal(tap_normal_roughness)), 0.0);
-			float depth_scale = max(max(current_viewz_hitdist.x, tap_viewz_hitdist.x), 1.0);
-			float relative_depth_error = abs(current_viewz_hitdist.x - tap_viewz_hitdist.x) / depth_scale;
-			if (normal_similarity < 0.82 || relative_depth_error > 0.12) {
-				continue;
-			}
-			vec3 tap = sanitize_color(imageLoad(source_image, tap_pos).rgb);
-			float tap_luma = luminance(tap);
-			float spatial_w = exp(-dot(vec2(x, y), vec2(x, y)) * 0.20);
-			float w = spatial_w * pow(normal_similarity, 3.0);
-			color_sum += tap * w;
-			luma_sum += tap_luma * w;
-			luma_sq_sum += tap_luma * tap_luma * w;
-			weight_sum += w;
-		}
-	}
-
-	if (weight_sum <= 1e-4) {
-		return current;
-	}
-
-	vec3 mean_color = color_sum / weight_sum;
-	float mean_luma = luma_sum / weight_sum;
-	float sigma = sqrt(max(luma_sq_sum / weight_sum - mean_luma * mean_luma, 0.0));
-	float dark_neighborhood = 1.0 - smoothstep(0.08, 0.32, mean_luma);
-	float hot_threshold = max(0.14, mean_luma * 3.25 + sigma * 2.0 + 0.035);
-	float hot = smoothstep(hot_threshold, hot_threshold + 0.08, current_luma) * dark_neighborhood;
-	float luma_cap = max(mean_luma + sigma * 2.25 + 0.045, mean_luma * 2.20 + 0.055);
-	vec3 clamped = clamp_luminance(current, luma_cap);
-	return sanitize_color(mix(current, mix(clamped, mean_color, 0.30), clamp(hot * 0.92, 0.0, 1.0)));
+	return current;
 }
 
 float variance_ratio_from_stats(vec4 stats_sample) {
@@ -118,7 +74,7 @@ float variance_ratio_from_stats(vec4 stats_sample) {
 	return sqrt(variance_value) / max(mean_value, 0.08);
 }
 
-bool load_neighborhood_candidate(ivec2 candidate_pos, vec4 current_history_id, vec3 current_normal, float current_viewz, float current_hitdist, float current_luma, out vec4 candidate_radiance, out vec4 candidate_meta, out vec4 candidate_stats, out float candidate_quality) {
+bool load_neighborhood_candidate(ivec2 candidate_pos, vec4 current_history_id, vec3 current_normal, float current_viewz, float current_hitdist, float current_luma, float roughness, out vec4 candidate_radiance, out vec4 candidate_meta, out vec4 candidate_stats, out float candidate_quality) {
 	candidate_quality = 0.0;
 	if (candidate_pos.x < 0 || candidate_pos.y < 0 || candidate_pos.x >= int(params.resolution.x) || candidate_pos.y >= int(params.resolution.y)) {
 		return false;
@@ -139,20 +95,23 @@ bool load_neighborhood_candidate(ivec2 candidate_pos, vec4 current_history_id, v
 	if (candidate_age < 2.0 || candidate_confidence <= 0.08) {
 		return false;
 	}
-	float candidate_luma_cap = max(0.08, current_luma * 0.72);
+	float candidate_luma_cap = max(mix(0.08, 0.85, clamp(roughness, 0.0, 1.0)), current_luma * mix(0.72, 4.5, clamp(roughness, 0.0, 1.0)));
 	if (candidate_stats.y > candidate_luma_cap) {
 		return false;
 	}
 
 	vec3 candidate_normal = decode_normal(candidate_meta);
 	float normal_dot = dot(current_normal, candidate_normal);
-	if (normal_dot < 0.93) {
+	float candidate_normal_threshold = mix(0.85, 0.10, clamp(roughness, 0.0, 1.0));
+	if (normal_dot < candidate_normal_threshold) {
 		return false;
 	}
 
 	float depth_delta = relative_delta(current_viewz, candidate_meta.w, 0.25);
 	float hit_delta = relative_delta(current_hitdist, candidate_stats.x, 0.25);
-	if (depth_delta > 0.045 || hit_delta > 0.12) {
+	float candidate_depth_threshold = mix(0.045, 0.18, clamp(roughness, 0.0, 1.0));
+	float candidate_hit_threshold = mix(0.12, 0.85, clamp(roughness, 0.0, 1.0));
+	if (depth_delta > candidate_depth_threshold || hit_delta > candidate_hit_threshold) {
 		return false;
 	}
 
@@ -168,7 +127,7 @@ bool load_neighborhood_candidate(ivec2 candidate_pos, vec4 current_history_id, v
 		return false;
 	}
 
-	float normal_weight = smoothstep(0.93, 0.995, normal_dot);
+	float normal_weight = smoothstep(candidate_normal_threshold, 0.995, normal_dot);
 	float delta_weight = 1.0 - smoothstep(0.55, 1.85, radiance_delta);
 	float variance_weight = 1.0 - smoothstep(0.35, 1.15, variance_ratio);
 	float age_weight = smoothstep(2.0, 18.0, candidate_age);
@@ -241,7 +200,9 @@ void main() {
 		vec3 current_normal = decode_normal(current_normal_roughness);
 		vec3 previous_normal = decode_normal(previous_meta_sample);
 		float normal_dot = dot(current_normal, previous_normal);
-		if (normal_dot < 0.88) {
+		float roughness = current_normal_roughness.a;
+		float normal_threshold = mix(0.80, 0.05, clamp(roughness, 0.0, 1.0));
+		if (normal_dot < normal_threshold) {
 			reusable = false;
 			rejection = 5.0;
 		}
@@ -249,7 +210,10 @@ void main() {
 	if (reusable) {
 		float depth_delta = relative_delta(current_viewz_hitdist.x, previous_meta_sample.w, 0.25);
 		float hit_delta = relative_delta(current_viewz_hitdist.y, previous_stats_sample.x, 0.25);
-		if (depth_delta > 0.08 || hit_delta > 0.20) {
+		float roughness = current_normal_roughness.a;
+		float depth_threshold = mix(0.08, 0.28, clamp(roughness, 0.0, 1.0));
+		float hit_threshold = mix(0.20, 1.25, clamp(roughness, 0.0, 1.0));
+		if (depth_delta > depth_threshold || hit_delta > hit_threshold) {
 			reusable = false;
 			rejection = 6.0;
 		}
@@ -262,8 +226,7 @@ void main() {
 		}
 	}
 	if (reusable) {
-		float variance_ratio = previous_sigma / max(previous_mean, 0.08);
-		if (previous_age < 1.0 || previous_confidence <= 0.04 || variance_ratio > 1.85) {
+		if (previous_age < 1.0 || previous_confidence <= 0.04) {
 			reusable = false;
 			rejection = 8.0;
 		}
@@ -283,8 +246,9 @@ void main() {
 		vec4 candidate_meta;
 		vec4 candidate_stats;
 		float candidate_quality = 0.0;
+		float roughness = current_normal_roughness.a;
 		for (int i = 0; i < 5; i++) {
-			if (load_neighborhood_candidate(center_pos + offsets[i], current_history_id, current_normal, current_viewz_hitdist.x, current_viewz_hitdist.y, current_luma, candidate_radiance, candidate_meta, candidate_stats, candidate_quality) && candidate_quality > best_quality) {
+			if (load_neighborhood_candidate(center_pos + offsets[i], current_history_id, current_normal, current_viewz_hitdist.x, current_viewz_hitdist.y, current_luma, roughness, candidate_radiance, candidate_meta, candidate_stats, candidate_quality) && candidate_quality > best_quality) {
 				best_quality = candidate_quality;
 				previous_radiance_sample = candidate_radiance;
 				previous_meta_sample = candidate_meta;
@@ -309,7 +273,9 @@ void main() {
 	if (reusable) {
 		hit = 1.0;
 		float radiance_delta = relative_delta(current_luma, previous_luma, 0.08);
-		float normal_weight = smoothstep(0.88, 0.98, dot(decode_normal(current_normal_roughness), decode_normal(previous_meta_sample)));
+		float roughness = current_normal_roughness.a;
+		float normal_threshold = mix(0.80, 0.05, clamp(roughness, 0.0, 1.0));
+		float normal_weight = smoothstep(normal_threshold, 0.98, dot(decode_normal(current_normal_roughness), decode_normal(previous_meta_sample)));
 		float delta_weight = 1.0 - smoothstep(0.75, 2.25, radiance_delta);
 		float variance_ratio = previous_sigma / max(previous_mean, 0.08);
 		float variance_weight = 1.0 - smoothstep(0.35, 1.65, variance_ratio);
@@ -331,7 +297,7 @@ void main() {
 		float base_max_previous_luma = max(current_luma * 3.15 + 0.08, previous_mean + previous_sigma * 2.50 + 0.05);
 		float tight_max_previous_luma = max(current_luma * (recovered ? 1.55 : 2.10) + 0.05, previous_mean + previous_sigma * (recovered ? 1.35 : 1.85) + 0.035);
 		float max_previous_luma = mix(base_max_previous_luma, tight_max_previous_luma, directional_strength);
-		vec3 clamped_previous = clamp_luminance(previous, max_previous_luma);
+		vec3 clamped_previous = previous;
 		filtered = sanitize_color(mix(current, clamped_previous, history_weight));
 		out_age = min(previous_age + 1.0, params.max_history);
 		out_confidence = clamp(mix(current_confidence, previous_confidence, history_weight) + 0.05, 0.0, 1.0);

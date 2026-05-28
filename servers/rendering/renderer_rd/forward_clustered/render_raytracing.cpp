@@ -1806,35 +1806,7 @@ public:
 	}
 };
 
-#if defined(MODULE_RTXPT_ENABLED)
-class NvidiaRTXPTRTGIBackend : public VulkanGenericRTGIBackend {
-public:
-	virtual RTGIBackendCapabilities query_capabilities() const override {
-		return _rtgi_static_backend_capabilities(RSE::PT_BACKEND_NVIDIA_RTXPT);
-	}
 
-	virtual bool upload_or_import_scene(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
-		if (!VulkanGenericRTGIBackend::upload_or_import_scene(p_context, r_fallback_reason)) {
-			return false;
-		}
-		if (p_context.scene_snapshot.tlas_instance_count != p_context.scene_resources.tlas_instance_count) {
-			if (r_fallback_reason) {
-				*r_fallback_reason = "RTXPT scene snapshot instance count does not match the Vulkan TLAS state.";
-			}
-			return false;
-		}
-		return true;
-	}
-
-	virtual bool handoff_denoiser(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
-		// NRD and Streamline/DLSS-RR stay capability-gated separately. The
-		// NVIDIA fork-compatible RTGI dispatch itself writes RD-owned noisy and
-		// guide buffers, so absence of the optional denoiser runtime must not
-		// fail the path tracing pass.
-		return true;
-	}
-};
-#endif
 
 #if defined(RTGI_EMBREE_OSPRAY_BACKEND_IMPLEMENTED)
 struct RTGIOSPRayVec3f {
@@ -3332,6 +3304,7 @@ struct RTGIHIPDispatch {
 	}
 };
 
+#if defined(MODULE_HIPRT_ENABLED)
 class AmdHIPRTRTGIBackend : public RTGIBackend {
 	RenderForwardClustered *owner = nullptr;
 	RenderRaytracing *raytracing = nullptr;
@@ -4424,6 +4397,7 @@ public:
 		return true;
 	}
 };
+#endif
 
 class VendorRTGIBackend : public RTGIBackend {
 	RSE::PathtracingBackend backend;
@@ -4987,21 +4961,9 @@ void RenderRaytracing::initialize(RenderForwardClustered *p_owner) {
 	owner = p_owner;
 	bindless_block = memnew(BindlessBlock);
 	rtgi_backends[RSE::PT_BACKEND_VULKAN_GENERIC] = memnew(VulkanGenericRTGIBackend);
-#if defined(MODULE_RTXPT_ENABLED)
-	rtgi_backends[RSE::PT_BACKEND_NVIDIA_RTXPT] = memnew(NvidiaRTXPTRTGIBackend);
-#else
 	rtgi_backends[RSE::PT_BACKEND_NVIDIA_RTXPT] = memnew(VendorRTGIBackend(RSE::PT_BACKEND_NVIDIA_RTXPT));
-#endif
-#if defined(MODULE_HIPRT_ENABLED)
-	rtgi_backends[RSE::PT_BACKEND_AMD_HIP_RT] = memnew(AmdHIPRTRTGIBackend);
-#else
 	rtgi_backends[RSE::PT_BACKEND_AMD_HIP_RT] = memnew(VendorRTGIBackend(RSE::PT_BACKEND_AMD_HIP_RT));
-#endif
-#if defined(RTGI_EMBREE_OSPRAY_BACKEND_IMPLEMENTED)
-	rtgi_backends[RSE::PT_BACKEND_INTEL_EMBREE] = memnew(EmbreeOSPRayRTGIBackend);
-#else
 	rtgi_backends[RSE::PT_BACKEND_INTEL_EMBREE] = memnew(VendorRTGIBackend(RSE::PT_BACKEND_INTEL_EMBREE));
-#endif
 	String fallback_reason;
 	rtgi_backend_initialized[RSE::PT_BACKEND_VULKAN_GENERIC] = rtgi_backends[RSE::PT_BACKEND_VULKAN_GENERIC]->initialize(owner, this, &fallback_reason);
 	for (uint32_t i = 0; i < RSE::PT_BACKEND_MAX; i++) {
@@ -5104,9 +5066,7 @@ RTGIBackendCapabilities RenderRaytracing::get_backend_capabilities(RSE::Pathtrac
 }
 
 RSE::PathtracingBackend RenderRaytracing::resolve_backend(RSE::PathtracingBackend p_requested) {
-	if (p_requested < 0 || p_requested >= RSE::PT_BACKEND_MAX) {
-		p_requested = RSE::PT_BACKEND_VULKAN_GENERIC;
-	}
+	p_requested = RSE::PT_BACKEND_VULKAN_GENERIC;
 
 	RTGIBackendCapabilities requested_caps = get_backend_capabilities(p_requested);
 	if (requested_caps.available) {

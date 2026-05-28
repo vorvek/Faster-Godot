@@ -681,17 +681,7 @@ bool Environment::is_rtgi_enabled() const {
 }
 
 void Environment::set_rtgi_backend(RTGIBackend p_backend) {
-	switch ((int)p_backend) {
-		case RTGI_BACKEND_VULKAN_GENERIC:
-		case RTGI_BACKEND_NVIDIA_RTXPT:
-		case RTGI_BACKEND_AMD_HIP_RT:
-		case RTGI_BACKEND_INTEL_EMBREE:
-			rtgi_backend = p_backend;
-			break;
-		default:
-			rtgi_backend = RTGI_BACKEND_VULKAN_GENERIC;
-			break;
-	}
+	rtgi_backend = RTGI_BACKEND_VULKAN_GENERIC;
 	_update_pathtracing();
 }
 
@@ -1951,7 +1941,7 @@ void Environment::_bind_methods() {
 
 	ADD_GROUP("RTGI", "rtgi_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_enabled", PROPERTY_HINT_GROUP_ENABLE), "set_rtgi_enabled", "is_rtgi_enabled");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_backend", PROPERTY_HINT_ENUM, "Vulkan Generic:0,Intel Embree:3"), "set_rtgi_backend", "get_rtgi_backend");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_backend", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR), "set_rtgi_backend", "get_rtgi_backend");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_mode", PROPERTY_HINT_ENUM, "Reflections RT Only,Full Path Tracing"), "set_rtgi_mode", "get_rtgi_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_samples_per_pixel", PROPERTY_HINT_RANGE, "1,16,1"), "set_rtgi_samples_per_pixel", "get_rtgi_samples_per_pixel");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_max_bounces", PROPERTY_HINT_RANGE, "1,8,1"), "set_rtgi_max_bounces", "get_rtgi_max_bounces");

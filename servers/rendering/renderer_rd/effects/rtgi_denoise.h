@@ -105,6 +105,7 @@ public:
 			const StringName &p_output_texture,
 			float p_denoise_strength,
 			float p_firefly_suppression,
+			float p_detail_preservation,
 			const Size2i &p_process_size,
 			uint32_t p_view = 0);
 
