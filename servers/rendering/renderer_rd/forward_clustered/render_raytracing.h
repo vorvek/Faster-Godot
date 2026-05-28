@@ -43,6 +43,14 @@
 #include "servers/rendering/renderer_rd/shaders/raytracing/multimesh_merge.glsl.gen.h"
 #include "servers/rendering/rendering_device.h"
 
+// The Forward+ renderer has an internal split-signal FidelityFX-style RTGI
+// denoise graph. AMD denoiser selections can hand off to it when their selected
+// RTGI backend is otherwise available. This does not imply the external
+// FidelityFX SDK denoiser ABI is linked.
+#ifndef RTGI_FIDELITYFX_DENOISER_HANDOFF_ENABLED
+#define RTGI_FIDELITYFX_DENOISER_HANDOFF_ENABLED
+#endif
+
 #define RB_TEX_RAYTRACING SNAME("raytracing")
 #define RB_TEX_RT_DIFFUSE_RADIANCE SNAME("rt_diffuse_radiance")
 #define RB_TEX_RT_SPECULAR_RADIANCE SNAME("rt_specular_radiance")
@@ -439,6 +447,8 @@ struct RTGIBackendCapabilities {
 	bool external_semaphore = false;
 	bool timeline_semaphore = false;
 	bool staged_copy = false;
+	bool vendor_scene_import = false;
+	bool vendor_sdk_dispatch = false;
 	bool denoiser_handoff = false;
 	bool backend_compiled = false;
 	bool runtime_detected = false;
@@ -448,12 +458,25 @@ struct RTGIBackendCapabilities {
 	bool sdk_headers_present = false;
 	String vulkan_interop_mode;
 	String resource_exchange_sync;
+	String scene_import_path;
+	String trace_dispatch_path;
 	bool native_probe_update = false;
 	bool generic_probe_update_fallback = false;
 	bool denoiser_runtime_detected = false;
 	bool denoiser_available = false;
 	String denoiser_name;
 	String denoiser_failure_reason;
+	bool nvidia_streamline_headers_present = false;
+	bool nvidia_streamline_runtime_detected = false;
+	bool nvidia_dlss_rr_handoff_ready = false;
+	bool nvidia_dlss_rr_device_supported = false;
+	bool nvidia_dlss_rr_available = false;
+	String nvidia_streamline_failure_reason;
+	bool nvidia_nrd_headers_present = false;
+	String nvidia_nrd_version;
+	bool amd_fidelityfx_sdk_headers_present = false;
+	String amd_fidelityfx_denoiser_version;
+	String denoiser_integration_path;
 	String probe_update_path;
 	String availability_failure;
 	String compile_failure_reason;
@@ -501,13 +524,56 @@ enum RTGIBackendOwnershipDirection {
 	RTGI_BACKEND_OWNERSHIP_BACKEND_TO_RD_COPY,
 };
 
+struct RTGIBackendNativeDeviceContext {
+	bool valid = false;
+	RDD::DeviceFamily device_family = RDD::DEVICE_UNKNOWN;
+	uint64_t topmost_object = 0;
+	uint64_t physical_device = 0;
+	uint64_t logical_device = 0;
+	uint64_t command_queue = 0;
+	uint32_t queue_family_index = 0;
+	String failure_reason;
+};
+
+struct RTGIBackendNativeTextureContext {
+	bool valid = false;
+	RDD::DeviceFamily device_family = RDD::DEVICE_UNKNOWN;
+	uint64_t native_texture = 0;
+	uint64_t native_texture_view = 0;
+	uint64_t native_format = 0;
+	uint64_t native_device_memory = 0;
+	uint64_t native_usage_flags = 0;
+	uint32_t width = 0;
+	uint32_t height = 0;
+	uint32_t mipmaps = 0;
+	uint32_t array_layers = 0;
+	String failure_reason;
+};
+
 struct RTGIBackendResourceExchange {
 	RTGIBackendExchangeMode mode = RTGI_BACKEND_EXCHANGE_RD_INTERNAL;
 	RTGIBackendOwnershipDirection ownership_direction = RTGI_BACKEND_OWNERSHIP_RD_INTERNAL;
 	RID output_texture;
 	RID depth_texture;
+	RID velocity_texture;
 	RID diffuse_radiance_texture;
 	RID specular_radiance_texture;
+	RID dlss_rr_diffuse_albedo_texture;
+	RID dlss_rr_specular_albedo_texture;
+	RID dlss_rr_normal_roughness_texture;
+	RID dlss_rr_specular_hit_dist_texture;
+	RTGIBackendNativeDeviceContext native_device_context;
+	RTGIBackendNativeTextureContext output_native_texture;
+	RTGIBackendNativeTextureContext depth_native_texture;
+	RTGIBackendNativeTextureContext velocity_native_texture;
+	RTGIBackendNativeTextureContext diffuse_radiance_native_texture;
+	RTGIBackendNativeTextureContext specular_radiance_native_texture;
+	RTGIBackendNativeTextureContext dlss_rr_diffuse_albedo_native_texture;
+	RTGIBackendNativeTextureContext dlss_rr_specular_albedo_native_texture;
+	RTGIBackendNativeTextureContext dlss_rr_normal_roughness_native_texture;
+	RTGIBackendNativeTextureContext dlss_rr_specular_hit_dist_native_texture;
+	bool streamline_native_contexts_valid = false;
+	String streamline_native_contexts_failure_reason;
 	Vector<RenderingDevice::CallbackResource> acquire_callback_resources;
 	RDD::DriverCallback acquire_driver_callback = nullptr;
 	void *acquire_driver_callback_userdata = nullptr;

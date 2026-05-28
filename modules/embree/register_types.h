@@ -34,3 +34,7 @@
 
 void initialize_embree_module(ModuleInitializationLevel p_level);
 void uninitialize_embree_module(ModuleInitializationLevel p_level);
+
+bool embree_module_is_rtgi_backend_registered();
+bool embree_module_has_rtgi_backend_implementation();
+bool embree_module_has_cpu_dispatch();

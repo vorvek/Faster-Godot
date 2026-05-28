@@ -2392,12 +2392,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	bool rt_replaces_opaque = scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING;
 	scene_features.rt_replaces_opaque = rt_replaces_opaque;
 	const uint32_t rt_denoiser = rt_env_params ? (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
-	if (scene_features.rt && rt_denoiser == RSE::PT_DENOISER_NVIDIA) {
-		WARN_PRINT_ONCE(vformat("RTGI denoiser '%s' is not available in the Vulkan renderer yet. Falling back to ASVFG for this viewport without changing the Environment resource.", _rtgi_denoiser_name(rt_denoiser)));
-	}
-	const bool rt_asvfg_denoiser = rt_denoiser == RSE::PT_DENOISER_INTERNAL || rt_denoiser == RSE::PT_DENOISER_NVIDIA;
+	const bool rt_nvidia_denoiser_requested = rt_denoiser == RSE::PT_DENOISER_NVIDIA;
+	bool rt_nvidia_denoiser_uses_dlss_rr = false;
+	bool rt_asvfg_denoiser = rt_denoiser == RSE::PT_DENOISER_INTERNAL || rt_nvidia_denoiser_requested;
 	const bool rt_fidelityfx_denoiser = rt_denoiser == RSE::PT_DENOISER_FIDELITYFX || rt_denoiser == RSE::PT_DENOISER_AMD || rt_denoiser == RSE::PT_DENOISER_INTEL;
-	const bool rt_temporal_denoiser = rt_asvfg_denoiser || rt_fidelityfx_denoiser;
+	bool rt_temporal_denoiser = rt_asvfg_denoiser || rt_fidelityfx_denoiser;
 
 	static const int texture_multisamples[RSE::VIEWPORT_MSAA_MAX] = { 1, 2, 4, 8 };
 
@@ -2747,6 +2746,16 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		rt_requires_external_resource_exchange = rt_backend_capabilities.external_memory && rt_backend_capabilities.external_semaphore;
 		const bool fog_enabled = p_render_data && p_render_data->environment.is_valid() && environment_get_fog_enabled(p_render_data->environment);
 		rt_flags = SceneShaderRaytracing::compute_rt_flags(env_params, fog_enabled);
+		rt_nvidia_denoiser_uses_dlss_rr = rt_nvidia_denoiser_requested && rt_backend_status.active_backend == RSE::PT_BACKEND_NVIDIA_RTXPT && rt_backend_capabilities.nvidia_dlss_rr_available;
+		rt_asvfg_denoiser = rt_denoiser == RSE::PT_DENOISER_INTERNAL || (rt_nvidia_denoiser_requested && !rt_nvidia_denoiser_uses_dlss_rr);
+		rt_temporal_denoiser = rt_asvfg_denoiser || rt_fidelityfx_denoiser || rt_nvidia_denoiser_uses_dlss_rr;
+		using_rt_denoise = !is_reflection_probe && scene_features.rt && rt_temporal_denoiser;
+		using_taa = using_viewport_taa || using_rt_denoise;
+		if (rt_nvidia_denoiser_uses_dlss_rr) {
+			rt_flags |= SceneShaderRaytracing::RT_FLAG_DLSS_RR_ENABLED;
+		} else if (rt_nvidia_denoiser_requested) {
+			WARN_PRINT_ONCE(vformat("RTGI denoiser '%s' is not available for active backend '%s'. Falling back to ASVFG for this viewport without changing the Environment resource.", _rtgi_denoiser_name(rt_denoiser), rt_backend_capabilities.name));
+		}
 		rt_strc_enabled = (rt_flags & SceneShaderRaytracing::RT_FLAG_STRC_ENABLED) != 0;
 		rt_strc_cascade_count = env_params ? CLAMP((uint32_t)env_params[RSE::PT_PARAM_RTGI_STRC_CASCADE_COUNT], 1u, 4u) : 3u;
 		rt_strc_grid_size = env_params ? CLAMP((uint32_t)env_params[RSE::PT_PARAM_RTGI_STRC_GRID_SIZE], 12u, 32u) : 24u;
@@ -3292,6 +3301,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		if (rt_dispatch_ok) {
 			rt_backend_status = raytracing->get_backend_status();
 			rt_path_output_backend = rt_backend_status.active_backend;
+			rt_flags = rt_backend_context.rt_flags;
+			rt_nvidia_denoiser_uses_dlss_rr = rt_nvidia_denoiser_uses_dlss_rr && rt_backend_status.active_backend == RSE::PT_BACKEND_NVIDIA_RTXPT && ((rt_flags & SceneShaderRaytracing::RT_FLAG_DLSS_RR_ENABLED) != 0);
+			rt_asvfg_denoiser = rt_denoiser == RSE::PT_DENOISER_INTERNAL || (rt_nvidia_denoiser_requested && !rt_nvidia_denoiser_uses_dlss_rr);
+			rt_temporal_denoiser = rt_asvfg_denoiser || rt_fidelityfx_denoiser || rt_nvidia_denoiser_uses_dlss_rr;
+			using_rt_denoise = !is_reflection_probe && scene_features.rt && rt_temporal_denoiser;
+			using_taa = using_viewport_taa || using_rt_denoise;
 			rt_state = rt_backend_context.viewport_state;
 			bool rt_post_safe = true;
 			Size2i rt_size = rb_data->rt_get_size();
@@ -3406,7 +3421,28 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			if (rt_specular_history_weight > 0.0f && time_step > 0.0) {
 				rt_specular_history_weight = Math::pow(rt_specular_history_weight, (float)time_step * 60.0f);
 			}
-			if (rt_asvfg_denoiser) {
+			if (rt_nvidia_denoiser_uses_dlss_rr) {
+				rb->clear_context(RB_SCOPE_RTGI_DENOISE);
+				rb->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
+				rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
+				rb->clear_context(RB_SCOPE_RTGI_DENOISE_COMPOSITE);
+				rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
+				rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX);
+				rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_DIFFUSE);
+				rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_DIRECT);
+				rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_EMISSIVE);
+				rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_INDIRECT);
+				rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_SKY);
+				rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_SPECULAR);
+				rb_data->rt_diffuse_cache_signature = 0;
+				rb_data->rt_diffuse_cache_signature_valid = false;
+				RD::get_singleton()->texture_clear(rb_data->rt_get_prev_history_validity(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
+				RD::get_singleton()->texture_clear(rb_data->rt_get_prev_history_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
+				if (rt_replaces_opaque) {
+					composite_rt_volumetric_fog();
+					raytracing->copy_output_texture(p_render_data);
+				}
+			} else if (rt_asvfg_denoiser) {
 				rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX);
 				rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_DIFFUSE);
 				rb->clear_context(RB_SCOPE_RTGI_FIDELITYFX_DIRECT);

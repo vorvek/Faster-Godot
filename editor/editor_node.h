@@ -101,6 +101,7 @@ class ProjectExportDialog;
 class ProjectSettingsEditor;
 class SceneImportSettingsDialog;
 class ProjectUpgradeTool;
+class RTGISDKManager;
 
 #ifdef ANDROID_ENABLED
 class TouchActionsPanel;
@@ -191,6 +192,7 @@ public:
 		EDITOR_MANAGE_FEATURE_PROFILES,
 		EDITOR_MANAGE_EXPORT_TEMPLATES,
 		EDITOR_CONFIGURE_FBX_IMPORTER,
+		EDITOR_CONFIGURE_RTGI_SDKS,
 
 		LAYOUT_SAVE,
 		LAYOUT_DELETE,
@@ -276,6 +278,7 @@ private:
 	ProjectSettingsEditor *project_settings_editor = nullptr;
 
 	FBXImporterManager *fbx_importer_manager = nullptr;
+	RTGISDKManager *rtgi_sdk_manager = nullptr;
 
 	Vector<EditorPlugin *> editor_plugins;
 	bool _initializing_plugins = false;

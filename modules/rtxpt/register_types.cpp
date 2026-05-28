@@ -30,6 +30,38 @@
 
 #include "register_types.h"
 
-void initialize_rtxpt_module(ModuleInitializationLevel p_level) {}
+static bool rtxpt_rtgi_backend_registered = false;
 
-void uninitialize_rtxpt_module(ModuleInitializationLevel p_level) {}
+bool rtxpt_module_has_rtgi_backend_implementation() {
+#if defined(RTGI_RTXPT_BACKEND_IMPLEMENTED)
+	return true;
+#else
+	return false;
+#endif
+}
+
+bool rtxpt_module_has_godot_reference_dispatch() {
+#if defined(RTGI_RTXPT_GODOT_REFERENCE_DISPATCH_ENABLED)
+	return true;
+#else
+	return false;
+#endif
+}
+
+bool rtxpt_module_is_rtgi_backend_registered() {
+	return rtxpt_rtgi_backend_registered;
+}
+
+void initialize_rtxpt_module(ModuleInitializationLevel p_level) {
+	if (p_level != MODULE_INITIALIZATION_LEVEL_SERVERS) {
+		return;
+	}
+	rtxpt_rtgi_backend_registered = rtxpt_module_has_rtgi_backend_implementation() && rtxpt_module_has_godot_reference_dispatch();
+}
+
+void uninitialize_rtxpt_module(ModuleInitializationLevel p_level) {
+	if (p_level != MODULE_INITIALIZATION_LEVEL_SERVERS) {
+		return;
+	}
+	rtxpt_rtgi_backend_registered = false;
+}

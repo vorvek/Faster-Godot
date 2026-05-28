@@ -1,0 +1,8 @@
+This directory contains NVIDIA Streamline public headers used to compile the
+optional RTGI DLSS Ray Reconstruction handoff.
+
+Only headers are vendored. Runtime binaries such as sl.interposer and DLSS/NGX
+artifacts are intentionally external and are detected at runtime.
+
+Imported from NVIDIA's Godot path tracing fork, branch nvidia-pt-dlss,
+commit a47a765. The headers carry their own permissive copyright notice.

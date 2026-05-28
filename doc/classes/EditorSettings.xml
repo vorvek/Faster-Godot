@@ -890,6 +890,9 @@
 			The path to the directory containing the Open Image Denoise (OIDN) executable, used optionally for denoising lightmaps. It can be downloaded from [url=https://www.openimagedenoise.org/downloads.html]openimagedenoise.org[/url].
 			To enable this feature for your specific project, use [member ProjectSettings.rendering/lightmapping/denoising/denoiser].
 		</member>
+		<member name="filesystem/tools/rtgi/nrd_sdk_path" type="String" setter="" getter="">
+			The path to a local NVIDIA NRD SDK checkout used by the optional NVIDIA RTGI denoiser path. The editor's RTGI vendor SDK manager can download the SDK into [code]res://addons/rtgi_vendor_sdks/nrd[/code] or save a path to an existing checkout.
+		</member>
 		<member name="input/buffering/agile_event_flushing" type="bool" setter="" getter="">
 			If [code]true[/code], input events will be flushed just before every idle and physics frame.
 			If [code]false[/code], these events will be flushed only once per process frame, between iterations of the engine.

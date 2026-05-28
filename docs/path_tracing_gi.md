@@ -18,7 +18,6 @@ The feature is exposed on `Environment`, so it appears through the same
   - `Vulkan Generic`
   - `NVIDIA RTXPT`
   - `AMD HIP RT`
-  - `Intel Embree`
 - `rtgi_mode`
   - `Reflections RT Only`
   - `Full Path Tracing`
@@ -38,7 +37,6 @@ The feature is exposed on `Environment`, so it appears through the same
   - `ASVFG (Experimental)`
   - `NVIDIA`
   - `AMD`
-  - `Intel`
   - `None`
 - `rtgi_strc_enabled`
 - `rtgi_strc_strength`
@@ -63,15 +61,21 @@ The feature is exposed on `Environment`, so it appears through the same
   - `Vulkan Generic`: uses the current built-in Vulkan ray tracing
     implementation. This is the default backend.
   - `NVIDIA RTXPT`: uses the NVIDIA Godot fork-compatible RenderingDevice/Vulkan
-    ray tracing dispatch path when the RTXPT module is compiled. Optional
-    NVIDIA denoising remains runtime-gated.
+    ray tracing dispatch path when the RTXPT module is compiled with a valid
+    `rtxpt_sdk_path`. Optional NVIDIA denoising remains runtime-gated.
   - `AMD HIP RT`: uses HIP RT scene and trace-kernel dispatch when the HIP RT
     module, runtime libraries, and Vulkan/HIP external memory and semaphore
     exchange are available. It reports unavailable instead of using readbacks
-    when external interop cannot be established.
-  - `Intel Embree`: uses Embree/OSPRay-capable CPU rendering when the backend is
-    compiled, then uploads the result into the RD-owned RTGI output. Probe
-    updates may still use the Vulkan Generic path in mixed mode.
+    when external interop cannot be established. The current trace kernel writes
+    a single noisy output, then mirrors that output into the internal
+    FidelityFX-style diffuse/signal inputs for real-time denoising.
+  - The Intel Embree/OSPRay CPU backend compatibility value is disabled for now;
+    new Environment resources only expose Vulkan Generic, NVIDIA RTXPT, and AMD
+    HIP RT.
+  - HIP RT can classify constant alpha-scissor materials while building scene
+    snapshots. It still falls back for texture alpha, vertex-color alpha, alpha
+    hash, and custom hit shaders because those require shader-side opacity
+    evaluation.
 - `rtgi_mode`
   - `Reflections RT Only`: keeps the normal Forward+ raster path and raster GI
     systems responsible for diffuse GI, then uses ray tracing for specular and
@@ -140,15 +144,26 @@ The feature is exposed on `Environment`, so it appears through the same
     linear view-Z, hit distance, validity masks, and history IDs to preserve
     edges and reject invalid samples.
   - `NVIDIA`: requests the NVIDIA denoiser path. NRD and DLSS Ray
-    Reconstruction remain gated by Streamline/API/platform/runtime requirements.
-    Until available, this warns once and falls back to ASVFG without rewriting
-    the scene.
+    Reconstruction remain gated by SDK/API/platform/runtime requirements. NRD
+    headers are consumed from `nrd_sdk_path` when configured; NRD source and
+    runtime binaries are not vendored. The editor includes
+    **Settings > Configure RTGI Vendor SDKs...**, which can download NRD into
+    the project at `res://addons/rtgi_vendor_sdks/nrd` or save a path to an
+    existing checkout. Installing NRD after the editor was built does not add
+    compile-time headers to that binary; rebuild with `module_rtxpt_enabled=yes`
+    and either `nrd_sdk_path=...` or `NRD_SDK_PATH` set to the installed checkout
+    when header integration is required. Streamline public headers are vendored,
+    while `sl.interposer` and DLSS/NGX runtime artifacts stay external. Until a
+    vendor denoiser path is available, this warns once and falls back to ASVFG
+    without rewriting the scene. When RTXPT and Streamline DLSS Ray
+    Reconstruction are both available, the renderer enables the DLSS-RR ray
+    tracing shader variant, records the Streamline Vulkan callback, and skips
+    the ASVFG post-denoiser.
   - `AMD`: requests the AMD denoiser path. The current renderer maps this to
-    the available FidelityFX-style multi-signal path; future AMD-specific
-    denoising remains gated by a Vulkan-compatible SDK handoff.
-  - `Intel`: requests the Intel denoiser path. For the real-time Forward+ path,
-    this targets the same cross-vendor FidelityFX denoiser handoff as AMD, not
-    Open Image Denoise. It falls back to ASVFG until that handoff is available.
+    the available FidelityFX-style multi-signal path. FidelityFX SDK API and
+    denoiser public headers are vendored so the module can compile against the
+    SDK ABI, while runtime/library dispatch remains gated by a Vulkan-compatible
+    SDK handoff.
   - `None`: disables the RT denoiser so the raw sampled RT result is visible.
     This is useful for debugging sample distribution, material hits, and TLAS
     coverage, but it is expected to show more noise.
@@ -177,8 +192,10 @@ it names the backend that will render instead of the request.
 Each capability dictionary includes:
 
 - `backend`, `name`, `runtime_name`, `integration_path`,
-  `rendering_device_family`, `rendering_device_name`,
-  `rendering_device_vendor`, and `rendering_device_vendor_id`
+  `scene_import_path`, `trace_dispatch_path`, `vendor_scene_import`,
+  `vendor_sdk_dispatch`, `rendering_device_family`,
+  `rendering_device_name`, `rendering_device_vendor`, and
+  `rendering_device_vendor_id`
 - `available` and `initialized`
 - `vulkan_runtime`
 - `exchange`, with explicit `rendering_device`, `external_memory`,
@@ -197,6 +214,16 @@ Each capability dictionary includes:
     `implementation_failure_reason`, which provide the human-readable reason
     for the corresponding failed check
 - `denoiser_handoff`
+- `denoiser_name`, `denoiser_runtime_detected`, `denoiser_available`,
+  `denoiser_failure_reason`, and `denoiser_integration_path`
+- `nvidia_streamline_headers_present`, `nvidia_streamline_runtime_detected`,
+  `nvidia_dlss_rr_handoff_ready`, `nvidia_dlss_rr_device_supported`,
+  `nvidia_dlss_rr_available`, and `nvidia_streamline_failure_reason` for the
+  NVIDIA RTXPT backend's optional Streamline DLSS Ray Reconstruction path
+- `nvidia_nrd_headers_present` and `nvidia_nrd_version` for the NVIDIA
+  denoiser SDK header path
+- `amd_fidelityfx_sdk_headers_present` and `amd_fidelityfx_denoiser_version`
+  for the AMD denoiser SDK header path
 - `fallback_reason`
 
 `available` must only become true when the backend is compiled in, its runtime
@@ -217,13 +244,39 @@ conservative dynamic-library checks against the executable directory, `PATH`,
 and the expected SDK root variables (`RTXPT_SDK_PATH`/`RTXPT_PATH`,
 `HIPRT_PATH`/`HIP_PATH`/`ROCM_PATH`, and
 `EMBREE_ROOT`/`EMBREE_DIR`/`OSPRAY_ROOT`/`OSPRAY_DIR`/`ONEAPI_ROOT`).
+RTXPT has no standalone runtime DLL in the Godot-compatible path, so its probe
+requires the configured `rtxpt_sdk_path` source root to still expose the sample,
+bridge, and path-tracer shader files used as the dispatch manifest. The probe
+accepts either the upstream source-tree `Rtxpt/` layout or an SDK-style
+`include/Rtxpt/` layout. Capability dictionaries intentionally report this
+current path as `vendor_sdk_dispatch=false`: it is the NVIDIA Godot-fork
+RenderingDevice dispatch path with RTXPT manifest validation, not the standalone
+RTXPT core sample dispatch linked into the engine.
+Streamline is reported separately from RTXPT and NRD: its Vulkan/DLSS-RR
+headers may be compiled in through `streamline_sdk_path`, but DLSS Ray
+Reconstruction only reports available when the Streamline runtime libraries are
+present through `sl.interposer` and export the expected Vulkan device setup,
+shutdown, feature-function lookup, frame constants, resource tagging, and feature
+evaluation entry points, when the engine-side Vulkan resource tagging and
+`slEvaluateFeature` handoff is compiled, and when Streamline accepts the active
+Vulkan adapter through
+`slIsFeatureSupported`. The DLSS-RR feature-specific functions are still
+resolved through Streamline's feature-function API after device setup, matching
+the NVIDIA fork's flow. `RTGI_DENOISER_NVIDIA` maps to this DLSS-RR handoff only
+when the active backend is RTXPT and `nvidia_dlss_rr_available` is true;
+otherwise it remains an ASVFG fallback request.
 Where the public ABI is stable enough for this phase, probes also require one
-expected entry point (`hipInit`, `rtcNewDevice`, or `ospInit`) before reporting
-the runtime as detected.
+complete dispatch entry-point set for the selected dynamic path before
+reporting the runtime as detected: HIP/HIP RT external-memory and kernel-launch
+symbols for AMD, and the NVIDIA fork-compatible RTXPT/RenderingDevice dispatch
+path for NVIDIA. The Intel Embree/OSPRay CPU backend is disabled and is not part
+of the active backend set.
+HIP RT runtime probing includes the exact versioned library name derived from
+`HIPRT_API_VERSION` (for example `hiprt0300164.dll` for HIP RT 3.1), then falls
+back to generic and older runtime names.
 Backend-specific compile checks are intentionally tied to their own optional
-modules: `module_rtxpt_enabled`, `module_hiprt_enabled`, and
-`module_embree_enabled` or `module_ospray_enabled`. Unrelated modules do not
-make a vendor RTGI backend compiled or available.
+modules: `module_rtxpt_enabled` and `module_hiprt_enabled`. Unrelated modules do
+not make a vendor RTGI backend compiled or available.
 Unavailable backends also report `denoiser_handoff = false`; denoiser handoff
 only describes a path the active backend can actually reach.
 The per-frame backend context also carries an explicit scene resource snapshot:
@@ -240,9 +293,11 @@ texture as a writable callback resource so the frame graph tracks the ownership
 handoff. External-memory exchange must also declare typed platform handles
 (`opaque FD` or `opaque Win32`), binary semaphore handles, output image layout
 expectations before and after backend work, and an RD-to-backend-to-RD ownership
-direction. Timeline-semaphore exchange uses `RenderingDevice` semaphore RIDs,
-timeline values, the same image layout metadata, and the same ownership
-direction. Staged-copy exchange is deliberately callback-managed in this phase:
+direction. The metadata includes whether Vulkan exported a dedicated allocation
+so HIP RT can set the matching HIP external-memory import flag.
+Timeline-semaphore exchange uses `RenderingDevice` semaphore RIDs, timeline
+values, the same image layout metadata, and the same ownership direction.
+Staged-copy exchange is deliberately callback-managed in this phase:
 the backend release callback performs the copy into the Vulkan-owned output
 texture, must declare a backend-to-RD copy ownership direction, must use that
 same texture as the staged copy target, and must declare the source buffer as

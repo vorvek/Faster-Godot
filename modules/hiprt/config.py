@@ -36,6 +36,44 @@ def _find_hiprt_api_version(sdk_path):
     return _parse_hiprt_source_version(sdk_path)
 
 
+def _format_hiprt_version_string(api_version):
+    return str(api_version).zfill(5)
+
+
+def _resolve_sdk_path(configured_path, vendored_path):
+    if configured_path and os.path.isdir(configured_path):
+        return configured_path
+    if os.path.isdir(vendored_path):
+        return vendored_path
+    return configured_path
+
+
+def _find_fidelityfx_denoiser_include_roots(sdk_path):
+    include_roots = []
+    for candidate in [
+        os.path.join(sdk_path, "Kits", "FidelityFX", "denoisers", "include"),
+        os.path.join(sdk_path, "denoisers", "include"),
+        os.path.join(sdk_path, "include"),
+        sdk_path,
+    ]:
+        if os.path.isfile(os.path.join(candidate, "ffx_denoiser.h")):
+            include_roots.append(candidate)
+    return include_roots
+
+
+def _find_fidelityfx_api_include_roots(sdk_path):
+    include_roots = []
+    for candidate in [
+        os.path.join(sdk_path, "Kits", "FidelityFX", "api", "include"),
+        os.path.join(sdk_path, "api", "include"),
+        os.path.join(sdk_path, "include"),
+        sdk_path,
+    ]:
+        if os.path.isfile(os.path.join(candidate, "ffx_api.h")):
+            include_roots.append(candidate)
+    return include_roots
+
+
 def is_enabled():
     return False
 
@@ -79,12 +117,22 @@ def configure(env):
         api_version = _find_hiprt_api_version(hiprt_path)
         if api_version:
             defines.append("RTGI_HIPRT_API_VERSION=%s" % api_version)
+            defines.append(("RTGI_HIPRT_VERSION_STR", _cpp_string_literal(_format_hiprt_version_string(api_version))))
             if device_headers_present:
                 defines.append("RTGI_HIPRT_TRACE_KERNEL_DISPATCH_ENABLED")
                 defines.append("RTGI_HIPRT_BACKEND_IMPLEMENTED")
         env.Append(CPPDEFINES=defines)
 
-    fidelityfx_path = env.get("fidelityfx_sdk_path", "")
+    fidelityfx_path = _resolve_sdk_path(env.get("fidelityfx_sdk_path", ""), os.path.join("thirdparty", "fidelityfx-sdk"))
     if fidelityfx_path and os.path.isdir(fidelityfx_path):
-        env.Append(CPPPATH=[os.path.join(fidelityfx_path, "include")])
-        env.Append(CPPDEFINES=["RTGI_FIDELITYFX_SDK_HEADERS_PRESENT"])
+        include_roots = _find_fidelityfx_denoiser_include_roots(fidelityfx_path)
+        include_roots += [path for path in _find_fidelityfx_api_include_roots(fidelityfx_path) if path not in include_roots]
+        if include_roots:
+            env.Append(CPPPATH=include_roots)
+            env.Append(
+                CPPDEFINES=[
+                    ("RTGI_FIDELITYFX_SDK_ROOT", _cpp_string_literal(fidelityfx_path)),
+                    "RTGI_FIDELITYFX_SDK_HEADERS_PRESENT",
+                    "RTGI_FIDELITYFX_SDK_DENOISER_HEADERS_PRESENT",
+                ]
+            )

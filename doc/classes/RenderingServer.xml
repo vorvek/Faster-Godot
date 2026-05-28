@@ -2892,7 +2892,7 @@
 		<method name="pathtracing_get_backend_capabilities" qualifiers="const">
 			<return type="Dictionary[]" />
 			<description>
-				Returns runtime capability information for every path tracing backend. Each dictionary reports the backend identifier, display name, runtime availability, initialization state, runtime name, active RenderingDevice family/name/vendor, Vulkan integration path, resource exchange support, denoiser handoff support, and fallback reason when unavailable. The nested [code]availability_checks[/code] dictionary reports [code]backend_compiled[/code], [code]runtime_detected[/code], [code]device_supported[/code], [code]resource_exchange_supported[/code], [code]implementation_ready[/code], [code]failure[/code], [code]compile_failure_reason[/code], [code]runtime_failure_reason[/code], [code]device_failure_reason[/code], [code]resource_exchange_failure_reason[/code], and [code]implementation_failure_reason[/code], where [code]failure[/code] is [code]"none"[/code] only when the backend is available.
+				Returns runtime capability information for every path tracing backend. Each dictionary reports the backend identifier, display name, runtime availability, initialization state, runtime name, active RenderingDevice family/name/vendor, Vulkan integration path, vendor scene import and SDK dispatch status, resource exchange support, denoiser handoff support, denoiser integration path, vendor denoiser header/runtime availability, and fallback reason when unavailable. The nested [code]availability_checks[/code] dictionary reports [code]backend_compiled[/code], [code]sdk_headers_present[/code], [code]runtime_detected[/code], [code]device_supported[/code], [code]resource_exchange_supported[/code], [code]implementation_ready[/code], [code]failure[/code], [code]compile_failure_reason[/code], [code]runtime_failure_reason[/code], [code]device_failure_reason[/code], [code]resource_exchange_failure_reason[/code], and [code]implementation_failure_reason[/code], where [code]failure[/code] is [code]"none"[/code] only when the backend is available. [code]scene_import_path[/code], [code]trace_dispatch_path[/code], [code]vendor_scene_import[/code], and [code]vendor_sdk_dispatch[/code] distinguish a full vendor SDK path from a compatibility path that validates vendor SDK inputs but still dispatches through Godot RenderingDevice code. NVIDIA-specific fields include Streamline DLSS Ray Reconstruction and NRD header status. AMD-specific fields include FidelityFX SDK denoiser header status.
 			</description>
 		</method>
 		<method name="pathtracing_get_backend_status" qualifiers="const">
@@ -5663,7 +5663,7 @@
 			AMD HIP RT backend identifier. Requires the HIP RT module, runtime libraries, and Vulkan/HIP external memory and semaphore interop; otherwise it falls back to [constant PT_BACKEND_VULKAN_GENERIC].
 		</constant>
 		<constant name="PT_BACKEND_INTEL_EMBREE" value="3" enum="PathtracingBackend">
-			Intel Embree/OSPRay backend identifier. Uses compiled CPU rendering with synchronized RD upload when available; otherwise it falls back to [constant PT_BACKEND_VULKAN_GENERIC].
+			Disabled compatibility identifier for the removed Intel Embree/OSPRay CPU backend. Requests for this backend report unavailable and fall back to [constant PT_BACKEND_VULKAN_GENERIC].
 		</constant>
 		<constant name="PT_BACKEND_MAX" value="4" enum="PathtracingBackend">
 			Represents the size of the [enum PathtracingBackend] enum.

@@ -16,10 +16,9 @@ if env["builtin_embree"]:
     env.AppendUnique(
         CPPDEFINES=[
             "RTGI_BUILTIN_EMBREE_ENABLED",
-            "RTGI_EMBREE_OSPRAY_SDK_HEADERS_PRESENT",
-            "RTGI_EMBREE_OSPRAY_BACKEND_IMPLEMENTED",
         ]
     )
+    env.Append(CPPPATH=[thirdparty_dir + "include"])
 
     embree_src = [
         "common/sys/sysinfo.cpp",

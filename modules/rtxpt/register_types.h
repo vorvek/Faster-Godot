@@ -34,3 +34,7 @@
 
 void initialize_rtxpt_module(ModuleInitializationLevel p_level);
 void uninitialize_rtxpt_module(ModuleInitializationLevel p_level);
+
+bool rtxpt_module_is_rtgi_backend_registered();
+bool rtxpt_module_has_rtgi_backend_implementation();
+bool rtxpt_module_has_godot_reference_dispatch();

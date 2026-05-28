@@ -26,10 +26,13 @@ var _strc_grid_size := 24
 var _strc_base_probe_spacing := 1.5
 var _strc_rays_per_frame := 4096
 var _strc_temporal_weight := 0.97
+var _rtgi_backend: int = Environment.RTGI_BACKEND_VULKAN_GENERIC
+var _rtgi_backend_arg_set := false
+var _rtgi_denoiser_override := -1
 var _warmup_frames := 120
 var _output_dir := DEFAULT_OUTPUT_DIR
 var _debug_view := "beauty"
-var _capture_all_debug_views := true
+var _capture_all_debug_views := false
 var _capture_comparison := false
 var _write_reference := false
 var _camera_pan := false
@@ -111,6 +114,11 @@ func _parse_args() -> void:
 			_strc_rays_per_frame = clampi(arg.trim_prefix("--rtgi-strc-rays-per-frame=").to_int(), 0, 32768)
 		elif arg.begins_with("--rtgi-strc-temporal-weight="):
 			_strc_temporal_weight = clampf(arg.trim_prefix("--rtgi-strc-temporal-weight=").to_float(), 0.0, 0.995)
+		elif arg.begins_with("--rtgi-backend="):
+			_rtgi_backend = _parse_rtgi_backend(arg.trim_prefix("--rtgi-backend="))
+			_rtgi_backend_arg_set = true
+		elif arg.begins_with("--rtgi-denoiser="):
+			_rtgi_denoiser_override = _parse_rtgi_denoiser(arg.trim_prefix("--rtgi-denoiser="))
 		elif arg.begins_with("--rtgi-warmup-frames="):
 			_warmup_frames = max(1, arg.trim_prefix("--rtgi-warmup-frames=").to_int())
 		elif arg.begins_with("--rtgi-reference-spp="):
@@ -121,6 +129,8 @@ func _parse_args() -> void:
 			_convergence_frames = clampi(arg.trim_prefix("--rtgi-convergence-frames=").to_int(), 0, 128)
 		elif arg.begins_with("--rtgi-scene="):
 			var requested_scene := arg.trim_prefix("--rtgi-scene=").to_lower()
+			if requested_scene == "many_lights":
+				requested_scene = "many_light_emissive"
 			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability", "offscreen_bounce"]:
 				_scene_mode = requested_scene
 			else:
@@ -167,16 +177,86 @@ func _parse_args() -> void:
 			_specular_object_motion = true
 
 
+func _parse_rtgi_backend(text: String) -> int:
+	match text.to_lower().replace("-", "_").strip_edges():
+		"vulkan", "generic", "vulkan_generic":
+			return Environment.RTGI_BACKEND_VULKAN_GENERIC
+		"nvidia", "rtxpt", "nvidia_rtxpt":
+			return Environment.RTGI_BACKEND_NVIDIA_RTXPT
+		"amd", "hiprt", "hip_rt", "amd_hip_rt":
+			return Environment.RTGI_BACKEND_AMD_HIP_RT
+		"intel", "embree", "ospray", "intel_embree", "embree_ospray":
+			push_warning("The Intel Embree/OSPRay CPU RTGI backend is disabled; using Vulkan Generic.")
+			return Environment.RTGI_BACKEND_VULKAN_GENERIC
+		_:
+			push_warning("Unknown RTGI backend '%s'; using Vulkan Generic." % text)
+			return Environment.RTGI_BACKEND_VULKAN_GENERIC
+
+
+func _parse_rtgi_denoiser(text: String) -> int:
+	match text.to_lower().replace("-", "_").strip_edges():
+		"auto", "default":
+			return -1
+		"asvfg", "svgf", "builtin":
+			return Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL
+		"none", "raw":
+			return Environment.RTGI_DENOISER_NONE
+		"fidelityfx", "ffx":
+			return Environment.RTGI_DENOISER_FIDELITYFX
+		"nvidia", "nrd", "dlss_rr":
+			return Environment.RTGI_DENOISER_NVIDIA
+		"amd", "hip":
+			return Environment.RTGI_DENOISER_AMD
+		"intel":
+			return Environment.RTGI_DENOISER_INTEL
+		_:
+			push_warning("Unknown RTGI denoiser '%s'; using the harness default." % text)
+			return -1
+
+
+func _rtgi_backend_key(backend: int) -> String:
+	match backend:
+		Environment.RTGI_BACKEND_NVIDIA_RTXPT:
+			return "nvidia_rtxpt"
+		Environment.RTGI_BACKEND_AMD_HIP_RT:
+			return "amd_hip_rt"
+		_:
+			return "vulkan_generic"
+
+
+func _rtgi_backend_name(backend: int) -> String:
+	match backend:
+		Environment.RTGI_BACKEND_NVIDIA_RTXPT:
+			return "NVIDIA RTXPT"
+		Environment.RTGI_BACKEND_AMD_HIP_RT:
+			return "AMD HIP RT"
+		_:
+			return "Vulkan Generic"
+
+
+func _rendering_server_rtgi_backend(backend: int) -> RenderingServer.PathtracingBackend:
+	match backend:
+		Environment.RTGI_BACKEND_NVIDIA_RTXPT:
+			return RenderingServer.PT_BACKEND_NVIDIA_RTXPT
+		Environment.RTGI_BACKEND_AMD_HIP_RT:
+			return RenderingServer.PT_BACKEND_AMD_HIP_RT
+		_:
+			return RenderingServer.PT_BACKEND_VULKAN_GENERIC
+
+
 func _build_scene() -> void:
 	var env := Environment.new()
 	env.glow_enabled = false
 	env.rtgi_enabled = true
 	env.rtgi_disable_in_editor = false
+	env.rtgi_backend = _rtgi_backend
 	env.rtgi_mode = Environment.RTGI_MODE_FULL_PATH_TRACING
 	env.rtgi_samples_per_pixel = 1
 	env.rtgi_max_bounces = 3
 	env.rtgi_energy = 1.0
 	env.rtgi_denoiser = Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL
+	if _rtgi_denoiser_override >= 0:
+		env.rtgi_denoiser = _rtgi_denoiser_override
 	env.rtgi_denoiser_strength = _denoise_strength
 	env.rtgi_denoiser_history_weight = _history_weight
 	env.rtgi_denoiser_firefly_suppression = _firefly_suppression
@@ -802,6 +882,8 @@ func _run_capture() -> void:
 		get_tree().quit(2)
 		return
 	var base_name := "%s_rtgi_strength_%0.2f" % [_scene_mode, _denoise_strength]
+	if _rtgi_backend_arg_set:
+		base_name = "%s_%s_rtgi_strength_%0.2f" % [_scene_mode, _rtgi_backend_key(_rtgi_backend), _denoise_strength]
 	if DisplayServer.get_name().to_lower() == "headless":
 		var skipped := {
 			"skipped": true,
@@ -863,11 +945,17 @@ func _run_capture() -> void:
 	metrics["analytic_light_sampling_enabled"] = _analytic_light_sampling
 	metrics["explicit_emissive_sampling_enabled"] = _explicit_emissive_sampling
 	metrics["diffuse_radiance_cache_enabled"] = _diffuse_cache
+	metrics["requested_rtgi_backend"] = _rtgi_backend
+	metrics["requested_rtgi_backend_name"] = _rtgi_backend_name(_rtgi_backend)
+	metrics["requested_rtgi_backend_key"] = _rtgi_backend_key(_rtgi_backend)
+	metrics["renderer_backend_status"] = RenderingServer.pathtracing_get_backend_status()
+	metrics["renderer_requested_backend_status"] = RenderingServer.pathtracing_get_backend_status_for_backend(_rendering_server_rtgi_backend(_rtgi_backend))
+	metrics["renderer_backend_capabilities"] = RenderingServer.pathtracing_get_backend_capabilities()
 	if _sparkle_frames > 1 and DisplayServer.get_name().to_lower() != "headless":
 		metrics.merge(await _measure_temporal_sparkle(base_name), true)
 	if _convergence_frames > 1 and DisplayServer.get_name().to_lower() != "headless":
 		metrics.merge(await _measure_convergence_curve(base_name), true)
-	if DisplayServer.get_name().to_lower() != "headless":
+	if _capture_all_debug_views and DisplayServer.get_name().to_lower() != "headless":
 		metrics.merge(await _measure_signal_debug_views(), true)
 		metrics["rtgi_instability_attribution"] = _source_attribution_summary(metrics)
 
@@ -1507,6 +1595,20 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"ray_max_radiance": _ray_max_radiance,
 		},
 		{
+			"name": "vendor_backend_amd_hip_rt",
+			"enabled": true,
+			"backend": Environment.RTGI_BACKEND_AMD_HIP_RT,
+			"mode": Environment.RTGI_MODE_FULL_PATH_TRACING,
+			"spp": 1,
+			"denoiser": Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL,
+			"max_bounces": 3,
+			"split_signals": _split_signals,
+			"analytic_light_sampling": _analytic_light_sampling,
+			"explicit_emissive_sampling": _explicit_emissive_sampling,
+			"ray_firefly_suppression": _ray_firefly_suppression,
+			"ray_max_radiance": _ray_max_radiance,
+		},
+		{
 			"name": "strc_static_layers_only",
 			"enabled": true,
 			"mode": Environment.RTGI_MODE_FULL_PATH_TRACING,
@@ -1603,6 +1705,9 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"path": ProjectSettings.globalize_path(path),
 			"rtgi_enabled": config["enabled"],
 			"rtgi_backend": config.get("backend", Environment.RTGI_BACKEND_VULKAN_GENERIC),
+			"rtgi_backend_name": _rtgi_backend_name(config.get("backend", Environment.RTGI_BACKEND_VULKAN_GENERIC)),
+			"renderer_backend_status": RenderingServer.pathtracing_get_backend_status(),
+			"renderer_requested_backend_status": RenderingServer.pathtracing_get_backend_status_for_backend(_rendering_server_rtgi_backend(config.get("backend", Environment.RTGI_BACKEND_VULKAN_GENERIC))),
 			"rtgi_mode": config["mode"],
 			"spp": config["spp"],
 			"denoiser": config["denoiser"],

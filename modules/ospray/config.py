@@ -1,6 +1,10 @@
 import os
 
 
+def _cpp_string_literal(path):
+    return '\\"%s\\"' % path.replace("\\", "/").replace('"', '\\"')
+
+
 def _find_ospray_include_roots(sdk_path):
     include_roots = []
     for candidate in [
@@ -23,7 +27,7 @@ def can_build(env, platform):
 
 def get_opts(platform):
     return [
-        ("ospray_sdk_path", "Path to a local Intel OSPRay SDK checkout used by the experimental RTGI backend", ""),
+        ("ospray_sdk_path", "Path to a local Intel OSPRay SDK checkout. The RTGI CPU backend is currently disabled.", ""),
     ]
 
 
@@ -36,8 +40,7 @@ def configure(env):
             env.Append(
                 CPPDEFINES=[
                     "RTGI_EMBREE_OSPRAY_SDK_HEADERS_PRESENT",
-                    "RTGI_OSPRAY_DISPATCH_ENABLED",
-                    "RTGI_EMBREE_OSPRAY_BACKEND_IMPLEMENTED",
+                    ("RTGI_OSPRAY_SDK_ROOT", _cpp_string_literal(ospray_path)),
                 ]
             )
 

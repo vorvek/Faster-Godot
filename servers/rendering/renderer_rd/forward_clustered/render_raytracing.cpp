@@ -69,23 +69,85 @@
 
 using namespace RendererSceneRenderImplementation;
 
-#if defined(MODULE_RAYCAST_ENABLED) && defined(RTGI_BUILTIN_EMBREE_ENABLED)
-#ifndef RTGI_EMBREE_CPU_DISPATCH_ENABLED
-#define RTGI_EMBREE_CPU_DISPATCH_ENABLED
-#endif
-#ifndef RTGI_EMBREE_OSPRAY_SDK_HEADERS_PRESENT
-#define RTGI_EMBREE_OSPRAY_SDK_HEADERS_PRESENT
-#endif
-#ifndef RTGI_EMBREE_OSPRAY_BACKEND_IMPLEMENTED
-#define RTGI_EMBREE_OSPRAY_BACKEND_IMPLEMENTED
-#endif
-#include "thirdparty/embree/include/embree4/rtcore.h"
+#ifndef RTGI_HIPRT_SDK_ROOT
+#define RTGI_HIPRT_SDK_ROOT ""
 #endif
 
-#if defined(MODULE_OSPRAY_ENABLED) && defined(RTGI_OSPRAY_DISPATCH_ENABLED)
-#ifndef RTGI_EMBREE_OSPRAY_BACKEND_IMPLEMENTED
-#define RTGI_EMBREE_OSPRAY_BACKEND_IMPLEMENTED
+#ifndef RTGI_HIPRT_VERSION_STR
+#define RTGI_HIPRT_VERSION_STR ""
 #endif
+
+#ifndef RTGI_RTXPT_SDK_ROOT
+#define RTGI_RTXPT_SDK_ROOT ""
+#endif
+
+#ifndef RTGI_NRD_SDK_ROOT
+#define RTGI_NRD_SDK_ROOT ""
+#endif
+
+#ifndef RTGI_STREAMLINE_SDK_ROOT
+#define RTGI_STREAMLINE_SDK_ROOT ""
+#endif
+
+#ifndef RTGI_FIDELITYFX_SDK_ROOT
+#define RTGI_FIDELITYFX_SDK_ROOT ""
+#endif
+
+#ifndef RTGI_EMBREE_SDK_ROOT
+#define RTGI_EMBREE_SDK_ROOT ""
+#endif
+
+#ifndef RTGI_OSPRAY_SDK_ROOT
+#define RTGI_OSPRAY_SDK_ROOT ""
+#endif
+
+#if defined(RTGI_EMBREE_CPU_DISPATCH_ENABLED)
+#if defined(RTGI_BUILTIN_EMBREE_ENABLED)
+#include "thirdparty/embree/include/embree4/rtcore.h"
+#elif defined(__has_include)
+#if __has_include(<embree4/rtcore.h>)
+#include <embree4/rtcore.h>
+#elif __has_include(<embree3/rtcore.h>)
+#include <embree3/rtcore.h>
+#else
+#error "RTGI Embree CPU dispatch is enabled, but Embree rtcore.h was not found in the configured include paths."
+#endif
+#else
+#include <embree4/rtcore.h>
+#endif
+#endif
+
+#if defined(RTGI_OSPRAY_DISPATCH_ENABLED)
+#include <ospray/ospray.h>
+#endif
+
+#if defined(RTGI_HIPRT_BACKEND_IMPLEMENTED) && defined(RTGI_HIPRT_SDK_HEADERS_PRESENT)
+#include <hiprt/hiprt_types.h>
+#endif
+
+#if defined(RTGI_NRD_SDK_HEADERS_PRESENT)
+#include <NRD.h>
+#endif
+
+#if defined(RTGI_FIDELITYFX_SDK_DENOISER_HEADERS_PRESENT)
+#if defined(__has_include)
+#if __has_include(<ffx_denoiser.h>)
+#include <ffx_denoiser.h>
+#elif __has_include("thirdparty/fidelityfx-sdk/Kits/FidelityFX/denoisers/include/ffx_denoiser.h")
+#include "thirdparty/fidelityfx-sdk/Kits/FidelityFX/denoisers/include/ffx_denoiser.h"
+#else
+#error "RTGI FidelityFX denoiser headers were detected, but ffx_denoiser.h is not reachable."
+#endif
+#else
+#include <ffx_denoiser.h>
+#endif
+#endif
+
+#if defined(MODULE_RTXPT_ENABLED) && defined(RTGI_STREAMLINE_SDK_HEADERS_PRESENT)
+#include "thirdparty/vulkan/include/vulkan/vulkan.h"
+#include <sl.h>
+#include <sl_dlss_d.h>
+#include <sl_helpers_vk.h>
 #endif
 
 static constexpr real_t RT_COMPRESSED_AABB_EPSILON = 0.0001;
@@ -289,7 +351,11 @@ static bool _rtgi_vulkan_interop_self_validate(RenderingDevice *p_rd, String *r_
 
 static String _rtgi_rtxpt_unavailable_reason() {
 #ifdef MODULE_RTXPT_ENABLED
+#if defined(RTGI_RTXPT_BACKEND_IMPLEMENTED) && !defined(RTGI_RTXPT_GODOT_REFERENCE_DISPATCH_ENABLED)
+	return "RTXPT Vulkan module is compiled, but the NVIDIA Godot fork-compatible dispatch path was not enabled for this build.";
+#else
 	return "RTXPT Vulkan module is compiled, but the RTGI backend implementation was not enabled for this build.";
+#endif
 #else
 	return "RTXPT Vulkan module is not compiled in.";
 #endif
@@ -304,15 +370,7 @@ static String _rtgi_hiprt_unavailable_reason() {
 }
 
 static String _rtgi_embree_unavailable_reason() {
-#if defined(RTGI_EMBREE_OSPRAY_BACKEND_IMPLEMENTED)
-	return "Embree/OSPRay RTGI backend is compiled, but the active runtime, device, or RenderingDevice exchange is unavailable.";
-#else
-#if defined(MODULE_EMBREE_ENABLED) || defined(MODULE_OSPRAY_ENABLED) || defined(MODULE_RAYCAST_ENABLED)
-	return "Embree/OSPRay module is compiled, but the RTGI backend has no CPU/SYCL renderer plus Vulkan upload/import or staged-copy path yet.";
-#else
-	return "Embree/OSPRay RTGI support is not compiled in and no Vulkan upload/import or staged-copy path is available.";
-#endif
-#endif
+	return "Intel Embree/OSPRay CPU RTGI backend is disabled; use Vulkan Generic, NVIDIA RTXPT, or AMD HIP RT.";
 }
 
 static bool _rtgi_rtxpt_backend_compiled() {
@@ -332,11 +390,7 @@ static bool _rtgi_hiprt_backend_compiled() {
 }
 
 static bool _rtgi_embree_backend_compiled() {
-#if defined(MODULE_EMBREE_ENABLED) || defined(MODULE_OSPRAY_ENABLED) || defined(MODULE_RAYCAST_ENABLED)
-	return true;
-#else
 	return false;
-#endif
 }
 
 static bool _rtgi_rtxpt_sdk_headers_present() {
@@ -363,16 +417,52 @@ static bool _rtgi_fidelityfx_sdk_headers_present() {
 #endif
 }
 
-static bool _rtgi_embree_sdk_headers_present() {
-#if (defined(MODULE_EMBREE_ENABLED) || defined(MODULE_OSPRAY_ENABLED) || defined(MODULE_RAYCAST_ENABLED)) && defined(RTGI_EMBREE_OSPRAY_SDK_HEADERS_PRESENT)
+static bool _rtgi_fidelityfx_sdk_denoiser_headers_present() {
+#if defined(RTGI_FIDELITYFX_SDK_DENOISER_HEADERS_PRESENT)
 	return true;
 #else
 	return false;
 #endif
 }
 
+static String _rtgi_fidelityfx_sdk_denoiser_version() {
+#if defined(RTGI_FIDELITYFX_SDK_DENOISER_HEADERS_PRESENT)
+	return vformat("%d.%d.%d", FFX_DENOISER_VERSION_MAJOR, FFX_DENOISER_VERSION_MINOR, FFX_DENOISER_VERSION_PATCH);
+#else
+	return String();
+#endif
+}
+
+static bool _rtgi_nrd_sdk_headers_present() {
+#if defined(MODULE_RTXPT_ENABLED) && defined(RTGI_NRD_SDK_HEADERS_PRESENT)
+	return true;
+#else
+	return false;
+#endif
+}
+
+static String _rtgi_nrd_sdk_version() {
+#if defined(MODULE_RTXPT_ENABLED) && defined(RTGI_NRD_SDK_HEADERS_PRESENT)
+	return vformat("%d.%d.%d", NRD_VERSION_MAJOR, NRD_VERSION_MINOR, NRD_VERSION_BUILD);
+#else
+	return String();
+#endif
+}
+
+static bool _rtgi_streamline_sdk_headers_present() {
+#if defined(MODULE_RTXPT_ENABLED) && defined(RTGI_STREAMLINE_SDK_HEADERS_PRESENT)
+	return true;
+#else
+	return false;
+#endif
+}
+
+static bool _rtgi_embree_sdk_headers_present() {
+	return false;
+}
+
 static bool _rtgi_rtxpt_backend_implementation_ready() {
-#if defined(MODULE_RTXPT_ENABLED) && defined(RTGI_RTXPT_BACKEND_IMPLEMENTED)
+#if defined(MODULE_RTXPT_ENABLED) && defined(RTGI_RTXPT_BACKEND_IMPLEMENTED) && defined(RTGI_RTXPT_GODOT_REFERENCE_DISPATCH_ENABLED)
 	return true;
 #else
 	return false;
@@ -388,11 +478,7 @@ static bool _rtgi_hiprt_backend_implementation_ready() {
 }
 
 static bool _rtgi_embree_backend_implementation_ready() {
-#if (defined(MODULE_EMBREE_ENABLED) || defined(MODULE_OSPRAY_ENABLED) || defined(MODULE_RAYCAST_ENABLED)) && defined(RTGI_EMBREE_OSPRAY_BACKEND_IMPLEMENTED)
-	return true;
-#else
 	return false;
-#endif
 }
 
 static String _rtgi_availability_failure(bool p_backend_compiled, bool p_runtime_detected, bool p_device_supported, bool p_resource_exchange_supported, bool p_implementation_ready) {
@@ -428,12 +514,16 @@ static RTGIBackendCapabilities _rtgi_vulkan_generic_capabilities() {
 	caps.available = caps.runtime_detected && caps.device_supported && caps.resource_exchange_supported && caps.implementation_ready;
 	caps.runtime_name = "Vulkan ray tracing pipeline";
 	caps.integration_path = "RenderingDevice-owned Vulkan resources";
+	caps.scene_import_path = "RenderingDevice TLAS and RTGI scene resources";
+	caps.trace_dispatch_path = "RenderingDevice Vulkan ray tracing pipeline";
 	caps.rendering_device_family = _rtgi_rd_device_family_name(rd);
 	caps.rendering_device_name = _rtgi_rd_device_name(rd);
 	caps.rendering_device_vendor_id = _rtgi_rd_device_vendor_id(rd);
 	caps.rendering_device_vendor = _rtgi_rd_device_vendor_name(caps.rendering_device_vendor_id);
 	caps.rendering_device_exchange = vulkan_driver;
 	caps.vulkan_runtime = vulkan_driver;
+	caps.vendor_scene_import = false;
+	caps.vendor_sdk_dispatch = false;
 	caps.denoiser_handoff = caps.available;
 	caps.sdk_headers_present = true;
 	caps.vulkan_interop_mode = caps.available ? "rd_internal" : "none";
@@ -443,6 +533,7 @@ static RTGIBackendCapabilities _rtgi_vulkan_generic_capabilities() {
 	caps.denoiser_runtime_detected = caps.available;
 	caps.denoiser_available = caps.available;
 	caps.denoiser_name = "ASVFG/Internal";
+	caps.denoiser_integration_path = "RenderingDevice ASVFG compute graph";
 	caps.probe_update_path = "Vulkan Generic ray tracing pipeline";
 	caps.availability_failure = _rtgi_availability_failure(caps.backend_compiled, caps.runtime_detected, caps.device_supported, caps.resource_exchange_supported, caps.implementation_ready);
 	if (!caps.available) {
@@ -555,6 +646,30 @@ static void _rtgi_append_unique_library_search_dir(Vector<String> &r_dirs, const
 	r_dirs.push_back(p_dir);
 }
 
+static void _rtgi_append_runtime_library_search_root(Vector<String> &r_dirs, const String &p_root) {
+	if (p_root.is_empty()) {
+		return;
+	}
+	_rtgi_append_unique_library_search_dir(r_dirs, p_root);
+	_rtgi_append_unique_library_search_dir(r_dirs, p_root.path_join("bin"));
+	_rtgi_append_unique_library_search_dir(r_dirs, p_root.path_join("lib"));
+	_rtgi_append_unique_library_search_dir(r_dirs, p_root.path_join("lib64"));
+	_rtgi_append_unique_library_search_dir(r_dirs, p_root.path_join("lib").path_join("x64"));
+}
+
+static void _rtgi_append_project_sdk_search_root(Vector<String> &r_dirs, const String &p_setting_path) {
+	if (p_setting_path.is_empty()) {
+		return;
+	}
+
+	ProjectSettings *project_settings = ProjectSettings::get_singleton();
+	if (project_settings == nullptr) {
+		return;
+	}
+
+	_rtgi_append_runtime_library_search_root(r_dirs, project_settings->globalize_path(p_setting_path).simplify_path());
+}
+
 static Vector<String> _rtgi_make_runtime_library_search_dirs(const char *const *p_root_env_vars, int p_root_env_var_count) {
 	Vector<String> search_dirs;
 	OS *os = OS::get_singleton();
@@ -564,16 +679,21 @@ static Vector<String> _rtgi_make_runtime_library_search_dirs(const char *const *
 
 	const String executable_dir = os->get_executable_path().get_base_dir();
 	_rtgi_append_unique_library_search_dir(search_dirs, executable_dir);
+	_rtgi_append_runtime_library_search_root(search_dirs, String(RTGI_HIPRT_SDK_ROOT));
+	_rtgi_append_runtime_library_search_root(search_dirs, String(RTGI_RTXPT_SDK_ROOT));
+	_rtgi_append_runtime_library_search_root(search_dirs, String(RTGI_NRD_SDK_ROOT));
+	_rtgi_append_runtime_library_search_root(search_dirs, String(RTGI_STREAMLINE_SDK_ROOT));
+	_rtgi_append_runtime_library_search_root(search_dirs, String(RTGI_EMBREE_SDK_ROOT));
+	_rtgi_append_runtime_library_search_root(search_dirs, String(RTGI_OSPRAY_SDK_ROOT));
+	_rtgi_append_project_sdk_search_root(search_dirs, String(GLOBAL_GET("rendering/path_tracing/nvidia/nrd_sdk_path")));
+	_rtgi_append_project_sdk_search_root(search_dirs, "res://addons/rtgi_vendor_sdks/nrd");
 
 	for (int i = 0; i < p_root_env_var_count; i++) {
 		const String root = os->get_environment(p_root_env_vars[i]);
 		if (root.is_empty()) {
 			continue;
 		}
-		_rtgi_append_unique_library_search_dir(search_dirs, root);
-		_rtgi_append_unique_library_search_dir(search_dirs, root.path_join("bin"));
-		_rtgi_append_unique_library_search_dir(search_dirs, root.path_join("lib"));
-		_rtgi_append_unique_library_search_dir(search_dirs, root.path_join("lib64"));
+		_rtgi_append_runtime_library_search_root(search_dirs, root);
 	}
 
 #if defined(WINDOWS_ENABLED)
@@ -629,11 +749,15 @@ struct RTGIVendorBackendRequirements {
 	String name;
 	String runtime_name;
 	String integration_path;
+	String scene_import_path;
+	String trace_dispatch_path;
 	uint32_t required_gpu_vendor = RenderingContextDriver::Vendor::VENDOR_UNKNOWN;
 	bool requires_raytracing_pipeline = false;
 	bool allows_rd_internal_exchange = false;
 	bool requires_external_memory_semaphore = false;
 	bool allows_staged_copy = false;
+	bool vendor_scene_import = false;
+	bool vendor_sdk_dispatch = false;
 };
 
 struct RTGIVendorBackendProbe {
@@ -654,15 +778,107 @@ struct RTGIVendorBackendProbe {
 	String implementation_failure_reason;
 };
 
+static bool _rtgi_rtxpt_dispatch_manifest_present(String *r_failure_reason) {
+#if defined(MODULE_RTXPT_ENABLED) && defined(RTGI_RTXPT_BACKEND_IMPLEMENTED) && defined(RTGI_RTXPT_GODOT_REFERENCE_DISPATCH_ENABLED)
+	const String root = String(RTGI_RTXPT_SDK_ROOT).replace("\\", "/");
+	if (root.is_empty()) {
+		if (r_failure_reason) {
+			*r_failure_reason = "RTXPT backend was compiled without an rtxpt_sdk_path source root.";
+		}
+		return false;
+	}
+
+	struct RTXPTManifestLayout {
+		const char *root = nullptr;
+		bool requires_sample_cpp = false;
+	};
+	static const RTXPTManifestLayout layouts[] = {
+		{ "Rtxpt", true },
+		{ "include/Rtxpt", false },
+	};
+	static const char *const required_relative_files[] = {
+		"Sample.h",
+		"Shaders/PathTracerSample.hlsl",
+		"Shaders/PathTracerBridge.hlsli",
+		"Shaders/PathTracer/Config.h",
+		"Shaders/PathTracer/PathTracerShared.h",
+		"Shaders/PathTracer/PathTracer.hlsli",
+		"Shaders/PathTracer/StablePlanes.hlsli",
+	};
+
+	String manifest_root;
+	for (uint32_t layout_index = 0; layout_index < sizeof(layouts) / sizeof(layouts[0]); layout_index++) {
+		const String candidate_root = root.path_join(layouts[layout_index].root);
+		bool layout_valid = true;
+		if (layouts[layout_index].requires_sample_cpp && !FileAccess::exists(candidate_root.path_join("Sample.cpp"))) {
+			layout_valid = false;
+		}
+		for (uint32_t file_index = 0; layout_valid && file_index < sizeof(required_relative_files) / sizeof(required_relative_files[0]); file_index++) {
+			if (!FileAccess::exists(candidate_root.path_join(required_relative_files[file_index]))) {
+				layout_valid = false;
+			}
+		}
+		if (layout_valid) {
+			manifest_root = candidate_root;
+			break;
+		}
+	}
+	if (manifest_root.is_empty()) {
+		if (r_failure_reason) {
+			*r_failure_reason = "RTXPT backend requires either a source-tree Rtxpt dispatch manifest or an include/Rtxpt dispatch manifest under rtxpt_sdk_path.";
+		}
+		return false;
+	}
+
+	Ref<FileAccess> path_tracer_shared = FileAccess::open(manifest_root.path_join("Shaders/PathTracer/PathTracerShared.h"), FileAccess::READ);
+	if (path_tracer_shared.is_null()) {
+		if (r_failure_reason) {
+			*r_failure_reason = "RTXPT backend could not open PathTracerShared.h from rtxpt_sdk_path.";
+		}
+		return false;
+	}
+	const String shared_source = path_tracer_shared->get_as_utf8_string();
+	if (!shared_source.contains("struct PathTracerConstants") || !shared_source.contains("struct PathTracerCameraData")) {
+		if (r_failure_reason) {
+			*r_failure_reason = "RTXPT PathTracerShared.h does not expose the expected camera and constant-buffer dispatch contract.";
+		}
+		return false;
+	}
+
+	Ref<FileAccess> sample_shader = FileAccess::open(manifest_root.path_join("Shaders/PathTracerSample.hlsl"), FileAccess::READ);
+	if (sample_shader.is_null()) {
+		if (r_failure_reason) {
+			*r_failure_reason = "RTXPT backend could not open PathTracerSample.hlsl from rtxpt_sdk_path.";
+		}
+		return false;
+	}
+	const String shader_source = sample_shader->get_as_utf8_string();
+	if (!shader_source.contains("PathTracerBridge") || !shader_source.contains("PathTracer/PathTracer.hlsli")) {
+		if (r_failure_reason) {
+			*r_failure_reason = "RTXPT PathTracerSample.hlsl does not expose the expected reference path tracer bridge.";
+		}
+		return false;
+	}
+	return true;
+#else
+	if (r_failure_reason) {
+		*r_failure_reason = _rtgi_rtxpt_unavailable_reason();
+	}
+	return false;
+#endif
+}
+
 static void _rtgi_probe_rtxpt_runtime(RTGIVendorBackendProbe &r_probe) {
 	r_probe.backend_compiled = _rtgi_rtxpt_backend_compiled();
 	r_probe.sdk_headers_present = _rtgi_rtxpt_sdk_headers_present();
 #ifdef MODULE_RTXPT_ENABLED
 	// NVIDIA's Godot reference branch records RTXPT-style work through Godot's
 	// Vulkan ray tracing pipeline, not through a standalone RTXPT runtime DLL.
-	r_probe.runtime_detected = true;
+	r_probe.runtime_detected = _rtgi_rtxpt_dispatch_manifest_present(&r_probe.runtime_failure_reason);
 	r_probe.implementation_ready = _rtgi_rtxpt_backend_implementation_ready();
-	if (!r_probe.implementation_ready) {
+	if (!r_probe.sdk_headers_present) {
+		r_probe.implementation_failure_reason = "RTXPT module is compiled, but rtxpt_sdk_path does not point to an RTXPT source tree with the required sample entry point, bridge, and path-tracer shader sources.";
+	} else if (!r_probe.implementation_ready) {
 		r_probe.implementation_failure_reason = "RTXPT module is compiled, but the NVIDIA fork-compatible RenderingDevice/Vulkan dispatch adapter was not compiled into this build.";
 	}
 #else
@@ -688,6 +904,9 @@ static void _rtgi_probe_hiprt_runtime(RTGIVendorBackendProbe &r_probe) {
 	};
 	static const char *const hip_runtime_symbols[] = {
 		"hipInit",
+		"hipSetDevice",
+		"hipGetDevice",
+		"hipCtxGetCurrent",
 		"hipDeviceSynchronize",
 		"hipMalloc",
 		"hipMemcpy",
@@ -744,11 +963,11 @@ static void _rtgi_probe_hiprt_runtime(RTGIVendorBackendProbe &r_probe) {
 	r_probe.runtime_detected = hip_runtime_detected && hiprt_runtime_detected;
 	if (!r_probe.runtime_detected) {
 		if (!hip_runtime_detected && !hiprt_runtime_detected) {
-			r_probe.runtime_failure_reason = "HIP and HIP RT runtime libraries were not found in HIPRT_PATH, HIP_PATH, ROCM_PATH, PATH, or the executable directory.";
+			r_probe.runtime_failure_reason = "HIP and HIP RT runtime libraries with required dispatch and external interop symbols were not found in hiprt_sdk_path, HIPRT_PATH, HIP_PATH, ROCM_PATH, PATH, or the executable directory.";
 		} else if (!hip_runtime_detected) {
-			r_probe.runtime_failure_reason = "HIP runtime library was not found in HIPRT_PATH, HIP_PATH, ROCM_PATH, PATH, or the executable directory.";
+			r_probe.runtime_failure_reason = "HIP runtime library with required dispatch and external interop symbols was not found in hiprt_sdk_path, HIPRT_PATH, HIP_PATH, ROCM_PATH, PATH, or the executable directory.";
 		} else {
-			r_probe.runtime_failure_reason = "HIP RT runtime library was not found in HIPRT_PATH, HIP_PATH, ROCM_PATH, PATH, or the executable directory.";
+			r_probe.runtime_failure_reason = "HIP RT runtime library with required acceleration-structure and trace-kernel symbols was not found in hiprt_sdk_path, HIPRT_PATH, HIP_PATH, ROCM_PATH, PATH, or the executable directory.";
 		}
 	}
 	r_probe.implementation_ready = _rtgi_hiprt_backend_implementation_ready();
@@ -768,9 +987,12 @@ static void _rtgi_probe_embree_runtime(RTGIVendorBackendProbe &r_probe) {
 	r_probe.backend_compiled = _rtgi_embree_backend_compiled();
 	r_probe.sdk_headers_present = _rtgi_embree_sdk_headers_present();
 #if defined(MODULE_EMBREE_ENABLED) || defined(MODULE_OSPRAY_ENABLED) || defined(MODULE_RAYCAST_ENABLED)
-#if defined(RTGI_EMBREE_OSPRAY_BACKEND_IMPLEMENTED)
-	r_probe.runtime_detected = true;
-#else
+	bool embree_runtime_detected = false;
+#if defined(RTGI_EMBREE_CPU_DISPATCH_ENABLED)
+	// Built-in Embree is compiled directly into the raycast module, and
+	// external Embree CPU dispatch is linked at build time.
+	embree_runtime_detected = true;
+#elif defined(MODULE_EMBREE_ENABLED)
 	static const char *const embree_runtime_libraries[] = {
 #if defined(WINDOWS_ENABLED)
 		"embree4.dll",
@@ -783,18 +1005,6 @@ static void _rtgi_probe_embree_runtime(RTGIVendorBackendProbe &r_probe) {
 	static const char *const embree_runtime_symbols[] = {
 		"rtcNewDevice",
 	};
-	static const char *const ospray_runtime_libraries[] = {
-#if defined(WINDOWS_ENABLED)
-		"ospray.dll",
-		"ospray_module_cpu.dll",
-#else
-		"libospray.so",
-		"libospray_module_cpu.so",
-#endif
-	};
-	static const char *const ospray_runtime_symbols[] = {
-		"ospInit",
-	};
 	static const char *const embree_root_env_vars[] = {
 		"EMBREE_ROOT",
 		"EMBREE_DIR",
@@ -803,14 +1013,66 @@ static void _rtgi_probe_embree_runtime(RTGIVendorBackendProbe &r_probe) {
 		"ONEAPI_ROOT",
 	};
 	String found_embree_library;
+	embree_runtime_detected = _rtgi_find_runtime_library(embree_runtime_libraries, sizeof(embree_runtime_libraries) / sizeof(embree_runtime_libraries[0]), embree_runtime_symbols, sizeof(embree_runtime_symbols) / sizeof(embree_runtime_symbols[0]), embree_root_env_vars, sizeof(embree_root_env_vars) / sizeof(embree_root_env_vars[0]), &found_embree_library);
+#endif
+	bool ospray_runtime_detected = false;
+#if defined(RTGI_OSPRAY_DISPATCH_ENABLED)
+	static const char *const ospray_runtime_libraries[] = {
+#if defined(WINDOWS_ENABLED)
+		"ospray.dll",
+#else
+		"libospray.so",
+#endif
+	};
+	static const char *const ospray_runtime_symbols[] = {
+		"ospShutdown",
+		"ospLoadModule",
+		"ospNewDevice",
+		"ospSetCurrentDevice",
+		"ospDeviceCommit",
+		"ospDeviceRelease",
+		"ospNewSharedData",
+		"ospNewGeometry",
+		"ospNewGeometricModel",
+		"ospNewMaterial",
+		"ospNewLight",
+		"ospNewGroup",
+		"ospNewInstance",
+		"ospNewWorld",
+		"ospNewRenderer",
+		"ospNewCamera",
+		"ospSetParam",
+		"ospCommit",
+		"ospRelease",
+		"ospNewFrameBuffer",
+		"ospResetAccumulation",
+		"ospRenderFrame",
+		"ospWait",
+		"ospMapFrameBuffer",
+		"ospUnmapFrameBuffer",
+	};
+	static const char *const ospray_module_libraries[] = {
+#if defined(WINDOWS_ENABLED)
+		"ospray_module_cpu.dll",
+#else
+		"libospray_module_cpu.so",
+#endif
+	};
+	static const char *const ospray_root_env_vars[] = {
+		"OSPRAY_ROOT",
+		"OSPRAY_DIR",
+		"ONEAPI_ROOT",
+	};
 	String found_ospray_library;
-	const bool embree_runtime_detected = _rtgi_find_runtime_library(embree_runtime_libraries, sizeof(embree_runtime_libraries) / sizeof(embree_runtime_libraries[0]), embree_runtime_symbols, sizeof(embree_runtime_symbols) / sizeof(embree_runtime_symbols[0]), embree_root_env_vars, sizeof(embree_root_env_vars) / sizeof(embree_root_env_vars[0]), &found_embree_library);
-	const bool ospray_runtime_detected = _rtgi_find_runtime_library(ospray_runtime_libraries, sizeof(ospray_runtime_libraries) / sizeof(ospray_runtime_libraries[0]), ospray_runtime_symbols, sizeof(ospray_runtime_symbols) / sizeof(ospray_runtime_symbols[0]), embree_root_env_vars, sizeof(embree_root_env_vars) / sizeof(embree_root_env_vars[0]), &found_ospray_library);
+	String found_ospray_module;
+	const bool ospray_library_detected = _rtgi_find_runtime_library(ospray_runtime_libraries, sizeof(ospray_runtime_libraries) / sizeof(ospray_runtime_libraries[0]), ospray_runtime_symbols, sizeof(ospray_runtime_symbols) / sizeof(ospray_runtime_symbols[0]), ospray_root_env_vars, sizeof(ospray_root_env_vars) / sizeof(ospray_root_env_vars[0]), &found_ospray_library);
+	const bool ospray_module_detected = _rtgi_find_runtime_library(ospray_module_libraries, sizeof(ospray_module_libraries) / sizeof(ospray_module_libraries[0]), nullptr, 0, ospray_root_env_vars, sizeof(ospray_root_env_vars) / sizeof(ospray_root_env_vars[0]), &found_ospray_module);
+	ospray_runtime_detected = ospray_library_detected && ospray_module_detected;
+#endif
 	r_probe.runtime_detected = embree_runtime_detected || ospray_runtime_detected;
 	if (!r_probe.runtime_detected) {
-		r_probe.runtime_failure_reason = "Embree or OSPRay runtime library was not found in EMBREE_ROOT, EMBREE_DIR, OSPRAY_ROOT, OSPRAY_DIR, ONEAPI_ROOT, PATH, or the executable directory.";
+		r_probe.runtime_failure_reason = "Embree or OSPRay runtime library was not found in embree_sdk_path, ospray_sdk_path, EMBREE_ROOT, EMBREE_DIR, OSPRAY_ROOT, OSPRAY_DIR, ONEAPI_ROOT, PATH, or the executable directory.";
 	}
-#endif
 	r_probe.implementation_ready = _rtgi_embree_backend_implementation_ready();
 	if (!r_probe.implementation_ready) {
 		r_probe.implementation_failure_reason = "Embree/OSPRay SDK detection is wired, but the CPU/SYCL scene conversion, renderer, and Vulkan upload/staged-copy entrypoints were not compiled into this build.";
@@ -882,7 +1144,7 @@ static RTGIVendorBackendProbe _rtgi_probe_vendor_backend(const RTGIVendorBackend
 			_rtgi_probe_hiprt_runtime(probe);
 			break;
 		case RSE::PT_BACKEND_INTEL_EMBREE:
-			_rtgi_probe_embree_runtime(probe);
+			probe.compile_failure_reason = _rtgi_embree_unavailable_reason();
 			break;
 		case RSE::PT_BACKEND_VULKAN_GENERIC:
 		default:
@@ -902,7 +1164,7 @@ static bool _rtgi_probe_vendor_denoiser_runtime(RSE::PathtracingBackend p_backen
 				*r_denoiser_name = "AMD FidelityFX Denoiser";
 				break;
 			case RSE::PT_BACKEND_INTEL_EMBREE:
-				*r_denoiser_name = "AMD FidelityFX Denoiser (cross-vendor)";
+				*r_denoiser_name = "disabled";
 				break;
 			case RSE::PT_BACKEND_VULKAN_GENERIC:
 			default:
@@ -931,7 +1193,7 @@ static bool _rtgi_probe_vendor_denoiser_runtime(RSE::PathtracingBackend p_backen
 			String found_library;
 			const bool detected = _rtgi_find_runtime_library(nrd_runtime_libraries, sizeof(nrd_runtime_libraries) / sizeof(nrd_runtime_libraries[0]), nullptr, 0, nrd_root_env_vars, sizeof(nrd_root_env_vars) / sizeof(nrd_root_env_vars[0]), &found_library);
 			if (!detected && r_failure_reason != nullptr) {
-				*r_failure_reason = "NVIDIA denoiser was requested, but the NRD runtime was not found in NRD_SDK_PATH, NRD_PATH, RTXPT_SDK_PATH, PATH, or the executable directory.";
+				*r_failure_reason = "NVIDIA denoiser was requested, but the NRD runtime was not found in rendering/path_tracing/nvidia/nrd_sdk_path, nrd_sdk_path, rtxpt_sdk_path, streamline_sdk_path, NRD_SDK_PATH, NRD_PATH, RTXPT_SDK_PATH, PATH, or the executable directory.";
 			}
 			return detected;
 #else
@@ -943,11 +1205,16 @@ static bool _rtgi_probe_vendor_denoiser_runtime(RSE::PathtracingBackend p_backen
 		}
 		case RSE::PT_BACKEND_AMD_HIP_RT: {
 #ifdef MODULE_HIPRT_ENABLED
-			const bool detected = _rtgi_fidelityfx_sdk_headers_present();
-			if (!detected && r_failure_reason != nullptr) {
+#if defined(RTGI_FIDELITYFX_DENOISER_HANDOFF_ENABLED)
+			return true;
+#else
+			if (!_rtgi_fidelityfx_sdk_headers_present() && r_failure_reason != nullptr) {
 				*r_failure_reason = "AMD denoiser support requires FidelityFX SDK headers to be configured for this build.";
+			} else if (r_failure_reason != nullptr) {
+				*r_failure_reason = "FidelityFX SDK denoiser headers are configured, but no Vulkan FidelityFX denoiser runtime handoff is compiled; RTGI uses the internal FidelityFX-style/ASVFG graph.";
 			}
-			return detected;
+			return false;
+#endif
 #else
 			if (r_failure_reason != nullptr) {
 				*r_failure_reason = "AMD denoiser support is not compiled in because the HIP RT module is disabled.";
@@ -956,17 +1223,67 @@ static bool _rtgi_probe_vendor_denoiser_runtime(RSE::PathtracingBackend p_backen
 #endif
 		}
 		case RSE::PT_BACKEND_INTEL_EMBREE: {
-			const bool detected = _rtgi_fidelityfx_sdk_headers_present();
-			if (!detected && r_failure_reason != nullptr) {
-				*r_failure_reason = "Intel denoiser support uses the cross-vendor FidelityFX Denoiser path and requires FidelityFX SDK headers to be configured for this build.";
+			if (r_failure_reason != nullptr) {
+				*r_failure_reason = "Intel RTGI denoising is disabled with the Intel CPU RTGI backend.";
 			}
-			return detected;
+			return false;
 		}
 		case RSE::PT_BACKEND_VULKAN_GENERIC:
 		default:
 			return true;
 	}
 }
+
+static bool _rtgi_probe_streamline_dlss_rr_runtime(String *r_failure_reason) {
+#if defined(MODULE_RTXPT_ENABLED) && defined(RTGI_STREAMLINE_SDK_HEADERS_PRESENT)
+	static const char *const streamline_runtime_libraries[] = {
+#if defined(WINDOWS_ENABLED)
+		"sl.interposer.dll",
+#else
+		"libsl.interposer.so",
+#endif
+	};
+	static const char *const streamline_symbols[] = {
+		"slInit",
+		"slShutdown",
+		"slSetVulkanInfo",
+		"slIsFeatureSupported",
+		"slGetFeatureRequirements",
+		"slGetFeatureFunction",
+		"slGetNewFrameToken",
+		"slSetConstants",
+		"slSetTagForFrame",
+		"slEvaluateFeature",
+	};
+	static const char *const streamline_root_env_vars[] = {
+		"STREAMLINE_SDK_PATH",
+		"STREAMLINE_PATH",
+		"RTXPT_SDK_PATH",
+	};
+
+	String found_library;
+	const bool detected = _rtgi_find_runtime_library(streamline_runtime_libraries, sizeof(streamline_runtime_libraries) / sizeof(streamline_runtime_libraries[0]), streamline_symbols, sizeof(streamline_symbols) / sizeof(streamline_symbols[0]), streamline_root_env_vars, sizeof(streamline_root_env_vars) / sizeof(streamline_root_env_vars[0]), &found_library);
+	if (!detected && r_failure_reason != nullptr) {
+		*r_failure_reason = "Streamline DLSS Ray Reconstruction runtime was not found in sl.interposer with Vulkan device setup, shutdown, feature-function lookup, frame constants, resource tagging, and feature evaluation entry points in streamline_sdk_path, rtxpt_sdk_path, STREAMLINE_SDK_PATH, STREAMLINE_PATH, RTXPT_SDK_PATH, PATH, or the executable directory.";
+	}
+	return detected;
+#else
+	if (r_failure_reason != nullptr) {
+		*r_failure_reason = "Streamline DLSS Ray Reconstruction support is not compiled in because Streamline headers were not configured for the RTXPT module.";
+	}
+	return false;
+#endif
+}
+
+static bool _rtgi_streamline_dlss_rr_handoff_ready() {
+#if defined(MODULE_RTXPT_ENABLED) && defined(RTGI_STREAMLINE_DLSS_RR_HANDOFF_ENABLED)
+	return true;
+#else
+	return false;
+#endif
+}
+
+static bool _rtgi_streamline_dlss_rr_runtime_ready_for_device(RenderingDevice *p_rd, String *r_failure_reason);
 
 static bool _rtgi_vendor_denoiser_handoff_ready(RSE::PathtracingBackend p_backend) {
 	switch (p_backend) {
@@ -983,11 +1300,7 @@ static bool _rtgi_vendor_denoiser_handoff_ready(RSE::PathtracingBackend p_backen
 			return false;
 #endif
 		case RSE::PT_BACKEND_INTEL_EMBREE:
-#if defined(RTGI_FIDELITYFX_DENOISER_HANDOFF_ENABLED)
-			return true;
-#else
 			return false;
-#endif
 		case RSE::PT_BACKEND_VULKAN_GENERIC:
 		default:
 			return true;
@@ -1006,6 +1319,10 @@ static RTGIBackendCapabilities _rtgi_vendor_backend_capabilities(const RTGIVendo
 	caps.available = probe.backend_compiled && probe.runtime_detected && probe.device_supported && probe.resource_exchange_supported && probe.implementation_ready;
 	caps.runtime_name = p_requirements.runtime_name;
 	caps.integration_path = p_requirements.integration_path;
+	caps.scene_import_path = p_requirements.scene_import_path;
+	caps.trace_dispatch_path = p_requirements.trace_dispatch_path;
+	caps.vendor_scene_import = p_requirements.vendor_scene_import;
+	caps.vendor_sdk_dispatch = p_requirements.vendor_sdk_dispatch;
 
 	caps.rendering_device_family = _rtgi_rd_device_family_name(rd);
 	caps.rendering_device_name = _rtgi_rd_device_name(rd);
@@ -1042,17 +1359,54 @@ static RTGIBackendCapabilities _rtgi_vendor_backend_capabilities(const RTGIVendo
 	caps.native_probe_update = probe.implementation_ready;
 	caps.generic_probe_update_fallback = !probe.implementation_ready;
 	caps.probe_update_path = probe.implementation_ready ? p_requirements.name + " native probe tracing" : "Vulkan Generic STRC probe fallback";
-	if (p_requirements.backend == RSE::PT_BACKEND_AMD_HIP_RT || p_requirements.backend == RSE::PT_BACKEND_INTEL_EMBREE) {
+	if (p_requirements.backend == RSE::PT_BACKEND_NVIDIA_RTXPT || p_requirements.backend == RSE::PT_BACKEND_AMD_HIP_RT || p_requirements.backend == RSE::PT_BACKEND_INTEL_EMBREE) {
 		caps.native_probe_update = false;
 		caps.generic_probe_update_fallback = probe.implementation_ready;
 		caps.probe_update_path = "Vulkan Generic STRC probe fallback";
 	}
 	const bool denoiser_handoff_ready = _rtgi_vendor_denoiser_handoff_ready(p_requirements.backend);
 	caps.denoiser_runtime_detected = _rtgi_probe_vendor_denoiser_runtime(p_requirements.backend, &caps.denoiser_name, &caps.denoiser_failure_reason);
-	caps.denoiser_available = probe.implementation_ready && caps.denoiser_runtime_detected && denoiser_handoff_ready;
+	caps.denoiser_available = caps.available && caps.denoiser_runtime_detected && denoiser_handoff_ready;
 	caps.denoiser_handoff = caps.denoiser_available;
+	if (p_requirements.backend == RSE::PT_BACKEND_NVIDIA_RTXPT) {
+		caps.nvidia_nrd_headers_present = _rtgi_nrd_sdk_headers_present();
+		caps.nvidia_nrd_version = _rtgi_nrd_sdk_version();
+		caps.nvidia_streamline_headers_present = _rtgi_streamline_sdk_headers_present();
+		caps.nvidia_streamline_runtime_detected = _rtgi_probe_streamline_dlss_rr_runtime(&caps.nvidia_streamline_failure_reason);
+		caps.nvidia_dlss_rr_handoff_ready = _rtgi_streamline_dlss_rr_handoff_ready();
+		caps.denoiser_integration_path = "NRD runtime probe with Streamline DLSS Ray Reconstruction Vulkan callback handoff; ASVFG fallback";
+		bool nvidia_dlss_rr_device_ready = false;
+		if (caps.available && caps.nvidia_streamline_headers_present && caps.nvidia_streamline_runtime_detected && caps.nvidia_dlss_rr_handoff_ready) {
+			String streamline_device_failure;
+			nvidia_dlss_rr_device_ready = _rtgi_streamline_dlss_rr_runtime_ready_for_device(rd, &streamline_device_failure);
+			if (!nvidia_dlss_rr_device_ready && !streamline_device_failure.is_empty()) {
+				caps.nvidia_streamline_failure_reason = streamline_device_failure;
+			}
+		}
+		caps.nvidia_dlss_rr_device_supported = nvidia_dlss_rr_device_ready;
+		caps.nvidia_dlss_rr_available = caps.available && caps.nvidia_streamline_headers_present && caps.nvidia_streamline_runtime_detected && caps.nvidia_dlss_rr_handoff_ready && nvidia_dlss_rr_device_ready;
+		if (!caps.nvidia_dlss_rr_available && caps.nvidia_streamline_headers_present && caps.nvidia_streamline_runtime_detected && !caps.nvidia_dlss_rr_handoff_ready && caps.nvidia_streamline_failure_reason.is_empty()) {
+			caps.nvidia_streamline_failure_reason = "Streamline DLSS Ray Reconstruction runtime was detected, but the Vulkan resource tagging and slEvaluateFeature handoff implementation is not compiled into this build.";
+		}
+		if (caps.nvidia_dlss_rr_available) {
+			caps.denoiser_name = caps.denoiser_name.is_empty() ? "NVIDIA Streamline DLSS Ray Reconstruction" : caps.denoiser_name + " / Streamline DLSS Ray Reconstruction";
+			caps.denoiser_runtime_detected = true;
+			caps.denoiser_available = true;
+			caps.denoiser_handoff = true;
+			caps.denoiser_failure_reason = String();
+			caps.denoiser_integration_path = "Streamline DLSS Ray Reconstruction Vulkan callback handoff";
+		}
+	} else if (p_requirements.backend == RSE::PT_BACKEND_AMD_HIP_RT) {
+		caps.amd_fidelityfx_sdk_headers_present = _rtgi_fidelityfx_sdk_denoiser_headers_present();
+		caps.amd_fidelityfx_denoiser_version = _rtgi_fidelityfx_sdk_denoiser_version();
+		caps.denoiser_integration_path = caps.amd_fidelityfx_sdk_headers_present ? "FidelityFX Denoiser API headers with RenderingDevice multi-signal RTGI graph" : "RenderingDevice FidelityFX-style multi-signal RTGI graph";
+	}
 	if (!caps.denoiser_available && caps.denoiser_failure_reason.is_empty()) {
-		caps.denoiser_failure_reason = caps.denoiser_runtime_detected ? "Vendor denoiser runtime was detected, but the matching RTGI denoiser handoff implementation was not compiled into this build." : "Vendor denoiser runtime was not detected.";
+		if (!caps.available) {
+			caps.denoiser_failure_reason = "Vendor denoiser handoff requires the selected RTGI backend to be available.";
+		} else {
+			caps.denoiser_failure_reason = caps.denoiser_runtime_detected ? "Vendor denoiser runtime was detected, but the matching RTGI denoiser handoff implementation was not compiled into this build." : "Vendor denoiser runtime was not detected.";
+		}
 	}
 	caps.compile_failure_reason = probe.compile_failure_reason;
 	caps.runtime_failure_reason = probe.runtime_failure_reason;
@@ -1074,6 +1428,43 @@ static RTGIBackendCapabilities _rtgi_vendor_backend_capabilities(const RTGIVendo
 	return caps;
 }
 
+static RTGIBackendCapabilities _rtgi_disabled_intel_backend_capabilities() {
+	RTGIBackendCapabilities caps;
+	const String reason = _rtgi_embree_unavailable_reason();
+	caps.backend = RSE::PT_BACKEND_INTEL_EMBREE;
+	caps.name = "Intel Embree/OSPRay (disabled)";
+	caps.available = false;
+	caps.runtime_name = "disabled";
+	caps.integration_path = "disabled";
+	caps.scene_import_path = "disabled";
+	caps.trace_dispatch_path = "disabled";
+	caps.rendering_device_family = _rtgi_rd_device_family_name(RD::get_singleton());
+	caps.rendering_device_name = _rtgi_rd_device_name(RD::get_singleton());
+	caps.rendering_device_vendor_id = _rtgi_rd_device_vendor_id(RD::get_singleton());
+	caps.rendering_device_vendor = _rtgi_rd_device_vendor_name(caps.rendering_device_vendor_id);
+	caps.backend_compiled = false;
+	caps.sdk_headers_present = false;
+	caps.runtime_detected = false;
+	caps.device_supported = false;
+	caps.resource_exchange_supported = false;
+	caps.implementation_ready = false;
+	caps.vendor_scene_import = false;
+	caps.vendor_sdk_dispatch = false;
+	caps.denoiser_handoff = false;
+	caps.denoiser_name = "disabled";
+	caps.denoiser_runtime_detected = false;
+	caps.denoiser_available = false;
+	caps.denoiser_failure_reason = "Intel RTGI denoising is disabled with the Intel CPU RTGI backend.";
+	caps.denoiser_integration_path = "disabled";
+	caps.native_probe_update = false;
+	caps.generic_probe_update_fallback = false;
+	caps.probe_update_path = "disabled";
+	caps.compile_failure_reason = reason;
+	caps.availability_failure = "backend_not_compiled";
+	caps.fallback_reason = reason;
+	return caps;
+}
+
 static RTGIBackendCapabilities _rtgi_static_backend_capabilities(RSE::PathtracingBackend p_backend) {
 	switch (p_backend) {
 		case RSE::PT_BACKEND_NVIDIA_RTXPT: {
@@ -1082,9 +1473,13 @@ static RTGIBackendCapabilities _rtgi_static_backend_capabilities(RSE::Pathtracin
 			requirements.name = "NVIDIA RTXPT";
 			requirements.runtime_name = "RenderingDevice Vulkan ray tracing pipeline";
 			requirements.integration_path = "NVIDIA Godot fork-compatible RenderingDevice/Vulkan dispatch";
+			requirements.scene_import_path = "RenderingDevice TLAS/RTGI scene resources; RTXPT source manifest validation only";
+			requirements.trace_dispatch_path = "NVIDIA Godot fork-compatible RenderingDevice ray tracing dispatch; standalone RTXPT core source dispatch is not linked";
 			requirements.required_gpu_vendor = RenderingContextDriver::Vendor::VENDOR_NVIDIA;
 			requirements.requires_raytracing_pipeline = true;
 			requirements.allows_rd_internal_exchange = true;
+			requirements.vendor_scene_import = false;
+			requirements.vendor_sdk_dispatch = false;
 			return _rtgi_vendor_backend_capabilities(requirements);
 		}
 		case RSE::PT_BACKEND_AMD_HIP_RT: {
@@ -1093,18 +1488,16 @@ static RTGIBackendCapabilities _rtgi_static_backend_capabilities(RSE::Pathtracin
 			requirements.name = "AMD HIP RT";
 			requirements.runtime_name = "HIP RT compute runtime";
 			requirements.integration_path = "Vulkan/HIP external memory and semaphore interop";
+			requirements.scene_import_path = "RTGI scene snapshot converted into HIP RT geometry and scene objects";
+			requirements.trace_dispatch_path = "HIP RT trace kernel launched through HIP module with Vulkan external-memory handoff";
 			requirements.required_gpu_vendor = RenderingContextDriver::Vendor::VENDOR_AMD;
 			requirements.requires_external_memory_semaphore = true;
+			requirements.vendor_scene_import = true;
+			requirements.vendor_sdk_dispatch = true;
 			return _rtgi_vendor_backend_capabilities(requirements);
 		}
 		case RSE::PT_BACKEND_INTEL_EMBREE: {
-			RTGIVendorBackendRequirements requirements;
-			requirements.backend = RSE::PT_BACKEND_INTEL_EMBREE;
-			requirements.name = "Intel Embree/OSPRay";
-			requirements.runtime_name = "CPU/SYCL";
-			requirements.integration_path = "Vulkan upload/import or deliberate staged copy";
-			requirements.allows_staged_copy = true;
-			return _rtgi_vendor_backend_capabilities(requirements);
+			return _rtgi_disabled_intel_backend_capabilities();
 		}
 		case RSE::PT_BACKEND_VULKAN_GENERIC:
 		default:
@@ -1316,16 +1709,6 @@ static bool _rt_instance_uses_alpha_overlay(const RenderGeometryInstanceBase *p_
 	return fade_alpha < RT_FADE_ALPHA_PASS_THRESHOLD;
 }
 
-struct RTGIVulkanInteropDeviceContext {
-	bool valid = false;
-	uint64_t instance = 0;
-	uint64_t physical_device = 0;
-	uint64_t logical_device = 0;
-	uint64_t queue = 0;
-	uint32_t queue_family_index = 0;
-	String failure_reason;
-};
-
 static RTGIBackendExternalHandleType _rtgi_backend_external_handle_type_from_rdd(RDD::ExternalHandleType p_handle_type) {
 	switch (p_handle_type) {
 		case RDD::EXTERNAL_HANDLE_OPAQUE_FD:
@@ -1356,61 +1739,104 @@ static void _rtgi_close_external_handle(uint64_t p_handle, RTGIBackendExternalHa
 static void _rtgi_vulkan_interop_noop_callback(RDD *p_driver, RDD::CommandBufferID p_command_buffer, void *p_userdata) {
 }
 
-struct RTGIVulkanInteropTextureContext {
-	bool valid = false;
-	uint64_t image = 0;
-	uint64_t image_view = 0;
-	uint64_t format = 0;
-	uint64_t device_memory = 0;
-	uint64_t usage_flags = 0;
-	String failure_reason;
-};
-
 class RTGIVulkanInteropAdapter {
 public:
-	static RTGIVulkanInteropDeviceContext get_device_context(RenderingDevice *p_rd) {
-		RTGIVulkanInteropDeviceContext context;
+	static RTGIBackendNativeDeviceContext get_device_context(RenderingDevice *p_rd) {
+		RTGIBackendNativeDeviceContext context;
 		if (p_rd == nullptr) {
 			context.failure_reason = "RenderingDevice is unavailable.";
 			return context;
 		}
+		context.device_family = p_rd->get_device_capabilities().device_family;
 		if (!_rtgi_current_rd_device_family_is_vulkan(p_rd)) {
 			context.failure_reason = "The active RenderingDevice driver is not Vulkan.";
 			return context;
 		}
 
-		context.instance = p_rd->get_driver_resource(RD::DRIVER_RESOURCE_TOPMOST_OBJECT);
+		context.topmost_object = p_rd->get_driver_resource(RD::DRIVER_RESOURCE_TOPMOST_OBJECT);
 		context.physical_device = p_rd->get_driver_resource(RD::DRIVER_RESOURCE_PHYSICAL_DEVICE);
 		context.logical_device = p_rd->get_driver_resource(RD::DRIVER_RESOURCE_LOGICAL_DEVICE);
-		context.queue = p_rd->get_driver_resource(RD::DRIVER_RESOURCE_COMMAND_QUEUE);
+		context.command_queue = p_rd->get_driver_resource(RD::DRIVER_RESOURCE_COMMAND_QUEUE);
 		context.queue_family_index = (uint32_t)p_rd->get_driver_resource(RD::DRIVER_RESOURCE_QUEUE_FAMILY);
-		context.valid = context.instance != 0 && context.physical_device != 0 && context.logical_device != 0 && context.queue != 0;
+		context.valid = context.topmost_object != 0 && context.physical_device != 0 && context.logical_device != 0 && context.command_queue != 0;
 		if (!context.valid) {
 			context.failure_reason = "RenderingDevice did not expose a complete Vulkan instance, physical device, logical device, queue, and queue family context.";
 		}
 		return context;
 	}
 
-	static RTGIVulkanInteropTextureContext get_texture_context(RenderingDevice *p_rd, RID p_texture) {
-		RTGIVulkanInteropTextureContext context;
+	static RTGIBackendNativeTextureContext get_texture_context(RenderingDevice *p_rd, RID p_texture) {
+		RTGIBackendNativeTextureContext context;
 		if (p_rd == nullptr) {
 			context.failure_reason = "RenderingDevice is unavailable.";
 			return context;
 		}
+		context.device_family = p_rd->get_device_capabilities().device_family;
 		if (!p_texture.is_valid()) {
-			context.failure_reason = "RTGI output texture RID is invalid.";
+			context.failure_reason = "RTGI texture RID is invalid.";
 			return context;
 		}
-		context.image = p_rd->get_driver_resource(RD::DRIVER_RESOURCE_TEXTURE, p_texture);
-		context.image_view = p_rd->get_driver_resource(RD::DRIVER_RESOURCE_TEXTURE_VIEW, p_texture);
-		context.format = p_rd->get_driver_resource(RD::DRIVER_RESOURCE_TEXTURE_DATA_FORMAT, p_texture);
-		context.device_memory = p_rd->get_driver_resource(RD::DRIVER_RESOURCE_TEXTURE_DEVICE_MEMORY, p_texture);
-		context.usage_flags = p_rd->get_driver_resource(RD::DRIVER_RESOURCE_TEXTURE_USAGE_FLAGS, p_texture);
-		context.valid = context.image != 0 && context.image_view != 0 && context.format != 0 && context.device_memory != 0 && context.usage_flags != 0;
+		context.native_texture = p_rd->get_driver_resource(RD::DRIVER_RESOURCE_TEXTURE, p_texture);
+		context.native_texture_view = p_rd->get_driver_resource(RD::DRIVER_RESOURCE_TEXTURE_VIEW, p_texture);
+		context.native_format = p_rd->get_driver_resource(RD::DRIVER_RESOURCE_TEXTURE_DATA_FORMAT, p_texture);
+		context.native_device_memory = p_rd->get_driver_resource(RD::DRIVER_RESOURCE_TEXTURE_DEVICE_MEMORY, p_texture);
+		context.native_usage_flags = p_rd->get_driver_resource(RD::DRIVER_RESOURCE_TEXTURE_USAGE_FLAGS, p_texture);
+		const RD::TextureFormat texture_format = p_rd->texture_get_format(p_texture);
+		context.width = texture_format.width;
+		context.height = texture_format.height;
+		context.mipmaps = texture_format.mipmaps;
+		context.array_layers = texture_format.array_layers;
+		context.valid = context.native_texture != 0 && context.native_texture_view != 0 && context.native_format != 0 && context.native_device_memory != 0 && context.native_usage_flags != 0;
 		if (!context.valid) {
-			context.failure_reason = "RenderingDevice did not expose a complete Vulkan image, view, format, memory, and usage context for the RTGI output texture.";
+			context.failure_reason = "RenderingDevice did not expose a complete native texture, view, format, memory, and usage context for an RTGI texture.";
 		}
 		return context;
+	}
+
+	static bool populate_streamline_texture_contexts(RenderingDevice *p_rd, RTGIBackendResourceExchange &r_exchange, String *r_failure_reason) {
+		const RTGIBackendNativeDeviceContext device_context = get_device_context(p_rd);
+		if (!device_context.valid) {
+			r_exchange.streamline_native_contexts_valid = false;
+			r_exchange.streamline_native_contexts_failure_reason = device_context.failure_reason;
+			if (r_failure_reason) {
+				*r_failure_reason = device_context.failure_reason;
+			}
+			return false;
+		}
+
+		struct RequiredTexture {
+			RID texture;
+			RTGIBackendNativeTextureContext *context = nullptr;
+			const char *label = nullptr;
+		};
+		RequiredTexture required_textures[] = {
+			{ r_exchange.output_texture, &r_exchange.output_native_texture, "output" },
+			{ r_exchange.depth_texture, &r_exchange.depth_native_texture, "depth" },
+			{ r_exchange.velocity_texture, &r_exchange.velocity_native_texture, "velocity" },
+			{ r_exchange.diffuse_radiance_texture, &r_exchange.diffuse_radiance_native_texture, "diffuse radiance" },
+			{ r_exchange.specular_radiance_texture, &r_exchange.specular_radiance_native_texture, "specular radiance" },
+			{ r_exchange.dlss_rr_diffuse_albedo_texture, &r_exchange.dlss_rr_diffuse_albedo_native_texture, "DLSS-RR diffuse albedo" },
+			{ r_exchange.dlss_rr_specular_albedo_texture, &r_exchange.dlss_rr_specular_albedo_native_texture, "DLSS-RR specular albedo" },
+			{ r_exchange.dlss_rr_normal_roughness_texture, &r_exchange.dlss_rr_normal_roughness_native_texture, "DLSS-RR normal roughness" },
+			{ r_exchange.dlss_rr_specular_hit_dist_texture, &r_exchange.dlss_rr_specular_hit_dist_native_texture, "DLSS-RR specular hit distance" },
+		};
+
+		r_exchange.native_device_context = device_context;
+		for (RequiredTexture &required_texture : required_textures) {
+			*required_texture.context = get_texture_context(p_rd, required_texture.texture);
+			if (!required_texture.context->valid) {
+				r_exchange.streamline_native_contexts_valid = false;
+				r_exchange.streamline_native_contexts_failure_reason = vformat("Streamline DLSS Ray Reconstruction native Vulkan handoff is missing %s texture metadata: %s", required_texture.label, required_texture.context->failure_reason);
+				if (r_failure_reason) {
+					*r_failure_reason = r_exchange.streamline_native_contexts_failure_reason;
+				}
+				return false;
+			}
+		}
+
+		r_exchange.streamline_native_contexts_valid = true;
+		r_exchange.streamline_native_contexts_failure_reason.clear();
+		return true;
 	}
 
 	static bool populate_external_memory_exchange(RenderingDevice *p_rd, RTGIBackendResourceExchange &r_exchange, String *r_failure_reason) {
@@ -1427,7 +1853,7 @@ public:
 			return false;
 		}
 
-		const RTGIVulkanInteropDeviceContext device_context = get_device_context(p_rd);
+		const RTGIBackendNativeDeviceContext device_context = get_device_context(p_rd);
 		if (!device_context.valid) {
 			if (r_failure_reason) {
 				*r_failure_reason = device_context.failure_reason;
@@ -1435,7 +1861,7 @@ public:
 			return false;
 		}
 
-		const RTGIVulkanInteropTextureContext texture_context = get_texture_context(p_rd, r_exchange.output_texture);
+		const RTGIBackendNativeTextureContext texture_context = get_texture_context(p_rd, r_exchange.output_texture);
 		if (!texture_context.valid) {
 			if (r_failure_reason) {
 				*r_failure_reason = texture_context.failure_reason;
@@ -1487,6 +1913,8 @@ public:
 
 		r_exchange.mode = RTGI_BACKEND_EXCHANGE_EXTERNAL_MEMORY_SEMAPHORE;
 		r_exchange.ownership_direction = RTGI_BACKEND_OWNERSHIP_RD_TO_BACKEND_TO_RD;
+		r_exchange.native_device_context = device_context;
+		r_exchange.output_native_texture = texture_context;
 		r_exchange.external_memory_handle = memory_info.handle;
 		r_exchange.external_memory_handle_type = _rtgi_backend_external_handle_type_from_rdd(memory_info.handle_type);
 		r_exchange.external_memory_allocation_offset = memory_info.allocation_offset;
@@ -1525,6 +1953,431 @@ public:
 		r_exchange.external_signal_semaphore = RDD::SemaphoreID();
 	}
 };
+
+#if defined(MODULE_RTXPT_ENABLED) && defined(RTGI_STREAMLINE_SDK_HEADERS_PRESENT) && defined(RTGI_STREAMLINE_DLSS_RR_HANDOFF_ENABLED)
+static String _rtgi_streamline_result_to_string(sl::Result p_result) {
+	return itos(int64_t(p_result));
+}
+
+static sl::float4x4 _rtgi_streamline_identity_matrix() {
+	sl::float4x4 result;
+	result.setRow(0, sl::float4(1.0f, 0.0f, 0.0f, 0.0f));
+	result.setRow(1, sl::float4(0.0f, 1.0f, 0.0f, 0.0f));
+	result.setRow(2, sl::float4(0.0f, 0.0f, 1.0f, 0.0f));
+	result.setRow(3, sl::float4(0.0f, 0.0f, 0.0f, 1.0f));
+	return result;
+}
+
+static sl::float4x4 _rtgi_streamline_convert_projection(const Projection &p_projection) {
+	sl::float4x4 result;
+	result.setRow(0, sl::float4(p_projection.columns[0].x, p_projection.columns[1].x, p_projection.columns[2].x, p_projection.columns[3].x));
+	result.setRow(1, sl::float4(p_projection.columns[0].y, p_projection.columns[1].y, p_projection.columns[2].y, p_projection.columns[3].y));
+	result.setRow(2, sl::float4(p_projection.columns[0].z, p_projection.columns[1].z, p_projection.columns[2].z, p_projection.columns[3].z));
+	result.setRow(3, sl::float4(p_projection.columns[0].w, p_projection.columns[1].w, p_projection.columns[2].w, p_projection.columns[3].w));
+	return result;
+}
+
+static sl::float3 _rtgi_streamline_convert_vector3(const Vector3 &p_vector) {
+	return sl::float3(float(p_vector.x), float(p_vector.y), float(p_vector.z));
+}
+
+struct RTGIStreamlineDLSSRRCallbackState {
+	bool valid = false;
+	uint32_t frame_index = 0;
+	uint32_t viewport_key = 1;
+	Size2i output_size;
+	RTGIBackendNativeDeviceContext device_context;
+	RTGIBackendNativeTextureContext output;
+	RTGIBackendNativeTextureContext depth;
+	RTGIBackendNativeTextureContext velocity;
+	RTGIBackendNativeTextureContext diffuse_albedo;
+	RTGIBackendNativeTextureContext specular_albedo;
+	RTGIBackendNativeTextureContext normal_roughness;
+	RTGIBackendNativeTextureContext specular_hit_dist;
+	Projection cam_projection;
+	Projection prev_cam_projection;
+	Projection reprojection;
+	Transform3D cam_transform;
+	Transform3D prev_cam_transform;
+	Vector2 jitter;
+	float z_near = 0.0f;
+	float z_far = 0.0f;
+	float fovy = 0.0f;
+	bool reverse_depth = true;
+	bool reset_accumulation = false;
+};
+
+struct RTGIStreamlineDLSSRRDispatch {
+#if defined(WINDOWS_ENABLED)
+	HMODULE library_handle = nullptr;
+#elif defined(LINUXBSD_ENABLED)
+	void *library_handle = nullptr;
+#endif
+	String loaded_path;
+	bool loaded = false;
+	bool initialized = false;
+	uint64_t vulkan_device_key = 0;
+
+	PFun_slInit *slInit = nullptr;
+	PFun_slShutdown *slShutdown = nullptr;
+	PFun_slSetVulkanInfo *slSetVulkanInfo = nullptr;
+	PFun_slIsFeatureSupported *slIsFeatureSupported = nullptr;
+	PFun_slGetFeatureRequirements *slGetFeatureRequirements = nullptr;
+	PFun_slGetFeatureFunction *slGetFeatureFunction = nullptr;
+	PFun_slGetNewFrameToken *slGetNewFrameToken = nullptr;
+	PFun_slSetConstants *slSetConstants = nullptr;
+	PFun_slSetTagForFrame *slSetTagForFrame = nullptr;
+	PFun_slEvaluateFeature *slEvaluateFeature = nullptr;
+	PFun_slDLSSDSetOptions *slDLSSDSetOptions = nullptr;
+
+	template <typename T>
+	bool _resolve_symbol(T &r_symbol, const char *p_name, String *r_failure_reason) {
+#if defined(WINDOWS_ENABLED)
+		void *symbol = reinterpret_cast<void *>(GetProcAddress(library_handle, p_name));
+#elif defined(LINUXBSD_ENABLED)
+		void *symbol = dlsym(library_handle, p_name);
+#else
+		void *symbol = nullptr;
+#endif
+		if (symbol == nullptr) {
+			if (r_failure_reason) {
+				*r_failure_reason = vformat("Streamline runtime library '%s' is missing required symbol '%s'.", loaded_path, p_name);
+			}
+			return false;
+		}
+		r_symbol = reinterpret_cast<T>(symbol);
+		return true;
+	}
+
+	void unload() {
+		if (initialized && slShutdown != nullptr) {
+			slShutdown();
+		}
+#if defined(WINDOWS_ENABLED)
+		if (library_handle != nullptr) {
+			FreeLibrary(library_handle);
+			library_handle = nullptr;
+		}
+#elif defined(LINUXBSD_ENABLED)
+		if (library_handle != nullptr) {
+			dlclose(library_handle);
+			library_handle = nullptr;
+		}
+#endif
+		*this = RTGIStreamlineDLSSRRDispatch();
+	}
+
+	bool load(String *r_failure_reason) {
+		if (loaded) {
+			return true;
+		}
+
+		static const char *const streamline_runtime_libraries[] = {
+#if defined(WINDOWS_ENABLED)
+			"sl.interposer.dll",
+#else
+			"libsl.interposer.so",
+#endif
+		};
+		static const char *const streamline_runtime_symbols[] = {
+			"slInit",
+			"slShutdown",
+			"slSetVulkanInfo",
+			"slIsFeatureSupported",
+			"slGetFeatureRequirements",
+			"slGetFeatureFunction",
+			"slGetNewFrameToken",
+			"slSetConstants",
+			"slSetTagForFrame",
+			"slEvaluateFeature",
+		};
+		static const char *const streamline_root_env_vars[] = {
+			"STREAMLINE_SDK_PATH",
+			"STREAMLINE_PATH",
+			"RTXPT_SDK_PATH",
+		};
+
+		String found_path;
+		if (!_rtgi_find_runtime_library(streamline_runtime_libraries, sizeof(streamline_runtime_libraries) / sizeof(streamline_runtime_libraries[0]), streamline_runtime_symbols, sizeof(streamline_runtime_symbols) / sizeof(streamline_runtime_symbols[0]), streamline_root_env_vars, sizeof(streamline_root_env_vars) / sizeof(streamline_root_env_vars[0]), &found_path)) {
+			if (r_failure_reason) {
+				*r_failure_reason = "Streamline DLSS Ray Reconstruction sl.interposer runtime library with Vulkan tagging, shutdown, and evaluation symbols was not found.";
+			}
+			return false;
+		}
+
+		loaded_path = found_path;
+#if defined(WINDOWS_ENABLED)
+		const UINT previous_error_mode = SetErrorMode(SEM_FAILCRITICALERRORS);
+		const DWORD load_flags = found_path.is_absolute_path() ? LOAD_WITH_ALTERED_SEARCH_PATH : 0;
+		library_handle = LoadLibraryExW((LPCWSTR)(found_path.utf16().get_data()), nullptr, load_flags);
+		SetErrorMode(previous_error_mode);
+#elif defined(LINUXBSD_ENABLED)
+		library_handle = dlopen(found_path.utf8().get_data(), RTLD_LAZY | RTLD_LOCAL);
+#endif
+		if (library_handle == nullptr) {
+			if (r_failure_reason) {
+				*r_failure_reason = "Streamline DLSS Ray Reconstruction runtime was found but could not be loaded.";
+			}
+			unload();
+			return false;
+		}
+
+		if (!_resolve_symbol(slInit, "slInit", r_failure_reason) ||
+				!_resolve_symbol(slShutdown, "slShutdown", r_failure_reason) ||
+				!_resolve_symbol(slSetVulkanInfo, "slSetVulkanInfo", r_failure_reason) ||
+				!_resolve_symbol(slIsFeatureSupported, "slIsFeatureSupported", r_failure_reason) ||
+				!_resolve_symbol(slGetFeatureRequirements, "slGetFeatureRequirements", r_failure_reason) ||
+				!_resolve_symbol(slGetFeatureFunction, "slGetFeatureFunction", r_failure_reason) ||
+				!_resolve_symbol(slGetNewFrameToken, "slGetNewFrameToken", r_failure_reason) ||
+				!_resolve_symbol(slSetConstants, "slSetConstants", r_failure_reason) ||
+				!_resolve_symbol(slSetTagForFrame, "slSetTagForFrame", r_failure_reason) ||
+				!_resolve_symbol(slEvaluateFeature, "slEvaluateFeature", r_failure_reason)) {
+			unload();
+			return false;
+		}
+
+		loaded = true;
+		return true;
+	}
+
+	bool ensure_ready(const RTGIBackendNativeDeviceContext &p_device_context, String *r_failure_reason) {
+		if (!load(r_failure_reason)) {
+			return false;
+		}
+		if (!p_device_context.valid || p_device_context.device_family != RDD::DEVICE_VULKAN) {
+			if (r_failure_reason) {
+				*r_failure_reason = "Streamline DLSS Ray Reconstruction requires a valid Vulkan RenderingDevice native context.";
+			}
+			return false;
+		}
+
+		if (!initialized) {
+			sl::Feature features_to_load[] = { sl::kFeatureDLSS_RR };
+			sl::Preferences preferences = {};
+			preferences.renderAPI = sl::RenderAPI::eVulkan;
+			preferences.engine = sl::EngineType::eCustom;
+			preferences.engineVersion = "Godot RTGI";
+			preferences.featuresToLoad = features_to_load;
+			preferences.numFeaturesToLoad = 1;
+			preferences.flags = sl::PreferenceFlags(uint64_t(sl::PreferenceFlags::eDisableCLStateTracking) | uint64_t(sl::PreferenceFlags::eUseManualHooking) | uint64_t(sl::PreferenceFlags::eUseFrameBasedResourceTagging));
+			const sl::Result init_result = slInit(preferences, sl::kSDKVersion);
+			if (init_result != sl::Result::eOk) {
+				if (r_failure_reason) {
+					*r_failure_reason = "Streamline slInit failed for DLSS Ray Reconstruction: " + _rtgi_streamline_result_to_string(init_result);
+				}
+				return false;
+			}
+			sl::FeatureRequirements dlss_rr_requirements = {};
+			const sl::Result requirements_result = slGetFeatureRequirements(sl::kFeatureDLSS_RR, dlss_rr_requirements);
+			if (requirements_result != sl::Result::eOk) {
+				if (r_failure_reason) {
+					*r_failure_reason = "Streamline could not query DLSS Ray Reconstruction feature requirements: " + _rtgi_streamline_result_to_string(requirements_result);
+				}
+				slShutdown();
+				initialized = false;
+				return false;
+			}
+			if ((uint32_t(dlss_rr_requirements.flags) & uint32_t(sl::FeatureRequirementFlags::eVulkanSupported)) == 0) {
+				if (r_failure_reason) {
+					*r_failure_reason = "Streamline DLSS Ray Reconstruction runtime is present but does not report Vulkan support.";
+				}
+				slShutdown();
+				initialized = false;
+				return false;
+			}
+			initialized = true;
+		}
+
+		if (vulkan_device_key != p_device_context.logical_device) {
+			sl::VulkanInfo vulkan_info = {};
+			vulkan_info.instance = reinterpret_cast<VkInstance>(uintptr_t(p_device_context.topmost_object));
+			vulkan_info.physicalDevice = reinterpret_cast<VkPhysicalDevice>(uintptr_t(p_device_context.physical_device));
+			vulkan_info.device = reinterpret_cast<VkDevice>(uintptr_t(p_device_context.logical_device));
+			vulkan_info.graphicsQueueFamily = p_device_context.queue_family_index;
+			vulkan_info.computeQueueFamily = p_device_context.queue_family_index;
+			vulkan_info.graphicsQueueIndex = 0;
+			vulkan_info.computeQueueIndex = 0;
+			const sl::Result vulkan_result = slSetVulkanInfo(vulkan_info);
+			if (vulkan_result != sl::Result::eOk) {
+				if (r_failure_reason) {
+					*r_failure_reason = "Streamline slSetVulkanInfo failed for RTGI DLSS Ray Reconstruction: " + _rtgi_streamline_result_to_string(vulkan_result);
+				}
+				return false;
+			}
+			sl::AdapterInfo adapter_info = {};
+			adapter_info.vkPhysicalDevice = reinterpret_cast<void *>(uintptr_t(p_device_context.physical_device));
+			const sl::Result support_result = slIsFeatureSupported(sl::kFeatureDLSS_RR, adapter_info);
+			if (support_result != sl::Result::eOk) {
+				if (r_failure_reason) {
+					*r_failure_reason = "Streamline DLSS Ray Reconstruction is not supported on the active Vulkan adapter: " + _rtgi_streamline_result_to_string(support_result);
+				}
+				return false;
+			}
+			vulkan_device_key = p_device_context.logical_device;
+			void *feature_function = nullptr;
+			const sl::Result feature_result = slGetFeatureFunction(sl::kFeatureDLSS_RR, "slDLSSDSetOptions", feature_function);
+			if (feature_result != sl::Result::eOk || feature_function == nullptr) {
+				if (r_failure_reason) {
+					*r_failure_reason = "Streamline could not resolve slDLSSDSetOptions for DLSS Ray Reconstruction: " + _rtgi_streamline_result_to_string(feature_result);
+				}
+				return false;
+			}
+			slDLSSDSetOptions = reinterpret_cast<PFun_slDLSSDSetOptions *>(feature_function);
+		}
+
+		return slDLSSDSetOptions != nullptr;
+	}
+};
+
+static RTGIStreamlineDLSSRRDispatch _rtgi_streamline_dlss_rr_dispatch;
+
+static bool _rtgi_streamline_dlss_rr_runtime_ready_for_device(RenderingDevice *p_rd, String *r_failure_reason) {
+#if defined(RTGI_STREAMLINE_DLSS_RR_HANDOFF_ENABLED) && defined(RTGI_STREAMLINE_SDK_HEADERS_PRESENT)
+	const RTGIBackendNativeDeviceContext device_context = RTGIVulkanInteropAdapter::get_device_context(p_rd);
+	if (!device_context.valid) {
+		if (r_failure_reason) {
+			*r_failure_reason = device_context.failure_reason.is_empty() ? "Streamline DLSS Ray Reconstruction requires a valid Vulkan RenderingDevice native context." : device_context.failure_reason;
+		}
+		return false;
+	}
+	return _rtgi_streamline_dlss_rr_dispatch.ensure_ready(device_context, r_failure_reason);
+#else
+	if (r_failure_reason) {
+		*r_failure_reason = "Streamline DLSS Ray Reconstruction support is not compiled in because Streamline headers or the Vulkan resource tagging handoff were not configured for the RTXPT module.";
+	}
+	return false;
+#endif
+}
+
+static bool _rtgi_streamline_make_resource(const RTGIBackendNativeTextureContext &p_context, uint32_t p_layout, sl::Resource &r_resource) {
+	if (!p_context.valid) {
+		return false;
+	}
+	r_resource = sl::Resource(sl::ResourceType::eTex2d,
+			reinterpret_cast<void *>(uintptr_t(p_context.native_texture)),
+			reinterpret_cast<void *>(uintptr_t(p_context.native_device_memory)),
+			reinterpret_cast<void *>(uintptr_t(p_context.native_texture_view)),
+			p_layout);
+	r_resource.width = p_context.width;
+	r_resource.height = p_context.height;
+	r_resource.nativeFormat = uint32_t(p_context.native_format);
+	r_resource.arrayLayers = p_context.array_layers;
+	r_resource.mipLevels = p_context.mipmaps;
+	r_resource.flags = 0;
+	r_resource.usage = uint32_t(p_context.native_usage_flags);
+	return true;
+}
+
+static bool _rtgi_streamline_add_resource_tag(sl::Resource *r_resources, sl::ResourceTag *r_tags, uint32_t &r_count, uint32_t p_max_count, const RTGIBackendNativeTextureContext &p_context, sl::BufferType p_buffer_type, sl::ResourceLifecycle p_lifecycle, uint32_t p_layout) {
+	if (r_count >= p_max_count || !p_context.valid) {
+		return false;
+	}
+	if (!_rtgi_streamline_make_resource(p_context, p_layout, r_resources[r_count])) {
+		return false;
+	}
+	r_tags[r_count] = sl::ResourceTag(&r_resources[r_count], p_buffer_type, p_lifecycle, nullptr);
+	r_count++;
+	return true;
+}
+
+static void _rtgi_streamline_dlss_rr_callback(RDD *p_driver, RDD::CommandBufferID p_command_buffer, void *p_userdata) {
+	RTGIStreamlineDLSSRRCallbackState *state = static_cast<RTGIStreamlineDLSSRRCallbackState *>(p_userdata);
+	if (state == nullptr || !state->valid || p_driver == nullptr) {
+		return;
+	}
+
+	void *native_command_buffer = p_driver->command_buffer_get_native_handle(p_command_buffer);
+	if (native_command_buffer == nullptr) {
+		ERR_PRINT_ONCE("Streamline DLSS Ray Reconstruction callback could not obtain a native Vulkan command buffer from RenderingDevice.");
+		return;
+	}
+
+	String failure_reason;
+	if (!_rtgi_streamline_dlss_rr_dispatch.ensure_ready(state->device_context, &failure_reason)) {
+		ERR_PRINT_ONCE(failure_reason);
+		return;
+	}
+
+	sl::FrameToken *frame_token = nullptr;
+	const sl::Result token_result = _rtgi_streamline_dlss_rr_dispatch.slGetNewFrameToken(frame_token, &state->frame_index);
+	if (token_result != sl::Result::eOk || frame_token == nullptr) {
+		ERR_PRINT_ONCE("Streamline DLSS Ray Reconstruction could not allocate a frame token: " + _rtgi_streamline_result_to_string(token_result));
+		return;
+	}
+
+	const sl::ViewportHandle viewport(state->viewport_key);
+	sl::DLSSDOptions options = {};
+	options.mode = sl::DLSSMode::eDLAA;
+	options.outputWidth = uint32_t(MAX(1, state->output_size.width));
+	options.outputHeight = uint32_t(MAX(1, state->output_size.height));
+	options.colorBuffersHDR = sl::Boolean::eTrue;
+	options.alphaUpscalingEnabled = sl::Boolean::eFalse;
+	options.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::ePacked;
+	options.worldToCameraView = _rtgi_streamline_convert_projection(Projection(state->cam_transform.affine_inverse()));
+	options.cameraViewToWorld = _rtgi_streamline_convert_projection(Projection(state->cam_transform));
+	const sl::Result options_result = _rtgi_streamline_dlss_rr_dispatch.slDLSSDSetOptions(viewport, options);
+	if (options_result != sl::Result::eOk) {
+		ERR_PRINT_ONCE("Streamline slDLSSDSetOptions failed for RTGI DLSS Ray Reconstruction: " + _rtgi_streamline_result_to_string(options_result));
+		return;
+	}
+
+	sl::Constants constants = {};
+	const sl::float4x4 identity = _rtgi_streamline_identity_matrix();
+	constants.cameraViewToClip = _rtgi_streamline_convert_projection(state->cam_projection);
+	constants.clipToCameraView = _rtgi_streamline_convert_projection(state->cam_projection.inverse());
+	constants.clipToLensClip = identity;
+	constants.clipToPrevClip = _rtgi_streamline_convert_projection(state->reprojection);
+	constants.prevClipToClip = _rtgi_streamline_convert_projection(state->reprojection.inverse());
+	constants.cameraPos = _rtgi_streamline_convert_vector3(state->cam_transform.get_origin());
+	constants.cameraFwd = _rtgi_streamline_convert_vector3(-state->cam_transform.get_basis().rows[2]);
+	constants.cameraUp = _rtgi_streamline_convert_vector3(state->cam_transform.get_basis().rows[1]);
+	constants.cameraRight = _rtgi_streamline_convert_vector3(state->cam_transform.get_basis().rows[0]);
+	constants.cameraNear = state->z_near;
+	constants.cameraFar = state->z_far;
+	constants.cameraFOV = state->fovy;
+	constants.cameraMotionIncluded = sl::Boolean::eTrue;
+	constants.cameraAspectRatio = state->output_size.height > 0 ? float(state->output_size.width) / float(state->output_size.height) : 1.0f;
+	constants.cameraPinholeOffset = sl::float2(0.0f, 0.0f);
+	constants.depthInverted = state->reverse_depth ? sl::Boolean::eTrue : sl::Boolean::eFalse;
+	constants.motionVectors3D = sl::Boolean::eFalse;
+	constants.motionVectorsDilated = sl::Boolean::eFalse;
+	constants.motionVectorsJittered = sl::Boolean::eFalse;
+	constants.jitterOffset = sl::float2(float(state->jitter.x), float(state->jitter.y));
+	constants.mvecScale = sl::float2(1.0f, 1.0f);
+	constants.orthographicProjection = sl::Boolean::eFalse;
+	constants.reset = state->reset_accumulation ? sl::Boolean::eTrue : sl::Boolean::eFalse;
+	const sl::Result constants_result = _rtgi_streamline_dlss_rr_dispatch.slSetConstants(constants, *frame_token, viewport);
+	if (constants_result != sl::Result::eOk) {
+		ERR_PRINT_ONCE("Streamline slSetConstants failed for RTGI DLSS Ray Reconstruction: " + _rtgi_streamline_result_to_string(constants_result));
+		return;
+	}
+
+	static const uint32_t max_resource_tags = 8;
+	sl::Resource resources[max_resource_tags] = {};
+	sl::ResourceTag tags[max_resource_tags] = {};
+	uint32_t tag_count = 0;
+	_rtgi_streamline_add_resource_tag(resources, tags, tag_count, max_resource_tags, state->output, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eValidUntilEvaluate, VK_IMAGE_LAYOUT_GENERAL);
+	_rtgi_streamline_add_resource_tag(resources, tags, tag_count, max_resource_tags, state->output, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eValidUntilPresent, VK_IMAGE_LAYOUT_GENERAL);
+	_rtgi_streamline_add_resource_tag(resources, tags, tag_count, max_resource_tags, state->depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilEvaluate, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	_rtgi_streamline_add_resource_tag(resources, tags, tag_count, max_resource_tags, state->velocity, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilEvaluate, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	_rtgi_streamline_add_resource_tag(resources, tags, tag_count, max_resource_tags, state->diffuse_albedo, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilEvaluate, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	_rtgi_streamline_add_resource_tag(resources, tags, tag_count, max_resource_tags, state->specular_albedo, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilEvaluate, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	_rtgi_streamline_add_resource_tag(resources, tags, tag_count, max_resource_tags, state->normal_roughness, sl::kBufferTypeNormalRoughness, sl::ResourceLifecycle::eValidUntilEvaluate, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	_rtgi_streamline_add_resource_tag(resources, tags, tag_count, max_resource_tags, state->specular_hit_dist, sl::kBufferTypeSpecularHitDistance, sl::ResourceLifecycle::eValidUntilEvaluate, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+	const sl::Result tag_result = _rtgi_streamline_dlss_rr_dispatch.slSetTagForFrame(*frame_token, viewport, tags, tag_count, reinterpret_cast<sl::CommandBuffer *>(native_command_buffer));
+	if (tag_result != sl::Result::eOk) {
+		ERR_PRINT_ONCE("Streamline slSetTagForFrame failed for RTGI DLSS Ray Reconstruction: " + _rtgi_streamline_result_to_string(tag_result));
+		return;
+	}
+
+	const sl::BaseStructure *inputs[] = { &viewport };
+	const sl::Result evaluate_result = _rtgi_streamline_dlss_rr_dispatch.slEvaluateFeature(sl::kFeatureDLSS_RR, *frame_token, inputs, 1, reinterpret_cast<sl::CommandBuffer *>(native_command_buffer));
+	if (evaluate_result != sl::Result::eOk) {
+		ERR_PRINT_ONCE("Streamline slEvaluateFeature failed for RTGI DLSS Ray Reconstruction: " + _rtgi_streamline_result_to_string(evaluate_result));
+	}
+}
+#endif
 
 static bool _rtgi_vulkan_interop_self_validate(RenderingDevice *p_rd, String *r_failure_reason) {
 	if (p_rd == nullptr) {
@@ -1594,7 +2447,87 @@ static bool _rtgi_vulkan_interop_self_validate(RenderingDevice *p_rd, String *r_
 	return true;
 }
 
+static Ref<RenderForwardClustered::RenderBufferDataForwardClustered> _rtgi_get_forward_clustered_render_buffer_data(const RTGIBackendFrameContext &p_context) {
+	if (p_context.render_data && p_context.render_data->render_buffers.is_valid() && p_context.render_data->render_buffers->has_custom_data(RB_SCOPE_FORWARD_CLUSTERED)) {
+		return p_context.render_data->render_buffers->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
+	}
+	return Ref<RenderForwardClustered::RenderBufferDataForwardClustered>();
+}
+
+static bool _rtgi_copy_texture_all_views(RenderingDevice *p_rd, RID p_source, RID p_target, const Size2i &p_size, uint32_t p_view_count, const char *p_label, String *r_fallback_reason) {
+	if (!p_source.is_valid() || !p_target.is_valid()) {
+		if (r_fallback_reason) {
+			*r_fallback_reason = vformat("RTGI backend denoiser handoff cannot copy %s because a source or target texture is invalid.", p_label);
+		}
+		return false;
+	}
+	for (uint32_t view = 0; view < p_view_count; view++) {
+		const Error err = p_rd->texture_copy(p_source, p_target, Vector3(), Vector3(), Vector3(p_size.x, p_size.y, 1), 0, 0, view, view);
+		if (err != OK) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = vformat("RTGI backend denoiser handoff failed while copying %s for view %d.", p_label, view);
+			}
+			return false;
+		}
+	}
+	return true;
+}
+
+static bool _rtgi_clear_texture_all_views(RenderingDevice *p_rd, RID p_texture, const Color &p_color, uint32_t p_view_count, const char *p_label, String *r_fallback_reason) {
+	if (!p_texture.is_valid()) {
+		if (r_fallback_reason) {
+			*r_fallback_reason = vformat("RTGI backend denoiser handoff cannot clear %s because the texture is invalid.", p_label);
+		}
+		return false;
+	}
+	const Error err = p_rd->texture_clear(p_texture, p_color, 0, 1, 0, p_view_count);
+	if (err != OK) {
+		if (r_fallback_reason) {
+			*r_fallback_reason = vformat("RTGI backend denoiser handoff failed while clearing %s.", p_label);
+		}
+		return false;
+	}
+	return true;
+}
+
+static bool _rtgi_prepare_single_signal_denoiser_handoff(RTGIBackendFrameContext &p_context, String *r_fallback_reason) {
+	if (p_context.rd == nullptr || !p_context.exchange.output_texture.is_valid()) {
+		if (r_fallback_reason) {
+			*r_fallback_reason = "RTGI backend denoiser handoff requires a valid RenderingDevice and output texture.";
+		}
+		return false;
+	}
+
+	const Ref<RenderForwardClustered::RenderBufferDataForwardClustered> rb_data = _rtgi_get_forward_clustered_render_buffer_data(p_context);
+	if (rb_data.is_null()) {
+		if (r_fallback_reason) {
+			*r_fallback_reason = "RTGI backend denoiser handoff could not access Forward+ render buffer data.";
+		}
+		return false;
+	}
+
+	const Size2i output_size = rb_data->rt_get_size();
+	if (output_size.x <= 0 || output_size.y <= 0) {
+		if (r_fallback_reason) {
+			*r_fallback_reason = "RTGI backend denoiser handoff has an invalid output size.";
+		}
+		return false;
+	}
+
+	const uint32_t view_count = p_context.render_data && p_context.render_data->render_buffers.is_valid() ? p_context.render_data->render_buffers->get_view_count() : 1;
+	if (!_rtgi_copy_texture_all_views(p_context.rd, p_context.exchange.output_texture, rb_data->rt_get_diffuse_radiance(), output_size, view_count, "single-signal diffuse radiance", r_fallback_reason) ||
+			!_rtgi_clear_texture_all_views(p_context.rd, rb_data->rt_get_specular_radiance(), Color(0, 0, 0, 0), view_count, "single-signal specular radiance", r_fallback_reason) ||
+			!_rtgi_clear_texture_all_views(p_context.rd, rb_data->rt_get_signal_direct_light(), Color(0, 0, 0, 0), view_count, "single-signal direct light", r_fallback_reason) ||
+			!_rtgi_clear_texture_all_views(p_context.rd, rb_data->rt_get_signal_emissive(), Color(0, 0, 0, 0), view_count, "single-signal emissive", r_fallback_reason) ||
+			!_rtgi_copy_texture_all_views(p_context.rd, p_context.exchange.output_texture, rb_data->rt_get_signal_indirect(), output_size, view_count, "single-signal indirect activity", r_fallback_reason) ||
+			!_rtgi_clear_texture_all_views(p_context.rd, rb_data->rt_get_signal_sky(), Color(0, 0, 0, 0), view_count, "single-signal sky", r_fallback_reason)) {
+		return false;
+	}
+	return true;
+}
+
 class VulkanGenericRTGIBackend : public RTGIBackend {
+protected:
 	RenderForwardClustered *owner = nullptr;
 	RenderRaytracing *raytracing = nullptr;
 
@@ -1678,8 +2611,15 @@ public:
 		r_context.exchange.mode = RTGI_BACKEND_EXCHANGE_RD_INTERNAL;
 		r_context.exchange.output_texture = rb_data->rt_get_texture();
 		r_context.exchange.depth_texture = rb_data->rt_has_depth_texture() ? rb_data->rt_get_depth_texture() : RID();
+		r_context.exchange.velocity_texture = rb_data->rt_get_velocity_texture();
 		r_context.exchange.diffuse_radiance_texture = rb_data->rt_get_diffuse_radiance();
 		r_context.exchange.specular_radiance_texture = rb_data->rt_get_specular_radiance();
+		if (rb_data->dlss_rr_has_buffers()) {
+			r_context.exchange.dlss_rr_diffuse_albedo_texture = rb_data->dlss_rr_get_diffuse_albedo();
+			r_context.exchange.dlss_rr_specular_albedo_texture = rb_data->dlss_rr_get_specular_albedo();
+			r_context.exchange.dlss_rr_normal_roughness_texture = rb_data->dlss_rr_get_normal_roughness();
+			r_context.exchange.dlss_rr_specular_hit_dist_texture = rb_data->dlss_rr_get_specular_hit_dist();
+		}
 		r_context.exchange.rd_owns_output_before_dispatch = true;
 		r_context.exchange.rd_owns_output_after_dispatch = true;
 		if (r_context.exchange.output_texture.is_valid()) {
@@ -1808,6 +2748,134 @@ public:
 
 #if defined(MODULE_RTXPT_ENABLED)
 class NvidiaRTXPTRTGIBackend : public VulkanGenericRTGIBackend {
+#if defined(RTGI_STREAMLINE_DLSS_RR_HANDOFF_ENABLED) && defined(RTGI_STREAMLINE_SDK_HEADERS_PRESENT)
+	RTGIStreamlineDLSSRRCallbackState streamline_callback_slots[8];
+	uint32_t streamline_callback_slot = 0;
+
+	bool _record_streamline_dlss_rr_handoff(RTGIBackendFrameContext &p_context, String *r_fallback_reason) {
+		if (p_context.rd == nullptr || p_context.render_data == nullptr || p_context.render_data->scene_data == nullptr) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "Streamline DLSS Ray Reconstruction handoff requires RenderingDevice and current scene camera data.";
+			}
+			return false;
+		}
+
+		if (!RTGIVulkanInteropAdapter::populate_streamline_texture_contexts(p_context.rd, p_context.exchange, r_fallback_reason)) {
+			return false;
+		}
+
+		String runtime_reason;
+		if (!_rtgi_streamline_dlss_rr_dispatch.ensure_ready(p_context.exchange.native_device_context, &runtime_reason)) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "Streamline DLSS Ray Reconstruction is unavailable for the active RTXPT dispatch: " + runtime_reason;
+			}
+			return false;
+		}
+
+		RTGIStreamlineDLSSRRCallbackState &state = streamline_callback_slots[streamline_callback_slot++ % (sizeof(streamline_callback_slots) / sizeof(streamline_callback_slots[0]))];
+		state = RTGIStreamlineDLSSRRCallbackState();
+		state.valid = true;
+		state.frame_index = uint32_t(RSG::rasterizer != nullptr ? RSG::rasterizer->get_frame_number() : 0);
+		state.viewport_key = p_context.render_data->render_buffers.is_valid() ? uint32_t(uint64_t(p_context.render_data->render_buffers->get_instance_id())) : 1u;
+		state.output_size = p_context.output_size;
+		state.device_context = p_context.exchange.native_device_context;
+		state.output = p_context.exchange.output_native_texture;
+		state.depth = p_context.exchange.depth_native_texture;
+		state.velocity = p_context.exchange.velocity_native_texture;
+		state.diffuse_albedo = p_context.exchange.dlss_rr_diffuse_albedo_native_texture;
+		state.specular_albedo = p_context.exchange.dlss_rr_specular_albedo_native_texture;
+		state.normal_roughness = p_context.exchange.dlss_rr_normal_roughness_native_texture;
+		state.specular_hit_dist = p_context.exchange.dlss_rr_specular_hit_dist_native_texture;
+		state.cam_projection = p_context.render_data->scene_data->cam_projection;
+		state.prev_cam_projection = p_context.render_data->scene_data->prev_cam_projection;
+		state.cam_transform = p_context.render_data->scene_data->cam_transform;
+		state.prev_cam_transform = p_context.render_data->scene_data->prev_cam_transform;
+		state.z_near = p_context.render_data->scene_data->z_near;
+		state.z_far = p_context.render_data->scene_data->z_far;
+		real_t fov = p_context.render_data->scene_data->cam_projection.get_fov();
+		real_t aspect = p_context.render_data->scene_data->cam_projection.get_aspect();
+		state.fovy = float(p_context.render_data->scene_data->cam_projection.get_fovy(fov, 1.0 / aspect));
+		state.jitter = p_context.render_data->scene_data->taa_jitter * Vector2(p_context.output_size) * 0.5f;
+		state.reverse_depth = true;
+		state.reset_accumulation = p_context.radiance_history_invalidated;
+
+		Projection correction;
+		correction.set_depth_correction(true, true, false);
+		state.reprojection = (correction * state.prev_cam_projection) * state.prev_cam_transform.affine_inverse() * state.cam_transform * (correction * state.cam_projection).inverse();
+
+		Vector<RenderingDevice::CallbackResource> callback_resources;
+		callback_resources.push_back({ p_context.exchange.output_texture, RenderingDevice::CALLBACK_RESOURCE_TYPE_TEXTURE, RenderingDevice::CALLBACK_RESOURCE_USAGE_GENERAL });
+		callback_resources.push_back({ p_context.exchange.depth_texture, RenderingDevice::CALLBACK_RESOURCE_TYPE_TEXTURE, RenderingDevice::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE });
+		callback_resources.push_back({ p_context.exchange.velocity_texture, RenderingDevice::CALLBACK_RESOURCE_TYPE_TEXTURE, RenderingDevice::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE });
+		callback_resources.push_back({ p_context.exchange.dlss_rr_diffuse_albedo_texture, RenderingDevice::CALLBACK_RESOURCE_TYPE_TEXTURE, RenderingDevice::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE });
+		callback_resources.push_back({ p_context.exchange.dlss_rr_specular_albedo_texture, RenderingDevice::CALLBACK_RESOURCE_TYPE_TEXTURE, RenderingDevice::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE });
+		callback_resources.push_back({ p_context.exchange.dlss_rr_normal_roughness_texture, RenderingDevice::CALLBACK_RESOURCE_TYPE_TEXTURE, RenderingDevice::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE });
+		callback_resources.push_back({ p_context.exchange.dlss_rr_specular_hit_dist_texture, RenderingDevice::CALLBACK_RESOURCE_TYPE_TEXTURE, RenderingDevice::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE });
+
+		const Error err = p_context.rd->driver_callback_add(_rtgi_streamline_dlss_rr_callback, &state, VectorView<RenderingDevice::CallbackResource>(callback_resources.ptr(), callback_resources.size()));
+		if (err != OK) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "RTXPT backend failed to record the Streamline DLSS Ray Reconstruction RenderingDevice callback.";
+			}
+			return false;
+		}
+		return true;
+	}
+#endif
+
+	bool _validate_reference_dispatch_context(RTGIBackendFrameContext &p_context, String *r_fallback_reason) const {
+		if (raytracing == nullptr || raytracing->get_shader() == nullptr || p_context.rd == nullptr) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "RTXPT reference dispatch is missing RenderingDevice ray tracing state.";
+			}
+			return false;
+		}
+		if (!p_context.pipeline.is_valid() || !p_context.uniform_set.is_valid()) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "RTXPT reference dispatch is missing the NVIDIA fork-compatible ray tracing pipeline or uniform set.";
+			}
+			return false;
+		}
+		if (!p_context.scene_resources.tlas.is_valid() || p_context.scene_resources.tlas_instance_count == 0) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "RTXPT reference dispatch requires a valid Vulkan TLAS.";
+			}
+			return false;
+		}
+		if (!p_context.exchange.output_texture.is_valid() ||
+				!p_context.exchange.diffuse_radiance_texture.is_valid() ||
+				!p_context.exchange.specular_radiance_texture.is_valid()) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "RTXPT reference dispatch requires RD-owned noisy output plus diffuse and specular radiance textures.";
+			}
+			return false;
+		}
+		if (p_context.output_size.width <= 0 || p_context.output_size.height <= 0) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "RTXPT reference dispatch has an invalid output size.";
+			}
+			return false;
+		}
+		if ((p_context.rt_flags & SceneShaderRaytracing::RT_FLAG_DLSS_RR_ENABLED) != 0) {
+			Ref<RenderForwardClustered::RenderBufferDataForwardClustered> rb_data;
+			if (p_context.render_data && p_context.render_data->render_buffers.is_valid() && p_context.render_data->render_buffers->has_custom_data(RB_SCOPE_FORWARD_CLUSTERED)) {
+				rb_data = p_context.render_data->render_buffers->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
+			}
+			if (rb_data.is_null() || !rb_data->dlss_rr_has_buffers() ||
+					!rb_data->dlss_rr_get_diffuse_albedo().is_valid() ||
+					!rb_data->dlss_rr_get_specular_albedo().is_valid() ||
+					!rb_data->dlss_rr_get_normal_roughness().is_valid() ||
+					!rb_data->dlss_rr_get_specular_hit_dist().is_valid() ||
+					!p_context.exchange.velocity_texture.is_valid()) {
+				if (r_fallback_reason) {
+					*r_fallback_reason = "RTXPT reference dispatch requested DLSS Ray Reconstruction guides, but the RD guide textures are not allocated.";
+				}
+				return false;
+			}
+		}
+		return true;
+	}
+
 public:
 	virtual RTGIBackendCapabilities query_capabilities() const override {
 		return _rtgi_static_backend_capabilities(RSE::PT_BACKEND_NVIDIA_RTXPT);
@@ -1826,17 +2894,91 @@ public:
 		return true;
 	}
 
+	virtual bool dispatch_path_trace(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
+		if (!_validate_reference_dispatch_context(p_context, r_fallback_reason)) {
+			return false;
+		}
+
+		// NVIDIA's Godot branch records RTXPT-compatible work through Godot's
+		// Vulkan ray tracing pipeline. Keep that dispatch explicit here so the
+		// backend owns its validation even though the shader/SBT resources are
+		// RD-owned.
+		RD::RaytracingListID raytracing_list = p_context.rd->raytracing_list_begin();
+		p_context.rd->raytracing_list_bind_raytracing_pipeline(raytracing_list, p_context.pipeline);
+		p_context.rd->raytracing_list_bind_uniform_set(raytracing_list, p_context.uniform_set, 0);
+		RID bindless_set = raytracing->get_bindless_uniform_set();
+		if (bindless_set.is_valid()) {
+			p_context.rd->raytracing_list_bind_uniform_set(raytracing_list, bindless_set, 1);
+		}
+
+		if (!_add_generic_dependencies(raytracing_list)) {
+			p_context.rd->raytracing_list_end();
+			if (r_fallback_reason) {
+				*r_fallback_reason = "RTXPT reference dispatch failed to declare material, geometry, or deformed-buffer dependencies.";
+			}
+			return false;
+		}
+
+		p_context.rd->raytracing_list_trace_rays(raytracing_list, 0, raytracing->get_shader()->get_hit_sbt(p_context.rt_flags), p_context.output_size.width, p_context.output_size.height, 1);
+		p_context.rd->raytracing_list_end();
+		return true;
+	}
+
 	virtual bool handoff_denoiser(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
-		// NRD and Streamline/DLSS-RR stay capability-gated separately. The
-		// NVIDIA fork-compatible RTGI dispatch itself writes RD-owned noisy and
-		// guide buffers, so absence of the optional denoiser runtime must not
-		// fail the path tracing pass.
+#if defined(RTGI_STREAMLINE_DLSS_RR_HANDOFF_ENABLED) && defined(RTGI_STREAMLINE_SDK_HEADERS_PRESENT)
+		if ((p_context.rt_flags & SceneShaderRaytracing::RT_FLAG_DLSS_RR_ENABLED) != 0) {
+			return _record_streamline_dlss_rr_handoff(p_context, r_fallback_reason);
+		}
+#endif
+		// NRD stays capability-gated separately. The NVIDIA fork-compatible RTGI
+		// dispatch itself writes RD-owned noisy and guide buffers, so absence of
+		// an optional denoiser runtime must not fail the path tracing pass.
 		return true;
 	}
 };
 #endif
 
+static bool _rtgi_backend_material_has_unsupported_cpu_alpha_or_custom_shader(const RT_MaterialData &p_material) {
+	if ((p_material.flags & (RT_MAT_FLAG_CUSTOM_SHADER | RT_MAT_FLAG_CUSTOM_ALPHA_CLIP)) != 0) {
+		return true;
+	}
+
+	if ((p_material.flags & (RT_MAT_FLAG_ALPHA_TEST | RT_MAT_FLAG_ALPHA_HASH)) == 0) {
+		return false;
+	}
+
+	// Constant alpha-scissor can be classified per surface before backend upload.
+	// Texture, vertex-color, and alpha-hash opacity need shader-side evaluation.
+	if ((p_material.flags & RT_MAT_FLAG_ALPHA_HASH) != 0 ||
+			(p_material.flags & RT_MAT_FLAG_VERTEX_COLOR_ALBEDO) != 0 ||
+			p_material.albedo_texture_idx != 0) {
+		return true;
+	}
+
+	return false;
+}
+
+static bool _rtgi_backend_constant_alpha_surface_visible(const RT_MaterialData &p_material) {
+	if ((p_material.flags & RT_MAT_FLAG_ALPHA_TEST) == 0) {
+		return true;
+	}
+
+	return p_material.albedo_color[3] >= p_material.alpha_scissor_threshold;
+}
+
+static RT_MaterialData _rtgi_backend_material_for_cpu_trace(const RT_MaterialData &p_material) {
+	RT_MaterialData material = p_material;
+	if ((material.flags & RT_MAT_FLAG_ALPHA_TEST) != 0 &&
+			!_rtgi_backend_material_has_unsupported_cpu_alpha_or_custom_shader(material)) {
+		material.flags &= ~(RT_MAT_FLAG_ALPHA_TEST | RT_MAT_FLAG_ALPHA_HASH | RT_MAT_FLAG_CUSTOM_ALPHA_CLIP);
+		material.alpha_hash_scale = 0.0f;
+		material.albedo_color[3] = 1.0f;
+	}
+	return material;
+}
+
 #if defined(RTGI_EMBREE_OSPRAY_BACKEND_IMPLEMENTED)
+#if defined(RTGI_OSPRAY_DISPATCH_ENABLED)
 struct RTGIOSPRayVec3f {
 	float x = 0.0f;
 	float y = 0.0f;
@@ -1868,8 +3010,10 @@ enum RTGIOSPRayConstants {
 	RTGI_OSP_DATA = 0x8000000 + 100,
 	RTGI_OSP_GEOMETRIC_MODEL = 0x8000000 + 104,
 	RTGI_OSP_INSTANCE = 0x8000000 + 108,
+	RTGI_OSP_LIGHT = 0x8000000 + 109,
 	RTGI_OSP_MATERIAL = 0x8000000 + 110,
 	RTGI_OSP_INT = 4000,
+	RTGI_OSP_UINT = 4500,
 	RTGI_OSP_VEC3UI = 4502,
 	RTGI_OSP_FLOAT = 6000,
 	RTGI_OSP_VEC3F = 6002,
@@ -1879,6 +3023,35 @@ enum RTGIOSPRayConstants {
 	RTGI_OSP_TASK_FINISHED = 100000,
 };
 
+#if defined(RTGI_OSPRAY_DISPATCH_ENABLED)
+static_assert(RTGI_OSP_DATA == OSP_DATA, "RTGI OSPRay ABI constant mismatch: OSP_DATA");
+static_assert(RTGI_OSP_GEOMETRIC_MODEL == OSP_GEOMETRIC_MODEL, "RTGI OSPRay ABI constant mismatch: OSP_GEOMETRIC_MODEL");
+static_assert(RTGI_OSP_INSTANCE == OSP_INSTANCE, "RTGI OSPRay ABI constant mismatch: OSP_INSTANCE");
+static_assert(RTGI_OSP_LIGHT == OSP_LIGHT, "RTGI OSPRay ABI constant mismatch: OSP_LIGHT");
+static_assert(RTGI_OSP_MATERIAL == OSP_MATERIAL, "RTGI OSPRay ABI constant mismatch: OSP_MATERIAL");
+static_assert(RTGI_OSP_INT == OSP_INT, "RTGI OSPRay ABI constant mismatch: OSP_INT");
+static_assert(RTGI_OSP_UINT == OSP_UINT, "RTGI OSPRay ABI constant mismatch: OSP_UINT");
+static_assert(RTGI_OSP_VEC3UI == OSP_VEC3UI, "RTGI OSPRay ABI constant mismatch: OSP_VEC3UI");
+static_assert(RTGI_OSP_FLOAT == OSP_FLOAT, "RTGI OSPRay ABI constant mismatch: OSP_FLOAT");
+static_assert(RTGI_OSP_VEC3F == OSP_VEC3F, "RTGI OSPRay ABI constant mismatch: OSP_VEC3F");
+static_assert(RTGI_OSP_VEC4F == OSP_VEC4F, "RTGI OSPRay ABI constant mismatch: OSP_VEC4F");
+static_assert(RTGI_OSP_FB_COLOR == OSP_FB_COLOR, "RTGI OSPRay ABI constant mismatch: OSP_FB_COLOR");
+static_assert(RTGI_OSP_FB_RGBA32F == OSP_FB_RGBA32F, "RTGI OSPRay ABI constant mismatch: OSP_FB_RGBA32F");
+static_assert(RTGI_OSP_TASK_FINISHED == OSP_TASK_FINISHED, "RTGI OSPRay ABI constant mismatch: OSP_TASK_FINISHED");
+#endif
+#endif // RTGI_OSPRAY_DISPATCH_ENABLED
+
+struct RTGIEmbreeVec3f {
+	float x = 0.0f;
+	float y = 0.0f;
+	float z = 0.0f;
+};
+static_assert(sizeof(RTGIEmbreeVec3f) == sizeof(float) * 3, "RTGIEmbreeVec3f must be a tightly packed float3.");
+static_assert(offsetof(RTGIEmbreeVec3f, x) == 0, "RTGIEmbreeVec3f x offset must match Embree float3.");
+static_assert(offsetof(RTGIEmbreeVec3f, y) == sizeof(float), "RTGIEmbreeVec3f y offset must match Embree float3.");
+static_assert(offsetof(RTGIEmbreeVec3f, z) == sizeof(float) * 2, "RTGIEmbreeVec3f z offset must match Embree float3.");
+
+#if defined(RTGI_OSPRAY_DISPATCH_ENABLED)
 struct RTGIOSPRayDispatch {
 #if defined(WINDOWS_ENABLED)
 	HMODULE library_handle = nullptr;
@@ -1888,29 +3061,31 @@ struct RTGIOSPRayDispatch {
 	String loaded_path;
 	bool loaded = false;
 
-	int (*load_module)(const char *) = nullptr;
-	void *(*new_device)(const char *) = nullptr;
-	void (*set_current_device)(void *) = nullptr;
-	void (*device_commit)(void *) = nullptr;
-	void (*device_release)(void *) = nullptr;
-	void *(*new_shared_data)(const void *, uint32_t, uint64_t, int64_t, uint64_t, int64_t, uint64_t, int64_t, void (*)(const void *, const void *), const void *) = nullptr;
-	void *(*new_geometry)(const char *) = nullptr;
-	void *(*new_geometric_model)(void *) = nullptr;
-	void *(*new_material)(const char *) = nullptr;
-	void *(*new_group)() = nullptr;
-	void *(*new_instance)(void *) = nullptr;
-	void *(*new_world)() = nullptr;
-	void *(*new_renderer)(const char *) = nullptr;
-	void *(*new_camera)(const char *) = nullptr;
-	void (*set_param)(void *, const char *, uint32_t, const void *) = nullptr;
-	void (*commit)(void *) = nullptr;
-	void (*release)(void *) = nullptr;
-	void *(*new_frame_buffer)(int, int, uint32_t, uint32_t) = nullptr;
-	void (*reset_accumulation)(void *) = nullptr;
-	void *(*render_frame)(void *, void *, void *, void *) = nullptr;
-	void (*wait)(void *, uint32_t) = nullptr;
-	const void *(*map_frame_buffer)(void *, uint32_t) = nullptr;
-	void (*unmap_frame_buffer)(const void *, void *) = nullptr;
+	void (*shutdown)() = nullptr;
+	OSPError (*load_module)(const char *) = nullptr;
+	OSPDevice (*new_device)(const char *) = nullptr;
+	void (*set_current_device)(OSPDevice) = nullptr;
+	void (*device_commit)(OSPDevice) = nullptr;
+	void (*device_release)(OSPDevice) = nullptr;
+	OSPData (*new_shared_data)(const void *, OSPDataType, uint64_t, int64_t, uint64_t, int64_t, uint64_t, int64_t, OSPDeleterCallback, const void *) = nullptr;
+	OSPGeometry (*new_geometry)(const char *) = nullptr;
+	OSPGeometricModel (*new_geometric_model)(OSPGeometry) = nullptr;
+	OSPMaterial (*new_material)(const char *) = nullptr;
+	OSPLight (*new_light)(const char *) = nullptr;
+	OSPGroup (*new_group)() = nullptr;
+	OSPInstance (*new_instance)(OSPGroup) = nullptr;
+	OSPWorld (*new_world)() = nullptr;
+	OSPRenderer (*new_renderer)(const char *) = nullptr;
+	OSPCamera (*new_camera)(const char *) = nullptr;
+	void (*set_param)(OSPObject, const char *, OSPDataType, const void *) = nullptr;
+	void (*commit)(OSPObject) = nullptr;
+	void (*release)(OSPObject) = nullptr;
+	OSPFrameBuffer (*new_frame_buffer)(int, int, OSPFrameBufferFormat, uint32_t) = nullptr;
+	void (*reset_accumulation)(OSPFrameBuffer) = nullptr;
+	OSPFuture (*render_frame)(OSPFrameBuffer, OSPRenderer, OSPCamera, OSPWorld) = nullptr;
+	void (*wait)(OSPFuture, OSPSyncEvent) = nullptr;
+	const void *(*map_frame_buffer)(OSPFrameBuffer, OSPFrameBufferChannel) = nullptr;
+	void (*unmap_frame_buffer)(const void *, OSPFrameBuffer) = nullptr;
 
 	template <typename T>
 	bool _resolve_symbol(T &r_symbol, const char *p_name, String *r_failure_reason) {
@@ -1932,6 +3107,10 @@ struct RTGIOSPRayDispatch {
 	}
 
 	void unload() {
+		if (shutdown != nullptr) {
+			shutdown();
+			shutdown = nullptr;
+		}
 #if defined(WINDOWS_ENABLED)
 		if (library_handle != nullptr) {
 			FreeLibrary(library_handle);
@@ -1959,6 +3138,7 @@ struct RTGIOSPRayDispatch {
 #endif
 		};
 		static const char *const ospray_runtime_symbols[] = {
+			"ospShutdown",
 			"ospLoadModule",
 			"ospNewDevice",
 			"ospSetCurrentDevice",
@@ -1968,6 +3148,7 @@ struct RTGIOSPRayDispatch {
 			"ospNewGeometry",
 			"ospNewGeometricModel",
 			"ospNewMaterial",
+			"ospNewLight",
 			"ospNewGroup",
 			"ospNewInstance",
 			"ospNewWorld",
@@ -2014,7 +3195,8 @@ struct RTGIOSPRayDispatch {
 			return false;
 		}
 
-		if (!_resolve_symbol(load_module, "ospLoadModule", r_failure_reason) ||
+		if (!_resolve_symbol(shutdown, "ospShutdown", r_failure_reason) ||
+				!_resolve_symbol(load_module, "ospLoadModule", r_failure_reason) ||
 				!_resolve_symbol(new_device, "ospNewDevice", r_failure_reason) ||
 				!_resolve_symbol(set_current_device, "ospSetCurrentDevice", r_failure_reason) ||
 				!_resolve_symbol(device_commit, "ospDeviceCommit", r_failure_reason) ||
@@ -2023,6 +3205,7 @@ struct RTGIOSPRayDispatch {
 				!_resolve_symbol(new_geometry, "ospNewGeometry", r_failure_reason) ||
 				!_resolve_symbol(new_geometric_model, "ospNewGeometricModel", r_failure_reason) ||
 				!_resolve_symbol(new_material, "ospNewMaterial", r_failure_reason) ||
+				!_resolve_symbol(new_light, "ospNewLight", r_failure_reason) ||
 				!_resolve_symbol(new_group, "ospNewGroup", r_failure_reason) ||
 				!_resolve_symbol(new_instance, "ospNewInstance", r_failure_reason) ||
 				!_resolve_symbol(new_world, "ospNewWorld", r_failure_reason) ||
@@ -2045,6 +3228,7 @@ struct RTGIOSPRayDispatch {
 		return true;
 	}
 };
+#endif // RTGI_OSPRAY_DISPATCH_ENABLED
 
 class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 	RenderForwardClustered *owner = nullptr;
@@ -2053,21 +3237,24 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 	RTCDevice embree_device = nullptr;
 	RTCScene embree_scene = nullptr;
 #endif
+#if defined(RTGI_OSPRAY_DISPATCH_ENABLED)
 	RTGIOSPRayDispatch ospray;
-	void *ospray_device = nullptr;
-	void *ospray_world = nullptr;
-	void *ospray_renderer = nullptr;
-	void *ospray_camera = nullptr;
-	void *ospray_framebuffer = nullptr;
-	LocalVector<void *> ospray_scene_objects;
-	LocalVector<void *> ospray_model_handles;
-	LocalVector<void *> ospray_instance_handles;
+	OSPDevice ospray_device = nullptr;
+	OSPWorld ospray_world = nullptr;
+	OSPRenderer ospray_renderer = nullptr;
+	OSPCamera ospray_camera = nullptr;
+	OSPFrameBuffer ospray_framebuffer = nullptr;
+	LocalVector<OSPObject> ospray_scene_objects;
+	LocalVector<OSPGeometricModel> ospray_model_handles;
+	LocalVector<OSPInstance> ospray_instance_handles;
+	LocalVector<OSPLight> ospray_light_handles;
 	LocalVector<Vector<RTGIOSPRayVec3f>> ospray_vertex_storage;
 	LocalVector<Vector<RTGIOSPRayVec3ui>> ospray_index_storage;
+	bool ospray_scene_active = false;
+#endif
 	Vector<uint8_t> output_rgba16f;
 	uint32_t output_width = 0;
 	uint32_t output_height = 0;
-	bool ospray_scene_active = false;
 
 #if defined(RTGI_EMBREE_CPU_DISPATCH_ENABLED)
 	static void _embree_error_callback(void *p_user_data, RTCError p_error, const char *p_message) {
@@ -2097,6 +3284,7 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 #endif
 	}
 
+#if defined(RTGI_OSPRAY_DISPATCH_ENABLED)
 	void _release_ospray_scene() {
 		if (ospray.loaded && ospray.release != nullptr) {
 			for (int64_t i = int64_t(ospray_scene_objects.size()) - 1; i >= 0; i--) {
@@ -2111,6 +3299,7 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 		ospray_scene_objects.clear();
 		ospray_model_handles.clear();
 		ospray_instance_handles.clear();
+		ospray_light_handles.clear();
 		ospray_vertex_storage.clear();
 		ospray_index_storage.clear();
 		ospray_world = nullptr;
@@ -2123,17 +3312,24 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 	void _release_ospray_device() {
 		_release_ospray_scene();
 		if (ospray_device != nullptr && ospray.loaded && ospray.device_release != nullptr) {
+			if (ospray.set_current_device != nullptr) {
+				ospray.set_current_device(nullptr);
+			}
 			ospray.device_release(ospray_device);
 			ospray_device = nullptr;
 		}
 		ospray.unload();
 	}
 
-	void _track_ospray_object(void *p_object) {
+	void _track_ospray_object(OSPObject p_object) {
 		if (p_object != nullptr) {
 			ospray_scene_objects.push_back(p_object);
 		}
 	}
+#else
+	void _release_ospray_scene() {}
+	void _release_ospray_device() {}
+#endif
 
 	static void _store_rgba16f(Vector<uint8_t> &r_data, uint32_t p_pixel_index, const Color &p_color) {
 		uint8_t *dst = r_data.ptrw() + uint64_t(p_pixel_index) * sizeof(uint16_t) * 4;
@@ -2143,12 +3339,109 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 		encode_uint16(Math::make_half_float(MAX(0.0f, p_color.a)), dst + 6);
 	}
 
-	static Color _material_shade(const RT_MaterialData &p_material, const Vector3 &p_normal, const Vector3 &p_ray_direction) {
+	static float _light_luminance(const RT_LightData &p_light) {
+		return MAX(p_light.emission[0], 0.0f) * 0.2126f + MAX(p_light.emission[1], 0.0f) * 0.7152f + MAX(p_light.emission[2], 0.0f) * 0.0722f;
+	}
+
+	static float _light_attenuation(float p_distance_sq, float p_inv_max_range, float p_decay) {
+		if (p_distance_sq <= 0.0f) {
+			return 1.0f;
+		}
+		const float distance = Math::sqrt(MAX(p_distance_sq, 0.000001f));
+		float attenuation = MIN(Math::pow(MAX(distance, 0.0001f), -p_decay), 1.0f);
+		if (p_inv_max_range >= 0.0f) {
+			float nd = distance * p_inv_max_range;
+			nd *= nd;
+			nd *= nd;
+			nd = MAX(1.0f - nd, 0.0f);
+			attenuation *= nd * nd;
+		}
+		return attenuation;
+	}
+
+#if defined(RTGI_EMBREE_CPU_DISPATCH_ENABLED)
+	bool _light_visible_from_hit(const Vector3 &p_hit_position, const Vector3 &p_normal, const Vector3 &p_light_direction, float p_max_distance) const {
+		if (embree_scene == nullptr || p_max_distance <= 0.003f) {
+			return true;
+		}
+
+		RTCRay shadow_ray = {};
+		const Vector3 origin = p_hit_position + p_normal * 0.002f;
+		shadow_ray.org_x = origin.x;
+		shadow_ray.org_y = origin.y;
+		shadow_ray.org_z = origin.z;
+		shadow_ray.dir_x = p_light_direction.x;
+		shadow_ray.dir_y = p_light_direction.y;
+		shadow_ray.dir_z = p_light_direction.z;
+		shadow_ray.tnear = 0.001f;
+		shadow_ray.tfar = MAX(p_max_distance - 0.002f, 0.001f);
+		shadow_ray.mask = RT_INSTANCE_MASK_SHADOW;
+
+		RTCOccludedArguments occluded_args;
+		rtcInitOccludedArguments(&occluded_args);
+		rtcOccluded1(embree_scene, &shadow_ray, &occluded_args);
+		return shadow_ray.tfar >= 0.0f;
+	}
+#endif
+
+	Color _material_shade(const RTGIBackendFrameContext &p_context, const RT_MaterialData &p_material, const Vector3 &p_hit_position, const Vector3 &p_normal, const Vector3 &p_ray_direction, float p_z_far) const {
 		const Color albedo(p_material.albedo_color[0], p_material.albedo_color[1], p_material.albedo_color[2], p_material.albedo_color[3]);
 		const Color emission(p_material.emission_color[0], p_material.emission_color[1], p_material.emission_color[2], 1.0f);
-		const float facing = CLAMP(Math::abs(p_normal.normalized().dot(-p_ray_direction.normalized())), 0.0f, 1.0f);
-		const float diffuse = 0.25f + 0.75f * facing;
-		Color shaded = albedo * diffuse;
+		Vector3 normal = p_normal.normalized();
+		if (normal.dot(-p_ray_direction) < 0.0f) {
+			normal = -normal;
+		}
+
+		Color shaded = albedo * 0.03f;
+		for (uint32_t i = 0; i < p_context.scene_snapshot.lights.size(); i++) {
+			const RT_LightData &light = p_context.scene_snapshot.lights[i];
+			if (_light_luminance(light) <= 0.0f) {
+				continue;
+			}
+
+			Vector3 light_direction;
+			float distance_sq = 0.0f;
+			float max_distance = p_z_far;
+			float spot_attenuation = 1.0f;
+			if (light.type == RT_LIGHT_TYPE_DIRECTIONAL) {
+				light_direction = -Vector3(light.position[0], light.position[1], light.position[2]).normalized();
+				max_distance = light.shadow_max_distance > 0.0f ? light.shadow_max_distance : p_z_far;
+			} else {
+				const Vector3 light_position(light.position[0], light.position[1], light.position[2]);
+				const Vector3 to_light = light_position - p_hit_position;
+				distance_sq = to_light.length_squared();
+				if (light.max_range_squared > 0.0f && distance_sq > light.max_range_squared) {
+					continue;
+				}
+				const float distance = Math::sqrt(MAX(distance_sq, 0.000001f));
+				light_direction = to_light / distance;
+				max_distance = distance;
+				if (light.type == RT_LIGHT_TYPE_SPOT) {
+					const Vector3 spot_direction(light.spot_direction[0], light.spot_direction[1], light.spot_direction[2]);
+					const float scos = (-light_direction).dot(spot_direction.normalized());
+					if (scos <= light.cos_spot_angle) {
+						continue;
+					}
+					const float spot_rim = MAX(0.0001f, (1.0f - scos) / MAX(1.0f - light.cos_spot_angle, 0.0001f));
+					spot_attenuation = 1.0f - Math::pow(spot_rim, light.inv_spot_attenuation);
+				}
+			}
+
+			const float n_dot_l = MAX(normal.dot(light_direction), 0.0f);
+			if (n_dot_l <= 0.0f) {
+				continue;
+			}
+			float visibility = 1.0f;
+#if defined(RTGI_EMBREE_CPU_DISPATCH_ENABLED)
+			if ((light.flags & RT_LIGHT_FLAG_SHADOW) != 0u && !_light_visible_from_hit(p_hit_position, normal, light_direction, max_distance)) {
+				visibility = 1.0f - CLAMP(light.shadow_opacity, 0.0f, 1.0f);
+			}
+#endif
+			const float attenuation = _light_attenuation(distance_sq, light.inv_max_range, light.attenuation) * MAX(spot_attenuation, 0.0f) * visibility;
+			shaded.r += albedo.r * MAX(light.emission[0], 0.0f) * n_dot_l * attenuation;
+			shaded.g += albedo.g * MAX(light.emission[1], 0.0f) * n_dot_l * attenuation;
+			shaded.b += albedo.b * MAX(light.emission[2], 0.0f) * n_dot_l * attenuation;
+		}
 		shaded.r += emission.r * MAX(0.0f, p_material.emission_strength);
 		shaded.g += emission.g * MAX(0.0f, p_material.emission_strength);
 		shaded.b += emission.b * MAX(0.0f, p_material.emission_strength);
@@ -2178,6 +3471,7 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 #endif
 	}
 
+#if defined(RTGI_OSPRAY_DISPATCH_ENABLED)
 	bool _ensure_ospray_device(String *r_fallback_reason) {
 		if (ospray_device != nullptr) {
 			return true;
@@ -2201,8 +3495,8 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 			}
 			return false;
 		}
-		ospray.set_current_device(ospray_device);
 		ospray.device_commit(ospray_device);
+		ospray.set_current_device(ospray_device);
 		return true;
 	}
 
@@ -2224,18 +3518,28 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 		ospray.set_current_device(ospray_device);
 
 		for (uint32_t geometry_index = 0; geometry_index < p_snapshot.geometries.size(); geometry_index++) {
-			if ((p_snapshot.instance_masks[geometry_index] & RT_INSTANCE_MASK_VISIBLE) == 0) {
+			const uint8_t instance_mask = p_snapshot.instance_masks[geometry_index];
+			if ((instance_mask & (RT_INSTANCE_MASK_VISIBLE | RT_INSTANCE_MASK_SHADOW)) == 0) {
 				continue;
 			}
-
-			const RT_MaterialData &material_data = p_snapshot.materials[geometry_index];
-			const uint32_t unsupported_material_flags = RT_MAT_FLAG_CUSTOM_SHADER | RT_MAT_FLAG_CUSTOM_ALPHA_CLIP | RT_MAT_FLAG_ALPHA_HASH | RT_MAT_FLAG_ALPHA_TEST;
-			if ((material_data.flags & unsupported_material_flags) != 0) {
+			if (instance_mask != (RT_INSTANCE_MASK_VISIBLE | RT_INSTANCE_MASK_SHADOW)) {
 				if (r_fallback_reason) {
-					*r_fallback_reason = "OSPRay RTGI backend cannot yet evaluate alpha-tested or custom hit shaders; falling back to Embree or Vulkan Generic.";
+					*r_fallback_reason = "OSPRay RTGI backend cannot represent per-instance visible/shadow masks; falling back to Embree or Vulkan Generic.";
 				}
 				return false;
 			}
+
+			const RT_MaterialData &source_material = p_snapshot.materials[geometry_index];
+			if (_rtgi_backend_material_has_unsupported_cpu_alpha_or_custom_shader(source_material)) {
+				if (r_fallback_reason) {
+					*r_fallback_reason = "OSPRay RTGI backend cannot evaluate texture or vertex alpha, alpha hash, or custom hit shaders; constant alpha-scissor is supported.";
+				}
+				return false;
+			}
+			if (!_rtgi_backend_constant_alpha_surface_visible(source_material)) {
+				continue;
+			}
+			const RT_MaterialData material_data = _rtgi_backend_material_for_cpu_trace(source_material);
 
 			const RTGIBackendCPUGeometry &cpu_geometry = p_snapshot.cpu_geometries[geometry_index];
 			if (!cpu_geometry.valid) {
@@ -2256,10 +3560,10 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 			indices.resize(cpu_geometry.primitive_count);
 			memcpy(indices.ptrw(), cpu_geometry.indices.ptr(), uint64_t(cpu_geometry.primitive_count) * sizeof(RTGIOSPRayVec3ui));
 
-			void *vertex_data = ospray.new_shared_data(vertices.ptr(), RTGI_OSP_VEC3F, vertices.size(), sizeof(RTGIOSPRayVec3f), 1, 0, 1, 0, nullptr, nullptr);
-			void *index_data = ospray.new_shared_data(indices.ptr(), RTGI_OSP_VEC3UI, indices.size(), sizeof(RTGIOSPRayVec3ui), 1, 0, 1, 0, nullptr, nullptr);
-			void *mesh = ospray.new_geometry("mesh");
-			void *material = ospray.new_material("obj");
+			OSPData vertex_data = ospray.new_shared_data(vertices.ptr(), OSP_VEC3F, vertices.size(), sizeof(RTGIOSPRayVec3f), 1, 0, 1, 0, nullptr, nullptr);
+			OSPData index_data = ospray.new_shared_data(indices.ptr(), OSP_VEC3UI, indices.size(), sizeof(RTGIOSPRayVec3ui), 1, 0, 1, 0, nullptr, nullptr);
+			OSPGeometry mesh = ospray.new_geometry("mesh");
+			OSPMaterial material = ospray.new_material("obj");
 			if (vertex_data == nullptr || index_data == nullptr || mesh == nullptr || material == nullptr) {
 				if (r_fallback_reason) {
 					*r_fallback_reason = "OSPRay could not allocate mesh data, geometry, or material objects.";
@@ -2273,8 +3577,8 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 
 			ospray.commit(vertex_data);
 			ospray.commit(index_data);
-			ospray.set_param(mesh, "vertex.position", RTGI_OSP_DATA, &vertex_data);
-			ospray.set_param(mesh, "index", RTGI_OSP_DATA, &index_data);
+			ospray.set_param(mesh, "vertex.position", OSP_DATA, &vertex_data);
+			ospray.set_param(mesh, "index", OSP_DATA, &index_data);
 			ospray.commit(mesh);
 
 			const RTGIOSPRayVec3f kd = {
@@ -2282,12 +3586,18 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 				MAX(0.0f, material_data.albedo_color[1]),
 				MAX(0.0f, material_data.albedo_color[2]),
 			};
+			const RTGIOSPRayVec3f emissive = {
+				MAX(0.0f, material_data.emission_color[0] * material_data.emission_strength),
+				MAX(0.0f, material_data.emission_color[1] * material_data.emission_strength),
+				MAX(0.0f, material_data.emission_color[2] * material_data.emission_strength),
+			};
 			const float alpha = CLAMP(material_data.albedo_color[3], 0.0f, 1.0f);
-			ospray.set_param(material, "kd", RTGI_OSP_VEC3F, &kd);
-			ospray.set_param(material, "d", RTGI_OSP_FLOAT, &alpha);
+			ospray.set_param(material, "kd", OSP_VEC3F, &kd);
+			ospray.set_param(material, "emissiveColor", OSP_VEC3F, &emissive);
+			ospray.set_param(material, "d", OSP_FLOAT, &alpha);
 			ospray.commit(material);
 
-			void *model = ospray.new_geometric_model(mesh);
+			OSPGeometricModel model = ospray.new_geometric_model(mesh);
 			if (model == nullptr) {
 				if (r_fallback_reason) {
 					*r_fallback_reason = "OSPRay could not allocate a geometric model for RTGI mesh data.";
@@ -2295,13 +3605,13 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 				return false;
 			}
 			_track_ospray_object(model);
-			ospray.set_param(model, "material", RTGI_OSP_MATERIAL, &material);
+			ospray.set_param(model, "material", OSP_MATERIAL, &material);
 			ospray.commit(model);
 			ospray_model_handles.push_back(model);
 		}
 
-		void *group = ospray.new_group();
-		void *model_data = nullptr;
+		OSPGroup group = ospray.new_group();
+		OSPData model_data = nullptr;
 		if (group == nullptr) {
 			if (r_fallback_reason) {
 				*r_fallback_reason = "OSPRay could not allocate a group for the RTGI scene.";
@@ -2310,7 +3620,7 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 		}
 		_track_ospray_object(group);
 		if (!ospray_model_handles.is_empty()) {
-			model_data = ospray.new_shared_data(ospray_model_handles.ptr(), RTGI_OSP_GEOMETRIC_MODEL, ospray_model_handles.size(), sizeof(void *), 1, 0, 1, 0, nullptr, nullptr);
+			model_data = ospray.new_shared_data(ospray_model_handles.ptr(), OSP_GEOMETRIC_MODEL, ospray_model_handles.size(), sizeof(OSPGeometricModel), 1, 0, 1, 0, nullptr, nullptr);
 			if (model_data == nullptr) {
 				if (r_fallback_reason) {
 					*r_fallback_reason = "OSPRay could not allocate geometric model array data for the RTGI scene.";
@@ -2319,11 +3629,11 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 			}
 			_track_ospray_object(model_data);
 			ospray.commit(model_data);
-			ospray.set_param(group, "geometry", RTGI_OSP_DATA, &model_data);
+			ospray.set_param(group, "geometry", OSP_DATA, &model_data);
 		}
 		ospray.commit(group);
 
-		void *instance = ospray.new_instance(group);
+		OSPInstance instance = ospray.new_instance(group);
 		if (instance == nullptr) {
 			if (r_fallback_reason) {
 				*r_fallback_reason = "OSPRay could not allocate an instance for the RTGI scene.";
@@ -2334,7 +3644,7 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 		ospray.commit(instance);
 		ospray_instance_handles.push_back(instance);
 
-		void *instance_data = ospray.new_shared_data(ospray_instance_handles.ptr(), RTGI_OSP_INSTANCE, ospray_instance_handles.size(), sizeof(void *), 1, 0, 1, 0, nullptr, nullptr);
+		OSPData instance_data = ospray.new_shared_data(ospray_instance_handles.ptr(), OSP_INSTANCE, ospray_instance_handles.size(), sizeof(OSPInstance), 1, 0, 1, 0, nullptr, nullptr);
 		ospray_world = ospray.new_world();
 		ospray_renderer = ospray.new_renderer("pathtracer");
 		if (ospray_renderer == nullptr) {
@@ -2350,17 +3660,69 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 		_track_ospray_object(ospray_world);
 		_track_ospray_object(ospray_renderer);
 		ospray.commit(instance_data);
-		ospray.set_param(ospray_world, "instance", RTGI_OSP_DATA, &instance_data);
+		ospray.set_param(ospray_world, "instance", OSP_DATA, &instance_data);
+
+		for (uint32_t light_index = 0; light_index < p_snapshot.lights.size(); light_index++) {
+			const RT_LightData &light_data = p_snapshot.lights[light_index];
+			if (_light_luminance(light_data) <= 0.0f) {
+				continue;
+			}
+
+			const char *light_type = light_data.type == RT_LIGHT_TYPE_DIRECTIONAL ? "distant" : (light_data.type == RT_LIGHT_TYPE_SPOT ? "spot" : "sphere");
+			OSPLight light = ospray.new_light(light_type);
+			if (light == nullptr) {
+				continue;
+			}
+			_track_ospray_object(light);
+			const RTGIOSPRayVec3f color = {
+				MAX(0.0f, light_data.emission[0]),
+				MAX(0.0f, light_data.emission[1]),
+				MAX(0.0f, light_data.emission[2]),
+			};
+			const float intensity = 1.0f;
+			ospray.set_param(light, "color", OSP_VEC3F, &color);
+			ospray.set_param(light, "intensity", OSP_FLOAT, &intensity);
+			if (light_data.type == RT_LIGHT_TYPE_DIRECTIONAL) {
+				const RTGIOSPRayVec3f direction = { light_data.position[0], light_data.position[1], light_data.position[2] };
+				const float angular_diameter = Math::rad_to_deg(MAX(light_data.radius * 2.0f, 0.0f));
+				ospray.set_param(light, "direction", OSP_VEC3F, &direction);
+				ospray.set_param(light, "angularDiameter", OSP_FLOAT, &angular_diameter);
+			} else {
+				const RTGIOSPRayVec3f position = { light_data.position[0], light_data.position[1], light_data.position[2] };
+				const float radius = MAX(light_data.radius, 0.0f);
+				ospray.set_param(light, "position", OSP_VEC3F, &position);
+				ospray.set_param(light, "radius", OSP_FLOAT, &radius);
+				if (light_data.type == RT_LIGHT_TYPE_SPOT) {
+					const RTGIOSPRayVec3f direction = { light_data.spot_direction[0], light_data.spot_direction[1], light_data.spot_direction[2] };
+					const float opening_angle = Math::rad_to_deg(Math::acos(CLAMP(light_data.cos_spot_angle, -1.0f, 1.0f))) * 2.0f;
+					const float penumbra_angle = MAX(opening_angle * 0.1f, 0.0f);
+					ospray.set_param(light, "direction", OSP_VEC3F, &direction);
+					ospray.set_param(light, "openingAngle", OSP_FLOAT, &opening_angle);
+					ospray.set_param(light, "penumbraAngle", OSP_FLOAT, &penumbra_angle);
+				}
+			}
+			ospray.commit(light);
+			ospray_light_handles.push_back(light);
+		}
+		if (!ospray_light_handles.is_empty()) {
+			OSPData light_data = ospray.new_shared_data(ospray_light_handles.ptr(), OSP_LIGHT, ospray_light_handles.size(), sizeof(OSPLight), 1, 0, 1, 0, nullptr, nullptr);
+			if (light_data != nullptr) {
+				_track_ospray_object(light_data);
+				ospray.commit(light_data);
+				ospray.set_param(ospray_world, "light", OSP_DATA, &light_data);
+			}
+		}
 		ospray.commit(ospray_world);
 
 		const int pixel_samples = 1;
 		const RTGIOSPRayVec4f background = { 0.0f, 0.0f, 0.0f, 1.0f };
-		ospray.set_param(ospray_renderer, "pixelSamples", RTGI_OSP_INT, &pixel_samples);
-		ospray.set_param(ospray_renderer, "backgroundColor", RTGI_OSP_VEC4F, &background);
+		ospray.set_param(ospray_renderer, "pixelSamples", OSP_INT, &pixel_samples);
+		ospray.set_param(ospray_renderer, "backgroundColor", OSP_VEC4F, &background);
 		ospray.commit(ospray_renderer);
 		ospray_scene_active = true;
 		return true;
 	}
+#endif
 
 	bool _create_scene_from_snapshot(const RTGIBackendSceneSnapshot &p_snapshot, String *r_fallback_reason) {
 #if defined(RTGI_EMBREE_CPU_DISPATCH_ENABLED)
@@ -2387,17 +3749,19 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 		}
 
 		for (uint32_t geometry_index = 0; geometry_index < p_snapshot.geometries.size(); geometry_index++) {
-			if ((p_snapshot.instance_masks[geometry_index] & RT_INSTANCE_MASK_VISIBLE) == 0) {
+			if ((p_snapshot.instance_masks[geometry_index] & (RT_INSTANCE_MASK_VISIBLE | RT_INSTANCE_MASK_SHADOW)) == 0) {
 				continue;
 			}
 
 			const RT_MaterialData &material = p_snapshot.materials[geometry_index];
-			const uint32_t unsupported_material_flags = RT_MAT_FLAG_CUSTOM_SHADER | RT_MAT_FLAG_CUSTOM_ALPHA_CLIP | RT_MAT_FLAG_ALPHA_HASH | RT_MAT_FLAG_ALPHA_TEST;
-			if ((material.flags & unsupported_material_flags) != 0) {
+			if (_rtgi_backend_material_has_unsupported_cpu_alpha_or_custom_shader(material)) {
 				if (r_fallback_reason) {
-					*r_fallback_reason = "Embree RTGI backend cannot yet evaluate alpha-tested or custom hit shaders; falling back to Vulkan Generic.";
+					*r_fallback_reason = "Embree RTGI backend cannot evaluate texture or vertex alpha, alpha hash, or custom hit shaders; constant alpha-scissor is supported.";
 				}
 				return false;
+			}
+			if (!_rtgi_backend_constant_alpha_surface_visible(material)) {
+				continue;
 			}
 
 			const RTGIBackendCPUGeometry &cpu_geometry = p_snapshot.cpu_geometries[geometry_index];
@@ -2416,7 +3780,7 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 				return false;
 			}
 
-			Vector3 *vertices = static_cast<Vector3 *>(rtcSetNewGeometryBuffer(geometry, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT3, sizeof(Vector3), cpu_geometry.vertices.size()));
+			RTGIEmbreeVec3f *vertices = static_cast<RTGIEmbreeVec3f *>(rtcSetNewGeometryBuffer(geometry, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT3, sizeof(RTGIEmbreeVec3f), cpu_geometry.vertices.size()));
 			uint32_t *indices = static_cast<uint32_t *>(rtcSetNewGeometryBuffer(geometry, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3, sizeof(uint32_t) * 3, cpu_geometry.primitive_count));
 			if (vertices == nullptr || indices == nullptr) {
 				rtcReleaseGeometry(geometry);
@@ -2427,13 +3791,12 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 			}
 
 			const Transform3D &transform = p_snapshot.blas_transforms[geometry_index];
-			for (uint32_t vertex_index = 0; vertex_index < cpu_geometry.vertices.size(); vertex_index++) {
-				vertices[vertex_index] = transform.xform(cpu_geometry.vertices[vertex_index]);
-			}
+			_rtgi_pack_transformed_vertices_float3(cpu_geometry.vertices.ptr(), cpu_geometry.vertices.size(), transform, vertices);
 			for (uint32_t index = 0; index < cpu_geometry.indices.size(); index++) {
 				indices[index] = cpu_geometry.indices[index];
 			}
 
+			rtcSetGeometryMask(geometry, p_snapshot.instance_masks[geometry_index]);
 			rtcCommitGeometry(geometry);
 			rtcAttachGeometryByID(embree_scene, geometry, geometry_index);
 			rtcReleaseGeometry(geometry);
@@ -2508,7 +3871,7 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 				ray_hit.ray.dir_z = ray_direction.z;
 				ray_hit.ray.tnear = 0.001f;
 				ray_hit.ray.tfar = z_far;
-				ray_hit.ray.mask = 0xFFFFFFFFu;
+				ray_hit.ray.mask = RT_INSTANCE_MASK_VISIBLE;
 				ray_hit.hit.geomID = RTC_INVALID_GEOMETRY_ID;
 				ray_hit.hit.instID[0] = RTC_INVALID_GEOMETRY_ID;
 
@@ -2517,7 +3880,9 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 				Color color(0, 0, 0, 1);
 				if (ray_hit.hit.geomID != RTC_INVALID_GEOMETRY_ID && ray_hit.hit.geomID < p_context.scene_snapshot.materials.size()) {
 					const Vector3 normal(ray_hit.hit.Ng_x, ray_hit.hit.Ng_y, ray_hit.hit.Ng_z);
-					color = _material_shade(p_context.scene_snapshot.materials[ray_hit.hit.geomID], normal, ray_direction);
+					const Vector3 hit_position = ray_origin + ray_direction * ray_hit.ray.tfar;
+					const RT_MaterialData material = _rtgi_backend_material_for_cpu_trace(p_context.scene_snapshot.materials[ray_hit.hit.geomID]);
+					color = _material_shade(p_context, material, hit_position, normal, ray_direction, z_far);
 				}
 				_store_rgba16f(output_rgba16f, y * output_width + x, color);
 			}
@@ -2531,6 +3896,7 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 #endif
 	}
 
+#if defined(RTGI_OSPRAY_DISPATCH_ENABLED)
 	bool _render_ospray_frame(const RTGIBackendFrameContext &p_context, String *r_fallback_reason) {
 		if (!ospray_scene_active || ospray_world == nullptr || ospray_renderer == nullptr) {
 			if (r_fallback_reason) {
@@ -2572,18 +3938,18 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 		const RTGIOSPRayVec3f osp_up = { float(camera_up.x), float(camera_up.y), float(camera_up.z) };
 		const float aspect = float(p_context.output_size.x) / MAX(float(p_context.output_size.y), 1.0f);
 
-		ospray.set_param(ospray_camera, "position", RTGI_OSP_VEC3F, &osp_position);
-		ospray.set_param(ospray_camera, "direction", RTGI_OSP_VEC3F, &osp_direction);
-		ospray.set_param(ospray_camera, "up", RTGI_OSP_VEC3F, &osp_up);
-		ospray.set_param(ospray_camera, "aspect", RTGI_OSP_FLOAT, &aspect);
+		ospray.set_param(ospray_camera, "position", OSP_VEC3F, &osp_position);
+		ospray.set_param(ospray_camera, "direction", OSP_VEC3F, &osp_direction);
+		ospray.set_param(ospray_camera, "up", OSP_VEC3F, &osp_up);
+		ospray.set_param(ospray_camera, "aspect", OSP_FLOAT, &aspect);
 		if (p_context.render_data->scene_data->cam_orthogonal) {
 			const Vector2 half_extents = p_context.render_data->scene_data->cam_projection.get_viewport_half_extents();
 			const float height = float(MAX(half_extents.y * 2.0, 0.001));
-			ospray.set_param(ospray_camera, "height", RTGI_OSP_FLOAT, &height);
+			ospray.set_param(ospray_camera, "height", OSP_FLOAT, &height);
 		} else {
 			const float fov_x = float(p_context.render_data->scene_data->cam_projection.get_fov());
 			const float fov_y = float(Projection::get_fovy(fov_x, 1.0f / MAX(aspect, 0.001f)));
-			ospray.set_param(ospray_camera, "fovy", RTGI_OSP_FLOAT, &fov_y);
+			ospray.set_param(ospray_camera, "fovy", OSP_FLOAT, &fov_y);
 		}
 		ospray.commit(ospray_camera);
 
@@ -2592,7 +3958,7 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 				ospray.release(ospray_framebuffer);
 				ospray_framebuffer = nullptr;
 			}
-			ospray_framebuffer = ospray.new_frame_buffer(p_context.output_size.x, p_context.output_size.y, RTGI_OSP_FB_RGBA32F, RTGI_OSP_FB_COLOR);
+			ospray_framebuffer = ospray.new_frame_buffer(p_context.output_size.x, p_context.output_size.y, OSP_FB_RGBA32F, OSP_FB_COLOR);
 			if (ospray_framebuffer == nullptr) {
 				if (r_fallback_reason) {
 					*r_fallback_reason = "OSPRay could not allocate an RGBA32F framebuffer for RTGI dispatch.";
@@ -2604,17 +3970,17 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 		output_height = p_context.output_size.y;
 		ospray.reset_accumulation(ospray_framebuffer);
 
-		void *future = ospray.render_frame(ospray_framebuffer, ospray_renderer, ospray_camera, ospray_world);
+		OSPFuture future = ospray.render_frame(ospray_framebuffer, ospray_renderer, ospray_camera, ospray_world);
 		if (future == nullptr) {
 			if (r_fallback_reason) {
 				*r_fallback_reason = "OSPRay failed to start RTGI frame rendering.";
 			}
 			return false;
 		}
-		ospray.wait(future, RTGI_OSP_TASK_FINISHED);
+		ospray.wait(future, OSP_TASK_FINISHED);
 		ospray.release(future);
 
-		const RTGIOSPRayVec4f *pixels = static_cast<const RTGIOSPRayVec4f *>(ospray.map_frame_buffer(ospray_framebuffer, RTGI_OSP_FB_COLOR));
+		const RTGIOSPRayVec4f *pixels = static_cast<const RTGIOSPRayVec4f *>(ospray.map_frame_buffer(ospray_framebuffer, OSP_FB_COLOR));
 		if (pixels == nullptr) {
 			if (r_fallback_reason) {
 				*r_fallback_reason = "OSPRay did not return a mappable RTGI framebuffer.";
@@ -2630,8 +3996,97 @@ class EmbreeOSPRayRTGIBackend : public RTGIBackend {
 		ospray.unmap_frame_buffer(pixels, ospray_framebuffer);
 		return true;
 	}
+#endif
 
 public:
+#ifdef TESTS_ENABLED
+	bool test_trace_embree_cpu_snapshot_to_texture(RTGIBackendFrameContext &p_context, uint32_t *r_cpu_nonzero_rgb_pixels, bool *r_direct_center_hit, bool *r_primary_center_hit, String *r_fallback_reason) {
+#if defined(RTGI_EMBREE_CPU_DISPATCH_ENABLED)
+		if (!_create_scene_from_snapshot(p_context.scene_snapshot, r_fallback_reason)) {
+			return false;
+		}
+		if (r_direct_center_hit != nullptr) {
+			RTCIntersectArguments args;
+			rtcInitIntersectArguments(&args);
+			RTCRayHit ray_hit = {};
+			ray_hit.ray.org_x = 0.0f;
+			ray_hit.ray.org_y = 0.0f;
+			ray_hit.ray.org_z = 0.0f;
+			ray_hit.ray.dir_x = 0.0f;
+			ray_hit.ray.dir_y = 0.0f;
+			ray_hit.ray.dir_z = -1.0f;
+			ray_hit.ray.tnear = 0.001f;
+			ray_hit.ray.tfar = 20.0f;
+			ray_hit.ray.mask = RT_INSTANCE_MASK_VISIBLE;
+			ray_hit.hit.geomID = RTC_INVALID_GEOMETRY_ID;
+			ray_hit.hit.instID[0] = RTC_INVALID_GEOMETRY_ID;
+			rtcIntersect1(embree_scene, &ray_hit, &args);
+			*r_direct_center_hit = ray_hit.hit.geomID != RTC_INVALID_GEOMETRY_ID;
+		}
+		if (r_primary_center_hit != nullptr) {
+			*r_primary_center_hit = false;
+			if (p_context.render_data != nullptr && p_context.render_data->scene_data != nullptr) {
+				const Transform3D &camera_transform = p_context.render_data->scene_data->cam_transform;
+				const Projection inv_projection = p_context.render_data->scene_data->cam_projection.inverse();
+				const Vector3 view_near = inv_projection.xform(Vector3(0.0f, 0.0f, 0.0f));
+				const Vector3 view_far = inv_projection.xform(Vector3(0.0f, 0.0f, 1.0f));
+				const Vector3 ray_origin = p_context.render_data->scene_data->cam_orthogonal ? camera_transform.xform(view_near) : camera_transform.origin;
+				const Vector3 ray_direction = p_context.render_data->scene_data->cam_orthogonal ? -camera_transform.basis.get_column(Vector3::AXIS_Z).normalized() : camera_transform.basis.xform((view_far - view_near).normalized()).normalized();
+				RTCIntersectArguments args;
+				rtcInitIntersectArguments(&args);
+				RTCRayHit ray_hit = {};
+				ray_hit.ray.org_x = ray_origin.x;
+				ray_hit.ray.org_y = ray_origin.y;
+				ray_hit.ray.org_z = ray_origin.z;
+				ray_hit.ray.dir_x = ray_direction.x;
+				ray_hit.ray.dir_y = ray_direction.y;
+				ray_hit.ray.dir_z = ray_direction.z;
+				ray_hit.ray.tnear = 0.001f;
+				ray_hit.ray.tfar = 20.0f;
+				ray_hit.ray.mask = RT_INSTANCE_MASK_VISIBLE;
+				ray_hit.hit.geomID = RTC_INVALID_GEOMETRY_ID;
+				ray_hit.hit.instID[0] = RTC_INVALID_GEOMETRY_ID;
+				rtcIntersect1(embree_scene, &ray_hit, &args);
+				*r_primary_center_hit = ray_hit.hit.geomID != RTC_INVALID_GEOMETRY_ID;
+			}
+		}
+		if (!_trace_primary(p_context, r_fallback_reason)) {
+			return false;
+		}
+		if (r_cpu_nonzero_rgb_pixels != nullptr) {
+			*r_cpu_nonzero_rgb_pixels = 0;
+			for (int byte_index = 0; byte_index + 5 < output_rgba16f.size(); byte_index += 8) {
+				const uint16_t r = uint16_t(output_rgba16f[byte_index]) | (uint16_t(output_rgba16f[byte_index + 1]) << 8);
+				const uint16_t g = uint16_t(output_rgba16f[byte_index + 2]) | (uint16_t(output_rgba16f[byte_index + 3]) << 8);
+				const uint16_t b = uint16_t(output_rgba16f[byte_index + 4]) | (uint16_t(output_rgba16f[byte_index + 5]) << 8);
+				if ((r | g | b) != 0) {
+					(*r_cpu_nonzero_rgb_pixels)++;
+				}
+			}
+		}
+		if (p_context.rd == nullptr || !p_context.exchange.output_texture.is_valid() || output_rgba16f.is_empty()) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "Embree RTGI CPU smoke dispatch produced no uploadable output.";
+			}
+			return false;
+		}
+		const Error err = p_context.rd->texture_update(p_context.exchange.output_texture, 0, output_rgba16f);
+		if (err != OK) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "Embree RTGI CPU smoke dispatch failed to upload its output texture.";
+			}
+			return false;
+		}
+		return true;
+#else
+		if (r_fallback_reason) {
+			*r_fallback_reason = "Embree CPU dispatch is not compiled in this build.";
+		}
+		return false;
+#endif
+	}
+#endif
+
 	virtual RTGIBackendCapabilities query_capabilities() const override {
 		return _rtgi_static_backend_capabilities(RSE::PT_BACKEND_INTEL_EMBREE);
 	}
@@ -2646,16 +4101,19 @@ public:
 			}
 			return false;
 		}
+#if defined(RTGI_OSPRAY_DISPATCH_ENABLED)
 		String ospray_reason;
 		if (_ensure_ospray_device(&ospray_reason)) {
 			return true;
 		}
+#endif
 		String embree_reason;
 		if (_ensure_device(&embree_reason)) {
 			return true;
 		}
 		if (r_fallback_reason) {
 			*r_fallback_reason = embree_reason;
+#if defined(RTGI_OSPRAY_DISPATCH_ENABLED)
 			if (!ospray_reason.is_empty()) {
 				if (r_fallback_reason->is_empty()) {
 					*r_fallback_reason = "OSPRay initialization failed first: " + ospray_reason;
@@ -2663,6 +4121,7 @@ public:
 					*r_fallback_reason += " OSPRay initialization failed first: " + ospray_reason;
 				}
 			}
+#endif
 		}
 		return false;
 	}
@@ -2722,18 +4181,21 @@ public:
 	}
 
 	virtual bool upload_or_import_scene(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
+#if defined(RTGI_OSPRAY_DISPATCH_ENABLED)
 		String ospray_reason;
 		if (_create_ospray_scene_from_snapshot(p_context.scene_snapshot, &ospray_reason)) {
 			_release_scene();
 			return true;
 		}
 		_release_ospray_scene();
+#endif
 		String embree_reason;
 		if (_create_scene_from_snapshot(p_context.scene_snapshot, &embree_reason)) {
 			return true;
 		}
 		if (r_fallback_reason) {
 			*r_fallback_reason = embree_reason;
+#if defined(RTGI_OSPRAY_DISPATCH_ENABLED)
 			if (!ospray_reason.is_empty()) {
 				if (r_fallback_reason->is_empty()) {
 					*r_fallback_reason = "OSPRay path failed first: " + ospray_reason;
@@ -2741,6 +4203,7 @@ public:
 					*r_fallback_reason += " OSPRay path failed first: " + ospray_reason;
 				}
 			}
+#endif
 		}
 		return false;
 	}
@@ -2757,9 +4220,11 @@ public:
 	}
 
 	virtual bool dispatch_path_trace(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
+#if defined(RTGI_OSPRAY_DISPATCH_ENABLED)
 		if (ospray_scene_active) {
 			return _render_ospray_frame(p_context, r_fallback_reason);
 		}
+#endif
 		return _trace_primary(p_context, r_fallback_reason);
 	}
 
@@ -2788,7 +4253,7 @@ public:
 			}
 			return false;
 		}
-		return true;
+		return _rtgi_prepare_single_signal_denoiser_handoff(p_context, r_fallback_reason);
 	}
 
 	virtual bool abort_frame(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
@@ -2910,6 +4375,69 @@ struct alignas(16) RTGIHIPRTSceneBuildInput {
 };
 static_assert(sizeof(RTGIHIPRTSceneBuildInput) == 80, "RTGIHIPRTSceneBuildInput must match HIP RT ABI size");
 
+struct RTGIHIPRTFuncNameSet {
+	const char *intersect_func_name = nullptr;
+	const char *filter_func_name = nullptr;
+};
+
+#if defined(RTGI_HIPRT_BACKEND_IMPLEMENTED) && defined(RTGI_HIPRT_SDK_HEADERS_PRESENT)
+static_assert(RTGI_HIPRT_BUILD_OPERATION_BUILD == hiprtBuildOperationBuild, "RTGI HIP RT ABI enum mismatch: build operation build");
+static_assert(RTGI_HIPRT_BUILD_OPERATION_UPDATE == hiprtBuildOperationUpdate, "RTGI HIP RT ABI enum mismatch: build operation update");
+static_assert(RTGI_HIPRT_PRIMITIVE_TYPE_TRIANGLE_MESH == hiprtPrimitiveTypeTriangleMesh, "RTGI HIP RT ABI enum mismatch: triangle mesh primitive");
+static_assert(RTGI_HIPRT_PRIMITIVE_TYPE_AABB_LIST == hiprtPrimitiveTypeAABBList, "RTGI HIP RT ABI enum mismatch: AABB primitive");
+static_assert(RTGI_HIPRT_INSTANCE_TYPE_GEOMETRY == hiprtInstanceTypeGeometry, "RTGI HIP RT ABI enum mismatch: geometry instance");
+static_assert(RTGI_HIPRT_INSTANCE_TYPE_SCENE == hiprtInstanceTypeScene, "RTGI HIP RT ABI enum mismatch: scene instance");
+static_assert(RTGI_HIPRT_FRAME_TYPE_SRT == hiprtFrameTypeSRT, "RTGI HIP RT ABI enum mismatch: SRT frame");
+static_assert(RTGI_HIPRT_FRAME_TYPE_MATRIX == hiprtFrameTypeMatrix, "RTGI HIP RT ABI enum mismatch: matrix frame");
+static_assert(sizeof(RTGIHIPRTContextCreationInput) == sizeof(hiprtContextCreationInput), "RTGI HIP RT ABI size mismatch: context creation input");
+static_assert(offsetof(RTGIHIPRTContextCreationInput, ctxt) == offsetof(hiprtContextCreationInput, ctxt), "RTGI HIP RT ABI offset mismatch: context");
+static_assert(offsetof(RTGIHIPRTContextCreationInput, device) == offsetof(hiprtContextCreationInput, device), "RTGI HIP RT ABI offset mismatch: device");
+static_assert(offsetof(RTGIHIPRTContextCreationInput, deviceType) == offsetof(hiprtContextCreationInput, deviceType), "RTGI HIP RT ABI offset mismatch: device type");
+static_assert(sizeof(RTGIHIPRTBuildOptions) == sizeof(hiprtBuildOptions), "RTGI HIP RT ABI size mismatch: build options");
+static_assert(offsetof(RTGIHIPRTBuildOptions, build_flags) == offsetof(hiprtBuildOptions, buildFlags), "RTGI HIP RT ABI offset mismatch: build flags");
+static_assert(offsetof(RTGIHIPRTBuildOptions, batch_build_max_prim_count) == offsetof(hiprtBuildOptions, batchBuildMaxPrimCount), "RTGI HIP RT ABI offset mismatch: batch build max primitive count");
+static_assert(sizeof(RTGIHIPRTTriangleMeshPrimitive) == sizeof(hiprtTriangleMeshPrimitive), "RTGI HIP RT ABI size mismatch: triangle mesh primitive");
+static_assert(offsetof(RTGIHIPRTTriangleMeshPrimitive, vertices) == offsetof(hiprtTriangleMeshPrimitive, vertices), "RTGI HIP RT ABI offset mismatch: triangle vertices");
+static_assert(offsetof(RTGIHIPRTTriangleMeshPrimitive, vertex_count) == offsetof(hiprtTriangleMeshPrimitive, vertexCount), "RTGI HIP RT ABI offset mismatch: vertex count");
+static_assert(offsetof(RTGIHIPRTTriangleMeshPrimitive, vertex_stride) == offsetof(hiprtTriangleMeshPrimitive, vertexStride), "RTGI HIP RT ABI offset mismatch: vertex stride");
+static_assert(offsetof(RTGIHIPRTTriangleMeshPrimitive, triangle_indices) == offsetof(hiprtTriangleMeshPrimitive, triangleIndices), "RTGI HIP RT ABI offset mismatch: triangle indices");
+static_assert(offsetof(RTGIHIPRTTriangleMeshPrimitive, triangle_count) == offsetof(hiprtTriangleMeshPrimitive, triangleCount), "RTGI HIP RT ABI offset mismatch: triangle count");
+static_assert(offsetof(RTGIHIPRTTriangleMeshPrimitive, triangle_stride) == offsetof(hiprtTriangleMeshPrimitive, triangleStride), "RTGI HIP RT ABI offset mismatch: triangle stride");
+static_assert(offsetof(RTGIHIPRTTriangleMeshPrimitive, triangle_pair_indices) == offsetof(hiprtTriangleMeshPrimitive, trianglePairIndices), "RTGI HIP RT ABI offset mismatch: triangle pair indices");
+static_assert(offsetof(RTGIHIPRTTriangleMeshPrimitive, triangle_pair_count) == offsetof(hiprtTriangleMeshPrimitive, trianglePairCount), "RTGI HIP RT ABI offset mismatch: triangle pair count");
+static_assert(sizeof(RTGIHIPRTAABBListPrimitive) == sizeof(hiprtAABBListPrimitive), "RTGI HIP RT ABI size mismatch: AABB list primitive");
+static_assert(offsetof(RTGIHIPRTAABBListPrimitive, aabbs) == offsetof(hiprtAABBListPrimitive, aabbs), "RTGI HIP RT ABI offset mismatch: AABB data");
+static_assert(offsetof(RTGIHIPRTAABBListPrimitive, aabb_count) == offsetof(hiprtAABBListPrimitive, aabbCount), "RTGI HIP RT ABI offset mismatch: AABB count");
+static_assert(offsetof(RTGIHIPRTAABBListPrimitive, aabb_stride) == offsetof(hiprtAABBListPrimitive, aabbStride), "RTGI HIP RT ABI offset mismatch: AABB stride");
+static_assert(sizeof(RTGIHIPRTBvhNodeList) == sizeof(hiprtBvhNodeList), "RTGI HIP RT ABI size mismatch: BVH node list");
+static_assert(offsetof(RTGIHIPRTBvhNodeList, internal_nodes) == offsetof(hiprtBvhNodeList, internalNodes), "RTGI HIP RT ABI offset mismatch: internal nodes");
+static_assert(offsetof(RTGIHIPRTBvhNodeList, leaf_nodes) == offsetof(hiprtBvhNodeList, leafNodes), "RTGI HIP RT ABI offset mismatch: leaf nodes");
+static_assert(offsetof(RTGIHIPRTBvhNodeList, node_count) == offsetof(hiprtBvhNodeList, nodeCount), "RTGI HIP RT ABI offset mismatch: node count");
+static_assert(sizeof(RTGIHIPRTGeometryBuildInput) == sizeof(hiprtGeometryBuildInput), "RTGI HIP RT ABI size mismatch: geometry build input");
+static_assert(offsetof(RTGIHIPRTGeometryBuildInput, type) == offsetof(hiprtGeometryBuildInput, type), "RTGI HIP RT ABI offset mismatch: geometry type");
+static_assert(offsetof(RTGIHIPRTGeometryBuildInput, geom_type) == offsetof(hiprtGeometryBuildInput, geomType), "RTGI HIP RT ABI offset mismatch: geometry custom type");
+static_assert(offsetof(RTGIHIPRTGeometryBuildInput, primitive) == offsetof(hiprtGeometryBuildInput, primitive), "RTGI HIP RT ABI offset mismatch: geometry primitive union");
+static_assert(offsetof(RTGIHIPRTGeometryBuildInput, node_list) == offsetof(hiprtGeometryBuildInput, nodeList), "RTGI HIP RT ABI offset mismatch: geometry node list");
+static_assert(sizeof(RTGIHIPRTInstance) == sizeof(hiprtInstance), "RTGI HIP RT ABI size mismatch: instance");
+static_assert(offsetof(RTGIHIPRTInstance, type) == offsetof(hiprtInstance, type), "RTGI HIP RT ABI offset mismatch: instance type");
+static_assert(offsetof(RTGIHIPRTInstance, geometry) == offsetof(hiprtInstance, geometry), "RTGI HIP RT ABI offset mismatch: instance geometry");
+static_assert(sizeof(RTGIHIPRTFrameMatrix) == sizeof(hiprtFrameMatrix), "RTGI HIP RT ABI size mismatch: frame matrix");
+static_assert(offsetof(RTGIHIPRTFrameMatrix, matrix) == offsetof(hiprtFrameMatrix, matrix), "RTGI HIP RT ABI offset mismatch: frame matrix data");
+static_assert(offsetof(RTGIHIPRTFrameMatrix, time) == offsetof(hiprtFrameMatrix, time), "RTGI HIP RT ABI offset mismatch: frame matrix time");
+static_assert(sizeof(RTGIHIPRTSceneBuildInput) == sizeof(hiprtSceneBuildInput), "RTGI HIP RT ABI size mismatch: scene build input");
+static_assert(offsetof(RTGIHIPRTSceneBuildInput, instances) == offsetof(hiprtSceneBuildInput, instances), "RTGI HIP RT ABI offset mismatch: scene instances");
+static_assert(offsetof(RTGIHIPRTSceneBuildInput, instance_transform_headers) == offsetof(hiprtSceneBuildInput, instanceTransformHeaders), "RTGI HIP RT ABI offset mismatch: transform headers");
+static_assert(offsetof(RTGIHIPRTSceneBuildInput, instance_frames) == offsetof(hiprtSceneBuildInput, instanceFrames), "RTGI HIP RT ABI offset mismatch: instance frames");
+static_assert(offsetof(RTGIHIPRTSceneBuildInput, instance_masks) == offsetof(hiprtSceneBuildInput, instanceMasks), "RTGI HIP RT ABI offset mismatch: instance masks");
+static_assert(offsetof(RTGIHIPRTSceneBuildInput, node_list) == offsetof(hiprtSceneBuildInput, nodeList), "RTGI HIP RT ABI offset mismatch: scene node list");
+static_assert(offsetof(RTGIHIPRTSceneBuildInput, instance_count) == offsetof(hiprtSceneBuildInput, instanceCount), "RTGI HIP RT ABI offset mismatch: instance count");
+static_assert(offsetof(RTGIHIPRTSceneBuildInput, frame_count) == offsetof(hiprtSceneBuildInput, frameCount), "RTGI HIP RT ABI offset mismatch: frame count");
+static_assert(offsetof(RTGIHIPRTSceneBuildInput, frame_type) == offsetof(hiprtSceneBuildInput, frameType), "RTGI HIP RT ABI offset mismatch: frame type");
+static_assert(sizeof(RTGIHIPRTFuncNameSet) == sizeof(hiprtFuncNameSet), "RTGI HIP RT ABI size mismatch: function name set");
+static_assert(offsetof(RTGIHIPRTFuncNameSet, intersect_func_name) == offsetof(hiprtFuncNameSet, intersectFuncName), "RTGI HIP RT ABI offset mismatch: intersect function name");
+static_assert(offsetof(RTGIHIPRTFuncNameSet, filter_func_name) == offsetof(hiprtFuncNameSet, filterFuncName), "RTGI HIP RT ABI offset mismatch: filter function name");
+#endif
+
 struct RTGIHIPDeviceAllocation {
 	void *ptr = nullptr;
 	size_t size = 0;
@@ -2950,6 +4478,28 @@ struct RTGIHIPKernelMaterial {
 	float emission_strength = 0.0f;
 };
 
+struct alignas(16) RTGIHIPKernelLight {
+	float position[3] = {};
+	uint32_t type = RT_LIGHT_TYPE_OMNI;
+	float emission[3] = {};
+	float radius = 0.0f;
+	float attenuation = 1.0f;
+	float inv_max_range = -1.0f;
+	float max_range_squared = 0.0f;
+	float specular_amount = 0.0f;
+	float indirect_energy = 0.0f;
+	float inv_spot_attenuation = 1.0f;
+	float cos_spot_angle = 1.0f;
+	uint32_t flags = 0;
+	float spot_direction[3] = {};
+	uint32_t cull_mask = 0;
+	uint32_t shadow_caster_mask = 0;
+	float shadow_opacity = 1.0f;
+	float shadow_max_distance = 0.0f;
+	uint32_t source_id = 0;
+};
+static_assert(sizeof(RTGIHIPKernelLight) == sizeof(RT_LightData), "HIP RT light upload must match RT_LightData.");
+
 enum RTGIHIPExternalMemoryHandleType {
 	RTGI_HIP_EXTERNAL_MEMORY_HANDLE_OPAQUE_FD = 1,
 	RTGI_HIP_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32 = 2,
@@ -2967,6 +4517,10 @@ enum RTGIHIPChannelFormatKind {
 enum RTGIHIPMemcpyKind {
 	RTGI_HIP_MEMCPY_HOST_TO_DEVICE = 1,
 	RTGI_HIP_MEMCPY_DEVICE_TO_DEVICE = 3,
+};
+
+enum RTGIHIPExternalMemoryFlags {
+	RTGI_HIP_EXTERNAL_MEMORY_DEDICATED = 0x1,
 };
 
 struct RTGIHIPChannelFormatDesc {
@@ -3120,9 +4674,9 @@ struct RTGIHIPDispatch {
 	int(RTGI_HIPRT_CALL *hiprtBuildGeometry)(void *, int, const RTGIHIPRTGeometryBuildInput &, RTGIHIPRTBuildOptions, void *, void *, void *) = nullptr;
 	int(RTGI_HIPRT_CALL *hiprtCreateScene)(void *, const RTGIHIPRTSceneBuildInput &, RTGIHIPRTBuildOptions, void *&) = nullptr;
 	int(RTGI_HIPRT_CALL *hiprtDestroyScene)(void *, void *) = nullptr;
-	int(RTGI_HIPRT_CALL *hiprtGetSceneBuildTemporaryBufferSize)(void *, const RTGIHIPRTSceneBuildInput &, RTGIHIPRTBuildOptions, size_t *) = nullptr;
-	int(RTGI_HIPRT_CALL *hiprtBuildScene)(void *, int, const RTGIHIPRTSceneBuildInput *, RTGIHIPRTBuildOptions, void *, void *, void *) = nullptr;
-	int(RTGI_HIPRT_CALL *hiprtBuildTraceKernels)(void *, uint32_t, const char **, const char *, const char *, uint32_t, const char **, const char **, uint32_t, const char **, uint32_t, uint32_t, void *, void **, void **, bool) = nullptr;
+	int(RTGI_HIPRT_CALL *hiprtGetSceneBuildTemporaryBufferSize)(void *, const RTGIHIPRTSceneBuildInput &, RTGIHIPRTBuildOptions, size_t &) = nullptr;
+	int(RTGI_HIPRT_CALL *hiprtBuildScene)(void *, int, const RTGIHIPRTSceneBuildInput &, RTGIHIPRTBuildOptions, void *, void *, void *) = nullptr;
+	int(RTGI_HIPRT_CALL *hiprtBuildTraceKernels)(void *, uint32_t, const char **, const char *, const char *, uint32_t, const char **, const char **, uint32_t, const char **, uint32_t, uint32_t, RTGIHIPRTFuncNameSet *, void **, void **, bool) = nullptr;
 
 	template <typename T>
 	bool _resolve_symbol(void *p_library_handle, T &r_symbol, const char *p_name, const String &p_library_path, String *r_failure_reason) {
@@ -3246,12 +4800,18 @@ struct RTGIHIPDispatch {
 		};
 		static const char *const hiprt_runtime_libraries[] = {
 #if defined(WINDOWS_ENABLED)
+#if RTGI_HIPRT_API_VERSION != 0
+			"hiprt" RTGI_HIPRT_VERSION_STR "64.dll",
+#endif
 			"hiprt0300064.dll",
 			"hiprt0200564.dll",
 			"hiprt0200064.dll",
 			"hiprt64.dll",
 			"hiprt.dll",
 #else
+#if RTGI_HIPRT_API_VERSION != 0
+			"libhiprt" RTGI_HIPRT_VERSION_STR "64.so",
+#endif
 			"libhiprt64.so",
 			"libhiprt64.so.3",
 			"libhiprt64.so.2.5",
@@ -3343,10 +4903,15 @@ class AmdHIPRTRTGIBackend : public RTGIBackend {
 	void *hip_output_mipmapped_array = nullptr;
 	void *hip_wait_semaphore = nullptr;
 	void *hip_signal_semaphore = nullptr;
+	bool hip_output_acquired = false;
+	bool hip_completion_signal_submitted = false;
+	bool hip_completion_wait_queued = false;
 	int hip_device = 0;
 	void *hip_trace_function = nullptr;
 	void *hip_materials_device_ptr = nullptr;
 	uint32_t hip_material_count = 0;
+	void *hip_lights_device_ptr = nullptr;
+	uint32_t hip_light_count = 0;
 	LocalVector<void *> hiprt_geometries;
 	LocalVector<RTGIHIPDeviceAllocation> hip_allocations;
 
@@ -3377,6 +4942,13 @@ class AmdHIPRTRTGIBackend : public RTGIBackend {
 		out.emission[1] = p_material.emission_color[1];
 		out.emission[2] = p_material.emission_color[2];
 		out.emission_strength = p_material.emission_strength;
+		return out;
+	}
+
+	static RTGIHIPKernelLight _make_kernel_light(const RT_LightData &p_light) {
+		RTGIHIPKernelLight out;
+		static_assert(sizeof(out) == sizeof(p_light), "HIP RT light upload must stay layout-compatible with RT_LightData.");
+		memcpy(&out, &p_light, sizeof(out));
 		return out;
 	}
 
@@ -3529,6 +5101,8 @@ class AmdHIPRTRTGIBackend : public RTGIBackend {
 		hiprt_geometries.clear();
 		hip_materials_device_ptr = nullptr;
 		hip_material_count = 0;
+		hip_lights_device_ptr = nullptr;
+		hip_light_count = 0;
 		for (uint32_t i = 0; i < hip_allocations.size(); i++) {
 			_hip_free_allocation(hip_allocations[i]);
 		}
@@ -3555,9 +5129,89 @@ class AmdHIPRTRTGIBackend : public RTGIBackend {
 			hip.hipDestroyExternalSemaphore(hip_signal_semaphore);
 			hip_signal_semaphore = nullptr;
 		}
+		hip_output_acquired = false;
+		hip_completion_signal_submitted = false;
+		hip_completion_wait_queued = false;
 	}
 
-	bool _populate_hip_memory_handle_desc(uint64_t p_handle, RTGIBackendExternalHandleType p_handle_type, uint64_t p_size, RTGIHIPExternalMemoryHandleDesc &r_desc, String *r_fallback_reason) const {
+	bool _queue_hip_output_return_to_rd(RTGIBackendFrameContext &p_context, String *r_fallback_reason) {
+		if (p_context.exchange.rd_owns_output_after_dispatch) {
+			return true;
+		}
+		if (!hip_output_acquired) {
+			p_context.exchange.rd_owns_output_after_dispatch = true;
+			return true;
+		}
+		if (p_context.rd == nullptr || !p_context.exchange.external_signal_semaphore || hip_signal_semaphore == nullptr) {
+			if (r_fallback_reason) {
+				*r_fallback_reason = "HIP RT backend cannot return RTGI output ownership because the RenderingDevice signal semaphore is unavailable.";
+			}
+			return false;
+		}
+		if (!hip_completion_signal_submitted) {
+			void *signal_semaphore = hip_signal_semaphore;
+			RTGIHIPExternalSemaphoreSignalParams signal_params = {};
+			const int hip_error = hip.hipSignalExternalSemaphoresAsync(&signal_semaphore, &signal_params, 1, nullptr);
+			if (hip_error != 0) {
+				if (r_fallback_reason) {
+					*r_fallback_reason = vformat("HIP RT backend failed to signal the imported Vulkan semaphore while returning RTGI output ownership; hipSignalExternalSemaphoresAsync returned %d.", hip_error);
+				}
+				return false;
+			}
+			hip_completion_signal_submitted = true;
+		}
+
+		if (hip.hipDeviceSynchronize != nullptr) {
+			const int hip_error = hip.hipDeviceSynchronize();
+			if (hip_error != 0) {
+				if (r_fallback_reason) {
+					*r_fallback_reason = vformat("HIP RT backend failed to synchronize while returning RTGI output ownership; hipDeviceSynchronize returned %d.", hip_error);
+				}
+				return false;
+			}
+		}
+
+		if (!hip_completion_wait_queued) {
+			const Error wait_err = p_context.rd->external_semaphore_wait_on_current_frame(p_context.exchange.external_signal_semaphore);
+			if (wait_err != OK) {
+				if (r_fallback_reason) {
+					*r_fallback_reason = "HIP RT backend could not make RenderingDevice wait on the HIP completion semaphore.";
+				}
+				return false;
+			}
+			hip_completion_wait_queued = true;
+		}
+		return true;
+	}
+
+	bool _finish_hip_output_return_to_rd(RTGIBackendFrameContext &p_context, String *r_fallback_reason) {
+		if (p_context.exchange.rd_owns_output_after_dispatch) {
+			return true;
+		}
+		if (!hip_output_acquired && !hip_completion_wait_queued) {
+			p_context.exchange.rd_owns_output_after_dispatch = true;
+			return true;
+		}
+		if (!_queue_hip_output_return_to_rd(p_context, r_fallback_reason)) {
+			return false;
+		}
+		if (p_context.rd != nullptr) {
+			const Error handoff_err = p_context.rd->external_resource_handoff_sync();
+			if (handoff_err != OK) {
+				if (r_fallback_reason) {
+					*r_fallback_reason = "HIP RT backend could not flush RenderingDevice after HIP signaled RTGI output completion.";
+				}
+				return false;
+			}
+		}
+		p_context.exchange.rd_owns_output_after_dispatch = true;
+		hip_output_acquired = false;
+		hip_completion_signal_submitted = false;
+		hip_completion_wait_queued = false;
+		return true;
+	}
+
+	bool _populate_hip_memory_handle_desc(uint64_t p_handle, RTGIBackendExternalHandleType p_handle_type, uint64_t p_size, bool p_dedicated_allocation, RTGIHIPExternalMemoryHandleDesc &r_desc, String *r_fallback_reason) const {
 		r_desc = RTGIHIPExternalMemoryHandleDesc();
 		r_desc.type = _rtgi_hip_external_memory_handle_type(p_handle_type);
 		if (r_desc.type == 0 || p_handle == 0 || p_size == 0) {
@@ -3567,6 +5221,9 @@ class AmdHIPRTRTGIBackend : public RTGIBackend {
 			return false;
 		}
 		r_desc.size = p_size;
+		if (p_dedicated_allocation) {
+			r_desc.flags |= RTGI_HIP_EXTERNAL_MEMORY_DEDICATED;
+		}
 #if defined(WINDOWS_ENABLED)
 		if (p_handle_type == RTGI_BACKEND_EXTERNAL_HANDLE_OPAQUE_WIN32) {
 			r_desc.handle.win32.handle = reinterpret_cast<void *>(uintptr_t(p_handle));
@@ -3624,7 +5281,7 @@ class AmdHIPRTRTGIBackend : public RTGIBackend {
 		_release_external_imports();
 
 		RTGIHIPExternalMemoryHandleDesc memory_desc;
-		if (!_populate_hip_memory_handle_desc(exchange.external_memory_handle, exchange.external_memory_handle_type, exchange.external_memory_allocation_size, memory_desc, r_fallback_reason)) {
+		if (!_populate_hip_memory_handle_desc(exchange.external_memory_handle, exchange.external_memory_handle_type, exchange.external_memory_allocation_size, exchange.external_memory_dedicated_allocation, memory_desc, r_fallback_reason)) {
 			return false;
 		}
 
@@ -3703,17 +5360,45 @@ class AmdHIPRTRTGIBackend : public RTGIBackend {
 		LocalVector<RTGIHIPRTFrameMatrix> scene_frames;
 		LocalVector<uint32_t> scene_masks;
 		LocalVector<RTGIHIPKernelMaterial> scene_materials;
+		LocalVector<RTGIHIPKernelLight> scene_lights;
 		const RTGIHIPRTBuildOptions build_options;
 
+		const uint32_t light_count = MIN(uint32_t(p_snapshot.lights.size()), uint32_t(RT_LIGHTS_MAX));
+		scene_lights.resize(light_count);
+		for (uint32_t light_index = 0; light_index < light_count; light_index++) {
+			scene_lights[light_index] = _make_kernel_light(p_snapshot.lights[light_index]);
+		}
+
 		for (uint32_t geometry_index = 0; geometry_index < p_snapshot.geometries.size(); geometry_index++) {
-			if (p_snapshot.instance_masks[geometry_index] == 0) {
+			if ((p_snapshot.instance_masks[geometry_index] & (RT_INSTANCE_MASK_VISIBLE | RT_INSTANCE_MASK_SHADOW)) == 0) {
 				continue;
+			}
+
+			RTGIHIPKernelMaterial kernel_material;
+			if (geometry_index < p_snapshot.materials.size()) {
+				const RT_MaterialData &material = p_snapshot.materials[geometry_index];
+				if (_rtgi_backend_material_has_unsupported_cpu_alpha_or_custom_shader(material)) {
+					if (r_fallback_reason) {
+						*r_fallback_reason = "HIP RT backend cannot evaluate texture or vertex alpha, alpha hash, or custom hit shaders; constant alpha-scissor is supported.";
+					}
+					_release_scene();
+					return false;
+				}
+				if (!_rtgi_backend_constant_alpha_surface_visible(material)) {
+					continue;
+				}
+				kernel_material = _make_kernel_material(_rtgi_backend_material_for_cpu_trace(material));
+			} else {
+				kernel_material.albedo[0] = 1.0f;
+				kernel_material.albedo[1] = 1.0f;
+				kernel_material.albedo[2] = 1.0f;
+				kernel_material.albedo[3] = 1.0f;
 			}
 
 			const RTGIBackendCPUGeometry &cpu_geometry = p_snapshot.cpu_geometries[geometry_index];
 			if (!cpu_geometry.valid || cpu_geometry.vertices.size() == 0 || cpu_geometry.primitive_count == 0) {
 				if (r_fallback_reason) {
-					*r_fallback_reason = "HIP RT backend requires CPU triangle geometry in the scene snapshot; procedural, deformed, and GPU-merged surfaces still fall back to Vulkan Generic.";
+					*r_fallback_reason = "HIP RT backend requires CPU triangle geometry in the scene snapshot; static mesh surfaces and CPU-visible expanded MultiMesh entries are supported, while procedural, deformed, and GPU-merged surfaces still fall back to Vulkan Generic.";
 				}
 				_release_scene();
 				return false;
@@ -3789,16 +5474,7 @@ class AmdHIPRTRTGIBackend : public RTGIBackend {
 			scene_instances.push_back(instance);
 			scene_frames.push_back(_make_identity_frame());
 			scene_masks.push_back(uint32_t(p_snapshot.instance_masks[geometry_index]));
-			if (geometry_index < p_snapshot.materials.size()) {
-				scene_materials.push_back(_make_kernel_material(p_snapshot.materials[geometry_index]));
-			} else {
-				RTGIHIPKernelMaterial fallback_material;
-				fallback_material.albedo[0] = 1.0f;
-				fallback_material.albedo[1] = 1.0f;
-				fallback_material.albedo[2] = 1.0f;
-				fallback_material.albedo[3] = 1.0f;
-				scene_materials.push_back(fallback_material);
-			}
+			scene_materials.push_back(kernel_material);
 		}
 
 		if (scene_instances.size() == 0) {
@@ -3813,15 +5489,19 @@ class AmdHIPRTRTGIBackend : public RTGIBackend {
 		void *frames_device_ptr = nullptr;
 		void *masks_device_ptr = nullptr;
 		void *materials_device_ptr = nullptr;
+		void *lights_device_ptr = nullptr;
 		if (!_hip_upload_buffer(scene_instances.ptr(), scene_instances.size() * sizeof(RTGIHIPRTInstance), hip_allocations, &instances_device_ptr, r_fallback_reason, "HIP RT scene instances") ||
 				!_hip_upload_buffer(scene_frames.ptr(), scene_frames.size() * sizeof(RTGIHIPRTFrameMatrix), hip_allocations, &frames_device_ptr, r_fallback_reason, "HIP RT scene frames") ||
 				!_hip_upload_buffer(scene_masks.ptr(), scene_masks.size() * sizeof(uint32_t), hip_allocations, &masks_device_ptr, r_fallback_reason, "HIP RT scene masks") ||
-				!_hip_upload_buffer(scene_materials.ptr(), scene_materials.size() * sizeof(RTGIHIPKernelMaterial), hip_allocations, &materials_device_ptr, r_fallback_reason, "HIP RT scene materials")) {
+				!_hip_upload_buffer(scene_materials.ptr(), scene_materials.size() * sizeof(RTGIHIPKernelMaterial), hip_allocations, &materials_device_ptr, r_fallback_reason, "HIP RT scene materials") ||
+				!_hip_upload_buffer(scene_lights.ptr(), scene_lights.size() * sizeof(RTGIHIPKernelLight), hip_allocations, &lights_device_ptr, r_fallback_reason, "HIP RT scene lights")) {
 			_release_scene();
 			return false;
 		}
 		hip_materials_device_ptr = materials_device_ptr;
 		hip_material_count = scene_materials.size();
+		hip_lights_device_ptr = lights_device_ptr;
+		hip_light_count = scene_lights.size();
 
 		RTGIHIPRTSceneBuildInput scene_input;
 		scene_input.instances = instances_device_ptr;
@@ -3841,7 +5521,7 @@ class AmdHIPRTRTGIBackend : public RTGIBackend {
 		}
 
 		size_t scene_temp_size = 0;
-		hiprt_error = hip.hiprtGetSceneBuildTemporaryBufferSize(hiprt_context, scene_input, build_options, &scene_temp_size);
+		hiprt_error = hip.hiprtGetSceneBuildTemporaryBufferSize(hiprt_context, scene_input, build_options, scene_temp_size);
 		if (hiprt_error != 0) {
 			if (r_fallback_reason) {
 				*r_fallback_reason = vformat("HIP RT backend failed hiprtGetSceneBuildTemporaryBufferSize with error %d.", hiprt_error);
@@ -3855,7 +5535,7 @@ class AmdHIPRTRTGIBackend : public RTGIBackend {
 			_release_scene();
 			return false;
 		}
-		hiprt_error = hip.hiprtBuildScene(hiprt_context, RTGI_HIPRT_BUILD_OPERATION_BUILD, &scene_input, build_options, scene_temp.ptr, nullptr, hiprt_scene);
+		hiprt_error = hip.hiprtBuildScene(hiprt_context, RTGI_HIPRT_BUILD_OPERATION_BUILD, scene_input, build_options, scene_temp.ptr, nullptr, hiprt_scene);
 		_hip_free_allocation(scene_temp);
 		if (hiprt_error != 0) {
 			if (r_fallback_reason) {
@@ -3989,8 +5669,156 @@ struct RTGIHIPKernelMaterial {
 	float emission_strength;
 };
 
+struct RTGIHIPKernelLight {
+	float position[3];
+	unsigned int type;
+	float emission[3];
+	float radius;
+	float attenuation;
+	float inv_max_range;
+	float max_range_squared;
+	float specular_amount;
+	float indirect_energy;
+	float inv_spot_attenuation;
+	float cos_spot_angle;
+	unsigned int flags;
+	float spot_direction[3];
+	unsigned int cull_mask;
+	unsigned int shadow_caster_mask;
+	float shadow_opacity;
+	float shadow_max_distance;
+	unsigned int source_id;
+};
+
 static __device__ float3 rtgi_make_float3(RTGIHIPKernelVec3 v) {
-	return hiprt::make_float3(v.x, v.y, v.z);
+	return float3{ v.x, v.y, v.z };
+}
+
+static __device__ float3 rtgi_make_float3_components(float x, float y, float z) {
+	return float3{ x, y, z };
+}
+
+static __device__ float3 rtgi_make_light_vec3(const float values[3]) {
+	return rtgi_make_float3_components(values[0], values[1], values[2]);
+}
+
+static const unsigned int RTGI_HIP_VISIBLE_INSTANCE_MASK = 1u;
+static const unsigned int RTGI_HIP_SHADOW_INSTANCE_MASK = 2u;
+static const unsigned int RTGI_HIP_LIGHT_TYPE_DIRECTIONAL = 1u;
+static const unsigned int RTGI_HIP_LIGHT_TYPE_SPOT = 3u;
+static const unsigned int RTGI_HIP_LIGHT_FLAG_SHADOW = 1u;
+
+static __device__ float rtgi_saturate(float value) {
+	return fminf(1.0f, fmaxf(0.0f, value));
+}
+
+static __device__ float3 rtgi_safe_normalize(float3 value, float3 fallback) {
+	const float len_sq = hiprt::dot(value, value);
+	if (len_sq <= 0.0000000001f) {
+		return fallback;
+	}
+	return value * rsqrtf(len_sq);
+}
+
+static __device__ float rtgi_light_luminance(const RTGIHIPKernelLight& light) {
+	return fmaxf(light.emission[0], 0.0f) * 0.2126f + fmaxf(light.emission[1], 0.0f) * 0.7152f + fmaxf(light.emission[2], 0.0f) * 0.0722f;
+}
+
+static __device__ float rtgi_light_attenuation(float distance_sq, float inv_max_range, float decay) {
+	if (distance_sq <= 0.0f) {
+		return 1.0f;
+	}
+	const float distance = sqrtf(fmaxf(distance_sq, 0.000001f));
+	float attenuation = fminf(powf(fmaxf(distance, 0.0001f), -decay), 1.0f);
+	if (inv_max_range >= 0.0f) {
+		float nd = distance * inv_max_range;
+		nd *= nd;
+		nd *= nd;
+		nd = fmaxf(1.0f - nd, 0.0f);
+		attenuation *= nd * nd;
+	}
+	return attenuation;
+}
+
+static __device__ float rtgi_shadow_visibility(hiprtScene scene, float3 hit_position, float3 normal, float3 light_direction, float max_distance, const RTGIHIPKernelLight& light) {
+	if ((light.flags & RTGI_HIP_LIGHT_FLAG_SHADOW) == 0u || max_distance <= 0.003f) {
+		return 1.0f;
+	}
+
+	hiprtRay shadow_ray;
+	shadow_ray.origin = hit_position + normal * 0.002f;
+	shadow_ray.direction = light_direction;
+	shadow_ray.minT = 0.001f;
+	shadow_ray.maxT = fmaxf(max_distance - 0.002f, 0.001f);
+	hiprtSceneTraversalAnyHit shadow_traversal(scene, shadow_ray, RTGI_HIP_SHADOW_INSTANCE_MASK);
+	const hiprtHit shadow_hit = shadow_traversal.getNextHit();
+	if (!shadow_hit.hasHit()) {
+		return 1.0f;
+	}
+	return 1.0f - rtgi_saturate(light.shadow_opacity);
+}
+
+static __device__ float3 rtgi_shade_hit(
+	hiprtScene scene,
+	const hiprtRay& ray,
+	const hiprtHit& hit,
+	const RTGIHIPKernelMaterial& material,
+	const RTGIHIPKernelLight* lights,
+	unsigned int light_count,
+	float z_far) {
+	float3 normal = rtgi_safe_normalize(hit.normal, -ray.direction);
+	if (hiprt::dot(normal, -ray.direction) < 0.0f) {
+		normal = -normal;
+	}
+
+	const float3 hit_position = ray.origin + ray.direction * hit.t;
+	const float3 albedo = rtgi_make_float3_components(material.albedo[0], material.albedo[1], material.albedo[2]);
+	const float3 emission = rtgi_make_float3_components(material.emission[0], material.emission[1], material.emission[2]);
+	float3 radiance = albedo * 0.03f + emission * fmaxf(0.0f, material.emission_strength);
+
+	for (unsigned int light_index = 0u; light_index < light_count; light_index++) {
+		const RTGIHIPKernelLight light = lights[light_index];
+		if (rtgi_light_luminance(light) <= 0.0f) {
+			continue;
+		}
+
+		float3 light_direction;
+		float distance_sq = 0.0f;
+		float max_distance = z_far;
+		float spot_attenuation = 1.0f;
+		if (light.type == RTGI_HIP_LIGHT_TYPE_DIRECTIONAL) {
+			light_direction = rtgi_safe_normalize(-rtgi_make_light_vec3(light.position), -ray.direction);
+			max_distance = light.shadow_max_distance > 0.0f ? light.shadow_max_distance : z_far;
+		} else {
+			const float3 to_light = rtgi_make_light_vec3(light.position) - hit_position;
+			distance_sq = hiprt::dot(to_light, to_light);
+			if (light.max_range_squared > 0.0f && distance_sq > light.max_range_squared) {
+				continue;
+			}
+			const float distance = sqrtf(fmaxf(distance_sq, 0.000001f));
+			light_direction = to_light / distance;
+			max_distance = distance;
+			if (light.type == RTGI_HIP_LIGHT_TYPE_SPOT) {
+				const float3 spot_direction = rtgi_safe_normalize(rtgi_make_light_vec3(light.spot_direction), -light_direction);
+				const float scos = hiprt::dot(-light_direction, spot_direction);
+				if (scos <= light.cos_spot_angle) {
+					continue;
+				}
+				const float spot_rim = fmaxf(0.0001f, (1.0f - scos) / fmaxf(1.0f - light.cos_spot_angle, 0.0001f));
+				spot_attenuation = 1.0f - powf(spot_rim, light.inv_spot_attenuation);
+			}
+		}
+
+		const float n_dot_l = fmaxf(hiprt::dot(normal, light_direction), 0.0f);
+		if (n_dot_l <= 0.0f) {
+			continue;
+		}
+
+		const float visibility = rtgi_shadow_visibility(scene, hit_position, normal, light_direction, max_distance, light);
+		const float attenuation = rtgi_light_attenuation(distance_sq, light.inv_max_range, light.attenuation) * fmaxf(spot_attenuation, 0.0f) * visibility;
+		radiance = radiance + albedo * rtgi_make_light_vec3(light.emission) * (n_dot_l * attenuation);
+	}
+	return radiance;
 }
 
 static __device__ float3 rtgi_lerp3(float3 a, float3 b, float t) {
@@ -4027,6 +5855,8 @@ extern "C" __global__ void GodotRTGIHIPRTTraceKernel(
 	const RTGIHIPKernelCamera* camera_ptr,
 	const RTGIHIPKernelMaterial* materials,
 	unsigned int material_count,
+	const RTGIHIPKernelLight* lights,
+	unsigned int light_count,
 	unsigned int width,
 	unsigned int height,
 	unsigned short* output_rgba16f) {
@@ -4053,19 +5883,14 @@ extern "C" __global__ void GodotRTGIHIPRTTraceKernel(
 	ray.minT = 0.001f;
 	ray.maxT = camera.z_far;
 
-	hiprtSceneTraversalClosest traversal(scene, ray);
+	hiprtSceneTraversalClosest traversal(scene, ray, RTGI_HIP_VISIBLE_INSTANCE_MASK);
 	const hiprtHit hit = traversal.getNextHit();
 
-	float3 radiance = hiprt::make_float3(0.0f, 0.0f, 0.0f);
+	float3 radiance = hiprt::make_float3(0.0f);
 	if (hit.hasHit()) {
 		const unsigned int material_index = hit.instanceID < material_count ? hit.instanceID : 0u;
 		const RTGIHIPKernelMaterial material = materials[material_index];
-		float3 normal = hiprt::normalize(hit.normal);
-		const float facing = fminf(1.0f, fmaxf(0.0f, fabsf(hiprt::dot(normal, -ray.direction))));
-		const float diffuse = 0.25f + 0.75f * facing;
-		radiance.x = material.albedo[0] * diffuse + material.emission[0] * fmaxf(0.0f, material.emission_strength);
-		radiance.y = material.albedo[1] * diffuse + material.emission[1] * fmaxf(0.0f, material.emission_strength);
-		radiance.z = material.albedo[2] * diffuse + material.emission[2] * fmaxf(0.0f, material.emission_strength);
+		radiance = rtgi_shade_hit(scene, ray, hit, material, lights, light_count, camera.z_far);
 	}
 
 	const unsigned int pixel = (y * width + x) * 4u;
@@ -4197,16 +6022,23 @@ extern "C" __global__ void GodotRTGIHIPRTTraceKernel(
 				}
 				return false;
 			}
+			hip_output_acquired = true;
+			hip_completion_signal_submitted = false;
+			hip_completion_wait_queued = false;
+			p_context.exchange.rd_owns_output_after_dispatch = false;
 		}
 
 		void *camera_device_ptr = camera_allocation.ptr;
 		void *materials_device_ptr = hip_materials_device_ptr;
+		void *lights_device_ptr = hip_lights_device_ptr;
 		void *output_device_ptr = output_allocation.ptr;
 		void *kernel_args[] = {
 			&hiprt_scene,
 			&camera_device_ptr,
 			&materials_device_ptr,
 			&hip_material_count,
+			&lights_device_ptr,
+			&hip_light_count,
 			&width,
 			&height,
 			&output_device_ptr,
@@ -4256,38 +6088,7 @@ extern "C" __global__ void GodotRTGIHIPRTTraceKernel(
 			return false;
 		}
 
-		if (hip_signal_semaphore != nullptr) {
-			void *signal_semaphore = hip_signal_semaphore;
-			RTGIHIPExternalSemaphoreSignalParams signal_params = {};
-			hip_error = hip.hipSignalExternalSemaphoresAsync(&signal_semaphore, &signal_params, 1, nullptr);
-			if (hip_error != 0) {
-				if (r_fallback_reason) {
-					*r_fallback_reason = vformat("HIP RT backend failed to signal the imported Vulkan semaphore after dispatch; hipSignalExternalSemaphoresAsync returned %d.", hip_error);
-				}
-				return false;
-			}
-		}
-
-		hip_error = hip.hipDeviceSynchronize();
-		if (hip_error != 0) {
-			if (r_fallback_reason) {
-				*r_fallback_reason = vformat("HIP RT backend failed to synchronize after copying trace output; hipDeviceSynchronize returned %d.", hip_error);
-			}
-			return false;
-		}
-
-		if (p_context.rd != nullptr && p_context.exchange.external_signal_semaphore) {
-			const Error wait_err = p_context.rd->external_semaphore_wait_on_current_frame(p_context.exchange.external_signal_semaphore);
-			if (wait_err != OK) {
-				if (r_fallback_reason) {
-					*r_fallback_reason = "HIP RT backend could not make RenderingDevice wait on the HIP completion semaphore.";
-				}
-				return false;
-			}
-		}
-
-		p_context.exchange.rd_owns_output_after_dispatch = true;
-		return true;
+		return _queue_hip_output_return_to_rd(p_context, r_fallback_reason);
 	}
 
 	void _release_context() {
@@ -4318,7 +6119,7 @@ public:
 			}
 			return false;
 		}
-		return _ensure_context(r_fallback_reason);
+		return _ensure_context(r_fallback_reason) && _ensure_trace_kernel(r_fallback_reason);
 	}
 
 	virtual void shutdown() override {
@@ -4393,7 +6194,7 @@ public:
 
 	virtual bool dispatch_probe_update(RTGIBackendFrameContext &p_context, uint32_t p_probe_flags, RID p_probe_pipeline, RID p_probe_uniform_set, RID p_probe_output_buffer, uint32_t p_ray_count, String *r_fallback_reason) override {
 		if (r_fallback_reason) {
-			*r_fallback_reason = "HIP RT native probe dispatch is not linked yet.";
+			*r_fallback_reason = "HIP RT routes STRC probe dispatch to Vulkan Generic.";
 		}
 		return false;
 	}
@@ -4403,25 +6204,24 @@ public:
 	}
 
 	virtual bool synchronize_output(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
-		if (p_context.rd != nullptr) {
-			const Error handoff_err = p_context.rd->external_resource_handoff_sync();
-			if (handoff_err != OK) {
-				if (r_fallback_reason) {
-					*r_fallback_reason = "HIP RT backend could not flush the RenderingDevice graph after HIP signaled RTGI output completion.";
-				}
-				return false;
-			}
+		if (!_finish_hip_output_return_to_rd(p_context, r_fallback_reason)) {
+			return false;
+		}
+		if (!_rtgi_prepare_single_signal_denoiser_handoff(p_context, r_fallback_reason)) {
+			RTGIVulkanInteropAdapter::cleanup_external_memory_exchange(p_context.rd, p_context.exchange);
+			return false;
 		}
 		RTGIVulkanInteropAdapter::cleanup_external_memory_exchange(p_context.rd, p_context.exchange);
 		return true;
 	}
 
 	virtual bool abort_frame(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
+		const bool output_returned = _finish_hip_output_return_to_rd(p_context, r_fallback_reason);
 		_release_scene();
 		_release_external_imports();
 		RTGIVulkanInteropAdapter::cleanup_external_memory_exchange(p_context.rd, p_context.exchange);
-		p_context.exchange.rd_owns_output_after_dispatch = true;
-		return true;
+		p_context.exchange.rd_owns_output_after_dispatch = output_returned;
+		return output_returned;
 	}
 };
 
@@ -4457,7 +6257,7 @@ public:
 	virtual bool prepare_frame(RTGIBackendFrameContext &r_context, String *r_fallback_reason) override {
 		const RTGIBackendCapabilities capabilities = query_capabilities();
 		if (r_context.rd != nullptr) {
-			const RTGIVulkanInteropDeviceContext device_context = RTGIVulkanInteropAdapter::get_device_context(r_context.rd);
+			const RTGIBackendNativeDeviceContext device_context = RTGIVulkanInteropAdapter::get_device_context(r_context.rd);
 			if (!device_context.valid && r_fallback_reason) {
 				*r_fallback_reason = device_context.failure_reason;
 				return false;
@@ -4878,16 +6678,71 @@ bool RenderRaytracing::test_vulkan_external_resource_exchange(RenderingDevice *p
 		return false;
 	}
 
+	const uint32_t guide_usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT;
+	auto make_smoke_texture = [&](RD::DataFormat p_format, uint32_t p_usage_bits) -> RID {
+		RD::TextureFormat texture_format = tf;
+		texture_format.format = p_rd->texture_is_format_supported_for_usage(p_format, p_usage_bits) ? p_format : RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
+		texture_format.usage_bits = p_usage_bits;
+		return p_rd->texture_create(texture_format, RD::TextureView());
+	};
+	RID depth_texture = make_smoke_texture(RD::DATA_FORMAT_D32_SFLOAT, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT);
+	RID velocity_texture = make_smoke_texture(RD::DATA_FORMAT_R16G16_SFLOAT, guide_usage_bits);
+	RID diffuse_texture = make_smoke_texture(RD::DATA_FORMAT_R16G16B16A16_SFLOAT, guide_usage_bits);
+	RID specular_texture = make_smoke_texture(RD::DATA_FORMAT_R16G16B16A16_SFLOAT, guide_usage_bits);
+	RID dlss_diffuse_albedo_texture = make_smoke_texture(RD::DATA_FORMAT_R8G8B8A8_UNORM, guide_usage_bits);
+	RID dlss_specular_albedo_texture = make_smoke_texture(RD::DATA_FORMAT_R16G16B16A16_SFLOAT, guide_usage_bits);
+	RID dlss_normal_roughness_texture = make_smoke_texture(RD::DATA_FORMAT_R8G8B8A8_SNORM, guide_usage_bits);
+	RID dlss_specular_hit_dist_texture = make_smoke_texture(RD::DATA_FORMAT_R16_SFLOAT, guide_usage_bits);
+
+	auto free_smoke_textures = [&]() {
+		RID textures[] = {
+			output_texture,
+			depth_texture,
+			velocity_texture,
+			diffuse_texture,
+			specular_texture,
+			dlss_diffuse_albedo_texture,
+			dlss_specular_albedo_texture,
+			dlss_normal_roughness_texture,
+			dlss_specular_hit_dist_texture,
+		};
+		for (RID texture : textures) {
+			if (texture.is_valid()) {
+				p_rd->free_rid(texture);
+			}
+		}
+	};
+
+	if (!depth_texture.is_valid() || !velocity_texture.is_valid() || !diffuse_texture.is_valid() || !specular_texture.is_valid() ||
+			!dlss_diffuse_albedo_texture.is_valid() || !dlss_specular_albedo_texture.is_valid() ||
+			!dlss_normal_roughness_texture.is_valid() || !dlss_specular_hit_dist_texture.is_valid()) {
+		free_smoke_textures();
+		if (r_failure_reason) {
+			*r_failure_reason = "Could not create all smoke-test RTGI textures needed for Vulkan native handoff metadata.";
+		}
+		return false;
+	}
+
 	RTGIBackendFrameContext context;
 	context.rd = p_rd;
 	context.exchange.output_texture = output_texture;
+	context.exchange.depth_texture = depth_texture;
+	context.exchange.velocity_texture = velocity_texture;
+	context.exchange.diffuse_radiance_texture = diffuse_texture;
+	context.exchange.specular_radiance_texture = specular_texture;
+	context.exchange.dlss_rr_diffuse_albedo_texture = dlss_diffuse_albedo_texture;
+	context.exchange.dlss_rr_specular_albedo_texture = dlss_specular_albedo_texture;
+	context.exchange.dlss_rr_normal_roughness_texture = dlss_normal_roughness_texture;
+	context.exchange.dlss_rr_specular_hit_dist_texture = dlss_specular_hit_dist_texture;
 
 	String failure_reason;
 	const bool exchange_ok = RTGIVulkanInteropAdapter::populate_external_memory_exchange(p_rd, context.exchange, &failure_reason);
+	const bool streamline_contexts_ok = exchange_ok && RTGIVulkanInteropAdapter::populate_streamline_texture_contexts(p_rd, context.exchange, &failure_reason);
 	RTGIBackendCapabilities capabilities;
 	capabilities.external_memory = true;
 	capabilities.external_semaphore = true;
 	const bool metadata_ok = exchange_ok &&
+			streamline_contexts_ok &&
 			_rtgi_backend_validate_frame_exchange(capabilities, context.exchange, &failure_reason) &&
 			_rtgi_backend_validate_driver_callback_exchange(context, &failure_reason);
 
@@ -4898,17 +6753,32 @@ bool RenderRaytracing::test_vulkan_external_resource_exchange(RenderingDevice *p
 		(*r_result)["external_memory_handle"] = context.exchange.external_memory_handle;
 		(*r_result)["external_memory_handle_type"] = int(context.exchange.external_memory_handle_type);
 		(*r_result)["external_memory_allocation_size"] = context.exchange.external_memory_allocation_size;
+		(*r_result)["external_memory_dedicated_allocation"] = context.exchange.external_memory_dedicated_allocation;
 		(*r_result)["external_wait_semaphore_handle"] = context.exchange.external_wait_semaphore_handle;
 		(*r_result)["external_wait_semaphore_handle_type"] = int(context.exchange.external_wait_semaphore_handle_type);
 		(*r_result)["external_signal_semaphore_handle"] = context.exchange.external_signal_semaphore_handle;
 		(*r_result)["external_signal_semaphore_handle_type"] = int(context.exchange.external_signal_semaphore_handle_type);
 		(*r_result)["acquire_callback_declared"] = context.exchange.acquire_driver_callback != nullptr && !context.exchange.acquire_callback_resources.is_empty();
 		(*r_result)["release_callback_declared"] = context.exchange.release_driver_callback != nullptr && !context.exchange.release_callback_resources.is_empty();
+		(*r_result)["native_device_context_valid"] = context.exchange.native_device_context.valid;
+		(*r_result)["native_device_topmost_object"] = context.exchange.native_device_context.topmost_object;
+		(*r_result)["native_device_logical_device"] = context.exchange.native_device_context.logical_device;
+		(*r_result)["native_device_command_queue"] = context.exchange.native_device_context.command_queue;
+		(*r_result)["streamline_native_contexts_ok"] = streamline_contexts_ok;
+		(*r_result)["output_native_texture_valid"] = context.exchange.output_native_texture.valid;
+		(*r_result)["depth_native_texture_valid"] = context.exchange.depth_native_texture.valid;
+		(*r_result)["velocity_native_texture_valid"] = context.exchange.velocity_native_texture.valid;
+		(*r_result)["diffuse_radiance_native_texture_valid"] = context.exchange.diffuse_radiance_native_texture.valid;
+		(*r_result)["specular_radiance_native_texture_valid"] = context.exchange.specular_radiance_native_texture.valid;
+		(*r_result)["dlss_rr_diffuse_albedo_native_texture_valid"] = context.exchange.dlss_rr_diffuse_albedo_native_texture.valid;
+		(*r_result)["dlss_rr_specular_albedo_native_texture_valid"] = context.exchange.dlss_rr_specular_albedo_native_texture.valid;
+		(*r_result)["dlss_rr_normal_roughness_native_texture_valid"] = context.exchange.dlss_rr_normal_roughness_native_texture.valid;
+		(*r_result)["dlss_rr_specular_hit_dist_native_texture_valid"] = context.exchange.dlss_rr_specular_hit_dist_native_texture.valid;
 		(*r_result)["rd_owns_output_after_dispatch"] = context.exchange.rd_owns_output_after_dispatch;
 	}
 
 	RTGIVulkanInteropAdapter::cleanup_external_memory_exchange(p_rd, context.exchange);
-	p_rd->free_rid(output_texture);
+	free_smoke_textures();
 
 	if (!metadata_ok) {
 		if (r_failure_reason) {
@@ -4918,6 +6788,7 @@ bool RenderRaytracing::test_vulkan_external_resource_exchange(RenderingDevice *p
 	}
 	return true;
 }
+
 #endif
 
 static bool _rtgi_backend_record_driver_callback(RTGIBackendFrameContext &p_context, RTGIBackendCallbackPhase p_phase, String *r_fallback_reason) {
@@ -4987,21 +6858,17 @@ void RenderRaytracing::initialize(RenderForwardClustered *p_owner) {
 	owner = p_owner;
 	bindless_block = memnew(BindlessBlock);
 	rtgi_backends[RSE::PT_BACKEND_VULKAN_GENERIC] = memnew(VulkanGenericRTGIBackend);
-#if defined(MODULE_RTXPT_ENABLED)
+#if defined(RTGI_RTXPT_BACKEND_IMPLEMENTED) && defined(RTGI_RTXPT_GODOT_REFERENCE_DISPATCH_ENABLED)
 	rtgi_backends[RSE::PT_BACKEND_NVIDIA_RTXPT] = memnew(NvidiaRTXPTRTGIBackend);
 #else
 	rtgi_backends[RSE::PT_BACKEND_NVIDIA_RTXPT] = memnew(VendorRTGIBackend(RSE::PT_BACKEND_NVIDIA_RTXPT));
 #endif
-#if defined(MODULE_HIPRT_ENABLED)
+#if defined(RTGI_HIPRT_BACKEND_IMPLEMENTED)
 	rtgi_backends[RSE::PT_BACKEND_AMD_HIP_RT] = memnew(AmdHIPRTRTGIBackend);
 #else
 	rtgi_backends[RSE::PT_BACKEND_AMD_HIP_RT] = memnew(VendorRTGIBackend(RSE::PT_BACKEND_AMD_HIP_RT));
 #endif
-#if defined(RTGI_EMBREE_OSPRAY_BACKEND_IMPLEMENTED)
-	rtgi_backends[RSE::PT_BACKEND_INTEL_EMBREE] = memnew(EmbreeOSPRayRTGIBackend);
-#else
 	rtgi_backends[RSE::PT_BACKEND_INTEL_EMBREE] = memnew(VendorRTGIBackend(RSE::PT_BACKEND_INTEL_EMBREE));
-#endif
 	String fallback_reason;
 	rtgi_backend_initialized[RSE::PT_BACKEND_VULKAN_GENERIC] = rtgi_backends[RSE::PT_BACKEND_VULKAN_GENERIC]->initialize(owner, this, &fallback_reason);
 	for (uint32_t i = 0; i < RSE::PT_BACKEND_MAX; i++) {
@@ -5230,8 +7097,6 @@ RSE::PathtracingBackend RenderRaytracing::backend_from_env_param(float p_backend
 			return RSE::PT_BACKEND_NVIDIA_RTXPT;
 		case RSE::PT_BACKEND_AMD_HIP_RT:
 			return RSE::PT_BACKEND_AMD_HIP_RT;
-		case RSE::PT_BACKEND_INTEL_EMBREE:
-			return RSE::PT_BACKEND_INTEL_EMBREE;
 		case RSE::PT_BACKEND_VULKAN_GENERIC:
 		default:
 			return RSE::PT_BACKEND_VULKAN_GENERIC;
@@ -5245,7 +7110,7 @@ const char *RenderRaytracing::backend_get_name(RSE::PathtracingBackend p_backend
 		case RSE::PT_BACKEND_AMD_HIP_RT:
 			return "AMD HIP RT";
 		case RSE::PT_BACKEND_INTEL_EMBREE:
-			return "Intel Embree/OSPRay";
+			return "Intel Embree/OSPRay (disabled)";
 		case RSE::PT_BACKEND_VULKAN_GENERIC:
 		default:
 			return "Vulkan Generic";
@@ -5281,6 +7146,10 @@ static Dictionary _rtgi_backend_capabilities_to_dictionary(const RTGIBackendCapa
 	result["initialized"] = p_initialized;
 	result["runtime_name"] = p_capabilities.runtime_name;
 	result["integration_path"] = p_capabilities.integration_path;
+	result["scene_import_path"] = p_capabilities.scene_import_path;
+	result["trace_dispatch_path"] = p_capabilities.trace_dispatch_path;
+	result["vendor_scene_import"] = p_capabilities.vendor_scene_import;
+	result["vendor_sdk_dispatch"] = p_capabilities.vendor_sdk_dispatch;
 	result["rendering_device_family"] = p_capabilities.rendering_device_family;
 	result["rendering_device_name"] = p_capabilities.rendering_device_name;
 	result["rendering_device_vendor"] = p_capabilities.rendering_device_vendor;
@@ -5296,6 +7165,17 @@ static Dictionary _rtgi_backend_capabilities_to_dictionary(const RTGIBackendCapa
 	result["denoiser_runtime_detected"] = p_capabilities.denoiser_runtime_detected;
 	result["denoiser_available"] = p_capabilities.denoiser_available;
 	result["denoiser_failure_reason"] = p_capabilities.denoiser_failure_reason;
+	result["denoiser_integration_path"] = p_capabilities.denoiser_integration_path;
+	result["nvidia_streamline_headers_present"] = p_capabilities.nvidia_streamline_headers_present;
+	result["nvidia_streamline_runtime_detected"] = p_capabilities.nvidia_streamline_runtime_detected;
+	result["nvidia_dlss_rr_handoff_ready"] = p_capabilities.nvidia_dlss_rr_handoff_ready;
+	result["nvidia_dlss_rr_device_supported"] = p_capabilities.nvidia_dlss_rr_device_supported;
+	result["nvidia_dlss_rr_available"] = p_capabilities.nvidia_dlss_rr_available;
+	result["nvidia_streamline_failure_reason"] = p_capabilities.nvidia_streamline_failure_reason;
+	result["nvidia_nrd_headers_present"] = p_capabilities.nvidia_nrd_headers_present;
+	result["nvidia_nrd_version"] = p_capabilities.nvidia_nrd_version;
+	result["amd_fidelityfx_sdk_headers_present"] = p_capabilities.amd_fidelityfx_sdk_headers_present;
+	result["amd_fidelityfx_denoiser_version"] = p_capabilities.amd_fidelityfx_denoiser_version;
 	result["native_probe_update"] = p_capabilities.native_probe_update;
 	result["generic_probe_update_fallback"] = p_capabilities.generic_probe_update_fallback;
 	result["probe_update_path"] = p_capabilities.probe_update_path;
@@ -5498,7 +7378,7 @@ RTGIBackendDispatchResult RenderRaytracing::dispatch_path_trace_backend(RTGIBack
 				r_context.rd = RD::get_singleton();
 				r_context.raytracing = this;
 				r_context.render_data = render_data;
-				r_context.rt_flags = rt_flags;
+				r_context.rt_flags = rt_flags & ~uint32_t(SceneShaderRaytracing::RT_FLAG_DLSS_RR_ENABLED);
 				fallback_reason = String();
 				if (prepare_and_validate(generic_backend, r_context, &fallback_reason) && run_backend(generic_backend, r_context, &fallback_reason)) {
 					if (!validate_rd_output_owner(r_context, &fallback_reason)) {
@@ -6448,7 +8328,7 @@ static void _fill_surface_geometry_data(
 	Vector4 uv_scale = mesh_storage->mesh_surface_get_uv_scale(p_mesh_surface);
 	geom.uv_scale_packed = (uint32_t(Math::make_half_float(uv_scale.y)) << 16) | Math::make_half_float(uv_scale.x);
 
-	// Index format (no device address â€” caller fills those in)
+	// Index format (no device address — caller fills those in)
 	if (index_buffer.is_valid() && index_count > 0) {
 		bool is_16bit = vertex_count <= 65536 && vertex_count > 0;
 		geom.index_format = is_16bit ? RT_INDEX_FORMAT_UINT16 : RT_INDEX_FORMAT_UINT32;
@@ -7926,25 +9806,25 @@ bool RenderRaytracing::_build_merged_mm_blas(
 	bool has_tangent = surface_format & RSE::ARRAY_FORMAT_TANGENT;
 	bool has_tbn = has_normal;
 
-	// Layout of uncompressed vertex buffer: [float3 positions Ã— V] + [packed TBN Ã— V].
+	// Layout of uncompressed vertex buffer: [float3 positions × V] + [packed TBN × V].
 	// normal_stride = 8 when both normal+tangent present (two uint16x2 packed), 4 with normal only.
 	uint32_t tbn_stride = 0;
 	if (has_normal && has_tangent) {
-		tbn_stride = 8; // 2 Ã— uint32 (normal oct, tangent oct+sign)
+		tbn_stride = 8; // 2 × uint32 (normal oct, tangent oct+sign)
 	} else if (has_normal) {
-		tbn_stride = 4; // 1 Ã— uint32 (normal oct only)
+		tbn_stride = 4; // 1 × uint32 (normal oct only)
 	}
 	// Byte offset of the TBN block in the source vertex buffer.
 	uint32_t src_tbn_byte_offset = vertex_count * 12; // after all float3 positions
 
-	// Merged vertex buffer: [float3 pos Ã— N*V] + [packed TBN Ã— N*V] (if TBN present).
+	// Merged vertex buffer: [float3 pos × N*V] + [packed TBN × N*V] (if TBN present).
 	const uint64_t merged_vtx_bytes_u64 = total_vertices_u64 * 12u + (has_tbn ? total_vertices_u64 * tbn_stride : 0u);
 	if (merged_vtx_bytes_u64 > UINT32_MAX) {
 		return false;
 	}
 	uint32_t merged_vtx_bytes = (uint32_t)merged_vtx_bytes_u64;
 
-	// Attribute buffer: attribute_stride bytes Ã— V, replicated N times.
+	// Attribute buffer: attribute_stride bytes × V, replicated N times.
 	RTSurfaceData meta_sd;
 	_fill_surface_geometry_data(p_mesh_surface, false, &meta_sd);
 	uint32_t attrib_stride = meta_sd.geometry.attribute_stride;
@@ -8224,6 +10104,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 	LocalVector<RID> dirty_blas_list;
 	LocalVector<RID> dirty_blas_update_list;
 	const uint32_t current_frame = RSG::rasterizer->get_frame_number();
+	const bool backend_needs_cpu_snapshot_geometry = active_backend == RSE::PT_BACKEND_AMD_HIP_RT;
 
 #ifdef TOOLS_ENABLED
 	uint32_t tlas_instance_count = 0;
@@ -8772,7 +10653,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 			}
 			RT_GeometryData rt_geometry = surf_data->geometry;
 			rt_geometry.flags |= raster_gi_flags;
-			const RTGIBackendCPUGeometry surface_cpu_geometry = (active_backend == RSE::PT_BACKEND_INTEL_EMBREE) ? _rt_make_cpu_geometry_from_surface(mesh_surface, rt_geometry) : RTGIBackendCPUGeometry();
+			const RTGIBackendCPUGeometry surface_cpu_geometry = backend_needs_cpu_snapshot_geometry ? _rt_make_cpu_geometry_from_surface(mesh_surface, rt_geometry) : RTGIBackendCPUGeometry();
 
 			// Resolve material before TLAS so unready custom HGs can use the default material path for this frame.
 			RID material_rid = resolve_surface_material_rid(surf, surf->owner->data->base);
@@ -8865,7 +10746,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 	}
 
 	// -----------------------------------------------------------------------
-	// Phase 2: GPU compute â€” merged MultiMesh BLAS dispatches.
+	// Phase 2: GPU compute — merged MultiMesh BLAS dispatches.
 	// -----------------------------------------------------------------------
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 
@@ -8948,7 +10829,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 			}
 			RT_GeometryData rt_geometry = surf_data->geometry;
 			rt_geometry.flags |= pending.raster_gi_flags;
-			const RTGIBackendCPUGeometry surface_cpu_geometry = (active_backend == RSE::PT_BACKEND_INTEL_EMBREE) ? _rt_make_cpu_geometry_from_surface(pending.mesh_surface, rt_geometry) : RTGIBackendCPUGeometry();
+			const RTGIBackendCPUGeometry surface_cpu_geometry = backend_needs_cpu_snapshot_geometry ? _rt_make_cpu_geometry_from_surface(pending.mesh_surface, rt_geometry) : RTGIBackendCPUGeometry();
 
 			for (uint32_t mi = 0; mi < pending.mm_count; mi++) {
 				const float *d = mm_data + (mm_cur_offset + mi) * mm_stride;

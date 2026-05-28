@@ -30,6 +30,30 @@
 
 #include "register_types.h"
 
-void initialize_embree_module(ModuleInitializationLevel p_level) {}
+static bool embree_rtgi_backend_registered = false;
 
-void uninitialize_embree_module(ModuleInitializationLevel p_level) {}
+bool embree_module_has_rtgi_backend_implementation() {
+	return false;
+}
+
+bool embree_module_has_cpu_dispatch() {
+	return false;
+}
+
+bool embree_module_is_rtgi_backend_registered() {
+	return embree_rtgi_backend_registered;
+}
+
+void initialize_embree_module(ModuleInitializationLevel p_level) {
+	if (p_level != MODULE_INITIALIZATION_LEVEL_SERVERS) {
+		return;
+	}
+	embree_rtgi_backend_registered = embree_module_has_rtgi_backend_implementation();
+}
+
+void uninitialize_embree_module(ModuleInitializationLevel p_level) {
+	if (p_level != MODULE_INITIALIZATION_LEVEL_SERVERS) {
+		return;
+	}
+	embree_rtgi_backend_registered = false;
+}
