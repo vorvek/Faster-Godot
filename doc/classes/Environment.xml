@@ -203,7 +203,7 @@
 			The reflected (specular) light source.
 		</member>
 		<member name="rtgi_backend" type="int" setter="set_rtgi_backend" getter="get_rtgi_backend" enum="Environment.RTGIBackend" default="0">
-			Selects the requested RTGI backend. [constant RTGI_BACKEND_VULKAN_GENERIC] is the built-in Vulkan ray tracing path. NVIDIA and AMD vendor backends remain serialized even when unavailable on the current platform; the renderer warns once and falls back at runtime without changing this resource. The Intel CPU backend compatibility value is disabled and coerces to [constant RTGI_BACKEND_VULKAN_GENERIC].
+			Selects the requested RTGI backend. [constant RTGI_BACKEND_VULKAN_GENERIC] is the built-in Vulkan ray tracing path. Vendor backends remain serialized even when unavailable on the current platform; the renderer warns once and falls back at runtime without changing this resource.
 		</member>
 		<member name="rtgi_disable_in_editor" type="bool" setter="set_rtgi_disable_in_editor" getter="is_rtgi_disabled_in_editor" default="true">
 			If [code]true[/code], disables RTGI while this environment is previewed in the editor. This does not affect running projects or exported builds.
@@ -224,7 +224,7 @@
 			Multiplier applied to the RTGI contribution before composition.
 		</member>
 		<member name="rtgi_denoiser" type="int" setter="set_rtgi_denoiser" getter="get_rtgi_denoiser" enum="Environment.RTGIDenoiser" default="8">
-			Selects the requested RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser. [constant RTGI_DENOISER_AMD] uses the FidelityFX-style real-time path. Unsupported vendor selections remain serialized and fall back without changing this resource. [constant RTGI_DENOISER_NONE] leaves the raw sampled RTGI result visible.
+			Selects the requested RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser. [constant RTGI_DENOISER_AMD] and [constant RTGI_DENOISER_INTEL] use the FidelityFX-style real-time path; unsupported vendor selections remain serialized and fall back without changing this resource. [constant RTGI_DENOISER_NONE] leaves the raw sampled RTGI result visible.
 		</member>
 		<member name="rtgi_denoiser_strength" type="float" setter="set_rtgi_denoiser_strength" getter="get_rtgi_denoiser_strength" default="0.9">
 			Controls RTGI denoiser spatial filtering, blotch stabilization, and firefly suppression strength. Higher values reduce 1-sample-per-pixel speckles, but can blur fine indirect-light detail. Lower values preserve texture and fast dynamic light changes better, but leave more raw RT noise.
@@ -573,7 +573,7 @@
 			Request the AMD HIP RT backend. Requires the HIP RT module, runtime libraries, and Vulkan/HIP external memory and semaphore interop; otherwise it falls back to [constant RTGI_BACKEND_VULKAN_GENERIC].
 		</constant>
 		<constant name="RTGI_BACKEND_INTEL_EMBREE" value="3" enum="RTGIBackend">
-			Disabled compatibility value for the removed Intel Embree/OSPRay CPU backend. Assigning this value falls back to [constant RTGI_BACKEND_VULKAN_GENERIC].
+			Request the Intel Embree/OSPRay backend. Uses compiled CPU rendering with synchronized RD upload when available; otherwise it falls back to [constant RTGI_BACKEND_VULKAN_GENERIC].
 		</constant>
 		<constant name="RTGI_MODE_REFLECTIONS_RT_ONLY" value="0" enum="RTGIMode">
 			Use RTGI for specular/reflection paths only while diffuse GI remains owned by raster GI systems.
@@ -606,7 +606,7 @@
 			Request the AMD RTGI denoiser. Uses the available FidelityFX-style path in this renderer and gates future FidelityFX SDK paths by platform and runtime support.
 		</constant>
 		<constant name="RTGI_DENOISER_INTEL" value="13" enum="RTGIDenoiser">
-			Deprecated compatibility alias for [constant RTGI_DENOISER_AMD]. The real-time RTGI path does not use Open Image Denoise or an Intel CPU denoiser.
+			Request the Intel RTGI denoiser. Uses the cross-vendor FidelityFX target for real-time rendering and falls back to ASVFG until that handoff is available.
 		</constant>
 	</constants>
 </class>

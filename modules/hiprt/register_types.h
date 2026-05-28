@@ -30,14 +30,7 @@
 
 #pragma once
 
-#include <stdint.h>
-
 #include "modules/register_module_types.h"
 
 void initialize_hiprt_module(ModuleInitializationLevel p_level);
 void uninitialize_hiprt_module(ModuleInitializationLevel p_level);
-
-bool hiprt_module_is_rtgi_backend_registered();
-bool hiprt_module_has_rtgi_backend_implementation();
-uint32_t hiprt_module_get_api_version();
-const char *hiprt_module_get_version_string();

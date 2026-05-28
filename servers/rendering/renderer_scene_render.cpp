@@ -33,24 +33,6 @@
 #include "core/variant/typed_array.h"
 #include "modules/modules_enabled.gen.h"
 
-#if defined(RTGI_NRD_SDK_HEADERS_PRESENT)
-#include <NRD.h>
-#endif
-
-#if defined(RTGI_FIDELITYFX_SDK_DENOISER_HEADERS_PRESENT)
-#if defined(__has_include)
-#if __has_include(<ffx_denoiser.h>)
-#include <ffx_denoiser.h>
-#elif __has_include("thirdparty/fidelityfx-sdk/Kits/FidelityFX/denoisers/include/ffx_denoiser.h")
-#include "thirdparty/fidelityfx-sdk/Kits/FidelityFX/denoisers/include/ffx_denoiser.h"
-#else
-#error "RTGI FidelityFX denoiser headers were detected, but ffx_denoiser.h is not reachable."
-#endif
-#else
-#include <ffx_denoiser.h>
-#endif
-#endif
-
 /////////////////////////////////////////////////////////////////////////////
 
 static const char *_pathtracing_backend_name(RSE::PathtracingBackend p_backend) {
@@ -60,7 +42,7 @@ static const char *_pathtracing_backend_name(RSE::PathtracingBackend p_backend) 
 		case RSE::PT_BACKEND_AMD_HIP_RT:
 			return "AMD HIP RT";
 		case RSE::PT_BACKEND_INTEL_EMBREE:
-			return "Intel Embree/OSPRay (disabled)";
+			return "Intel Embree/OSPRay";
 		case RSE::PT_BACKEND_VULKAN_GENERIC:
 		default:
 			return "Vulkan Generic";
@@ -74,7 +56,7 @@ static const char *_pathtracing_backend_runtime_name(RSE::PathtracingBackend p_b
 		case RSE::PT_BACKEND_AMD_HIP_RT:
 			return "HIP RT compute runtime";
 		case RSE::PT_BACKEND_INTEL_EMBREE:
-			return "disabled";
+			return "CPU/SYCL";
 		case RSE::PT_BACKEND_VULKAN_GENERIC:
 		default:
 			return "Vulkan ray tracing pipeline";
@@ -84,74 +66,14 @@ static const char *_pathtracing_backend_runtime_name(RSE::PathtracingBackend p_b
 static const char *_pathtracing_backend_integration_path(RSE::PathtracingBackend p_backend) {
 	switch (p_backend) {
 		case RSE::PT_BACKEND_NVIDIA_RTXPT:
-			return "NVIDIA Godot fork-compatible RenderingDevice/Vulkan dispatch";
+			return "Vulkan external memory/semaphore resource exchange";
 		case RSE::PT_BACKEND_AMD_HIP_RT:
 			return "Vulkan/HIP external memory and semaphore interop";
 		case RSE::PT_BACKEND_INTEL_EMBREE:
-			return "disabled";
+			return "Vulkan upload/import or deliberate staged copy";
 		case RSE::PT_BACKEND_VULKAN_GENERIC:
 		default:
 			return "RenderingDevice-owned Vulkan resources";
-	}
-}
-
-static const char *_pathtracing_backend_scene_import_path(RSE::PathtracingBackend p_backend) {
-	switch (p_backend) {
-		case RSE::PT_BACKEND_NVIDIA_RTXPT:
-			return "RenderingDevice TLAS/RTGI scene resources; RTXPT source manifest validation only";
-		case RSE::PT_BACKEND_AMD_HIP_RT:
-			return "RTGI scene snapshot converted into HIP RT geometry and scene objects";
-		case RSE::PT_BACKEND_INTEL_EMBREE:
-			return "disabled";
-		case RSE::PT_BACKEND_VULKAN_GENERIC:
-		default:
-			return "RenderingDevice TLAS and RTGI scene resources";
-	}
-}
-
-static const char *_pathtracing_backend_trace_dispatch_path(RSE::PathtracingBackend p_backend) {
-	switch (p_backend) {
-		case RSE::PT_BACKEND_NVIDIA_RTXPT:
-			return "NVIDIA Godot fork-compatible RenderingDevice ray tracing dispatch; standalone RTXPT core source dispatch is not linked";
-		case RSE::PT_BACKEND_AMD_HIP_RT:
-			return "HIP RT trace kernel launched through HIP module with Vulkan external-memory handoff";
-		case RSE::PT_BACKEND_INTEL_EMBREE:
-			return "disabled";
-		case RSE::PT_BACKEND_VULKAN_GENERIC:
-		default:
-			return "RenderingDevice Vulkan ray tracing pipeline";
-	}
-}
-
-static bool _pathtracing_backend_vendor_scene_import(RSE::PathtracingBackend p_backend) {
-	switch (p_backend) {
-		case RSE::PT_BACKEND_AMD_HIP_RT:
-#if defined(RTGI_HIPRT_BACKEND_IMPLEMENTED)
-			return true;
-#else
-			return false;
-#endif
-		case RSE::PT_BACKEND_NVIDIA_RTXPT:
-		case RSE::PT_BACKEND_INTEL_EMBREE:
-		case RSE::PT_BACKEND_VULKAN_GENERIC:
-		default:
-			return false;
-	}
-}
-
-static bool _pathtracing_backend_vendor_sdk_dispatch(RSE::PathtracingBackend p_backend) {
-	switch (p_backend) {
-		case RSE::PT_BACKEND_AMD_HIP_RT:
-#if defined(RTGI_HIPRT_BACKEND_IMPLEMENTED)
-			return true;
-#else
-			return false;
-#endif
-		case RSE::PT_BACKEND_NVIDIA_RTXPT:
-		case RSE::PT_BACKEND_INTEL_EMBREE:
-		case RSE::PT_BACKEND_VULKAN_GENERIC:
-		default:
-			return false;
 	}
 }
 
@@ -162,28 +84,10 @@ static const char *_pathtracing_backend_denoiser_name(RSE::PathtracingBackend p_
 		case RSE::PT_BACKEND_AMD_HIP_RT:
 			return "AMD FidelityFX Denoiser";
 		case RSE::PT_BACKEND_INTEL_EMBREE:
-			return "disabled";
+			return "AMD FidelityFX Denoiser (cross-vendor)";
 		case RSE::PT_BACKEND_VULKAN_GENERIC:
 		default:
 			return "ASVFG/Internal";
-	}
-}
-
-static const char *_pathtracing_backend_denoiser_integration_path(RSE::PathtracingBackend p_backend) {
-	switch (p_backend) {
-		case RSE::PT_BACKEND_NVIDIA_RTXPT:
-			return "NRD runtime probe with Streamline DLSS Ray Reconstruction Vulkan callback handoff; ASVFG fallback";
-		case RSE::PT_BACKEND_AMD_HIP_RT:
-#if defined(RTGI_FIDELITYFX_SDK_DENOISER_HEADERS_PRESENT)
-			return "FidelityFX Denoiser API headers with RenderingDevice multi-signal RTGI graph";
-#else
-			return "RenderingDevice FidelityFX-style multi-signal RTGI graph";
-#endif
-		case RSE::PT_BACKEND_INTEL_EMBREE:
-			return "disabled";
-		case RSE::PT_BACKEND_VULKAN_GENERIC:
-		default:
-			return "RenderingDevice ASVFG compute graph";
 	}
 }
 
@@ -202,7 +106,11 @@ static bool _pathtracing_backend_compiled(RSE::PathtracingBackend p_backend) {
 			return false;
 #endif
 		case RSE::PT_BACKEND_INTEL_EMBREE:
+#if defined(MODULE_EMBREE_ENABLED) || defined(MODULE_OSPRAY_ENABLED) || (defined(MODULE_RAYCAST_ENABLED) && defined(RTGI_BUILTIN_EMBREE_ENABLED))
+			return true;
+#else
 			return false;
+#endif
 		case RSE::PT_BACKEND_VULKAN_GENERIC:
 		default:
 			return true;
@@ -226,38 +134,6 @@ static String _pathtracing_backend_availability_failure(bool p_backend_compiled,
 		return "implementation_unavailable";
 	}
 	return "none";
-}
-
-static bool _pathtracing_backend_nrd_headers_present(RSE::PathtracingBackend p_backend) {
-#if defined(MODULE_RTXPT_ENABLED) && defined(RTGI_NRD_SDK_HEADERS_PRESENT)
-	return p_backend == RSE::PT_BACKEND_NVIDIA_RTXPT;
-#else
-	return false;
-#endif
-}
-
-static String _pathtracing_backend_nrd_version(RSE::PathtracingBackend p_backend) {
-#if defined(MODULE_RTXPT_ENABLED) && defined(RTGI_NRD_SDK_HEADERS_PRESENT)
-	return p_backend == RSE::PT_BACKEND_NVIDIA_RTXPT ? vformat("%d.%d.%d", NRD_VERSION_MAJOR, NRD_VERSION_MINOR, NRD_VERSION_BUILD) : String();
-#else
-	return String();
-#endif
-}
-
-static bool _pathtracing_backend_fidelityfx_denoiser_headers_present(RSE::PathtracingBackend p_backend) {
-#if defined(MODULE_HIPRT_ENABLED) && defined(RTGI_FIDELITYFX_SDK_DENOISER_HEADERS_PRESENT)
-	return p_backend == RSE::PT_BACKEND_AMD_HIP_RT;
-#else
-	return false;
-#endif
-}
-
-static String _pathtracing_backend_fidelityfx_denoiser_version(RSE::PathtracingBackend p_backend) {
-#if defined(MODULE_HIPRT_ENABLED) && defined(RTGI_FIDELITYFX_SDK_DENOISER_HEADERS_PRESENT)
-	return p_backend == RSE::PT_BACKEND_AMD_HIP_RT ? vformat("%d.%d.%d", FFX_DENOISER_VERSION_MAJOR, FFX_DENOISER_VERSION_MINOR, FFX_DENOISER_VERSION_PATCH) : String();
-#else
-	return String();
-#endif
 }
 
 static Dictionary _make_unavailable_pathtracing_capabilities(RSE::PathtracingBackend p_backend, const String &p_reason) {
@@ -290,10 +166,6 @@ static Dictionary _make_unavailable_pathtracing_capabilities(RSE::PathtracingBac
 	capabilities["initialized"] = false;
 	capabilities["runtime_name"] = _pathtracing_backend_runtime_name(p_backend);
 	capabilities["integration_path"] = _pathtracing_backend_integration_path(p_backend);
-	capabilities["scene_import_path"] = _pathtracing_backend_scene_import_path(p_backend);
-	capabilities["trace_dispatch_path"] = _pathtracing_backend_trace_dispatch_path(p_backend);
-	capabilities["vendor_scene_import"] = _pathtracing_backend_vendor_scene_import(p_backend);
-	capabilities["vendor_sdk_dispatch"] = _pathtracing_backend_vendor_sdk_dispatch(p_backend);
 	capabilities["rendering_device_family"] = "unknown";
 	capabilities["rendering_device_name"] = "unknown";
 	capabilities["rendering_device_vendor"] = "unknown";
@@ -309,26 +181,6 @@ static Dictionary _make_unavailable_pathtracing_capabilities(RSE::PathtracingBac
 	capabilities["denoiser_runtime_detected"] = false;
 	capabilities["denoiser_available"] = false;
 	capabilities["denoiser_failure_reason"] = p_reason;
-	capabilities["denoiser_integration_path"] = _pathtracing_backend_denoiser_integration_path(p_backend);
-#if defined(MODULE_RTXPT_ENABLED) && defined(RTGI_STREAMLINE_SDK_HEADERS_PRESENT)
-	const bool nvidia_streamline_headers_present = p_backend == RSE::PT_BACKEND_NVIDIA_RTXPT;
-#else
-	const bool nvidia_streamline_headers_present = false;
-#endif
-	capabilities["nvidia_streamline_headers_present"] = nvidia_streamline_headers_present;
-	capabilities["nvidia_streamline_runtime_detected"] = false;
-#if defined(MODULE_RTXPT_ENABLED) && defined(RTGI_STREAMLINE_DLSS_RR_HANDOFF_ENABLED)
-	capabilities["nvidia_dlss_rr_handoff_ready"] = p_backend == RSE::PT_BACKEND_NVIDIA_RTXPT;
-#else
-	capabilities["nvidia_dlss_rr_handoff_ready"] = false;
-#endif
-	capabilities["nvidia_dlss_rr_device_supported"] = false;
-	capabilities["nvidia_dlss_rr_available"] = false;
-	capabilities["nvidia_streamline_failure_reason"] = p_backend == RSE::PT_BACKEND_NVIDIA_RTXPT ? p_reason : String();
-	capabilities["nvidia_nrd_headers_present"] = _pathtracing_backend_nrd_headers_present(p_backend);
-	capabilities["nvidia_nrd_version"] = _pathtracing_backend_nrd_version(p_backend);
-	capabilities["amd_fidelityfx_sdk_headers_present"] = _pathtracing_backend_fidelityfx_denoiser_headers_present(p_backend);
-	capabilities["amd_fidelityfx_denoiser_version"] = _pathtracing_backend_fidelityfx_denoiser_version(p_backend);
 	capabilities["native_probe_update"] = false;
 	capabilities["generic_probe_update_fallback"] = p_backend != RSE::PT_BACKEND_VULKAN_GENERIC;
 	capabilities["probe_update_path"] = p_backend == RSE::PT_BACKEND_VULKAN_GENERIC ? String("Vulkan Generic ray tracing pipeline") : String("Vulkan Generic STRC probe fallback");

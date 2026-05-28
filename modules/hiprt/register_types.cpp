@@ -30,46 +30,6 @@
 
 #include "register_types.h"
 
-#ifndef RTGI_HIPRT_API_VERSION
-#define RTGI_HIPRT_API_VERSION 0
-#endif
+void initialize_hiprt_module(ModuleInitializationLevel p_level) {}
 
-#ifndef RTGI_HIPRT_VERSION_STR
-#define RTGI_HIPRT_VERSION_STR ""
-#endif
-
-static bool hiprt_rtgi_backend_registered = false;
-
-bool hiprt_module_has_rtgi_backend_implementation() {
-#if defined(RTGI_HIPRT_BACKEND_IMPLEMENTED)
-	return true;
-#else
-	return false;
-#endif
-}
-
-uint32_t hiprt_module_get_api_version() {
-	return RTGI_HIPRT_API_VERSION;
-}
-
-const char *hiprt_module_get_version_string() {
-	return RTGI_HIPRT_VERSION_STR;
-}
-
-bool hiprt_module_is_rtgi_backend_registered() {
-	return hiprt_rtgi_backend_registered;
-}
-
-void initialize_hiprt_module(ModuleInitializationLevel p_level) {
-	if (p_level != MODULE_INITIALIZATION_LEVEL_SERVERS) {
-		return;
-	}
-	hiprt_rtgi_backend_registered = hiprt_module_has_rtgi_backend_implementation() && hiprt_module_get_api_version() != 0;
-}
-
-void uninitialize_hiprt_module(ModuleInitializationLevel p_level) {
-	if (p_level != MODULE_INITIALIZATION_LEVEL_SERVERS) {
-		return;
-	}
-	hiprt_rtgi_backend_registered = false;
-}
+void uninitialize_hiprt_module(ModuleInitializationLevel p_level) {}

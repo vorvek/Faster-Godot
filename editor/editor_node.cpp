@@ -133,7 +133,6 @@
 #include "editor/import/resource_importer_texture.h"
 #include "editor/import/resource_importer_texture_atlas.h"
 #include "editor/import/resource_importer_wav.h"
-#include "editor/import/rtgi_sdk_manager.h"
 #include "editor/inspector/editor_inspector.h"
 #include "editor/inspector/editor_preview_plugins.h"
 #include "editor/inspector/editor_properties.h"
@@ -3757,11 +3756,6 @@ void EditorNode::_menu_option_confirm(int p_option, bool p_confirmed) {
 		case EDITOR_CONFIGURE_FBX_IMPORTER: {
 #if !defined(ANDROID_ENABLED) && !defined(WEB_ENABLED)
 			fbx_importer_manager->show_dialog();
-#endif
-		} break;
-		case EDITOR_CONFIGURE_RTGI_SDKS: {
-#if !defined(ANDROID_ENABLED) && !defined(WEB_ENABLED)
-			rtgi_sdk_manager->show_dialog();
 #endif
 		} break;
 		case EDITOR_MANAGE_FEATURE_PROFILES: {
@@ -7996,7 +7990,6 @@ void EditorNode::_build_settings_menu() {
 	settings_menu->add_item(TTRC("Manage Export Templates..."), EDITOR_MANAGE_EXPORT_TEMPLATES);
 #if !defined(ANDROID_ENABLED) && !defined(WEB_ENABLED)
 	settings_menu->add_item(TTRC("Configure FBX Importer..."), EDITOR_CONFIGURE_FBX_IMPORTER);
-	settings_menu->add_item(TTRC("Configure RTGI Vendor SDKs..."), EDITOR_CONFIGURE_RTGI_SDKS);
 #endif
 }
 
@@ -8719,9 +8712,6 @@ EditorNode::EditorNode() {
 #if !defined(ANDROID_ENABLED) && !defined(WEB_ENABLED)
 	fbx_importer_manager = memnew(FBXImporterManager);
 	gui_base->add_child(fbx_importer_manager);
-
-	rtgi_sdk_manager = memnew(RTGISDKManager);
-	gui_base->add_child(rtgi_sdk_manager);
 #endif
 
 	warning = memnew(AcceptDialog);

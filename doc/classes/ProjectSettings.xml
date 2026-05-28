@@ -3237,9 +3237,6 @@
 			[b]Note:[/b] Enabling occlusion culling has a cost on the CPU. Only enable occlusion culling if you actually plan to use it. Large open scenes with few or no objects blocking the view will generally not benefit much from occlusion culling. Large open scenes generally benefit more from mesh LOD and visibility ranges ([member GeometryInstance3D.visibility_range_begin] and [member GeometryInstance3D.visibility_range_end]) compared to occlusion culling.
 			[b]Note:[/b] Due to memory constraints, occlusion culling is not supported by default in Web export templates. It can be enabled by compiling custom Web export templates with [code]module_raycast_enabled=yes[/code].
 		</member>
-		<member name="rendering/path_tracing/nvidia/nrd_sdk_path" type="String" setter="" getter="" default="&quot;res://addons/rtgi_vendor_sdks/nrd&quot;">
-			Project-local path to a NVIDIA NRD SDK checkout used by the optional NVIDIA RTGI denoiser path. The RTGI vendor SDK manager stores downloaded NRD sources here by default so projects can keep a stable SDK checkout under [code]addons[/code]. Rebuild the engine with [code]module_rtxpt_enabled=yes[/code] after installing or changing this path if NRD headers were not configured for the current binary.
-		</member>
 		<member name="rendering/reflections/reflection_atlas/reflection_count" type="int" setter="" getter="" default="64">
 			Number of cubemaps to store in the reflection atlas. The number of [ReflectionProbe]s in a scene will be limited by this amount. A higher number requires more VRAM.
 		</member>

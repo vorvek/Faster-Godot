@@ -654,8 +654,7 @@ void Environment::set_pathtracing_denoiser(RSE::PathtracingDenoiser p_denoiser) 
 			rtgi_denoiser = RTGI_DENOISER_AMD;
 			break;
 		case RSE::PT_DENOISER_INTEL:
-			rtgi_denoiser = RTGI_DENOISER_AMD;
-			pathtracing_denoiser = RSE::PT_DENOISER_AMD;
+			rtgi_denoiser = RTGI_DENOISER_INTEL;
 			break;
 		case RSE::PT_DENOISER_FIDELITYFX:
 			rtgi_denoiser = RTGI_DENOISER_FIDELITYFX;
@@ -686,6 +685,7 @@ void Environment::set_rtgi_backend(RTGIBackend p_backend) {
 		case RTGI_BACKEND_VULKAN_GENERIC:
 		case RTGI_BACKEND_NVIDIA_RTXPT:
 		case RTGI_BACKEND_AMD_HIP_RT:
+		case RTGI_BACKEND_INTEL_EMBREE:
 			rtgi_backend = p_backend;
 			break;
 		default:
@@ -973,8 +973,8 @@ void Environment::set_rtgi_denoiser(RTGIDenoiser p_denoiser) {
 			pathtracing_denoiser = RSE::PT_DENOISER_AMD;
 			break;
 		case RTGI_DENOISER_INTEL:
-			rtgi_denoiser = RTGI_DENOISER_AMD;
-			pathtracing_denoiser = RSE::PT_DENOISER_AMD;
+			rtgi_denoiser = RTGI_DENOISER_INTEL;
+			pathtracing_denoiser = RSE::PT_DENOISER_INTEL;
 			break;
 		case RTGI_DENOISER_FIDELITYFX:
 			rtgi_denoiser = RTGI_DENOISER_FIDELITYFX;
@@ -1951,7 +1951,7 @@ void Environment::_bind_methods() {
 
 	ADD_GROUP("RTGI", "rtgi_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_enabled", PROPERTY_HINT_GROUP_ENABLE), "set_rtgi_enabled", "is_rtgi_enabled");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_backend", PROPERTY_HINT_ENUM, "Vulkan Generic,NVIDIA RTXPT,AMD HIP RT"), "set_rtgi_backend", "get_rtgi_backend");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_backend", PROPERTY_HINT_ENUM, "Vulkan Generic,NVIDIA RTXPT,AMD HIP RT,Intel Embree"), "set_rtgi_backend", "get_rtgi_backend");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_mode", PROPERTY_HINT_ENUM, "Reflections RT Only,Full Path Tracing"), "set_rtgi_mode", "get_rtgi_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_samples_per_pixel", PROPERTY_HINT_RANGE, "1,16,1"), "set_rtgi_samples_per_pixel", "get_rtgi_samples_per_pixel");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_max_bounces", PROPERTY_HINT_RANGE, "1,8,1"), "set_rtgi_max_bounces", "get_rtgi_max_bounces");
@@ -1980,7 +1980,7 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_vertical", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_vertical", "get_rtgi_overscan_vertical");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_strc_static_visual_layers", PROPERTY_HINT_LAYERS_3D_RENDER), "set_rtgi_strc_static_visual_layers", "get_rtgi_strc_static_visual_layers");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_strc_dynamic_visual_layers", PROPERTY_HINT_LAYERS_3D_RENDER), "set_rtgi_strc_dynamic_visual_layers", "get_rtgi_strc_dynamic_visual_layers");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "ASVFG (Experimental):8,NVIDIA:11,AMD:12,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "ASVFG (Experimental):8,NVIDIA:11,AMD:12,Intel:13,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_debug_mode", PROPERTY_HINT_ENUM, "Disabled,Mirror Reflection,Geometry Normals,Final Normals,Normal Map,Tangent,Bitangent,UV,Albedo,ORM,Diffuse Albedo,Specular Albedo,Normal+Roughness,Specular Hit Dist,Metalness,Roughness,View Normals,Diffuse+Specular,Fresnel F0,Front/Back Face,Depth,Emissive,BRDF Rejection,Normal Deviation,Specular Reflection Direction,Specular Reflected Hit Distance,Specular Reflected Hit Normal"), "set_rtgi_debug_mode", "get_rtgi_debug_mode");
 
 	// Glow

@@ -30,30 +30,6 @@
 
 #include "register_types.h"
 
-static bool ospray_rtgi_backend_registered = false;
+void initialize_ospray_module(ModuleInitializationLevel p_level) {}
 
-bool ospray_module_has_rtgi_backend_implementation() {
-	return false;
-}
-
-bool ospray_module_has_dispatch() {
-	return false;
-}
-
-bool ospray_module_is_rtgi_backend_registered() {
-	return ospray_rtgi_backend_registered;
-}
-
-void initialize_ospray_module(ModuleInitializationLevel p_level) {
-	if (p_level != MODULE_INITIALIZATION_LEVEL_SERVERS) {
-		return;
-	}
-	ospray_rtgi_backend_registered = ospray_module_has_rtgi_backend_implementation() && ospray_module_has_dispatch();
-}
-
-void uninitialize_ospray_module(ModuleInitializationLevel p_level) {
-	if (p_level != MODULE_INITIALIZATION_LEVEL_SERVERS) {
-		return;
-	}
-	ospray_rtgi_backend_registered = false;
-}
+void uninitialize_ospray_module(ModuleInitializationLevel p_level) {}

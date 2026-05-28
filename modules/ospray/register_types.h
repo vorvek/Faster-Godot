@@ -34,7 +34,3 @@
 
 void initialize_ospray_module(ModuleInitializationLevel p_level);
 void uninitialize_ospray_module(ModuleInitializationLevel p_level);
-
-bool ospray_module_is_rtgi_backend_registered();
-bool ospray_module_has_rtgi_backend_implementation();
-bool ospray_module_has_dispatch();

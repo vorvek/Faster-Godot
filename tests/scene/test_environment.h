@@ -49,7 +49,7 @@ static void check_rtgi_backend_reaches_render_params(const Ref<Environment> &p_e
 	CHECK_EQ(int(params[RSE::PT_PARAM_RTGI_BACKEND]), int(p_backend));
 }
 
-TEST_CASE("[SceneTree][Environment] RTGI backend selection preserves active vendor requests and disables the Intel CPU backend") {
+TEST_CASE("[SceneTree][Environment] RTGI backend selection preserves vendor requests and falls back only for invalid values") {
 	Ref<Environment> environment;
 	environment.instantiate();
 
@@ -61,12 +61,7 @@ TEST_CASE("[SceneTree][Environment] RTGI backend selection preserves active vend
 	check_rtgi_backend_reaches_render_params(environment, Environment::RTGI_BACKEND_VULKAN_GENERIC);
 	check_rtgi_backend_reaches_render_params(environment, Environment::RTGI_BACKEND_NVIDIA_RTXPT);
 	check_rtgi_backend_reaches_render_params(environment, Environment::RTGI_BACKEND_AMD_HIP_RT);
-
-	environment->set_rtgi_backend(Environment::RTGI_BACKEND_INTEL_EMBREE);
-	CHECK_EQ(environment->get_rtgi_backend(), Environment::RTGI_BACKEND_VULKAN_GENERIC);
-	params = RenderingServer::get_singleton()->environment_get_pathtracing_params(environment->get_rid());
-	REQUIRE_GT(params.size(), RSE::PT_PARAM_RTGI_BACKEND);
-	CHECK_EQ(int(params[RSE::PT_PARAM_RTGI_BACKEND]), int(Environment::RTGI_BACKEND_VULKAN_GENERIC));
+	check_rtgi_backend_reaches_render_params(environment, Environment::RTGI_BACKEND_INTEL_EMBREE);
 
 	environment->set_rtgi_backend((Environment::RTGIBackend)-1);
 	CHECK_EQ(environment->get_rtgi_backend(), Environment::RTGI_BACKEND_VULKAN_GENERIC);
@@ -79,28 +74,6 @@ TEST_CASE("[SceneTree][Environment] RTGI backend selection preserves active vend
 	params = RenderingServer::get_singleton()->environment_get_pathtracing_params(environment->get_rid());
 	REQUIRE_GT(params.size(), RSE::PT_PARAM_RTGI_BACKEND);
 	CHECK_EQ(int(params[RSE::PT_PARAM_RTGI_BACKEND]), int(Environment::RTGI_BACKEND_VULKAN_GENERIC));
-}
-
-TEST_CASE("[SceneTree][Environment] RTGI denoiser selection disables the Intel compatibility value") {
-	Ref<Environment> environment;
-	environment.instantiate();
-
-	environment->set_rtgi_denoiser(Environment::RTGI_DENOISER_INTEL);
-	CHECK_EQ(environment->get_rtgi_denoiser(), Environment::RTGI_DENOISER_AMD);
-	CHECK_EQ(environment->get_pathtracing_denoiser(), RSE::PT_DENOISER_AMD);
-
-	RenderingServer *rendering_server = RenderingServer::get_singleton();
-	REQUIRE(rendering_server != nullptr);
-	PackedFloat32Array params = rendering_server->environment_get_pathtracing_params(environment->get_rid());
-	REQUIRE_GT(params.size(), RSE::PT_PARAM_DENOISER);
-	CHECK_EQ(int(params[RSE::PT_PARAM_DENOISER]), int(RSE::PT_DENOISER_AMD));
-
-	environment->set_pathtracing_denoiser(RSE::PT_DENOISER_INTEL);
-	CHECK_EQ(environment->get_rtgi_denoiser(), Environment::RTGI_DENOISER_AMD);
-	CHECK_EQ(environment->get_pathtracing_denoiser(), RSE::PT_DENOISER_AMD);
-	params = rendering_server->environment_get_pathtracing_params(environment->get_rid());
-	REQUIRE_GT(params.size(), RSE::PT_PARAM_DENOISER);
-	CHECK_EQ(int(params[RSE::PT_PARAM_DENOISER]), int(RSE::PT_DENOISER_AMD));
 }
 
 } // namespace TestEnvironment

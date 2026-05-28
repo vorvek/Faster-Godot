@@ -1,7 +1,0 @@
-This directory contains the FidelityFX SDK API and denoiser public headers used
-to compile optional RTGI FidelityFX denoiser integration points.
-
-Only source headers are vendored. Runtime binaries are intentionally external.
-
-Imported from GPUOpen-LibrariesAndSDKs/FidelityFX-SDK commit e236f23. The
-vendored API and denoiser headers carry their own MIT-style copyright notice.
