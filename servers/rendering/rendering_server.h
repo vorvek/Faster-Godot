@@ -1436,6 +1436,11 @@ public:
 	virtual void viewport_set_screen_space_aa(RID p_viewport, RSE::ViewportScreenSpaceAA p_mode) = 0;
 
 	virtual void viewport_set_use_taa(RID p_viewport, bool p_use_taa) = 0;
+	virtual void viewport_set_taa_sharpness(RID p_viewport, float p_sharpness) = 0;
+	virtual void viewport_set_taa_history_weight(RID p_viewport, float p_history_weight) = 0;
+	virtual void viewport_set_taa_disocclusion_threshold(RID p_viewport, float p_threshold) = 0;
+	virtual void viewport_set_taa_jitter_phase_count(RID p_viewport, int p_jitter_phase_count) = 0;
+	virtual void viewport_set_taa_jitter_scale(RID p_viewport, float p_jitter_scale) = 0;
 
 	virtual void viewport_set_use_debanding(RID p_viewport, bool p_use_debanding) = 0;
 

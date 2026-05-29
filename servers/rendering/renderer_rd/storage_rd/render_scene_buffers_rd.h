@@ -95,6 +95,11 @@ private:
 	RS::ViewportScreenSpaceAA screen_space_aa = RS::VIEWPORT_SCREEN_SPACE_AA_DISABLED;
 	bool use_taa = false;
 	bool use_debanding = false;
+	float taa_sharpness = 0.10f;
+	float taa_history_weight = 0.93f;
+	float taa_disocclusion_threshold = 2.25f;
+	uint32_t taa_jitter_phase_count = 16;
+	float taa_jitter_scale = 0.85f;
 	RD::TextureSamples texture_samples = RD::TEXTURE_SAMPLES_1;
 
 	// Named Textures
@@ -247,6 +252,11 @@ public:
 	_FORCE_INLINE_ RS::ViewportScreenSpaceAA get_screen_space_aa() const { return screen_space_aa; }
 	_FORCE_INLINE_ bool get_use_taa() const { return use_taa; }
 	_FORCE_INLINE_ bool get_use_debanding() const { return use_debanding; }
+	_FORCE_INLINE_ float get_taa_sharpness() const { return taa_sharpness; }
+	_FORCE_INLINE_ float get_taa_history_weight() const { return taa_history_weight; }
+	_FORCE_INLINE_ float get_taa_disocclusion_threshold() const { return taa_disocclusion_threshold; }
+	_FORCE_INLINE_ uint32_t get_taa_jitter_phase_count() const { return taa_jitter_phase_count; }
+	_FORCE_INLINE_ float get_taa_jitter_scale() const { return taa_jitter_scale; }
 
 	uint64_t get_auto_exposure_version() const { return auto_exposure_version; }
 	void set_auto_exposure_version(const uint64_t p_auto_exposure_version) { auto_exposure_version = p_auto_exposure_version; }

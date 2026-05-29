@@ -53,6 +53,12 @@ private:
 	bool use_taa = false;
 	bool use_debanding = false;
 
+	float taa_sharpness = 0.10f;
+	float taa_history_weight = 0.93f;
+	float taa_disocclusion_threshold = 2.25f;
+	uint32_t taa_jitter_phase_count = 16;
+	float taa_jitter_scale = 0.85f;
+
 protected:
 	static void _bind_methods();
 
@@ -92,6 +98,21 @@ public:
 
 	bool get_use_debanding() const { return use_debanding; }
 	void set_use_debanding(bool p_use_debanding) { use_debanding = p_use_debanding; }
+
+	float get_taa_sharpness() const { return taa_sharpness; }
+	void set_taa_sharpness(float p_sharpness) { taa_sharpness = p_sharpness; }
+
+	float get_taa_history_weight() const { return taa_history_weight; }
+	void set_taa_history_weight(float p_history_weight) { taa_history_weight = p_history_weight; }
+
+	float get_taa_disocclusion_threshold() const { return taa_disocclusion_threshold; }
+	void set_taa_disocclusion_threshold(float p_threshold) { taa_disocclusion_threshold = p_threshold; }
+
+	uint32_t get_taa_jitter_phase_count() const { return taa_jitter_phase_count; }
+	void set_taa_jitter_phase_count(uint32_t p_phase_count) { taa_jitter_phase_count = p_phase_count; }
+
+	float get_taa_jitter_scale() const { return taa_jitter_scale; }
+	void set_taa_jitter_scale(float p_scale) { taa_jitter_scale = p_scale; }
 
 	RenderSceneBuffersConfiguration() {}
 	virtual ~RenderSceneBuffersConfiguration() {}

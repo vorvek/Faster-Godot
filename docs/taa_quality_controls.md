@@ -9,7 +9,7 @@ source.
 
 ## User-Facing Controls
 
-The controls are Project Settings under `rendering/anti_aliasing/quality`:
+The controls are available as per-`Viewport` properties and can be configured dynamically or via the inspector. By default, the root viewport inherits their initial values from the global Project Settings under `rendering/anti_aliasing/quality`:
 
 - `taa_sharpness`
   - Default: `0.10`.
@@ -33,8 +33,7 @@ The controls are Project Settings under `rendering/anti_aliasing/quality`:
   - Scales plain TAA camera jitter. `0.0` disables camera jitter while keeping
     the TAA resolve active.
 
-These settings are intentionally project-global. The fork does not add new
-`Viewport` or `RenderingServer` runtime API for per-viewport TAA tuning.
+The root `Viewport` automatically falls back to these Project Settings, but any `Viewport` can customize them at runtime via scripting (`viewport.taa_sharpness`, etc.) or directly in the editor inspector, allowing fine-grained control for different render targets (e.g., split-screen, UI viewports, or high-performance viewports).
 
 ## Rendering Behavior
 
@@ -59,22 +58,27 @@ Temporal still compute their own jitter phase counts and ignore
 
 ## Code Changes
 
-- `servers/rendering/rendering_server.cpp`
-  - Registers the new Project Settings with editor-visible ranges and balanced
-    defaults.
+- `scene/main/viewport.h`, `scene/main/viewport.cpp`
+  - Exposes properties, getters, setters, and ClassDB bindings for the 5 TAA tuning options, so they appear in the editor inspector and can be updated dynamically via scripts.
+- `scene/main/scene_tree.cpp`
+  - Initializes the root viewport's TAA parameters using Project Settings fallbacks at startup.
+- `servers/rendering/rendering_server.*`
+  - Declares the viewport TAA setter methods on `RenderingServer`, implements them in `RenderingServerDefault`, and registers the global Project Settings.
+- `servers/rendering/renderer_viewport.*`
+  - Declares and implements `RendererViewport` setters to assign viewport TAA fields.
+  - Passes these values to `RenderSceneBuffersConfiguration` during viewport 3D rendering configuration.
+- `servers/rendering/storage/render_scene_buffers.*`
+  - Adds and binds properties and methods to `RenderSceneBuffersConfiguration` to carry these settings to GDExtension and internal render buffers.
+- `servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.*`
+  - Caches the TAA parameters in `RenderSceneBuffersRD` when configuring buffers.
 - `servers/rendering/renderer_rd/effects/taa.*`
-  - Reads cached Project Settings and sends the values through TAA push
-    constants.
-  - Preserves the existing raytracing/TAA history-validity plumbing.
+  - Updates the `resolve()` signature to accept custom TAA parameters as inputs and uses them to populate the shader push constants.
+  - Extracts the 3 resolution-invariant parameters directly from `p_render_buffers` and forwards them to `resolve()`.
 - `servers/rendering/renderer_rd/shaders/effects/taa_resolve.glsl`
   - Uses configurable history weight and disocclusion threshold.
   - Adds clamp-aware resolve sharpening.
-- `servers/rendering/renderer_viewport.*`,
-  `servers/rendering/renderer_scene_cull.*`, and
-  `servers/rendering/rendering_method.h`
-  - Carry the plain-TAA jitter scale through the internal render-camera path.
 - `doc/classes/ProjectSettings.xml`
-  - Documents the new settings.
+  - Documents the new global settings.
 
 ## Pros
 
@@ -87,8 +91,6 @@ Temporal still compute their own jitter phase counts and ignore
 ## Cons And Limitations
 
 - More aggressive values can increase shimmer, flicker, or aliasing.
-- The settings are read from Project Settings, not exposed as per-viewport
-  runtime properties.
 - Visual tuning is content-dependent; thin geometry, particles, skinned meshes,
   alpha-tested materials, and rapid camera motion can still show artifacts.
 - The defaults are intentionally biased toward this fork's desktop Forward+

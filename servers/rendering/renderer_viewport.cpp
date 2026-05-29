@@ -265,8 +265,8 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 				// Also used for MetalFX Temporal scaling.
 				jitter_phase_count = uint32_t(8.0f * std::pow(float(target_width) / render_width, 2.0f));
 			} else if (use_taa) {
-				jitter_phase_count = CLAMP(int(GLOBAL_GET_CACHED(int, "rendering/anti_aliasing/quality/taa_jitter_phase_count")), 2, 64);
-				jitter_scale = CLAMP(GLOBAL_GET_CACHED(float, "rendering/anti_aliasing/quality/taa_jitter_scale"), 0.0f, 1.0f);
+				jitter_phase_count = CLAMP((int)p_viewport->taa_jitter_phase_count, 2, 64);
+				jitter_scale = CLAMP(p_viewport->taa_jitter_scale, 0.0f, 1.0f);
 			}
 
 			p_viewport->internal_size = Size2(render_width, render_height);
@@ -289,6 +289,11 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 			rb_config.set_texture_mipmap_bias(texture_mipmap_bias);
 			rb_config.set_anisotropic_filtering_level(p_viewport->anisotropic_filtering_level);
 			rb_config.set_use_taa(use_taa);
+			rb_config.set_taa_sharpness(p_viewport->taa_sharpness);
+			rb_config.set_taa_history_weight(p_viewport->taa_history_weight);
+			rb_config.set_taa_disocclusion_threshold(p_viewport->taa_disocclusion_threshold);
+			rb_config.set_taa_jitter_phase_count(p_viewport->taa_jitter_phase_count);
+			rb_config.set_taa_jitter_scale(p_viewport->taa_jitter_scale);
 			rb_config.set_use_debanding(p_viewport->use_debanding);
 
 			p_viewport->render_buffers->configure(&rb_config);
@@ -1481,6 +1486,61 @@ void RendererViewport::viewport_set_use_taa(RID p_viewport, bool p_use_taa) {
 		num_viewports_with_motion_vectors += motion_vectors_after ? 1 : -1;
 	}
 
+	_configure_3d_render_buffers(viewport);
+}
+
+void RendererViewport::viewport_set_taa_sharpness(RID p_viewport, float p_sharpness) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+
+	if (viewport->taa_sharpness == p_sharpness) {
+		return;
+	}
+	viewport->taa_sharpness = p_sharpness;
+	_configure_3d_render_buffers(viewport);
+}
+
+void RendererViewport::viewport_set_taa_history_weight(RID p_viewport, float p_history_weight) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+
+	if (viewport->taa_history_weight == p_history_weight) {
+		return;
+	}
+	viewport->taa_history_weight = p_history_weight;
+	_configure_3d_render_buffers(viewport);
+}
+
+void RendererViewport::viewport_set_taa_disocclusion_threshold(RID p_viewport, float p_threshold) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+
+	if (viewport->taa_disocclusion_threshold == p_threshold) {
+		return;
+	}
+	viewport->taa_disocclusion_threshold = p_threshold;
+	_configure_3d_render_buffers(viewport);
+}
+
+void RendererViewport::viewport_set_taa_jitter_phase_count(RID p_viewport, int p_jitter_phase_count) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+
+	if (viewport->taa_jitter_phase_count == (uint32_t)p_jitter_phase_count) {
+		return;
+	}
+	viewport->taa_jitter_phase_count = p_jitter_phase_count;
+	_configure_3d_render_buffers(viewport);
+}
+
+void RendererViewport::viewport_set_taa_jitter_scale(RID p_viewport, float p_jitter_scale) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+
+	if (viewport->taa_jitter_scale == p_jitter_scale) {
+		return;
+	}
+	viewport->taa_jitter_scale = p_jitter_scale;
 	_configure_3d_render_buffers(viewport);
 }
 

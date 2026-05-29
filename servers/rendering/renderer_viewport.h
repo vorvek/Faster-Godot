@@ -71,6 +71,11 @@ public:
 		RS::ViewportMSAA msaa_3d = RenderingServer::VIEWPORT_MSAA_DISABLED;
 		RS::ViewportScreenSpaceAA screen_space_aa = RenderingServer::VIEWPORT_SCREEN_SPACE_AA_DISABLED;
 		bool use_taa = false;
+		float taa_sharpness = 0.10f;
+		float taa_history_weight = 0.93f;
+		float taa_disocclusion_threshold = 2.25f;
+		uint32_t taa_jitter_phase_count = 16;
+		float taa_jitter_scale = 0.85f;
 		bool use_debanding = false;
 		bool force_motion_vectors = false;
 		bool rt_temporal_motion_vectors = false;
@@ -279,6 +284,11 @@ public:
 	void viewport_set_msaa_3d(RID p_viewport, RS::ViewportMSAA p_msaa);
 	void viewport_set_screen_space_aa(RID p_viewport, RS::ViewportScreenSpaceAA p_mode);
 	void viewport_set_use_taa(RID p_viewport, bool p_use_taa);
+	void viewport_set_taa_sharpness(RID p_viewport, float p_sharpness);
+	void viewport_set_taa_history_weight(RID p_viewport, float p_history_weight);
+	void viewport_set_taa_disocclusion_threshold(RID p_viewport, float p_threshold);
+	void viewport_set_taa_jitter_phase_count(RID p_viewport, int p_jitter_phase_count);
+	void viewport_set_taa_jitter_scale(RID p_viewport, float p_jitter_scale);
 	void viewport_set_use_debanding(RID p_viewport, bool p_use_debanding);
 	void viewport_set_force_motion_vectors(RID p_viewport, bool p_force_motion_vectors);
 	void viewport_set_rt_temporal_motion_vectors(RID p_viewport, bool p_enable);

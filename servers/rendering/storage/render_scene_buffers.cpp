@@ -70,6 +70,26 @@ void RenderSceneBuffersConfiguration::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_anisotropic_filtering_level"), &RenderSceneBuffersConfiguration::get_anisotropic_filtering_level);
 	ClassDB::bind_method(D_METHOD("set_anisotropic_filtering_level", "anisotropic_filtering_level"), &RenderSceneBuffersConfiguration::set_anisotropic_filtering_level);
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "anisotropic_filtering_level"), "set_anisotropic_filtering_level", "get_anisotropic_filtering_level");
+
+	ClassDB::bind_method(D_METHOD("get_taa_sharpness"), &RenderSceneBuffersConfiguration::get_taa_sharpness);
+	ClassDB::bind_method(D_METHOD("set_taa_sharpness", "taa_sharpness"), &RenderSceneBuffersConfiguration::set_taa_sharpness);
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "taa_sharpness"), "set_taa_sharpness", "get_taa_sharpness");
+
+	ClassDB::bind_method(D_METHOD("get_taa_history_weight"), &RenderSceneBuffersConfiguration::get_taa_history_weight);
+	ClassDB::bind_method(D_METHOD("set_taa_history_weight", "taa_history_weight"), &RenderSceneBuffersConfiguration::set_taa_history_weight);
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "taa_history_weight"), "set_taa_history_weight", "get_taa_history_weight");
+
+	ClassDB::bind_method(D_METHOD("get_taa_disocclusion_threshold"), &RenderSceneBuffersConfiguration::get_taa_disocclusion_threshold);
+	ClassDB::bind_method(D_METHOD("set_taa_disocclusion_threshold", "taa_disocclusion_threshold"), &RenderSceneBuffersConfiguration::set_taa_disocclusion_threshold);
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "taa_disocclusion_threshold"), "set_taa_disocclusion_threshold", "get_taa_disocclusion_threshold");
+
+	ClassDB::bind_method(D_METHOD("get_taa_jitter_phase_count"), &RenderSceneBuffersConfiguration::get_taa_jitter_phase_count);
+	ClassDB::bind_method(D_METHOD("set_taa_jitter_phase_count", "taa_jitter_phase_count"), &RenderSceneBuffersConfiguration::set_taa_jitter_phase_count);
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "taa_jitter_phase_count"), "set_taa_jitter_phase_count", "get_taa_jitter_phase_count");
+
+	ClassDB::bind_method(D_METHOD("get_taa_jitter_scale"), &RenderSceneBuffersConfiguration::get_taa_jitter_scale);
+	ClassDB::bind_method(D_METHOD("set_taa_jitter_scale", "taa_jitter_scale"), &RenderSceneBuffersConfiguration::set_taa_jitter_scale);
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "taa_jitter_scale"), "set_taa_jitter_scale", "get_taa_jitter_scale");
 }
 
 void RenderSceneBuffers::_bind_methods() {

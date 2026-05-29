@@ -168,6 +168,11 @@ void RenderSceneBuffersRD::configure(const RenderSceneBuffersConfiguration *p_co
 	anisotropic_filtering_level = p_config->get_anisotropic_filtering_level();
 	use_taa = p_config->get_use_taa();
 	use_debanding = p_config->get_use_debanding();
+	taa_sharpness = p_config->get_taa_sharpness();
+	taa_history_weight = p_config->get_taa_history_weight();
+	taa_disocclusion_threshold = p_config->get_taa_disocclusion_threshold();
+	taa_jitter_phase_count = p_config->get_taa_jitter_phase_count();
+	taa_jitter_scale = p_config->get_taa_jitter_scale();
 
 	ERR_FAIL_COND_MSG(view_count == 0, "Must have at least 1 view");
 

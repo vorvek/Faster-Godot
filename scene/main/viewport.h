@@ -310,6 +310,11 @@ private:
 	MSAA msaa_3d = MSAA_DISABLED;
 	ScreenSpaceAA screen_space_aa = SCREEN_SPACE_AA_DISABLED;
 	bool use_taa = false;
+	float taa_sharpness = 0.10f;
+	float taa_history_weight = 0.93f;
+	float taa_disocclusion_threshold = 2.25f;
+	int taa_jitter_phase_count = 16;
+	float taa_jitter_scale = 0.85f;
 
 	Scaling3DMode scaling_3d_mode = SCALING_3D_MODE_BILINEAR;
 	float scaling_3d_scale = 1.0;
@@ -572,6 +577,21 @@ public:
 
 	void set_use_taa(bool p_use_taa);
 	bool is_using_taa() const;
+
+	void set_taa_sharpness(float p_sharpness);
+	float get_taa_sharpness() const;
+
+	void set_taa_history_weight(float p_history_weight);
+	float get_taa_history_weight() const;
+
+	void set_taa_disocclusion_threshold(float p_threshold);
+	float get_taa_disocclusion_threshold() const;
+
+	void set_taa_jitter_phase_count(int p_phase_count);
+	int get_taa_jitter_phase_count() const;
+
+	void set_taa_jitter_scale(float p_scale);
+	float get_taa_jitter_scale() const;
 
 	void set_use_oversampling(bool p_oversampling);
 	bool is_using_oversampling() const;

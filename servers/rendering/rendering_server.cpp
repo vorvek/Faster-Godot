@@ -2900,6 +2900,11 @@ void RenderingServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("viewport_set_use_hdr_2d", "viewport", "enabled"), &RenderingServer::viewport_set_use_hdr_2d);
 	ClassDB::bind_method(D_METHOD("viewport_set_screen_space_aa", "viewport", "mode"), &RenderingServer::viewport_set_screen_space_aa);
 	ClassDB::bind_method(D_METHOD("viewport_set_use_taa", "viewport", "enable"), &RenderingServer::viewport_set_use_taa);
+	ClassDB::bind_method(D_METHOD("viewport_set_taa_sharpness", "viewport", "sharpness"), &RenderingServer::viewport_set_taa_sharpness);
+	ClassDB::bind_method(D_METHOD("viewport_set_taa_history_weight", "viewport", "history_weight"), &RenderingServer::viewport_set_taa_history_weight);
+	ClassDB::bind_method(D_METHOD("viewport_set_taa_disocclusion_threshold", "viewport", "threshold"), &RenderingServer::viewport_set_taa_disocclusion_threshold);
+	ClassDB::bind_method(D_METHOD("viewport_set_taa_jitter_phase_count", "viewport", "jitter_phase_count"), &RenderingServer::viewport_set_taa_jitter_phase_count);
+	ClassDB::bind_method(D_METHOD("viewport_set_taa_jitter_scale", "viewport", "jitter_scale"), &RenderingServer::viewport_set_taa_jitter_scale);
 	ClassDB::bind_method(D_METHOD("viewport_set_use_debanding", "viewport", "enable"), &RenderingServer::viewport_set_use_debanding);
 	ClassDB::bind_method(D_METHOD("viewport_set_use_occlusion_culling", "viewport", "enable"), &RenderingServer::viewport_set_use_occlusion_culling);
 	ClassDB::bind_method(D_METHOD("viewport_set_occlusion_rays_per_thread", "rays_per_thread"), &RenderingServer::viewport_set_occlusion_rays_per_thread);

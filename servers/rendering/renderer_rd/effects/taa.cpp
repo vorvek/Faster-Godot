@@ -49,7 +49,7 @@ TAA::~TAA() {
 	taa_shader.version_free(shader_version);
 }
 
-void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_prev_velocity, RID p_history, RID p_rt_history_validity, RID p_rt_prev_history_validity, RID p_rt_history_id, RID p_rt_prev_history_id, Size2 p_resolution, float p_z_near, float p_z_far, bool p_raytracing_denoise, float p_raytracing_history_weight) {
+void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_prev_velocity, RID p_history, RID p_rt_history_validity, RID p_rt_prev_history_validity, RID p_rt_history_id, RID p_rt_prev_history_id, Size2 p_resolution, float p_z_near, float p_z_far, bool p_raytracing_denoise, float p_raytracing_history_weight, float p_taa_disocclusion_threshold, float p_taa_history_weight, float p_taa_sharpness) {
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
@@ -72,13 +72,13 @@ void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_pr
 	memset(&push_constant, 0, sizeof(TAAResolvePushConstant));
 	push_constant.resolution_width = p_resolution.width;
 	push_constant.resolution_height = p_resolution.height;
-	push_constant.disocclusion_threshold = CLAMP(GLOBAL_GET_CACHED(float, "rendering/anti_aliasing/quality/taa_disocclusion_threshold"), 0.0f, 8.0f); // If velocity changes by less than this amount of texels we can retain the accumulation buffer.
+	push_constant.disocclusion_threshold = CLAMP(p_taa_disocclusion_threshold, 0.0f, 8.0f); // If velocity changes by less than this amount of texels we can retain the accumulation buffer.
 	push_constant.variance_dynamic = CLAMP(base_variance * variance_scale, base_variance_min, base_variance_max); // Variance dynamically scales based on resolution
 	push_constant.raytracing_denoise = p_raytracing_denoise ? 1.0f : 0.0f;
 	push_constant.rt_history_validity_enabled = (p_rt_history_validity.is_valid() && p_rt_prev_history_validity.is_valid()) ? 1.0f : 0.0f;
 	push_constant.rt_history_id_enabled = (p_rt_history_id.is_valid() && p_rt_prev_history_id.is_valid()) ? 1.0f : 0.0f;
-	push_constant.history_weight = CLAMP(GLOBAL_GET_CACHED(float, "rendering/anti_aliasing/quality/taa_history_weight"), 0.0f, 0.99f);
-	push_constant.sharpness = CLAMP(GLOBAL_GET_CACHED(float, "rendering/anti_aliasing/quality/taa_sharpness"), 0.0f, 1.0f);
+	push_constant.history_weight = CLAMP(p_taa_history_weight, 0.0f, 0.99f);
+	push_constant.sharpness = CLAMP(p_taa_sharpness, 0.0f, 1.0f);
 	push_constant.rt_history_filter_strength = 0.0f;
 	if (p_raytracing_denoise) {
 		push_constant.history_weight = CLAMP(p_raytracing_history_weight, 0.0f, 0.999f);
@@ -150,7 +150,7 @@ void TAA::process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_f
 			RID rt_history_id_slice = p_rt_history_id.is_valid() ? p_render_buffers->get_texture_slice(SNAME("forward_clustered"), SNAME("rt_history_id"), v, 0) : RID();
 			RID rt_prev_history_id_slice = p_rt_prev_history_id.is_valid() ? p_render_buffers->get_texture_slice(SNAME("forward_clustered"), SNAME("rt_history_id_prev"), v, 0) : RID();
 
-			resolve(internal_texture, taa_temp, depth_texture, velocity_buffer, taa_prev_velocity, taa_history, rt_history_validity_slice, rt_prev_history_validity_slice, rt_history_id_slice, rt_prev_history_id_slice, Size2(internal_size.x, internal_size.y), p_z_near, p_z_far, p_raytracing_denoise, p_raytracing_history_weight);
+			resolve(internal_texture, taa_temp, depth_texture, velocity_buffer, taa_prev_velocity, taa_history, rt_history_validity_slice, rt_prev_history_validity_slice, rt_history_id_slice, rt_prev_history_id_slice, Size2(internal_size.x, internal_size.y), p_z_near, p_z_far, p_raytracing_denoise, p_raytracing_history_weight, p_render_buffers->get_taa_disocclusion_threshold(), p_render_buffers->get_taa_history_weight(), p_render_buffers->get_taa_sharpness());
 			copy_effects->copy_to_rect(taa_temp, internal_texture, Rect2(0, 0, internal_size.x, internal_size.y));
 		}
 
@@ -205,7 +205,7 @@ void TAA::process_texture(Ref<RenderSceneBuffersRD> p_render_buffers, const Stri
 			RID rt_history_id_slice = p_rt_history_id.is_valid() ? p_render_buffers->get_texture_slice(SNAME("forward_clustered"), SNAME("rt_history_id"), v, 0) : RID();
 			RID rt_prev_history_id_slice = p_rt_prev_history_id.is_valid() ? p_render_buffers->get_texture_slice(SNAME("forward_clustered"), SNAME("rt_history_id_prev"), v, 0) : RID();
 
-			resolve(frame_texture, taa_temp, depth_texture, velocity_buffer, taa_prev_velocity, taa_history, rt_history_validity_slice, rt_prev_history_validity_slice, rt_history_id_slice, rt_prev_history_id_slice, Size2(process_size.x, process_size.y), p_z_near, p_z_far, p_raytracing_denoise, p_raytracing_history_weight);
+			resolve(frame_texture, taa_temp, depth_texture, velocity_buffer, taa_prev_velocity, taa_history, rt_history_validity_slice, rt_prev_history_validity_slice, rt_history_id_slice, rt_prev_history_id_slice, Size2(process_size.x, process_size.y), p_z_near, p_z_far, p_raytracing_denoise, p_raytracing_history_weight, p_render_buffers->get_taa_disocclusion_threshold(), p_render_buffers->get_taa_history_weight(), p_render_buffers->get_taa_sharpness());
 			copy_effects->copy_to_rect(taa_temp, frame_texture, Rect2(0, 0, process_size.x, process_size.y));
 		}
 

@@ -3802,6 +3802,76 @@ bool Viewport::is_using_taa() const {
 	return use_taa;
 }
 
+void Viewport::set_taa_sharpness(float p_sharpness) {
+	ERR_MAIN_THREAD_GUARD;
+	if (taa_sharpness == p_sharpness) {
+		return;
+	}
+	taa_sharpness = p_sharpness;
+	RS::get_singleton()->viewport_set_taa_sharpness(viewport, p_sharpness);
+}
+
+float Viewport::get_taa_sharpness() const {
+	ERR_READ_THREAD_GUARD_V(0.0f);
+	return taa_sharpness;
+}
+
+void Viewport::set_taa_history_weight(float p_history_weight) {
+	ERR_MAIN_THREAD_GUARD;
+	if (taa_history_weight == p_history_weight) {
+		return;
+	}
+	taa_history_weight = p_history_weight;
+	RS::get_singleton()->viewport_set_taa_history_weight(viewport, p_history_weight);
+}
+
+float Viewport::get_taa_history_weight() const {
+	ERR_READ_THREAD_GUARD_V(0.0f);
+	return taa_history_weight;
+}
+
+void Viewport::set_taa_disocclusion_threshold(float p_threshold) {
+	ERR_MAIN_THREAD_GUARD;
+	if (taa_disocclusion_threshold == p_threshold) {
+		return;
+	}
+	taa_disocclusion_threshold = p_threshold;
+	RS::get_singleton()->viewport_set_taa_disocclusion_threshold(viewport, p_threshold);
+}
+
+float Viewport::get_taa_disocclusion_threshold() const {
+	ERR_READ_THREAD_GUARD_V(0.0f);
+	return taa_disocclusion_threshold;
+}
+
+void Viewport::set_taa_jitter_phase_count(int p_phase_count) {
+	ERR_MAIN_THREAD_GUARD;
+	if (taa_jitter_phase_count == p_phase_count) {
+		return;
+	}
+	taa_jitter_phase_count = p_phase_count;
+	RS::get_singleton()->viewport_set_taa_jitter_phase_count(viewport, p_phase_count);
+}
+
+int Viewport::get_taa_jitter_phase_count() const {
+	ERR_READ_THREAD_GUARD_V(0);
+	return taa_jitter_phase_count;
+}
+
+void Viewport::set_taa_jitter_scale(float p_scale) {
+	ERR_MAIN_THREAD_GUARD;
+	if (taa_jitter_scale == p_scale) {
+		return;
+	}
+	taa_jitter_scale = p_scale;
+	RS::get_singleton()->viewport_set_taa_jitter_scale(viewport, p_scale);
+}
+
+float Viewport::get_taa_jitter_scale() const {
+	ERR_READ_THREAD_GUARD_V(0.0f);
+	return taa_jitter_scale;
+}
+
 void Viewport::set_use_debanding(bool p_use_debanding) {
 	ERR_MAIN_THREAD_GUARD;
 	if (use_debanding == p_use_debanding) {
@@ -4984,6 +5054,21 @@ void Viewport::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_use_taa", "enable"), &Viewport::set_use_taa);
 	ClassDB::bind_method(D_METHOD("is_using_taa"), &Viewport::is_using_taa);
 
+	ClassDB::bind_method(D_METHOD("set_taa_sharpness", "sharpness"), &Viewport::set_taa_sharpness);
+	ClassDB::bind_method(D_METHOD("get_taa_sharpness"), &Viewport::get_taa_sharpness);
+
+	ClassDB::bind_method(D_METHOD("set_taa_history_weight", "history_weight"), &Viewport::set_taa_history_weight);
+	ClassDB::bind_method(D_METHOD("get_taa_history_weight"), &Viewport::get_taa_history_weight);
+
+	ClassDB::bind_method(D_METHOD("set_taa_disocclusion_threshold", "threshold"), &Viewport::set_taa_disocclusion_threshold);
+	ClassDB::bind_method(D_METHOD("get_taa_disocclusion_threshold"), &Viewport::get_taa_disocclusion_threshold);
+
+	ClassDB::bind_method(D_METHOD("set_taa_jitter_phase_count", "phase_count"), &Viewport::set_taa_jitter_phase_count);
+	ClassDB::bind_method(D_METHOD("get_taa_jitter_phase_count"), &Viewport::get_taa_jitter_phase_count);
+
+	ClassDB::bind_method(D_METHOD("set_taa_jitter_scale", "scale"), &Viewport::set_taa_jitter_scale);
+	ClassDB::bind_method(D_METHOD("get_taa_jitter_scale"), &Viewport::get_taa_jitter_scale);
+
 	ClassDB::bind_method(D_METHOD("set_use_debanding", "enable"), &Viewport::set_use_debanding);
 	ClassDB::bind_method(D_METHOD("is_using_debanding"), &Viewport::is_using_debanding);
 
@@ -5166,6 +5251,11 @@ void Viewport::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "msaa_3d", PROPERTY_HINT_ENUM, String::utf8("Disabled (Fastest),2× (Average),4× (Slow),8× (Slowest)")), "set_msaa_3d", "get_msaa_3d");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "screen_space_aa", PROPERTY_HINT_ENUM, "Disabled (Fastest),FXAA (Fast),SMAA (Average)"), "set_screen_space_aa", "get_screen_space_aa");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_taa"), "set_use_taa", "is_using_taa");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "taa_sharpness", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), "set_taa_sharpness", "get_taa_sharpness");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "taa_history_weight", PROPERTY_HINT_RANGE, "0.0,1.0,0.001"), "set_taa_history_weight", "get_taa_history_weight");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "taa_disocclusion_threshold", PROPERTY_HINT_RANGE, "0.0,8.0,0.01"), "set_taa_disocclusion_threshold", "get_taa_disocclusion_threshold");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "taa_jitter_phase_count", PROPERTY_HINT_RANGE, "2,64,1"), "set_taa_jitter_phase_count", "get_taa_jitter_phase_count");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "taa_jitter_scale", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), "set_taa_jitter_scale", "get_taa_jitter_scale");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_debanding"), "set_use_debanding", "is_using_debanding");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_occlusion_culling"), "set_use_occlusion_culling", "is_using_occlusion_culling");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "mesh_lod_threshold", PROPERTY_HINT_RANGE, "0,1024,0.1"), "set_mesh_lod_threshold", "get_mesh_lod_threshold");

@@ -2099,6 +2099,11 @@ SceneTree::SceneTree() {
 
 	const bool use_taa = GLOBAL_DEF_BASIC("rendering/anti_aliasing/quality/use_taa", false);
 	root->set_use_taa(use_taa);
+	root->set_taa_sharpness(GLOBAL_GET("rendering/anti_aliasing/quality/taa_sharpness"));
+	root->set_taa_history_weight(GLOBAL_GET("rendering/anti_aliasing/quality/taa_history_weight"));
+	root->set_taa_disocclusion_threshold(GLOBAL_GET("rendering/anti_aliasing/quality/taa_disocclusion_threshold"));
+	root->set_taa_jitter_phase_count(GLOBAL_GET("rendering/anti_aliasing/quality/taa_jitter_phase_count"));
+	root->set_taa_jitter_scale(GLOBAL_GET("rendering/anti_aliasing/quality/taa_jitter_scale"));
 
 	const bool use_debanding = GLOBAL_GET("rendering/anti_aliasing/quality/use_debanding");
 	root->set_use_debanding(use_debanding);
