@@ -447,16 +447,20 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 				RID dest_fb = RendererRD::TextureStorage::get_singleton()->render_target_get_rd_framebuffer(p_viewport->render_target);
 				if (frame_gen_previous.is_valid() && dest_fb.is_valid()) {
 					RendererRD::CopyEffects::get_singleton()->copy_to_fb_rect(frame_gen_previous, dest_fb, rect);
+				} else if (dest_fb.is_valid() && render_target_texture.is_valid()) {
+					RendererRD::CopyEffects::get_singleton()->copy_to_fb_rect(render_target_texture, dest_fb, rect);
 				}
 			}
 		} else {
+			RSG::texture_storage->render_target_disable_clear_request(p_viewport->render_target);
+
 			RID velocity_texture;
 			if (rb->has_velocity_buffer(false)) {
 				velocity_texture = rb->get_velocity_buffer(false);
 			}
 			RID dest_fb = RendererRD::TextureStorage::get_singleton()->render_target_get_rd_framebuffer(p_viewport->render_target);
 
-			if (dest_fb.is_valid()) {
+			if (dest_fb.is_valid() && frame_gen_current.is_valid() && frame_gen_previous.is_valid()) {
 				RendererRD::CopyEffects::get_singleton()->copy_frame_generation(
 					frame_gen_current,
 					frame_gen_previous,
@@ -465,6 +469,8 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 					rect,
 					p_viewport->frame_generation_warp_scale
 				);
+			} else if (dest_fb.is_valid() && render_target_texture.is_valid()) {
+				RendererRD::CopyEffects::get_singleton()->copy_to_fb_rect(render_target_texture, dest_fb, rect);
 			}
 
 			if (frame_gen_current.is_valid() && frame_gen_previous.is_valid()) {
