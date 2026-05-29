@@ -704,6 +704,17 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		}
 	}
 
+	// Russian Roulette path termination to stochastically terminate low-energy paths
+	if (total_bounces >= 3u) {
+		float q = max(0.05, min(0.95, rt_luminance(ps.throughput)));
+		if (rand(ps.rng_state) > q) {
+			ps.packed_bounces_flags = set_path_terminated(ps.packed_bounces_flags);
+			path_pack(payload, ps);
+			return;
+		}
+		ps.throughput /= q; // Rescale weight to remain unbiased
+	}
+
 	// Bounce limit check.
 	if (total_bounces >= RT_GET_MAX_BOUNCES() || diffuse_bounces >= MAX_DIFFUSE_BOUNCES) {
 		ps.packed_bounces_flags = set_path_terminated(ps.packed_bounces_flags);
