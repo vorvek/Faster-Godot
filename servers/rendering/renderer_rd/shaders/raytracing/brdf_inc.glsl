@@ -1118,8 +1118,9 @@ bool evalIndirectCombinedBRDF(float2 u, float3 shadingNormal, float3 geometryNor
 		sampleWeight = data.diffuseReflectance * diffuseTerm(data);
 
 #if COMBINE_BRDFS_WITH_FRESNEL
-		// Sample a half-vector of specular BRDF. Note that we're reusing random variable 'u' here, but correctly it should be an new independent random number
-		float3 Hspecular = sampleSpecularHalfVector(Vlocal, float2(data.alpha, data.alpha), u);
+		// Decorrelate random variables using a Golden Ratio Weyl sequence shift to avoid correlation bias
+		vec2 u_spec = fract(u + vec2(0.61803398875, 0.75487766625));
+		float3 Hspecular = sampleSpecularHalfVector(Vlocal, float2(data.alpha, data.alpha), u_spec);
 
 		// Clamp HdotL to small value to prevent numerical instability. Assume that rays incident from below the hemisphere have been filtered
 		float VdotH = max(0.00001f, min(1.0f, dot(Vlocal, Hspecular)));
