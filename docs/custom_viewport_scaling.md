@@ -25,11 +25,10 @@ We have integrated three new high-performance, GPU-powered spatial upscaling mod
 
 ---
 
-## 2. Scale Range Extensions (Up to 100x)
+## 2. Scale Range Constraints (Standard 2.0x limit)
 
-* **Extended Bounds**: The rendering scale constraint has been increased from `2.0` to `100.0`.
-* **UI Slider**: The inspector slider range is set to `0.1` to `10.0`, with the property hint `"or_greater"` enabling developers to type arbitrary values up to `100.0`.
-* **Advantage**: Allows extreme scaling factors (e.g., massive internal supersampling/rendering or low-resolution retro-styled scaling effects).
+* **Standard Bounds**: The rendering scale constraint is kept at the official Godot maximum of `2.0x` (with slider range `0.1` to `2.0`).
+* **Rationale**: Limiting the maximum rendering scale to `2.0x` prevents accidental and extremely heavy GPU workloads (such as supersampling above 4K/8K resolutions) which drastically reduce performance. Downscaling from extremely large custom scales back to viewport size also lacks proper mipmap support, causing massive performance overhead without visual benefits.
 
 ---
 
@@ -46,9 +45,9 @@ All custom modes are fully integrated into the **Vulkan RD (Rendering Device)** 
 A quick summary of files changed to support this feature:
 * [rendering_server_enums.h](file:///d:/dev/faster-godot-4.6.3/servers/rendering/rendering_server_enums.h): Added custom scaling modes to `ViewportScaling3DMode` and categorized them as spatial.
 * [viewport.h](file:///d:/dev/faster-godot-4.6.3/scene/main/viewport.h): Registered new scaling modes in `Viewport::Scaling3DMode` to align indexes perfectly.
-* [viewport.cpp](file:///d:/dev/faster-godot-4.6.3/scene/main/viewport.cpp): Extended limits up to 100.0, registered property hints, and bound property enum constants.
-* [rendering_server.cpp](file:///d:/dev/faster-godot-4.6.3/servers/rendering/rendering_server.cpp): Registered default Project Settings hints and default values for indexes 5-9.
-* [renderer_viewport.cpp](file:///d:/dev/faster-godot-4.6.3/servers/rendering/renderer_viewport.cpp): Adjusted bounds, ensured FSR/temporal checks do not interfere with our custom modes, and kept our modes in the safe rendering path.
+* [viewport.cpp](file:///d:/dev/faster-godot-4.6.3/scene/main/viewport.cpp): Registered property hints, kept/restored the standard 2.0x scale limit, and bound property enum constants.
+* [rendering_server.cpp](file:///d:/dev/faster-godot-4.6.3/servers/rendering/rendering_server.cpp): Registered default Project Settings hints (keeping standard 2.0x limit) and default values for indexes 5-9.
+* [renderer_viewport.cpp](file:///d:/dev/faster-godot-4.6.3/servers/rendering/renderer_viewport.cpp): Kept/restored standard scale limits, ensured FSR/temporal checks do not interfere with our custom modes, and kept our modes in the safe rendering path.
 * [copy_effects.h](file:///d:/dev/faster-godot-4.6.3/servers/rendering/renderer_rd/effects/copy_effects.h): Added custom modes to `CopyToFBMode` enum and expanded `copy_to_fb_rect` method signature.
 * [copy_effects.cpp](file:///d:/dev/faster-godot-4.6.3/servers/rendering/renderer_rd/effects/copy_effects.cpp): Appended corresponding preprocessor defines to compiler modes, handled texture size query, and mapped enums to shader pipelines.
 * [renderer_scene_render_rd.cpp](file:///d:/dev/faster-godot-4.6.3/servers/rendering/renderer_rd/renderer_scene_render_rd.cpp): Enabled scaling copy-pass for our modes and passed active scale mode.
