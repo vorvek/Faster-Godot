@@ -4950,7 +4950,11 @@ float Viewport::get_frame_generation_warp_scale() const {
 
 void Viewport::set_frame_generation_target_fps(int p_target_fps) {
 	ERR_MAIN_THREAD_GUARD;
-	frame_generation_target_fps = MAX(0, p_target_fps);
+	if (p_target_fps > 0) {
+		frame_generation_target_fps = MAX(60, p_target_fps);
+	} else {
+		frame_generation_target_fps = 0;
+	}
 	RS::get_singleton()->viewport_set_frame_generation_target_fps(viewport, frame_generation_target_fps);
 }
 
