@@ -2937,11 +2937,11 @@ void RenderingServer::_bind_methods() {
 	BIND_ENUM_CONSTANT(VIEWPORT_SCALING_3D_MODE_FSR2);
 	BIND_ENUM_CONSTANT(VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL);
 	BIND_ENUM_CONSTANT(VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL);
-	BIND_ENUM_CONSTANT(VIEWPORT_SCALING_3D_MODE_DLSS);
 	BIND_ENUM_CONSTANT(VIEWPORT_SCALING_3D_MODE_NEAREST);
 	BIND_ENUM_CONSTANT(VIEWPORT_SCALING_3D_MODE_SHARP_BILINEAR);
 	BIND_ENUM_CONSTANT(VIEWPORT_SCALING_3D_MODE_BICUBIC);
 	BIND_ENUM_CONSTANT(VIEWPORT_SCALING_3D_MODE_SGSR);
+	BIND_ENUM_CONSTANT(VIEWPORT_SCALING_3D_MODE_DLSS);
 	BIND_ENUM_CONSTANT(VIEWPORT_SCALING_3D_MODE_MAX);
 
 	BIND_ENUM_CONSTANT(VIEWPORT_FRAME_GENERATION_DISABLED);
@@ -3847,7 +3847,7 @@ void RenderingServer::init() {
 		String mode_hints;
 		String mode_hints_metal;
 		{
-			Vector<String> mode_hints_arr = { "Bilinear (Fastest):0", "FSR 1.0 (Fast):1", "FSR 2.2 (Slow):2", "MetalFX (Spatial):3", "MetalFX (Temporal):4", "Nearest:6", "Sharp Bilinear:7", "Bicubic (Catmull-Rom):8", "SGSR:9" };
+			Vector<String> mode_hints_arr = { "Bilinear (Fastest)", "FSR 1.0 (Fast)", "FSR 2.2 (Slow)", "MetalFX (Spatial)", "MetalFX (Temporal)", "Nearest", "Sharp Bilinear", "Bicubic (Catmull-Rom)", "SGSR" };
 			mode_hints = String(",").join(mode_hints_arr);
 			mode_hints_metal = String(",").join(mode_hints_arr);
 		}
