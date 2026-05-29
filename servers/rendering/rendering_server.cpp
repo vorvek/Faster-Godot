@@ -3847,7 +3847,7 @@ void RenderingServer::init() {
 		String mode_hints;
 		String mode_hints_metal;
 		{
-			Vector<String> mode_hints_arr = { "Bilinear (Fastest):0", "FSR 1.0 (Fast):1", "FSR 2.2 (Slow):2", "MetalFX (Spatial):3", "MetalFX (Temporal):4", "DLSS:5", "Nearest:6", "Sharp Bilinear:7", "Bicubic (Catmull-Rom):8", "SGSR:9" };
+			Vector<String> mode_hints_arr = { "Bilinear (Fastest):0", "FSR 1.0 (Fast):1", "FSR 2.2 (Slow):2", "MetalFX (Spatial):3", "MetalFX (Temporal):4", "Nearest:6", "Sharp Bilinear:7", "Bicubic (Catmull-Rom):8", "SGSR:9" };
 			mode_hints = String(",").join(mode_hints_arr);
 			mode_hints_metal = String(",").join(mode_hints_arr);
 		}
