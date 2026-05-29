@@ -238,6 +238,12 @@ public:
 		VRS_UPDATE_MAX
 	};
 
+	enum FrameGenerationMode {
+		FRAME_GENERATION_DISABLED,
+		FRAME_GENERATION_INTERPOLATED,
+		FRAME_GENERATION_MAX,
+	};
+
 private:
 	friend class ViewportTexture;
 
@@ -329,6 +335,10 @@ private:
 	bool use_debanding = false;
 	float mesh_lod_threshold = 1.0;
 	bool use_occlusion_culling = false;
+
+	FrameGenerationMode frame_generation_mode = FRAME_GENERATION_DISABLED;
+	float frame_generation_warp_scale = 1.0f;
+	int frame_generation_target_fps = 0;
 
 	Ref<ViewportTexture> default_texture;
 	HashSet<ViewportTexture *> viewport_textures;
@@ -605,6 +615,20 @@ public:
 	float get_oversampling_override() const;
 
 	float get_oversampling() const { return font_oversampling; }
+
+	void set_frame_generation_mode(FrameGenerationMode p_mode);
+	FrameGenerationMode get_frame_generation_mode() const;
+
+	void set_frame_generation_warp_scale(float p_warp_scale);
+	float get_frame_generation_warp_scale() const;
+
+	void set_frame_generation_target_fps(int p_target_fps);
+	int get_frame_generation_target_fps() const;
+
+	bool is_frame_generation_active() const;
+	float get_frame_generation_real_fps() const;
+	float get_frame_generation_output_fps() const;
+	float get_frame_generation_latency() const;
 
 	void set_scaling_3d_mode(Scaling3DMode p_scaling_3d_mode);
 	Scaling3DMode get_scaling_3d_mode() const;
@@ -961,3 +985,5 @@ VARIANT_ENUM_CAST(Viewport::RenderInfo);
 VARIANT_ENUM_CAST(Viewport::RenderInfoType);
 VARIANT_ENUM_CAST(Viewport::DefaultCanvasItemTextureFilter);
 VARIANT_ENUM_CAST(Viewport::DefaultCanvasItemTextureRepeat);
+VARIANT_ENUM_CAST(Viewport::FrameGenerationMode);
+

@@ -29,6 +29,9 @@
 /**************************************************************************/
 
 #include "renderer_viewport.h"
+#include "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.h"
+#include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
+#include "servers/rendering/renderer_rd/effects/copy_effects.h"
 
 #include "core/config/project_settings.h"
 #include "core/math/transform_interpolator.h"
@@ -393,11 +396,102 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 		}
 	}
 
-	if (!scenario_draw_canvas_bg && can_draw_3d) {
-		if (force_clear_render_target) {
-			RSG::texture_storage->render_target_do_clear_request(p_viewport->render_target);
+	bool is_fg_enabled = (p_viewport->frame_generation_mode == RS::VIEWPORT_FRAME_GENERATION_INTERPOLATED);
+	bool is_fg_active = false;
+	if (is_fg_enabled) {
+		if (p_viewport->frame_generation_target_fps > 0) {
+			float base_fps = p_viewport->last_real_frame_delta_usec > 0 ? (1000000.0f / p_viewport->last_real_frame_delta_usec) : 0.0f;
+			if (p_viewport->frame_generation_is_active) {
+				if (base_fps * 2.0f >= (float)p_viewport->frame_generation_target_fps * 1.1f) {
+					is_fg_active = false;
+				} else {
+					is_fg_active = true;
+				}
+			} else {
+				if (base_fps > 0.0f && base_fps < (float)p_viewport->frame_generation_target_fps) {
+					is_fg_active = true;
+				} else {
+					is_fg_active = false;
+				}
+			}
+		} else {
+			is_fg_active = true;
 		}
-		_draw_3d(p_viewport);
+	}
+	p_viewport->frame_generation_is_active = is_fg_active;
+
+	Ref<RenderSceneBuffersRD> rb = p_viewport->render_buffers;
+
+	if (is_fg_active && rb.is_valid()) {
+		Rect2i rect(Point2i(), p_viewport->size);
+		RID render_target_texture = RendererRD::TextureStorage::get_singleton()->render_target_get_rd_texture(p_viewport->render_target);
+		RID frame_gen_current = rb->get_frame_gen_buffer_current();
+		RID frame_gen_previous = rb->get_frame_gen_buffer_previous();
+
+		if (p_viewport->frame_generation_step % 2 == 0) {
+			uint64_t current_time = OS::get_singleton()->get_ticks_usec();
+			if (p_viewport->last_real_frame_time_usec != 0) {
+				p_viewport->last_real_frame_delta_usec = current_time - p_viewport->last_real_frame_time_usec;
+			}
+			p_viewport->last_real_frame_time_usec = current_time;
+
+			if (!scenario_draw_canvas_bg && can_draw_3d) {
+				if (force_clear_render_target) {
+					RSG::texture_storage->render_target_do_clear_request(p_viewport->render_target);
+				}
+				_draw_3d(p_viewport);
+			}
+
+			if (render_target_texture.is_valid() && frame_gen_current.is_valid()) {
+				RendererRD::CopyEffects::get_singleton()->copy_to_rect(render_target_texture, frame_gen_current, rect);
+			}
+
+			if (p_viewport->frame_generation_step == 0 && render_target_texture.is_valid() && frame_gen_previous.is_valid()) {
+				RendererRD::CopyEffects::get_singleton()->copy_to_rect(render_target_texture, frame_gen_previous, rect);
+			} else {
+				RID dest_fb = RendererRD::TextureStorage::get_singleton()->render_target_get_rd_framebuffer(p_viewport->render_target);
+				if (frame_gen_previous.is_valid() && dest_fb.is_valid()) {
+					RendererRD::CopyEffects::get_singleton()->copy_to_fb_rect(frame_gen_previous, dest_fb, rect);
+				}
+			}
+		} else {
+			RID velocity_texture;
+			if (rb->has_velocity_buffer(false)) {
+				velocity_texture = rb->get_velocity_buffer(false);
+			}
+			RID dest_fb = RendererRD::TextureStorage::get_singleton()->render_target_get_rd_framebuffer(p_viewport->render_target);
+
+			if (dest_fb.is_valid()) {
+				RendererRD::CopyEffects::get_singleton()->copy_frame_generation(
+					frame_gen_current,
+					frame_gen_previous,
+					velocity_texture,
+					dest_fb,
+					rect,
+					p_viewport->frame_generation_warp_scale
+				);
+			}
+
+			if (frame_gen_current.is_valid() && frame_gen_previous.is_valid()) {
+				RendererRD::CopyEffects::get_singleton()->copy_to_rect(frame_gen_current, frame_gen_previous, rect);
+			}
+		}
+
+		p_viewport->frame_generation_step++;
+		if (p_viewport->frame_generation_step > 100000) {
+			p_viewport->frame_generation_step = 2; // prevent overflow while keeping phase
+		}
+	} else {
+		p_viewport->frame_generation_step = 0;
+		p_viewport->last_real_frame_time_usec = 0;
+		p_viewport->last_real_frame_delta_usec = 0;
+
+		if (!scenario_draw_canvas_bg && can_draw_3d) {
+			if (force_clear_render_target) {
+				RSG::texture_storage->render_target_do_clear_request(p_viewport->render_target);
+			}
+			_draw_3d(p_viewport);
+		}
 	}
 
 	if (can_draw_2d) {
@@ -1113,7 +1207,85 @@ bool RendererViewport::_viewport_requires_motion_vectors(Viewport *p_viewport) {
 	return p_viewport->use_taa ||
 			RS::scaling_3d_mode_type(p_viewport->scaling_3d_mode) == RS::VIEWPORT_SCALING_3D_TYPE_TEMPORAL ||
 			p_viewport->debug_draw == RenderingServer::VIEWPORT_DEBUG_DRAW_MOTION_VECTORS || p_viewport->force_motion_vectors ||
-			p_viewport->rt_temporal_motion_vectors;
+			p_viewport->rt_temporal_motion_vectors ||
+			p_viewport->frame_generation_mode == RS::VIEWPORT_FRAME_GENERATION_INTERPOLATED;
+}
+
+void RendererViewport::viewport_set_frame_generation_mode(RID p_viewport, RS::ViewportFrameGenerationMode p_mode) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+
+	if (viewport->frame_generation_mode == p_mode) {
+		return;
+	}
+
+	bool motion_vectors_before = _viewport_requires_motion_vectors(viewport);
+	viewport->frame_generation_mode = p_mode;
+	bool motion_vectors_after = _viewport_requires_motion_vectors(viewport);
+
+	if (motion_vectors_before != motion_vectors_after) {
+		_viewport_set_rt_temporal_motion_vectors(viewport, motion_vectors_after);
+	}
+
+	_configure_3d_render_buffers(viewport);
+}
+
+void RendererViewport::viewport_set_frame_generation_warp_scale(RID p_viewport, float p_warp_scale) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+
+	viewport->frame_generation_warp_scale = p_warp_scale;
+}
+
+void RendererViewport::viewport_set_frame_generation_target_fps(RID p_viewport, int p_target_fps) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+
+	viewport->frame_generation_target_fps = p_target_fps;
+}
+
+bool RendererViewport::viewport_is_frame_generation_active(RID p_viewport) const {
+	const Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL_V(viewport, false);
+
+	return viewport->frame_generation_is_active;
+}
+
+float RendererViewport::viewport_get_frame_generation_real_fps(RID p_viewport) const {
+	const Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL_V(viewport, 0.0f);
+
+	if (!viewport->frame_generation_is_active) {
+		return 0.0f;
+	}
+
+	if (viewport->last_real_frame_delta_usec == 0) {
+		return 0.0f;
+	}
+
+	return 1000000.0f / viewport->last_real_frame_delta_usec;
+}
+
+float RendererViewport::viewport_get_frame_generation_output_fps(RID p_viewport) const {
+	const Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL_V(viewport, 0.0f);
+
+	if (!viewport->frame_generation_is_active) {
+		return 0.0f;
+	}
+
+	return (1000000.0f / viewport->last_real_frame_delta_usec) * 2.0f;
+}
+
+float RendererViewport::viewport_get_frame_generation_latency(RID p_viewport) const {
+	const Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL_V(viewport, 0.0f);
+
+	if (!viewport->frame_generation_is_active) {
+		return 0.0f;
+	}
+
+	return (float)viewport->last_real_frame_delta_usec / 1000.0f;
 }
 
 void RendererViewport::_viewport_set_rt_temporal_motion_vectors(Viewport *p_viewport, bool p_enable) {

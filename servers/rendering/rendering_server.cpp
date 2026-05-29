@@ -2867,6 +2867,16 @@ void RenderingServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("viewport_set_fsr_sharpness", "viewport", "sharpness"), &RenderingServer::viewport_set_fsr_sharpness);
 	ClassDB::bind_method(D_METHOD("viewport_set_texture_mipmap_bias", "viewport", "mipmap_bias"), &RenderingServer::viewport_set_texture_mipmap_bias);
 	ClassDB::bind_method(D_METHOD("viewport_set_anisotropic_filtering_level", "viewport", "anisotropic_filtering_level"), &RenderingServer::viewport_set_anisotropic_filtering_level);
+
+	ClassDB::bind_method(D_METHOD("viewport_set_frame_generation_mode", "viewport", "frame_generation_mode"), &RenderingServer::viewport_set_frame_generation_mode);
+	ClassDB::bind_method(D_METHOD("viewport_set_frame_generation_warp_scale", "viewport", "warp_scale"), &RenderingServer::viewport_set_frame_generation_warp_scale);
+	ClassDB::bind_method(D_METHOD("viewport_set_frame_generation_target_fps", "viewport", "target_fps"), &RenderingServer::viewport_set_frame_generation_target_fps);
+
+	ClassDB::bind_method(D_METHOD("viewport_is_frame_generation_active", "viewport"), &RenderingServer::viewport_is_frame_generation_active);
+	ClassDB::bind_method(D_METHOD("viewport_get_frame_generation_real_fps", "viewport"), &RenderingServer::viewport_get_frame_generation_real_fps);
+	ClassDB::bind_method(D_METHOD("viewport_get_frame_generation_output_fps", "viewport"), &RenderingServer::viewport_get_frame_generation_output_fps);
+	ClassDB::bind_method(D_METHOD("viewport_get_frame_generation_latency", "viewport"), &RenderingServer::viewport_get_frame_generation_latency);
+
 	ClassDB::bind_method(D_METHOD("viewport_set_update_mode", "viewport", "update_mode"), &RenderingServer::viewport_set_update_mode);
 	ClassDB::bind_method(D_METHOD("viewport_get_update_mode", "viewport"), &RenderingServer::viewport_get_update_mode);
 	ClassDB::bind_method(D_METHOD("viewport_set_clear_mode", "viewport", "clear_mode"), &RenderingServer::viewport_set_clear_mode);
@@ -2930,6 +2940,10 @@ void RenderingServer::_bind_methods() {
 	BIND_ENUM_CONSTANT(VIEWPORT_SCALING_3D_MODE_DLSS);
 	BIND_ENUM_CONSTANT(VIEWPORT_SCALING_3D_MODE_NEAREST);
 	BIND_ENUM_CONSTANT(VIEWPORT_SCALING_3D_MODE_MAX);
+
+	BIND_ENUM_CONSTANT(VIEWPORT_FRAME_GENERATION_DISABLED);
+	BIND_ENUM_CONSTANT(VIEWPORT_FRAME_GENERATION_INTERPOLATED);
+	BIND_ENUM_CONSTANT(VIEWPORT_FRAME_GENERATION_MAX);
 
 	BIND_ENUM_CONSTANT(VIEWPORT_UPDATE_DISABLED);
 	BIND_ENUM_CONSTANT(VIEWPORT_UPDATE_ONCE); // Then goes to disabled, must be manually updated.

@@ -80,6 +80,14 @@ public:
 		bool force_motion_vectors = false;
 		bool rt_temporal_motion_vectors = false;
 
+		RS::ViewportFrameGenerationMode frame_generation_mode = RS::VIEWPORT_FRAME_GENERATION_DISABLED;
+		float frame_generation_warp_scale = 1.0f;
+		int frame_generation_target_fps = 0;
+		uint64_t last_real_frame_time_usec = 0;
+		uint64_t last_real_frame_delta_usec = 0;
+		bool frame_generation_is_active = false;
+		uint64_t frame_generation_step = 0;
+
 		RendererSceneRender::CameraData prev_camera_data;
 		uint64_t prev_camera_data_frame = 0;
 
@@ -242,6 +250,15 @@ public:
 	void viewport_set_fsr_sharpness(RID p_viewport, float p_sharpness);
 	void viewport_set_texture_mipmap_bias(RID p_viewport, float p_mipmap_bias);
 	void viewport_set_anisotropic_filtering_level(RID p_viewport, RS::ViewportAnisotropicFiltering p_anisotropic_filtering_level);
+
+	void viewport_set_frame_generation_mode(RID p_viewport, RS::ViewportFrameGenerationMode p_mode);
+	void viewport_set_frame_generation_warp_scale(RID p_viewport, float p_warp_scale);
+	void viewport_set_frame_generation_target_fps(RID p_viewport, int p_target_fps);
+
+	bool viewport_is_frame_generation_active(RID p_viewport) const;
+	float viewport_get_frame_generation_real_fps(RID p_viewport) const;
+	float viewport_get_frame_generation_output_fps(RID p_viewport) const;
+	float viewport_get_frame_generation_latency(RID p_viewport) const;
 
 	void viewport_set_update_mode(RID p_viewport, RS::ViewportUpdateMode p_mode);
 	RS::ViewportUpdateMode viewport_get_update_mode(RID p_viewport) const;

@@ -770,6 +770,15 @@ public:
 	FUNC2(viewport_set_texture_mipmap_bias, RID, float)
 	FUNC2(viewport_set_anisotropic_filtering_level, RID, RSE::ViewportAnisotropicFiltering)
 
+	FUNC2(viewport_set_frame_generation_mode, RID, RSE::ViewportFrameGenerationMode)
+	FUNC2(viewport_set_frame_generation_warp_scale, RID, float)
+	FUNC2(viewport_set_frame_generation_target_fps, RID, int)
+
+	FUNC1RC(bool, viewport_is_frame_generation_active, RID)
+	FUNC1RC(float, viewport_get_frame_generation_real_fps, RID)
+	FUNC1RC(float, viewport_get_frame_generation_output_fps, RID)
+	FUNC1RC(float, viewport_get_frame_generation_latency, RID)
+
 	FUNC2(viewport_set_update_mode, RID, RSE::ViewportUpdateMode)
 	FUNC1RC(RSE::ViewportUpdateMode, viewport_get_update_mode, RID)
 

@@ -91,6 +91,11 @@ layout(location = 0) in vec3 uv_interp;
 layout(location = 0) in vec2 uv_interp;
 #endif
 
+#ifdef MODE_FRAME_GEN
+layout(set = 0, binding = 0) uniform sampler2D current_color;
+layout(set = 1, binding = 0) uniform sampler2D previous_color;
+layout(set = 2, binding = 0) uniform sampler2D velocity_texture;
+#else
 #ifdef USE_MULTIVIEW
 layout(set = 0, binding = 0) uniform sampler2DArray source_color;
 #ifdef MODE_TWO_SOURCES
@@ -103,6 +108,7 @@ layout(set = 0, binding = 0) uniform sampler2D source_color;
 layout(set = 1, binding = 0) uniform sampler2D source_color2;
 #endif /* MODE_TWO_SOURCES */
 #endif /* USE_MULTIVIEW */
+#endif /* MODE_FRAME_GEN */
 #endif /* !SET_COLOR */
 
 #ifndef MODE_COPY_DEPTH
@@ -253,7 +259,41 @@ vec4 sample_sgsr(sampler2D tex, vec2 uv) {
 #endif
 
 void main() {
-#ifdef MODE_SET_COLOR
+#ifdef MODE_FRAME_GEN
+	vec2 uv = uv_interp;
+	vec2 velocity = textureLod(velocity_texture, uv, 0.0).xy;
+
+	float warp = params.luminance_multiplier; // Repurposed for warp_scale.
+	vec2 uv_curr = uv - 0.5 * velocity * warp;
+	vec2 uv_prev = uv + 0.5 * velocity * warp;
+
+	// Clamp UVs to avoid wrapping artifacts
+	uv_curr = clamp(uv_curr, vec2(0.001), vec2(0.999));
+	uv_prev = clamp(uv_prev, vec2(0.001), vec2(0.999));
+
+	vec4 color_curr = textureLod(current_color, uv_curr, 0.0);
+	vec4 color_prev = textureLod(previous_color, uv_prev, 0.0);
+
+	// Premium discrepancy-based disocclusion masking
+	// Compare color difference in RGB
+	float diff = distance(color_curr.rgb, color_prev.rgb);
+
+	// Adaptive threshold based on luma to avoid blending issues in dark vs bright regions
+	float luma_curr = dot(color_curr.rgb, vec3(0.299, 0.587, 0.114));
+	float luma_prev = dot(color_prev.rgb, vec3(0.299, 0.587, 0.114));
+	float luma_avg = max(0.001, 0.5 * (luma_curr + luma_prev));
+	float threshold = 0.12 * (1.0 + luma_avg * 1.5); // Smooth premium threshold scaling
+
+	// If discrepancy is high, smoothly fall back to standard unwarped blending
+	float mask = smoothstep(threshold * 1.5, threshold, diff);
+
+	vec4 unwarped_curr = textureLod(current_color, uv, 0.0);
+	vec4 unwarped_prev = textureLod(previous_color, uv, 0.0);
+	vec4 fallback_blend = 0.5 * unwarped_curr + 0.5 * unwarped_prev;
+	vec4 warped_blend = 0.5 * color_curr + 0.5 * color_prev;
+
+	frag_color = mix(fallback_blend, warped_blend, mask);
+#elif defined(MODE_SET_COLOR)
 	frag_color = params.color;
 #else
 

@@ -454,6 +454,12 @@ public:
 	static constexpr ViewportScaling3DMode VIEWPORT_SCALING_3D_MODE_MAX = RSE::VIEWPORT_SCALING_3D_MODE_MAX;
 	static constexpr ViewportScaling3DMode VIEWPORT_SCALING_3D_MODE_OFF = RSE::VIEWPORT_SCALING_3D_MODE_OFF;
 
+	using ViewportFrameGenerationMode = RSE::ViewportFrameGenerationMode;
+	static constexpr ViewportFrameGenerationMode VIEWPORT_FRAME_GENERATION_DISABLED = RSE::VIEWPORT_FRAME_GENERATION_DISABLED;
+	static constexpr ViewportFrameGenerationMode VIEWPORT_FRAME_GENERATION_INTERPOLATED = RSE::VIEWPORT_FRAME_GENERATION_INTERPOLATED;
+	static constexpr ViewportFrameGenerationMode VIEWPORT_FRAME_GENERATION_MAX = RSE::VIEWPORT_FRAME_GENERATION_MAX;
+
+
 	using ViewportScaling3DType = RSE::ViewportScaling3DType;
 	static constexpr ViewportScaling3DType VIEWPORT_SCALING_3D_TYPE_NONE = RSE::VIEWPORT_SCALING_3D_TYPE_NONE;
 	static constexpr ViewportScaling3DType VIEWPORT_SCALING_3D_TYPE_TEMPORAL = RSE::VIEWPORT_SCALING_3D_TYPE_TEMPORAL;
@@ -1396,6 +1402,15 @@ public:
 	virtual void viewport_set_texture_mipmap_bias(RID p_viewport, float p_texture_mipmap_bias) = 0;
 	virtual void viewport_set_anisotropic_filtering_level(RID p_viewport, RSE::ViewportAnisotropicFiltering p_anisotropic_filtering_level) = 0;
 
+	virtual void viewport_set_frame_generation_mode(RID p_viewport, RSE::ViewportFrameGenerationMode p_mode) = 0;
+	virtual void viewport_set_frame_generation_warp_scale(RID p_viewport, float p_warp_scale) = 0;
+	virtual void viewport_set_frame_generation_target_fps(RID p_viewport, int p_target_fps) = 0;
+
+	virtual bool viewport_is_frame_generation_active(RID p_viewport) const = 0;
+	virtual float viewport_get_frame_generation_real_fps(RID p_viewport) const = 0;
+	virtual float viewport_get_frame_generation_output_fps(RID p_viewport) const = 0;
+	virtual float viewport_get_frame_generation_latency(RID p_viewport) const = 0;
+
 	virtual void viewport_set_update_mode(RID p_viewport, RSE::ViewportUpdateMode p_mode) = 0;
 	virtual RSE::ViewportUpdateMode viewport_get_update_mode(RID p_viewport) const = 0;
 
@@ -1981,6 +1996,7 @@ VARIANT_ENUM_CAST_EXT(RSE::ParticlesCollisionType, RenderingServer::ParticlesCol
 VARIANT_ENUM_CAST_EXT(RSE::ParticlesCollisionHeightfieldResolution, RenderingServer::ParticlesCollisionHeightfieldResolution);
 VARIANT_ENUM_CAST_EXT(RSE::FogVolumeShape, RenderingServer::FogVolumeShape);
 VARIANT_ENUM_CAST_EXT(RSE::ViewportScaling3DMode, RenderingServer::ViewportScaling3DMode);
+VARIANT_ENUM_CAST_EXT(RSE::ViewportFrameGenerationMode, RenderingServer::ViewportFrameGenerationMode);
 VARIANT_ENUM_CAST_EXT(RSE::ViewportUpdateMode, RenderingServer::ViewportUpdateMode);
 VARIANT_ENUM_CAST_EXT(RSE::ViewportClearMode, RenderingServer::ViewportClearMode);
 VARIANT_ENUM_CAST_EXT(RSE::ViewportEnvironmentMode, RenderingServer::ViewportEnvironmentMode);

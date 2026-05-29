@@ -4922,6 +4922,63 @@ bool Viewport::is_using_xr() {
 }
 #endif // XR_DISABLED
 
+void Viewport::set_frame_generation_mode(FrameGenerationMode p_mode) {
+	ERR_MAIN_THREAD_GUARD;
+	if (frame_generation_mode == p_mode) {
+		return;
+	}
+
+	frame_generation_mode = p_mode;
+	RS::get_singleton()->viewport_set_frame_generation_mode(viewport, (RS::ViewportFrameGenerationMode)p_mode);
+}
+
+Viewport::FrameGenerationMode Viewport::get_frame_generation_mode() const {
+	ERR_READ_THREAD_GUARD_V(FRAME_GENERATION_DISABLED);
+	return frame_generation_mode;
+}
+
+void Viewport::set_frame_generation_warp_scale(float p_warp_scale) {
+	ERR_MAIN_THREAD_GUARD;
+	frame_generation_warp_scale = MAX(0.0f, p_warp_scale);
+	RS::get_singleton()->viewport_set_frame_generation_warp_scale(viewport, frame_generation_warp_scale);
+}
+
+float Viewport::get_frame_generation_warp_scale() const {
+	ERR_READ_THREAD_GUARD_V(1.0f);
+	return frame_generation_warp_scale;
+}
+
+void Viewport::set_frame_generation_target_fps(int p_target_fps) {
+	ERR_MAIN_THREAD_GUARD;
+	frame_generation_target_fps = MAX(0, p_target_fps);
+	RS::get_singleton()->viewport_set_frame_generation_target_fps(viewport, frame_generation_target_fps);
+}
+
+int Viewport::get_frame_generation_target_fps() const {
+	ERR_READ_THREAD_GUARD_V(0);
+	return frame_generation_target_fps;
+}
+
+bool Viewport::is_frame_generation_active() const {
+	ERR_READ_THREAD_GUARD_V(false);
+	return RS::get_singleton()->viewport_is_frame_generation_active(viewport);
+}
+
+float Viewport::get_frame_generation_real_fps() const {
+	ERR_READ_THREAD_GUARD_V(0.0f);
+	return RS::get_singleton()->viewport_get_frame_generation_real_fps(viewport);
+}
+
+float Viewport::get_frame_generation_output_fps() const {
+	ERR_READ_THREAD_GUARD_V(0.0f);
+	return RS::get_singleton()->viewport_get_frame_generation_output_fps(viewport);
+}
+
+float Viewport::get_frame_generation_latency() const {
+	ERR_READ_THREAD_GUARD_V(0.0f);
+	return RS::get_singleton()->viewport_get_frame_generation_latency(viewport);
+}
+
 void Viewport::set_scaling_3d_mode(Scaling3DMode p_scaling_3d_mode) {
 	ERR_MAIN_THREAD_GUARD;
 	if (scaling_3d_mode == p_scaling_3d_mode) {
@@ -5210,6 +5267,20 @@ void Viewport::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_using_xr"), &Viewport::is_using_xr);
 #endif // XR_DISABLED
 
+	ClassDB::bind_method(D_METHOD("set_frame_generation_mode", "mode"), &Viewport::set_frame_generation_mode);
+	ClassDB::bind_method(D_METHOD("get_frame_generation_mode"), &Viewport::get_frame_generation_mode);
+
+	ClassDB::bind_method(D_METHOD("set_frame_generation_warp_scale", "warp_scale"), &Viewport::set_frame_generation_warp_scale);
+	ClassDB::bind_method(D_METHOD("get_frame_generation_warp_scale"), &Viewport::get_frame_generation_warp_scale);
+
+	ClassDB::bind_method(D_METHOD("set_frame_generation_target_fps", "target_fps"), &Viewport::set_frame_generation_target_fps);
+	ClassDB::bind_method(D_METHOD("get_frame_generation_target_fps"), &Viewport::get_frame_generation_target_fps);
+
+	ClassDB::bind_method(D_METHOD("is_frame_generation_active"), &Viewport::is_frame_generation_active);
+	ClassDB::bind_method(D_METHOD("get_frame_generation_real_fps"), &Viewport::get_frame_generation_real_fps);
+	ClassDB::bind_method(D_METHOD("get_frame_generation_output_fps"), &Viewport::get_frame_generation_output_fps);
+	ClassDB::bind_method(D_METHOD("get_frame_generation_latency"), &Viewport::get_frame_generation_latency);
+
 	ClassDB::bind_method(D_METHOD("set_scaling_3d_mode", "scaling_3d_mode"), &Viewport::set_scaling_3d_mode);
 	ClassDB::bind_method(D_METHOD("get_scaling_3d_mode"), &Viewport::get_scaling_3d_mode);
 
@@ -5263,6 +5334,11 @@ void Viewport::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_hdr_2d"), "set_use_hdr_2d", "is_using_hdr_2d");
 
 #ifndef _3D_DISABLED
+	ADD_GROUP("Frame Generation", "frame_generation_");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "frame_generation_mode", PROPERTY_HINT_ENUM, "Disabled,Interpolated (3D Motion Vectors)"), "set_frame_generation_mode", "get_frame_generation_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "frame_generation_warp_scale", PROPERTY_HINT_RANGE, "0.1,2.0,0.05"), "set_frame_generation_warp_scale", "get_frame_generation_warp_scale");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "frame_generation_target_fps", PROPERTY_HINT_RANGE, "0,240,1"), "set_frame_generation_target_fps", "get_frame_generation_target_fps");
+
 	ADD_GROUP("Scaling 3D", "");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "scaling_3d_mode", PROPERTY_HINT_ENUM, "Bilinear (Fastest),FSR 1.0 (Fast),FSR 2.2 (Slow),MetalFX (Spatial),MetalFX (Temporal),DLSS,Nearest,Sharp Bilinear,Bicubic (Catmull-Rom),SGSR"), "set_scaling_3d_mode", "get_scaling_3d_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "scaling_3d_scale", PROPERTY_HINT_RANGE, "0.1,10.0,0.01,or_greater"), "set_scaling_3d_scale", "get_scaling_3d_scale");
@@ -5333,6 +5409,10 @@ void Viewport::_bind_methods() {
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_BICUBIC);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_SGSR);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_MAX);
+
+	BIND_ENUM_CONSTANT(FRAME_GENERATION_DISABLED);
+	BIND_ENUM_CONSTANT(FRAME_GENERATION_INTERPOLATED);
+	BIND_ENUM_CONSTANT(FRAME_GENERATION_MAX);
 
 	BIND_ENUM_CONSTANT(MSAA_DISABLED);
 	BIND_ENUM_CONSTANT(MSAA_2X);

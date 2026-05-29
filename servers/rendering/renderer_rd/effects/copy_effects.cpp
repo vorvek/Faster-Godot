@@ -121,6 +121,7 @@ CopyEffects::CopyEffects(BitField<RasterEffects> p_raster_effects) {
 		copy_modes.push_back("\n#define MODE_SHARP_BILINEAR\n"); // COPY_TO_FB_SHARP_BILINEAR
 		copy_modes.push_back("\n#define MODE_BICUBIC\n"); // COPY_TO_FB_BICUBIC
 		copy_modes.push_back("\n#define MODE_SGSR\n"); // COPY_TO_FB_SGSR
+		copy_modes.push_back("\n#define MODE_FRAME_GEN\n"); // COPY_TO_FB_FRAME_GEN
 		copy_modes.push_back("\n#define USE_MULTIVIEW\n"); // COPY_TO_FB_MULTIVIEW
 		copy_modes.push_back("\n#define USE_MULTIVIEW\n#define MODE_TWO_SOURCES\n"); // COPY_TO_FB_MULTIVIEW_WITH_DEPTH
 
@@ -774,6 +775,47 @@ void CopyEffects::copy_to_fb_rect(RID p_source_rd_texture, RID p_dest_framebuffe
 		RD::Uniform u_secondary(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ default_sampler, p_secondary }));
 		RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 1, u_secondary), 1);
 	}
+	RD::get_singleton()->draw_list_bind_index_array(draw_list, material_storage->get_quad_index_array());
+	RD::get_singleton()->draw_list_set_push_constant(draw_list, &copy_to_fb.push_constant, sizeof(CopyToFbPushConstant));
+	RD::get_singleton()->draw_list_draw(draw_list, true);
+	RD::get_singleton()->draw_list_end();
+}
+
+void CopyEffects::copy_frame_generation(RID p_current_texture, RID p_previous_texture, RID p_velocity_texture, RID p_dest_framebuffer, const Rect2i &p_rect, float p_warp_scale) {
+	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
+	ERR_FAIL_NULL(uniform_set_cache);
+	MaterialStorage *material_storage = MaterialStorage::get_singleton();
+	ERR_FAIL_NULL(material_storage);
+
+	memset(&copy_to_fb.push_constant, 0, sizeof(CopyToFbPushConstant));
+	copy_to_fb.push_constant.luminance_multiplier = p_warp_scale; // Warp scale is passed via luminance_multiplier.
+
+	if (p_current_texture.is_valid()) {
+		RD::TextureFormat format = RD::get_singleton()->texture_get_format(p_current_texture);
+		copy_to_fb.push_constant.pixel_size[0] = 1.0f / (float)format.width;
+		copy_to_fb.push_constant.pixel_size[1] = 1.0f / (float)format.height;
+	}
+
+	RID default_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+
+	RID previous_tex = p_previous_texture.is_valid() ? p_previous_texture : p_current_texture;
+	RID velocity_tex = p_velocity_texture.is_valid() ? p_velocity_texture : RendererRD::TextureStorage::get_singleton()->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+
+	RD::Uniform u_current_texture(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ default_sampler, p_current_texture }));
+	RD::Uniform u_previous_texture(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ default_sampler, previous_tex }));
+	RD::Uniform u_velocity_texture(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ default_sampler, velocity_tex }));
+
+	CopyToFBMode mode = COPY_TO_FB_FRAME_GEN;
+
+	RID shader = copy_to_fb.shader.version_get_shader(copy_to_fb.shader_version, mode);
+	ERR_FAIL_COND(shader.is_null());
+
+	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_dest_framebuffer, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 1.0f, 0, p_rect);
+	RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, copy_to_fb.pipelines[mode].get_render_pipeline(RD::INVALID_ID, RD::get_singleton()->framebuffer_get_format(p_dest_framebuffer)));
+	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 0, u_current_texture), 0);
+	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 1, u_previous_texture), 1);
+	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 2, u_velocity_texture), 2);
+
 	RD::get_singleton()->draw_list_bind_index_array(draw_list, material_storage->get_quad_index_array());
 	RD::get_singleton()->draw_list_set_push_constant(draw_list, &copy_to_fb.push_constant, sizeof(CopyToFbPushConstant));
 	RD::get_singleton()->draw_list_draw(draw_list, true);

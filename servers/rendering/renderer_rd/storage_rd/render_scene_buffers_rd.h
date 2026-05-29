@@ -53,6 +53,9 @@
 #define RB_TEX_VELOCITY SNAME("velocity")
 #define RB_TEX_VELOCITY_MSAA SNAME("velocity_msaa")
 
+#define RB_TEX_FRAME_GEN_CURRENT SNAME("frame_gen_current")
+#define RB_TEX_FRAME_GEN_PREVIOUS SNAME("frame_gen_previous")
+
 #define RB_TEX_BLUR_0 SNAME("blur_0")
 #define RB_TEX_BLUR_1 SNAME("blur_1")
 
@@ -335,6 +338,12 @@ public:
 	RID get_velocity_buffer(bool p_get_msaa, uint32_t p_layer);
 
 	RID get_velocity_depth_buffer();
+
+	// Frame Generation
+	void ensure_frame_gen_buffers();
+	bool has_frame_gen_buffers() const;
+	RID get_frame_gen_buffer_current();
+	RID get_frame_gen_buffer_previous();
 
 	// Samplers adjusted with the mipmap bias that is best fit for the configuration of these render buffers.
 

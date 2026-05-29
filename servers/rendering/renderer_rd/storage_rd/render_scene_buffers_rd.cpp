@@ -813,3 +813,24 @@ float RenderSceneBuffersRD::get_luminance_multiplier() const {
 	// to fit 0-2 range color values into a UNORM buffer.
 	return (force_hdr || can_be_storage) ? 1.0 : 2.0;
 }
+
+void RenderSceneBuffersRD::ensure_frame_gen_buffers() {
+	if (!has_frame_gen_buffers()) {
+		create_texture(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_CURRENT, get_base_data_format(), get_color_usage_bits(false, false, can_be_storage));
+		create_texture(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_PREVIOUS, get_base_data_format(), get_color_usage_bits(false, false, can_be_storage));
+	}
+}
+
+bool RenderSceneBuffersRD::has_frame_gen_buffers() const {
+	return has_texture(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_CURRENT) && has_texture(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_PREVIOUS);
+}
+
+RID RenderSceneBuffersRD::get_frame_gen_buffer_current() {
+	ensure_frame_gen_buffers();
+	return get_texture(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_CURRENT);
+}
+
+RID RenderSceneBuffersRD::get_frame_gen_buffer_previous() {
+	ensure_frame_gen_buffers();
+	return get_texture(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_PREVIOUS);
+}
