@@ -200,11 +200,11 @@ vec4 sample_bicubic_catmull_rom(sampler2D tex, vec2 uv) {
 	float sharpness = 0.5; // Premium customizable sharpness default
 	float amp = mix(-0.125, -0.05, sharpness);
 	float r_mx = mx > 0.0001 ? 1.0 / mx : 1.0;
-	float peak = sqrt(min(mn, 1.0 - mx) * r_mx);
+	float peak = sqrt(max(0.0, min(mn, 1.0 - mx)) * r_mx);
 	float weight = peak * amp;
 
 	vec4 sharp_color = (color + (n + s + w + e) * weight) / (1.0 + 4.0 * weight);
-	return clamp(sharp_color, vec4(0.0), vec4(1.0));
+	return max(sharp_color, vec4(0.0));
 }
 #endif
 
@@ -255,11 +255,11 @@ vec4 sample_sgsr(sampler2D tex, vec2 uv) {
 	float min_l = min(min(l00, l10), min(l01, l11));
 	float max_l = max(max(l00, l10), max(l01, l11));
 	float r_max = max_l > 0.0001 ? 1.0 / max_l : 1.0;
-	float peak = sqrt(min(min_l, 1.0 - max_l) * r_max);
+	float peak = sqrt(max(0.0, min(min_l, 1.0 - max_l)) * r_max);
 	float sharpen_weight = peak * -0.15;
 
 	vec4 sharp_color = color + sharpen_weight * (c00 + c10 + c01 + c11 - 4.0 * color);
-	return clamp(sharp_color, vec4(0.0), vec4(1.0));
+	return max(sharp_color, vec4(0.0));
 }
 #endif
 
