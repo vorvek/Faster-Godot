@@ -940,18 +940,23 @@ void EditorPropertyEnum::update_property() {
 void EditorPropertyEnum::setup(const Vector<String> &p_options) {
 	options->clear();
 	HashMap<int64_t, Vector<String>> items;
+	Vector<int64_t> keys;
 	int64_t current_val = 0;
 	for (const String &option : p_options) {
 		if (option.get_slice_count(":") != 1) {
 			current_val = option.get_slicec(':', 1).to_int();
 		}
+		if (!items.has(current_val)) {
+			keys.push_back(current_val);
+		}
 		items[current_val].push_back(option.get_slicec(':', 0));
 		current_val += 1;
 	}
 
-	for (const KeyValue<int64_t, Vector<String>> &K : items) {
-		options->add_item(String(", ").join(K.value));
-		options->set_item_metadata(-1, K.key);
+	for (int i = 0; i < keys.size(); i++) {
+		int64_t key = keys[i];
+		options->add_item(String(", ").join(items[key]));
+		options->set_item_metadata(-1, key);
 	}
 }
 
