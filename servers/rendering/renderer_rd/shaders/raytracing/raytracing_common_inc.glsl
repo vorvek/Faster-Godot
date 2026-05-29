@@ -76,7 +76,8 @@ vec3 rt_clamp_luminance(vec3 color, float max_luma) {
 	if (luma <= max_luma || luma <= 1e-6) {
 		return color;
 	}
-	return color * (max_luma / luma);
+	float soft_luma = max_luma + (luma - max_luma) / (1.0 + (luma - max_luma) / max_luma);
+	return color * (soft_luma / luma);
 }
 
 vec3 rt_clamp_path_contribution(vec3 contribution, float roughness, float metalness, bool indirect_path, bool secondary_emissive_or_miss) {
