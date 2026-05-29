@@ -408,8 +408,13 @@ void main() {
 			ps.packed_bounces_flags = (sample_idx == 0u) ? set_sample_zero(0u) : 0u;
 			ps.rng_state = init_blue_noise_rng(rng_pixel, frame_index, sample_idx);
 
+			// Jitter primary ray for anti-aliasing (supersampling)
+			vec2 jitter = (rand2(ps.rng_state) - vec2(0.5)) / rt_visible_size();
+			vec2 jittered_d = d + jitter * 2.0;
+			vec4 target_j = inv_projection_unjittered * vec4(jittered_d.x, jittered_d.y, 1.0, 1.0);
+
 			vec3 ray_origin = origin.xyz;
-			vec3 ray_dir = direction.xyz;
+			vec3 ray_dir = (inv_view * vec4(normalize(target_j.xyz), 0.0)).xyz;
 
 			[[dont_unroll]] for (uint bounce = 0u; bounce <= max_bounces; bounce++) {
 				path_pack(payload, ps);
