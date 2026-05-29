@@ -38,6 +38,11 @@ All custom modes are fully integrated into the **Vulkan RD (Rendering Device)** 
 1. **Low-Resolution Render**: All 3D rendering (including heavy passes like **Ray Tracing** and post-processing) is executed completely at the lower internal resolution (`rb->get_internal_size()`).
 2. **Post-Process Upscale Pass**: The upscale is executed during the final copy-to-framebuffer pass (`copy_to_fb.glsl` / `copy_effects.cpp`). By performing the upscaling here, 3D render-time bottlenecks are avoided, resulting in a massive framerate boost for heavy render features compared to rendering natively at 2x.
 
+### 3D Render Buffer Allocation & Validation Bugfixes
+We have implemented critical engine fixes to ensure these custom spatial scaling modes operate correctly under all viewport conditions:
+* **Prevention of False-Positive Downsampling Fallbacks**: Official Godot safety checks fall back to bilinear upscaling when scale is $\ge 1.0$ under the assumption that all non-bilinear scaling modes are advanced temporal/spatial upscalers (like FSR or DLSS) which do not support supersampling/downsampling. We introduced `scaling_3d_is_advanced_upscaler` to restrict this fallback logic exclusively to actual advanced upscalers, allowing our custom spatial modes (`NEAREST`, `SHARP_BILINEAR`, `BICUBIC`, `SGSR`) to correctly handle downsampling scales up to `2.0x`.
+* **Explicit Buffer Allocation Mappings**: Fixed a fallback bug where custom scaling modes were omitted from the viewport configuration `switch` block in `_configure_3d_render_buffers()`. This omission caused them to hit the `default` branch, silently disabling 3D resolution scaling by reverting the mode to `OFF` and scale to `1.0`. We mapped all custom modes (`NEAREST`, `SHARP_BILINEAR`, `BICUBIC`, `SGSR`) explicitly to their correct scaled resolution targets (up to a clamped safe limit of `16384` pixels).
+
 ---
 
 ## 4. Modified Files

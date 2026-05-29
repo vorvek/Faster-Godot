@@ -815,22 +815,47 @@ float RenderSceneBuffersRD::get_luminance_multiplier() const {
 }
 
 void RenderSceneBuffersRD::ensure_frame_gen_buffers() {
-	if (!has_frame_gen_buffers()) {
-		create_texture(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_CURRENT, get_base_data_format(), get_color_usage_bits(false, false, can_be_storage));
-		create_texture(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_PREVIOUS, get_base_data_format(), get_color_usage_bits(false, false, can_be_storage));
+	if (internal_size.x == 0 || internal_size.y == 0) {
+		return;
+	}
+	bool need_create = false;
+	NTKey key_curr(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_CURRENT);
+	NTKey key_prev(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_PREVIOUS);
+
+	if (!named_textures.has(key_curr) || named_textures[key_curr].texture.is_null()) {
+		named_textures.erase(key_curr);
+		need_create = true;
+	}
+	if (!named_textures.has(key_prev) || named_textures[key_prev].texture.is_null()) {
+		named_textures.erase(key_prev);
+		need_create = true;
+	}
+
+	if (need_create) {
+		create_texture(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_CURRENT, get_base_data_format(), get_color_usage_bits(false, false, true));
+		create_texture(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_PREVIOUS, get_base_data_format(), get_color_usage_bits(false, false, true));
 	}
 }
 
 bool RenderSceneBuffersRD::has_frame_gen_buffers() const {
-	return has_texture(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_CURRENT) && has_texture(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_PREVIOUS);
+	NTKey key_curr(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_CURRENT);
+	NTKey key_prev(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_PREVIOUS);
+	return named_textures.has(key_curr) && !named_textures[key_curr].texture.is_null() &&
+	       named_textures.has(key_prev) && !named_textures[key_prev].texture.is_null();
 }
 
 RID RenderSceneBuffersRD::get_frame_gen_buffer_current() {
 	ensure_frame_gen_buffers();
+	if (!has_frame_gen_buffers()) {
+		return RID();
+	}
 	return get_texture(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_CURRENT);
 }
 
 RID RenderSceneBuffersRD::get_frame_gen_buffer_previous() {
 	ensure_frame_gen_buffers();
+	if (!has_frame_gen_buffers()) {
+		return RID();
+	}
 	return get_texture(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_PREVIOUS);
 }

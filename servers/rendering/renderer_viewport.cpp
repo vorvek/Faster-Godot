@@ -195,9 +195,14 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 			}
 
 			bool scaling_3d_is_not_bilinear = scaling_3d_mode != RS::VIEWPORT_SCALING_3D_MODE_OFF && scaling_3d_mode != RS::VIEWPORT_SCALING_3D_MODE_BILINEAR;
+			bool scaling_3d_is_advanced_upscaler = scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_FSR ||
+												scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_FSR2 ||
+												scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL ||
+												scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL ||
+												scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_DLSS;
 			bool use_taa = p_viewport->use_taa;
 
-			if (scaling_3d_is_not_bilinear && (scaling_3d_scale >= (1.0 + EPSILON))) {
+			if (scaling_3d_is_advanced_upscaler && (scaling_3d_scale >= (1.0 + EPSILON))) {
 				// FSR and MetalFX is not designed for downsampling.
 				// Fall back to bilinear scaling.
 				WARN_PRINT_ONCE("FSR 3D resolution scaling is not designed for downsampling. Falling back to bilinear 3D resolution scaling.");
@@ -205,7 +210,7 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 				scaling_type = RS::scaling_3d_mode_type(scaling_3d_mode);
 			}
 
-			if (scaling_3d_is_not_bilinear && !upscaler_available) {
+			if (scaling_3d_is_advanced_upscaler && !upscaler_available) {
 				// FSR is not actually available.
 				// Fall back to bilinear scaling.
 				WARN_PRINT_ONCE("FSR 3D resolution scaling is not available. Falling back to bilinear 3D resolution scaling.");
@@ -227,6 +232,10 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 
 			switch (scaling_3d_mode) {
 				case RS::VIEWPORT_SCALING_3D_MODE_BILINEAR:
+				case RS::VIEWPORT_SCALING_3D_MODE_NEAREST:
+				case RS::VIEWPORT_SCALING_3D_MODE_SHARP_BILINEAR:
+				case RS::VIEWPORT_SCALING_3D_MODE_BICUBIC:
+				case RS::VIEWPORT_SCALING_3D_MODE_SGSR:
 					// Clamp 3D rendering resolution to reasonable values supported on most hardware.
 					// This prevents freezing the engine or outright crashing on lower-end GPUs.
 					target_width = p_viewport->size.width;
