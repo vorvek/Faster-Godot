@@ -149095,3 +149095,126 @@ msgstr ""
 "Lódálann sé ábhar iomlán comhaid sa chartlann zip luchtaithe isteach sa "
 "chuimhne agus seolann ar ais é.\n"
 "Ní mór é a ghlaoch i ndiaidh [method open]."
+
+# RTGI and TAA inspector tooltips.
+msgid "Selects the RTGI backend. [constant RTGI_BACKEND_VULKAN_GENERIC] is the built-in Vulkan ray tracing path and the only active backend. Legacy vendor backend values fall back to [constant RTGI_BACKEND_VULKAN_GENERIC]."
+msgstr "Roghnaíonn sé an t-inneall cúil RTGI. Is é [constant RTGI_BACKEND_VULKAN_GENERIC] an cosán rianaithe gathanna Vulkan ionsuite agus an t-aon inneall cúil gníomhach. Titeann luachanna oidhreachta inneall cúil díoltóra siar go [constant RTGI_BACKEND_VULKAN_GENERIC]."
+
+msgid "If [code]true[/code], disables RTGI only while this environment is previewed in the editor. Running projects and exported builds still use [member rtgi_enabled]."
+msgstr "Má tá [code]true[/code], díchumasaítear RTGI amháin agus an timpeallacht seo á réamhamharc san eagarthóir. Úsáideann tionscadail reatha agus tógálacha easpórtáilte [member rtgi_enabled] fós."
+
+msgid "If [code]true[/code], enables hardware ray-traced global illumination for this environment when the active renderer and GPU support Vulkan ray tracing."
+msgstr "Má tá [code]true[/code], cumasaítear soilsiú domhanda rianaithe le gathanna crua-earraí don timpeallacht seo nuair a thacaíonn an rindreálaí gníomhach agus an GPU le rianú gathanna Vulkan."
+
+msgid "Selects how RTGI contributes to the scene: specular/reflection paths only, full path-traced diffuse and specular lighting, or hybrid secondary lighting traced from the raster G-buffer."
+msgstr "Roghnaíonn sé conas a chuireann RTGI leis an radharc: cosáin specular/frithchaithimh amháin, soilsiú diffuse agus specular le path tracing iomlán, nó soilsiú tánaisteach hibrideach rianaithe ón G-buffer raster."
+
+msgid "Sets the RTGI ray samples per pixel. Higher values reduce noise, but increase GPU cost."
+msgstr "Socraíonn sé samplaí gathanna RTGI in aghaidh an phicteilín. Laghdaíonn luachanna níos airde torann, ach méadaíonn siad costas GPU."
+
+msgid "Sets the maximum RTGI ray bounce count. Higher values can add secondary light, but increase cost and noise."
+msgstr "Socraíonn sé uaslíon preabanna gathanna RTGI. Is féidir le luachanna níos airde solas tánaisteach a chur leis, ach méadaíonn siad costas agus torann."
+
+msgid "Multiplier applied to the denoised RTGI contribution before composition."
+msgstr "Iolraitheoir a chuirtear i bhfeidhm ar rannchuidiú RTGI díthorannaithe roimh an gcomhdhéanamh."
+
+msgid "Selects the RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser, [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION] denoises split lighting signals before recomposition, and [constant RTGI_DENOISER_NONE] shows the raw sampled result."
+msgstr "Roghnaíonn sé díthorannóir RTGI. Úsáideann [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] an díthorannóir GPU ionsuite, díthorannaíonn [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION] comharthaí soilsithe scoilte roimh athchomhdhéanamh, agus taispeánann [constant RTGI_DENOISER_NONE] an toradh sampláilte amh."
+
+msgid "Selects the RTGI debug visualization. Use it to inspect sampled buffers, material guides, rejection data, and reflection diagnostics."
+msgstr "Roghnaíonn sé amharcléiriú dífhabhtaithe RTGI. Úsáid é chun maoláin shampláilte, treoracha ábhair, sonraí diúltaithe agus diagnóisic frithchaithimh a iniúchadh."
+
+msgid "Controls RTGI denoiser spatial filtering and noise cleanup strength. Higher values reduce speckles, but can blur fine indirect-light detail."
+msgstr "Rialaíonn sé neart scagtha spásúil agus glantacháin torainn an díthorannóra RTGI. Laghdaíonn luachanna níos airde spotaí, ach d'fhéadfaidís mionsonraí solais indíreacha a dhoiléiriú."
+
+msgid "Controls how much previous-frame RTGI radiance is reused. Higher values stabilize static surfaces, but can increase ghosting. A value of [code]0.0[/code] disables temporal reuse."
+msgstr "Rialaíonn sé cé mhéad radiance RTGI ón bhfráma roimhe seo a athúsáidtear. Cobhsóidh luachanna níos airde dromchlaí statacha, ach féadfaidh siad ghosting a mhéadú. Díchumasaíonn luach [code]0.0[/code] athúsáid ama."
+
+msgid "Controls additional isolated bright-pixel suppression in the RTGI denoiser. Lower values preserve tiny highlights, but can leave more fireflies."
+msgstr "Rialaíonn sé cosc breise ar phicteilíní geala scoite sa díthorannóir RTGI. Caomhnaíonn luachanna níos ísle buaicsholas beag, ach féadfaidh siad níos mó fireflies a fhágáil."
+
+msgid "Controls how strongly the RTGI denoiser preserves high-frequency albedo and lighting detail. Lower values allow smoother, blurrier denoising."
+msgstr "Rialaíonn sé cé chomh láidir a chaomhnaíonn an díthorannóir RTGI mionsonraí albedo agus soilsithe ard-minicíochta. Ligeann luachanna níos ísle díthorannú níos míne agus níos doiléire."
+
+msgid "If [code]true[/code], keeps diffuse, direct light, emissive, sky, and specular RTGI signals separated for denoising when supported by the selected denoiser."
+msgstr "Má tá [code]true[/code], coinníonn sé comharthaí diffuse, solas díreach, emissive, spéir agus specular RTGI scartha le haghaidh díthorannaithe nuair a thacaíonn an díthorannóir roghnaithe leis."
+
+msgid "Controls previous-frame reuse for specular RTGI. Higher values stabilize glossy reflections, but can increase ghosting."
+msgstr "Rialaíonn sé athúsáid an fhráma roimhe seo do RTGI specular. Cobhsóidh luachanna níos airde frithchaithimh lonracha, ach féadfaidh siad ghosting a mhéadú."
+
+msgid "Controls spatial filtering strength for specular RTGI. Higher values smooth noise, but can blur glossy detail."
+msgstr "Rialaíonn sé neart scagtha spásúil do RTGI specular. Míníonn luachanna níos airde torann, ach d'fhéadfaidís mionsonraí lonracha a dhoiléiriú."
+
+msgid "Applies a pre-denoiser clamp to extreme ray or path contributions. Higher values suppress fireflies before they enter temporal history, but can dim tiny highlights."
+msgstr "Cuireann sé clamp roimh dhíthorannú i bhfeidhm ar rannchuidithe foircneacha gathanna nó cosán. Cuireann luachanna níos airde fireflies faoi chois sula dtéann siad isteach sa stair ama, ach d'fhéadfaidís buaicsholas beag a dhorchaigh."
+
+msgid "Sets the linear HDR luminance limit used by [member rtgi_ray_firefly_suppression]. A value of [code]0.0[/code] disables the pre-denoiser contribution clamp."
+msgstr "Socraíonn sé an teorainn luminance HDR líneach a úsáideann [member rtgi_ray_firefly_suppression]. Díchumasaíonn luach [code]0.0[/code] an clamp rannchuidithe roimh dhíthorannú."
+
+msgid "If [code]true[/code], directly samples analytic lights during RTGI tracing."
+msgstr "Má tá [code]true[/code], samplálann sé soilse anailíseacha go díreach le linn rianú RTGI."
+
+msgid "If [code]true[/code], directly samples bounded emissive surface candidates during RTGI tracing."
+msgstr "Má tá [code]true[/code], samplálann sé iarrthóirí dromchla emissive teoranta go díreach le linn rianú RTGI."
+
+msgid "If [code]true[/code], enables the screen-space diffuse radiance cache before ASVFG denoising. The cache reuses valid diffuse history and rejects it when guides or radiance change."
+msgstr "Má tá [code]true[/code], cumasaítear an taisce diffuse radiance i spás scáileáin roimh dhíthorannú ASVFG. Athúsáideann an taisce stair diffuse bhailí agus diúltaíonn sí di nuair a athraíonn treoracha nó radiance."
+
+msgid "Sets the maximum number of persistent diffuse radiance cache entries. Lower values reduce GPU memory and bandwidth, but use coarser cache reconstruction."
+msgstr "Socraíonn sé uaslíon iontrálacha buana sa taisce diffuse radiance. Laghdaíonn luachanna níos ísle cuimhne agus bandaleithead GPU, ach úsáideann siad atógáil taisce níos garbha."
+
+msgid "Adds a horizontal RTGI render margin as a fraction of the viewport width. Higher values can reduce edge noise during motion, but increase RT cost."
+msgstr "Cuireann sé imeall rindreála RTGI cothrománach leis mar chodán de leithead an viewport. Is féidir le luachanna níos airde torann imeall a laghdú le linn gluaisne, ach méadaíonn siad costas RT."
+
+msgid "Adds a vertical RTGI render margin as a fraction of the viewport height. Higher values can reduce edge noise during motion, but increase RT cost."
+msgstr "Cuireann sé imeall rindreála RTGI ingearach leis mar chodán d'airde an viewport. Is féidir le luachanna níos airde torann imeall a laghdú le linn gluaisne, ach méadaíonn siad costas RT."
+
+msgid "If [code]true[/code], enables the spatiotemporal RTGI radiance cache used for rough diffuse secondary bounces."
+msgstr "Má tá [code]true[/code], cumasaítear an taisce radiance RTGI spás-ama a úsáidtear do phreabanna tánaisteacha diffuse garbha."
+
+msgid "Visual layers treated as static by STRC. Objects outside both STRC layer masks are ignored by probe updates and cache sampling. Layers present in both masks are treated as static."
+msgstr "Sraitheanna amhairc a láimhseálann STRC mar statach. Déantar neamhaird d'oibiachtaí lasmuigh den dá masc sraithe STRC le linn nuashonruithe taiscéalaithe agus sampláil taisce. Láimhseáiltear sraitheanna atá sa dá masc mar statach."
+
+msgid "Visual layers treated as dynamic by STRC. Dynamic hits use lower temporal confidence so they refresh more aggressively."
+msgstr "Sraitheanna amhairc a láimhseálann STRC mar dhinimiciúil. Úsáideann amas dinimiciúla muinín ama níos ísle, mar sin athnuann siad níos ionsaithí."
+
+msgid "Controls how strongly valid STRC samples contribute to RTGI. Lower values rely more on freshly traced rays."
+msgstr "Rialaíonn sé cé chomh láidir a chuireann samplaí bailí STRC le RTGI. Braitheann luachanna níos ísle níos mó ar ghathanna úrrianaithe."
+
+msgid "Sets the number of camera-centered STRC cascades. More cascades extend cache coverage."
+msgstr "Socraíonn sé líon na gcascáidí STRC lárnaithe ar an gceamara. Leathnaíonn tuilleadh cascáidí clúdach an taisce."
+
+msgid "Sets the probe count per axis for each STRC cascade. Higher values add detail, memory use, and update cost."
+msgstr "Socraíonn sé líon na dtaisclann in aghaidh na haise do gach cascáid STRC. Cuireann luachanna níos airde mionsonra, úsáid cuimhne agus costas nuashonraithe leis."
+
+msgid "Sets the world-space probe spacing for STRC cascade 0. Each farther cascade doubles this spacing."
+msgstr "Socraíonn sé spásáil taiscéalaithe i spás domhanda do chascáid STRC 0. Déanann gach cascáid níos faide an spásáil seo a dhúbailt."
+
+msgid "Sets the per-frame ray budget for refreshing STRC probes. Higher values update the cache faster, but cost more GPU time."
+msgstr "Socraíonn sé buiséad gathanna in aghaidh an fhráma chun taiscéalaithe STRC a athnuachan. Nuashonraíonn luachanna níos airde an taisce níos tapa, ach cosnaíonn siad níos mó ama GPU."
+
+msgid "Controls temporal accumulation for STRC probe updates. Higher values stabilize the cache, but react more slowly to changes."
+msgstr "Rialaíonn sé carnadh ama do nuashonruithe taiscéalaithe STRC. Cobhsóidh luachanna níos airde an taisce, ach imoibríonn siad níos moille d'athruithe."
+
+msgid "Sets how much the per-pixel motion vector can change, in texels, before TAA starts rejecting history for that pixel. Lower values reduce ghosting in motion, but can increase flickering."
+msgstr "Socraíonn sé cé mhéad is féidir leis an veicteoir gluaisne in aghaidh an phicteilín athrú, i texels, sula dtosaíonn TAA ag diúltú stair don phicteilín sin. Laghdaíonn luachanna níos ísle ghosting i ngluaiseacht, ach féadfaidh siad flickering a mhéadú."
+
+msgid "Sets how much previous frame history contributes to the TAA resolve before additional rejection logic is applied. Higher values produce a more stable image, but can increase ghosting."
+msgstr "Socraíonn sé cé mhéad a chuireann stair an fhráma roimhe seo le resolve TAA sula gcuirtear loighic dhiúltaithe bhreise i bhfeidhm. Cruthaíonn luachanna níos airde íomhá níos cobhsaí, ach féadfaidh siad ghosting a mhéadú."
+
+msgid ""
+"Sets the number of jitter positions used by TAA. Higher values can improve still-image convergence, but take more frames to converge and can increase temporal instability in motion.\n"
+"[b]Note:[/b] This does not affect FSR2 or MetalFX temporal upscaling."
+msgstr ""
+"Socraíonn sé líon na suíomhanna jitter a úsáideann TAA. Is féidir le luachanna níos airde cóineasú íomhá fós a fheabhsú, ach tógann siad níos mó frámaí le cóineasú agus féadfaidh siad éagobhsaíocht ama i ngluaiseacht a mhéadú.\n"
+"[b]Nóta:[/b] Ní théann sé seo i bhfeidhm ar uas-scálú ama FSR2 nó MetalFX."
+
+msgid ""
+"Scales the camera jitter offset used by TAA. Lower values reduce subpixel jitter, which can reduce shimmering but also reduces TAA's ability to reconstruct subpixel detail. A value of [code]0.0[/code] disables TAA camera jitter while leaving TAA resolve enabled.\n"
+"[b]Note:[/b] This does not affect FSR2 or MetalFX temporal upscaling."
+msgstr ""
+"Scálaíonn sé fritháireamh jitter an cheamara a úsáideann TAA. Laghdaíonn luachanna níos ísle jitter fo-phicteilín, rud a d'fhéadfadh shimmering a laghdú, ach laghdaíonn sé cumas TAA mionsonraí fo-phicteilín a atógáil freisin. Díchumasaíonn luach [code]0.0[/code] jitter ceamara TAA agus fágann sé resolve TAA cumasaithe.\n"
+"[b]Nóta:[/b] Ní théann sé seo i bhfeidhm ar uas-scálú ama FSR2 nó MetalFX."
+
+msgid "Sets how much sharpening is applied during the TAA resolve. Higher values counteract TAA blur, but can increase shimmering or edge halos."
+msgstr "Socraíonn sé cé mhéad géarú a chuirtear i bhfeidhm le linn resolve TAA. Fritháiríonn luachanna níos airde doiléire TAA, ach féadfaidh siad shimmering nó halo imeall a mhéadú."

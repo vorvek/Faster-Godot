@@ -217809,3 +217809,126 @@ msgstr ""
 "Завантажує весь вміст файлу у завантаженому zip-архіві в пам'ять і повертає "
 "його.\n"
 "Має бути викликаний після [method open]."
+
+# RTGI and TAA inspector tooltips.
+msgid "Selects the RTGI backend. [constant RTGI_BACKEND_VULKAN_GENERIC] is the built-in Vulkan ray tracing path and the only active backend. Legacy vendor backend values fall back to [constant RTGI_BACKEND_VULKAN_GENERIC]."
+msgstr "Вибирає бекенд RTGI. [constant RTGI_BACKEND_VULKAN_GENERIC] — вбудований шлях трасування променів Vulkan і єдиний активний бекенд. Застарілі значення бекендів постачальників повертаються до [constant RTGI_BACKEND_VULKAN_GENERIC]."
+
+msgid "If [code]true[/code], disables RTGI only while this environment is previewed in the editor. Running projects and exported builds still use [member rtgi_enabled]."
+msgstr "Якщо [code]true[/code], вимикає RTGI лише під час попереднього перегляду цього середовища в редакторі. Запущені проєкти та експортовані збірки все одно використовують [member rtgi_enabled]."
+
+msgid "If [code]true[/code], enables hardware ray-traced global illumination for this environment when the active renderer and GPU support Vulkan ray tracing."
+msgstr "Якщо [code]true[/code], вмикає апаратну глобальну ілюмінацію з трасуванням променів для цього середовища, коли активний рендерер і GPU підтримують трасування променів Vulkan."
+
+msgid "Selects how RTGI contributes to the scene: specular/reflection paths only, full path-traced diffuse and specular lighting, or hybrid secondary lighting traced from the raster G-buffer."
+msgstr "Вибирає, як RTGI впливає на сцену: лише дзеркальні/відбивні шляхи, повне path tracing освітлення diffuse і specular, або гібридне вторинне освітлення, трасоване з растрового G-buffer."
+
+msgid "Sets the RTGI ray samples per pixel. Higher values reduce noise, but increase GPU cost."
+msgstr "Встановлює кількість зразків променів RTGI на піксель. Вищі значення зменшують шум, але збільшують вартість для GPU."
+
+msgid "Sets the maximum RTGI ray bounce count. Higher values can add secondary light, but increase cost and noise."
+msgstr "Встановлює максимальну кількість відскоків променів RTGI. Вищі значення можуть додати вторинне світло, але збільшують вартість і шум."
+
+msgid "Multiplier applied to the denoised RTGI contribution before composition."
+msgstr "Множник, застосований до знешумленого внеску RTGI перед композицією."
+
+msgid "Selects the RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser, [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION] denoises split lighting signals before recomposition, and [constant RTGI_DENOISER_NONE] shows the raw sampled result."
+msgstr "Вибирає денойзер RTGI. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] використовує вбудований GPU-денойзер, [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION] знешумлює розділені сигнали освітлення перед рекомпозицією, а [constant RTGI_DENOISER_NONE] показує сирий семпльований результат."
+
+msgid "Selects the RTGI debug visualization. Use it to inspect sampled buffers, material guides, rejection data, and reflection diagnostics."
+msgstr "Вибирає налагоджувальну візуалізацію RTGI. Використовуйте її для перевірки семпльованих буферів, матеріальних напрямних, даних відхилення та діагностики відбиттів."
+
+msgid "Controls RTGI denoiser spatial filtering and noise cleanup strength. Higher values reduce speckles, but can blur fine indirect-light detail."
+msgstr "Керує силою просторової фільтрації та очищення шуму денойзера RTGI. Вищі значення зменшують плями, але можуть розмивати дрібні деталі непрямого світла."
+
+msgid "Controls how much previous-frame RTGI radiance is reused. Higher values stabilize static surfaces, but can increase ghosting. A value of [code]0.0[/code] disables temporal reuse."
+msgstr "Керує тим, скільки RTGI radiance з попереднього кадру повторно використовується. Вищі значення стабілізують статичні поверхні, але можуть збільшити ghosting. Значення [code]0.0[/code] вимикає часове повторне використання."
+
+msgid "Controls additional isolated bright-pixel suppression in the RTGI denoiser. Lower values preserve tiny highlights, but can leave more fireflies."
+msgstr "Керує додатковим пригніченням ізольованих яскравих пікселів у денойзері RTGI. Нижчі значення зберігають маленькі відблиски, але можуть залишити більше fireflies."
+
+msgid "Controls how strongly the RTGI denoiser preserves high-frequency albedo and lighting detail. Lower values allow smoother, blurrier denoising."
+msgstr "Керує тим, наскільки сильно денойзер RTGI зберігає високочастотні деталі альбедо та освітлення. Нижчі значення дозволяють плавніше й розмитіше знешумлення."
+
+msgid "If [code]true[/code], keeps diffuse, direct light, emissive, sky, and specular RTGI signals separated for denoising when supported by the selected denoiser."
+msgstr "Якщо [code]true[/code], diffuse, direct light, emissive, sky і specular сигнали RTGI залишаються розділеними для знешумлення, коли вибраний денойзер це підтримує."
+
+msgid "Controls previous-frame reuse for specular RTGI. Higher values stabilize glossy reflections, but can increase ghosting."
+msgstr "Керує повторним використанням попереднього кадру для specular RTGI. Вищі значення стабілізують глянцеві відбиття, але можуть збільшити ghosting."
+
+msgid "Controls spatial filtering strength for specular RTGI. Higher values smooth noise, but can blur glossy detail."
+msgstr "Керує силою просторової фільтрації для specular RTGI. Вищі значення згладжують шум, але можуть розмивати глянцеві деталі."
+
+msgid "Applies a pre-denoiser clamp to extreme ray or path contributions. Higher values suppress fireflies before they enter temporal history, but can dim tiny highlights."
+msgstr "Застосовує clamp перед денойзером до екстремальних внесків променів або шляхів. Вищі значення пригнічують fireflies до входу в часову історію, але можуть приглушити маленькі відблиски."
+
+msgid "Sets the linear HDR luminance limit used by [member rtgi_ray_firefly_suppression]. A value of [code]0.0[/code] disables the pre-denoiser contribution clamp."
+msgstr "Встановлює межу лінійної HDR-яскравості, яку використовує [member rtgi_ray_firefly_suppression]. Значення [code]0.0[/code] вимикає clamp внеску перед денойзером."
+
+msgid "If [code]true[/code], directly samples analytic lights during RTGI tracing."
+msgstr "Якщо [code]true[/code], безпосередньо семплює аналітичні джерела світла під час трасування RTGI."
+
+msgid "If [code]true[/code], directly samples bounded emissive surface candidates during RTGI tracing."
+msgstr "Якщо [code]true[/code], безпосередньо семплює обмежені кандидати емісивних поверхонь під час трасування RTGI."
+
+msgid "If [code]true[/code], enables the screen-space diffuse radiance cache before ASVFG denoising. The cache reuses valid diffuse history and rejects it when guides or radiance change."
+msgstr "Якщо [code]true[/code], вмикає екранний кеш diffuse radiance перед знешумленням ASVFG. Кеш повторно використовує допустиму diffuse history і відхиляє її, коли змінюються напрямні або radiance."
+
+msgid "Sets the maximum number of persistent diffuse radiance cache entries. Lower values reduce GPU memory and bandwidth, but use coarser cache reconstruction."
+msgstr "Встановлює максимальну кількість постійних записів кешу diffuse radiance. Нижчі значення зменшують пам'ять і пропускну здатність GPU, але використовують грубішу реконструкцію кешу."
+
+msgid "Adds a horizontal RTGI render margin as a fraction of the viewport width. Higher values can reduce edge noise during motion, but increase RT cost."
+msgstr "Додає горизонтальне поле рендерингу RTGI як частку ширини viewport. Вищі значення можуть зменшити шум на краях під час руху, але збільшують вартість RT."
+
+msgid "Adds a vertical RTGI render margin as a fraction of the viewport height. Higher values can reduce edge noise during motion, but increase RT cost."
+msgstr "Додає вертикальне поле рендерингу RTGI як частку висоти viewport. Вищі значення можуть зменшити шум на краях під час руху, але збільшують вартість RT."
+
+msgid "If [code]true[/code], enables the spatiotemporal RTGI radiance cache used for rough diffuse secondary bounces."
+msgstr "Якщо [code]true[/code], вмикає просторово-часовий кеш RTGI radiance, який використовується для шорстких diffuse вторинних відскоків."
+
+msgid "Visual layers treated as static by STRC. Objects outside both STRC layer masks are ignored by probe updates and cache sampling. Layers present in both masks are treated as static."
+msgstr "Візуальні шари, які STRC вважає статичними. Об’єкти поза обома масками шарів STRC ігноруються під час оновлення проб і семплювання кешу. Шари, наявні в обох масках, вважаються статичними."
+
+msgid "Visual layers treated as dynamic by STRC. Dynamic hits use lower temporal confidence so they refresh more aggressively."
+msgstr "Візуальні шари, які STRC вважає динамічними. Динамічні попадання використовують нижчу часову довіру, тому оновлюються агресивніше."
+
+msgid "Controls how strongly valid STRC samples contribute to RTGI. Lower values rely more on freshly traced rays."
+msgstr "Керує тим, наскільки сильно допустимі семпли STRC впливають на RTGI. Нижчі значення більше покладаються на щойно трасовані промені."
+
+msgid "Sets the number of camera-centered STRC cascades. More cascades extend cache coverage."
+msgstr "Встановлює кількість каскадів STRC, центрованих на камері. Більше каскадів розширює покриття кешу."
+
+msgid "Sets the probe count per axis for each STRC cascade. Higher values add detail, memory use, and update cost."
+msgstr "Встановлює кількість проб на вісь для кожного каскаду STRC. Вищі значення додають деталі, використання пам’яті та вартість оновлення."
+
+msgid "Sets the world-space probe spacing for STRC cascade 0. Each farther cascade doubles this spacing."
+msgstr "Встановлює відстань між пробами у світовому просторі для каскаду STRC 0. Кожен дальший каскад подвоює цю відстань."
+
+msgid "Sets the per-frame ray budget for refreshing STRC probes. Higher values update the cache faster, but cost more GPU time."
+msgstr "Встановлює бюджет променів на кадр для оновлення проб STRC. Вищі значення оновлюють кеш швидше, але потребують більше часу GPU."
+
+msgid "Controls temporal accumulation for STRC probe updates. Higher values stabilize the cache, but react more slowly to changes."
+msgstr "Керує часовим накопиченням для оновлень проб STRC. Вищі значення стабілізують кеш, але повільніше реагують на зміни."
+
+msgid "Sets how much the per-pixel motion vector can change, in texels, before TAA starts rejecting history for that pixel. Lower values reduce ghosting in motion, but can increase flickering."
+msgstr "Встановлює, наскільки може змінитися вектор руху на піксель, у текселях, перш ніж TAA почне відхиляти історію цього пікселя. Нижчі значення зменшують ghosting у русі, але можуть збільшити мерехтіння."
+
+msgid "Sets how much previous frame history contributes to the TAA resolve before additional rejection logic is applied. Higher values produce a more stable image, but can increase ghosting."
+msgstr "Встановлює, наскільки історія попереднього кадру впливає на TAA resolve до застосування додаткової логіки відхилення. Вищі значення дають стабільніше зображення, але можуть збільшити ghosting."
+
+msgid ""
+"Sets the number of jitter positions used by TAA. Higher values can improve still-image convergence, but take more frames to converge and can increase temporal instability in motion.\n"
+"[b]Note:[/b] This does not affect FSR2 or MetalFX temporal upscaling."
+msgstr ""
+"Встановлює кількість позицій jitter, які використовує TAA. Вищі значення можуть покращити збіжність нерухомого зображення, але потребують більше кадрів для збіжності й можуть збільшити часову нестабільність у русі.\n"
+"[b]Примітка:[/b] Це не впливає на часове масштабування FSR2 або MetalFX."
+
+msgid ""
+"Scales the camera jitter offset used by TAA. Lower values reduce subpixel jitter, which can reduce shimmering but also reduces TAA's ability to reconstruct subpixel detail. A value of [code]0.0[/code] disables TAA camera jitter while leaving TAA resolve enabled.\n"
+"[b]Note:[/b] This does not affect FSR2 or MetalFX temporal upscaling."
+msgstr ""
+"Масштабує зсув jitter камери, який використовує TAA. Нижчі значення зменшують субпіксельний jitter, що може зменшити shimmering, але також зменшує здатність TAA реконструювати субпіксельні деталі. Значення [code]0.0[/code] вимикає jitter камери TAA, залишаючи TAA resolve увімкненим.\n"
+"[b]Примітка:[/b] Це не впливає на часове масштабування FSR2 або MetalFX."
+
+msgid "Sets how much sharpening is applied during the TAA resolve. Higher values counteract TAA blur, but can increase shimmering or edge halos."
+msgstr "Встановлює, скільки різкості застосовується під час TAA resolve. Вищі значення компенсують розмиття TAA, але можуть збільшити shimmering або ореоли на краях."

@@ -109499,3 +109499,126 @@ msgid ""
 msgstr ""
 "將載入的 zip 存檔中檔的全部內容載入到記憶體中並返回它。\n"
 "必須在 [method open] 之後呼叫。"
+
+# RTGI and TAA inspector tooltips.
+msgid "Selects the RTGI backend. [constant RTGI_BACKEND_VULKAN_GENERIC] is the built-in Vulkan ray tracing path and the only active backend. Legacy vendor backend values fall back to [constant RTGI_BACKEND_VULKAN_GENERIC]."
+msgstr "選擇 RTGI 後端。[constant RTGI_BACKEND_VULKAN_GENERIC] 是內建 Vulkan 光線追蹤路徑，也是唯一作用中的後端。舊版廠商後端值會退回到 [constant RTGI_BACKEND_VULKAN_GENERIC]。"
+
+msgid "If [code]true[/code], disables RTGI only while this environment is previewed in the editor. Running projects and exported builds still use [member rtgi_enabled]."
+msgstr "如果為 [code]true[/code]，只會在編輯器中預覽此環境時停用 RTGI。執行中的專案與匯出的建置仍會使用 [member rtgi_enabled]。"
+
+msgid "If [code]true[/code], enables hardware ray-traced global illumination for this environment when the active renderer and GPU support Vulkan ray tracing."
+msgstr "如果為 [code]true[/code]，且目前算繪器與 GPU 支援 Vulkan 光線追蹤，則會為此環境啟用硬體光線追蹤全域照明。"
+
+msgid "Selects how RTGI contributes to the scene: specular/reflection paths only, full path-traced diffuse and specular lighting, or hybrid secondary lighting traced from the raster G-buffer."
+msgstr "選擇 RTGI 對場景的貢獻方式：僅鏡面/反射路徑、完整路徑追蹤的漫反射與鏡面照明，或從光柵 G-buffer 追蹤的混合次級照明。"
+
+msgid "Sets the RTGI ray samples per pixel. Higher values reduce noise, but increase GPU cost."
+msgstr "設定每像素的 RTGI 光線樣本數。較高的值會降低雜訊，但會增加 GPU 成本。"
+
+msgid "Sets the maximum RTGI ray bounce count. Higher values can add secondary light, but increase cost and noise."
+msgstr "設定 RTGI 光線最大反彈次數。較高的值可以加入次級光照，但會增加成本與雜訊。"
+
+msgid "Multiplier applied to the denoised RTGI contribution before composition."
+msgstr "在合成前套用到降噪後 RTGI 貢獻的乘數。"
+
+msgid "Selects the RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser, [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION] denoises split lighting signals before recomposition, and [constant RTGI_DENOISER_NONE] shows the raw sampled result."
+msgstr "選擇 RTGI 降噪器。[constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] 使用內建 GPU 降噪器，[constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION] 會在重組前對分離的照明訊號降噪，而 [constant RTGI_DENOISER_NONE] 會顯示原始取樣結果。"
+
+msgid "Selects the RTGI debug visualization. Use it to inspect sampled buffers, material guides, rejection data, and reflection diagnostics."
+msgstr "選擇 RTGI 除錯視覺化。可用來檢查取樣緩衝區、材質導引、拒絕資料與反射診斷。"
+
+msgid "Controls RTGI denoiser spatial filtering and noise cleanup strength. Higher values reduce speckles, but can blur fine indirect-light detail."
+msgstr "控制 RTGI 降噪器的空間濾波與雜訊清理強度。較高的值會減少斑點，但可能模糊細微的間接光細節。"
+
+msgid "Controls how much previous-frame RTGI radiance is reused. Higher values stabilize static surfaces, but can increase ghosting. A value of [code]0.0[/code] disables temporal reuse."
+msgstr "控制重複使用多少上一影格的 RTGI 輻亮度。較高的值會穩定靜態表面，但可能增加殘影。[code]0.0[/code] 會停用時間重複使用。"
+
+msgid "Controls additional isolated bright-pixel suppression in the RTGI denoiser. Lower values preserve tiny highlights, but can leave more fireflies."
+msgstr "控制 RTGI 降噪器中額外的孤立亮像素抑制。較低的值會保留微小高光，但可能留下更多螢火雜訊。"
+
+msgid "Controls how strongly the RTGI denoiser preserves high-frequency albedo and lighting detail. Lower values allow smoother, blurrier denoising."
+msgstr "控制 RTGI 降噪器保留高頻反照率與照明細節的強度。較低的值允許更平滑、更模糊的降噪。"
+
+msgid "If [code]true[/code], keeps diffuse, direct light, emissive, sky, and specular RTGI signals separated for denoising when supported by the selected denoiser."
+msgstr "如果為 [code]true[/code]，且所選降噪器支援，則會在降噪時保持漫反射、直接光、發光、天空與鏡面 RTGI 訊號分離。"
+
+msgid "Controls previous-frame reuse for specular RTGI. Higher values stabilize glossy reflections, but can increase ghosting."
+msgstr "控制鏡面 RTGI 的上一影格重複使用。較高的值會穩定光滑反射，但可能增加殘影。"
+
+msgid "Controls spatial filtering strength for specular RTGI. Higher values smooth noise, but can blur glossy detail."
+msgstr "控制鏡面 RTGI 的空間濾波強度。較高的值會平滑雜訊，但可能模糊光滑細節。"
+
+msgid "Applies a pre-denoiser clamp to extreme ray or path contributions. Higher values suppress fireflies before they enter temporal history, but can dim tiny highlights."
+msgstr "對極端光線或路徑貢獻套用降噪前鉗制。較高的值會在其進入時間歷史前抑制螢火雜訊，但可能壓暗微小高光。"
+
+msgid "Sets the linear HDR luminance limit used by [member rtgi_ray_firefly_suppression]. A value of [code]0.0[/code] disables the pre-denoiser contribution clamp."
+msgstr "設定 [member rtgi_ray_firefly_suppression] 使用的線性 HDR 亮度限制。[code]0.0[/code] 會停用降噪前貢獻鉗制。"
+
+msgid "If [code]true[/code], directly samples analytic lights during RTGI tracing."
+msgstr "如果為 [code]true[/code]，會在 RTGI 追蹤期間直接取樣解析光源。"
+
+msgid "If [code]true[/code], directly samples bounded emissive surface candidates during RTGI tracing."
+msgstr "如果為 [code]true[/code]，會在 RTGI 追蹤期間直接取樣有界發光表面候選。"
+
+msgid "If [code]true[/code], enables the screen-space diffuse radiance cache before ASVFG denoising. The cache reuses valid diffuse history and rejects it when guides or radiance change."
+msgstr "如果為 [code]true[/code]，會在 ASVFG 降噪前啟用螢幕空間漫反射輻亮度快取。快取會重複使用有效的漫反射歷史，並在導引或輻亮度改變時拒絕它。"
+
+msgid "Sets the maximum number of persistent diffuse radiance cache entries. Lower values reduce GPU memory and bandwidth, but use coarser cache reconstruction."
+msgstr "設定持久漫反射輻亮度快取項目的最大數量。較低的值會減少 GPU 記憶體與頻寬，但會使用較粗略的快取重建。"
+
+msgid "Adds a horizontal RTGI render margin as a fraction of the viewport width. Higher values can reduce edge noise during motion, but increase RT cost."
+msgstr "依視口寬度比例加入水平 RTGI 算繪邊界。較高的值可以減少移動時的邊緣雜訊，但會增加 RT 成本。"
+
+msgid "Adds a vertical RTGI render margin as a fraction of the viewport height. Higher values can reduce edge noise during motion, but increase RT cost."
+msgstr "依視口高度比例加入垂直 RTGI 算繪邊界。較高的值可以減少移動時的邊緣雜訊，但會增加 RT 成本。"
+
+msgid "If [code]true[/code], enables the spatiotemporal RTGI radiance cache used for rough diffuse secondary bounces."
+msgstr "如果為 [code]true[/code]，會啟用用於粗糙漫反射次級反彈的時空 RTGI 輻亮度快取。"
+
+msgid "Visual layers treated as static by STRC. Objects outside both STRC layer masks are ignored by probe updates and cache sampling. Layers present in both masks are treated as static."
+msgstr "STRC 視為靜態的可視圖層。兩個 STRC 圖層遮罩之外的物件會被探針更新與快取取樣忽略。同時存在於兩個遮罩中的圖層會視為靜態。"
+
+msgid "Visual layers treated as dynamic by STRC. Dynamic hits use lower temporal confidence so they refresh more aggressively."
+msgstr "STRC 視為動態的可視圖層。動態命中使用較低的時間可信度，因此會更積極地更新。"
+
+msgid "Controls how strongly valid STRC samples contribute to RTGI. Lower values rely more on freshly traced rays."
+msgstr "控制有效 STRC 樣本對 RTGI 的貢獻強度。較低的值會更依賴新追蹤的光線。"
+
+msgid "Sets the number of camera-centered STRC cascades. More cascades extend cache coverage."
+msgstr "設定以相機為中心的 STRC 級聯數量。更多級聯會擴展快取覆蓋範圍。"
+
+msgid "Sets the probe count per axis for each STRC cascade. Higher values add detail, memory use, and update cost."
+msgstr "設定每個 STRC 級聯每軸的探針數量。較高的值會增加細節、記憶體用量與更新成本。"
+
+msgid "Sets the world-space probe spacing for STRC cascade 0. Each farther cascade doubles this spacing."
+msgstr "設定 STRC 級聯 0 的世界空間探針間距。每個更遠的級聯都會將此間距加倍。"
+
+msgid "Sets the per-frame ray budget for refreshing STRC probes. Higher values update the cache faster, but cost more GPU time."
+msgstr "設定用於更新 STRC 探針的每影格光線預算。較高的值會更快更新快取，但會消耗更多 GPU 時間。"
+
+msgid "Controls temporal accumulation for STRC probe updates. Higher values stabilize the cache, but react more slowly to changes."
+msgstr "控制 STRC 探針更新的時間累積。較高的值會穩定快取，但對變化反應較慢。"
+
+msgid "Sets how much the per-pixel motion vector can change, in texels, before TAA starts rejecting history for that pixel. Lower values reduce ghosting in motion, but can increase flickering."
+msgstr "設定每像素運動向量在 TAA 開始拒絕該像素歷史前可變化的幅度，單位為紋素。較低的值會減少移動中的殘影，但可能增加閃爍。"
+
+msgid "Sets how much previous frame history contributes to the TAA resolve before additional rejection logic is applied. Higher values produce a more stable image, but can increase ghosting."
+msgstr "設定在套用額外拒絕邏輯前，上一影格歷史對 TAA resolve 的貢獻程度。較高的值會產生更穩定的影像，但可能增加殘影。"
+
+msgid ""
+"Sets the number of jitter positions used by TAA. Higher values can improve still-image convergence, but take more frames to converge and can increase temporal instability in motion.\n"
+"[b]Note:[/b] This does not affect FSR2 or MetalFX temporal upscaling."
+msgstr ""
+"設定 TAA 使用的抖動位置數量。較高的值可以改善靜止影像收斂，但需要更多影格才能收斂，且可能增加移動中的時間不穩定。\n"
+"[b]注意：[/b]這不會影響 FSR2 或 MetalFX 時間升頻。"
+
+msgid ""
+"Scales the camera jitter offset used by TAA. Lower values reduce subpixel jitter, which can reduce shimmering but also reduces TAA's ability to reconstruct subpixel detail. A value of [code]0.0[/code] disables TAA camera jitter while leaving TAA resolve enabled.\n"
+"[b]Note:[/b] This does not affect FSR2 or MetalFX temporal upscaling."
+msgstr ""
+"縮放 TAA 使用的相機抖動偏移。較低的值會減少次像素抖動，可能減少閃爍，但也會降低 TAA 重建次像素細節的能力。[code]0.0[/code] 會停用 TAA 相機抖動，同時保持 TAA resolve 啟用。\n"
+"[b]注意：[/b]這不會影響 FSR2 或 MetalFX 時間升頻。"
+
+msgid "Sets how much sharpening is applied during the TAA resolve. Higher values counteract TAA blur, but can increase shimmering or edge halos."
+msgstr "設定 TAA resolve 期間套用的銳化量。較高的值會抵銷 TAA 模糊，但可能增加閃爍或邊緣光暈。"

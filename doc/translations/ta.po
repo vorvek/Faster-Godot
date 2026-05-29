@@ -192346,3 +192346,126 @@ msgstr ""
 "ஏற்றப்பட்ட சிப் காப்பகத்தில் ஒரு கோப்பின் முழு உள்ளடக்கத்தையும் நினைவகத்தில் ஏற்றி அதை "
 "வழங்குகிறது.\n"
 " [முறை திறந்த] பிறகு அழைக்கப்பட வேண்டும்."
+
+# RTGI and TAA inspector tooltips.
+msgid "Selects the RTGI backend. [constant RTGI_BACKEND_VULKAN_GENERIC] is the built-in Vulkan ray tracing path and the only active backend. Legacy vendor backend values fall back to [constant RTGI_BACKEND_VULKAN_GENERIC]."
+msgstr "RTGI பின்தளத்தைத் தேர்ந்தெடுக்கிறது. [constant RTGI_BACKEND_VULKAN_GENERIC] என்பது உட்பொதிக்கப்பட்ட Vulkan கதிர்-தடமறிதல் பாதை மற்றும் செயலில் உள்ள ஒரே பின்தளம். பழைய vendor பின்தள மதிப்புகள் [constant RTGI_BACKEND_VULKAN_GENERIC] க்கு மாறும்."
+
+msgid "If [code]true[/code], disables RTGI only while this environment is previewed in the editor. Running projects and exported builds still use [member rtgi_enabled]."
+msgstr "[code]true[/code] என்றால், இந்த சூழல் திருத்தியில் முன்னோட்டமாக காட்டப்படும் போது மட்டும் RTGI முடக்கப்படும். இயங்கும் திட்டங்களும் ஏற்றுமதி செய்யப்பட்ட build-களும் இன்னும் [member rtgi_enabled] ஐப் பயன்படுத்தும்."
+
+msgid "If [code]true[/code], enables hardware ray-traced global illumination for this environment when the active renderer and GPU support Vulkan ray tracing."
+msgstr "[code]true[/code] என்றால், செயலில் உள்ள renderer மற்றும் GPU Vulkan ray tracing-ஐ ஆதரிக்கும் போது இந்த சூழலுக்கு hardware ray-traced global illumination ஐ இயக்கும்."
+
+msgid "Selects how RTGI contributes to the scene: specular/reflection paths only, full path-traced diffuse and specular lighting, or hybrid secondary lighting traced from the raster G-buffer."
+msgstr "RTGI காட்சி மீது எவ்வாறு தாக்கம் செலுத்தும் என்பதைத் தேர்ந்தெடுக்கிறது: specular/reflection பாதைகள் மட்டும், முழு path-traced diffuse மற்றும் specular lighting, அல்லது raster G-buffer இலிருந்து trace செய்யப்படும் hybrid secondary lighting."
+
+msgid "Sets the RTGI ray samples per pixel. Higher values reduce noise, but increase GPU cost."
+msgstr "ஒவ்வொரு pixel-க்கும் RTGI ray sample எண்ணிக்கையை அமைக்கிறது. அதிக மதிப்புகள் noise-ஐ குறைக்கும், ஆனால் GPU செலவை அதிகரிக்கும்."
+
+msgid "Sets the maximum RTGI ray bounce count. Higher values can add secondary light, but increase cost and noise."
+msgstr "RTGI ray-களின் அதிகபட்ச bounce எண்ணிக்கையை அமைக்கிறது. அதிக மதிப்புகள் secondary light-ஐ சேர்க்கலாம், ஆனால் செலவையும் noise-யையும் அதிகரிக்கும்."
+
+msgid "Multiplier applied to the denoised RTGI contribution before composition."
+msgstr "Composition-க்கு முன் denoised RTGI contribution மீது பயன்படுத்தப்படும் multiplier."
+
+msgid "Selects the RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser, [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION] denoises split lighting signals before recomposition, and [constant RTGI_DENOISER_NONE] shows the raw sampled result."
+msgstr "RTGI denoiser-ஐத் தேர்ந்தெடுக்கிறது. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] உட்பொதிக்கப்பட்ட GPU denoiser-ஐப் பயன்படுத்தும், [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION] recomposition-க்கு முன் பிரிக்கப்பட்ட lighting signals-ஐ denoise செய்யும், மேலும் [constant RTGI_DENOISER_NONE] raw sampled result-ஐ காட்டும்."
+
+msgid "Selects the RTGI debug visualization. Use it to inspect sampled buffers, material guides, rejection data, and reflection diagnostics."
+msgstr "RTGI debug visualization-ஐத் தேர்ந்தெடுக்கிறது. sampled buffers, material guides, rejection data, reflection diagnostics ஆகியவற்றை ஆய்வு செய்ய இதைப் பயன்படுத்தலாம்."
+
+msgid "Controls RTGI denoiser spatial filtering and noise cleanup strength. Higher values reduce speckles, but can blur fine indirect-light detail."
+msgstr "RTGI denoiser spatial filtering மற்றும் noise cleanup வலிமையை கட்டுப்படுத்துகிறது. அதிக மதிப்புகள் speckles-ஐ குறைக்கும், ஆனால் நுண்ணிய indirect-light விவரங்களை blur செய்யலாம்."
+
+msgid "Controls how much previous-frame RTGI radiance is reused. Higher values stabilize static surfaces, but can increase ghosting. A value of [code]0.0[/code] disables temporal reuse."
+msgstr "முந்தைய frame-இன் RTGI radiance எவ்வளவு மறுபயன்படுத்தப்படும் என்பதை கட்டுப்படுத்துகிறது. அதிக மதிப்புகள் static surfaces-ஐ நிலைப்படுத்தும், ஆனால் ghosting-ஐ அதிகரிக்கலாம். [code]0.0[/code] மதிப்பு temporal reuse-ஐ முடக்கும்."
+
+msgid "Controls additional isolated bright-pixel suppression in the RTGI denoiser. Lower values preserve tiny highlights, but can leave more fireflies."
+msgstr "RTGI denoiser-இல் தனித்த bright-pixel suppression-ஐ கூடுதலாக கட்டுப்படுத்துகிறது. குறைந்த மதிப்புகள் சிறிய highlights-ஐ காக்கும், ஆனால் அதிக fireflies மீதமிருக்கும்."
+
+msgid "Controls how strongly the RTGI denoiser preserves high-frequency albedo and lighting detail. Lower values allow smoother, blurrier denoising."
+msgstr "RTGI denoiser high-frequency albedo மற்றும் lighting detail-ஐ எவ்வளவு வலுவாக காக்கும் என்பதை கட்டுப்படுத்துகிறது. குறைந்த மதிப்புகள் மென்மையான, blur ஆன denoising-ஐ அனுமதிக்கும்."
+
+msgid "If [code]true[/code], keeps diffuse, direct light, emissive, sky, and specular RTGI signals separated for denoising when supported by the selected denoiser."
+msgstr "[code]true[/code] என்றால், தேர்ந்தெடுக்கப்பட்ட denoiser ஆதரிக்கும் போது diffuse, direct light, emissive, sky, specular RTGI signals denoising-க்கு தனியே வைக்கப்படும்."
+
+msgid "Controls previous-frame reuse for specular RTGI. Higher values stabilize glossy reflections, but can increase ghosting."
+msgstr "Specular RTGI-க்கான previous-frame reuse-ஐ கட்டுப்படுத்துகிறது. அதிக மதிப்புகள் glossy reflections-ஐ நிலைப்படுத்தும், ஆனால் ghosting-ஐ அதிகரிக்கலாம்."
+
+msgid "Controls spatial filtering strength for specular RTGI. Higher values smooth noise, but can blur glossy detail."
+msgstr "Specular RTGI-க்கான spatial filtering வலிமையை கட்டுப்படுத்துகிறது. அதிக மதிப்புகள் noise-ஐ மென்மையாக்கும், ஆனால் glossy detail-ஐ blur செய்யலாம்."
+
+msgid "Applies a pre-denoiser clamp to extreme ray or path contributions. Higher values suppress fireflies before they enter temporal history, but can dim tiny highlights."
+msgstr "மிகையான ray அல்லது path contributions மீது denoiser-க்கு முன் clamp-ஐ பயன்படுத்துகிறது. அதிக மதிப்புகள் அவை temporal history-க்கு செல்வதற்கு முன் fireflies-ஐ அடக்கும், ஆனால் சிறிய highlights-ஐ மங்கச் செய்யலாம்."
+
+msgid "Sets the linear HDR luminance limit used by [member rtgi_ray_firefly_suppression]. A value of [code]0.0[/code] disables the pre-denoiser contribution clamp."
+msgstr "[member rtgi_ray_firefly_suppression] பயன்படுத்தும் linear HDR luminance வரம்பை அமைக்கிறது. [code]0.0[/code] மதிப்பு denoiser-க்கு முன் contribution clamp-ஐ முடக்கும்."
+
+msgid "If [code]true[/code], directly samples analytic lights during RTGI tracing."
+msgstr "[code]true[/code] என்றால், RTGI tracing நடக்கும் போது analytic lights-ஐ நேரடியாக sample செய்யும்."
+
+msgid "If [code]true[/code], directly samples bounded emissive surface candidates during RTGI tracing."
+msgstr "[code]true[/code] என்றால், RTGI tracing நடக்கும் போது bounded emissive surface candidates-ஐ நேரடியாக sample செய்யும்."
+
+msgid "If [code]true[/code], enables the screen-space diffuse radiance cache before ASVFG denoising. The cache reuses valid diffuse history and rejects it when guides or radiance change."
+msgstr "[code]true[/code] என்றால், ASVFG denoising-க்கு முன் screen-space diffuse radiance cache-ஐ இயக்கும். Cache செல்லுபடியான diffuse history-ஐ மறுபயன்படுத்தி, guides அல்லது radiance மாறும் போது அதை நிராகரிக்கும்."
+
+msgid "Sets the maximum number of persistent diffuse radiance cache entries. Lower values reduce GPU memory and bandwidth, but use coarser cache reconstruction."
+msgstr "Persistent diffuse radiance cache entries-ன் அதிகபட்ச எண்ணிக்கையை அமைக்கிறது. குறைந்த மதிப்புகள் GPU memory மற்றும் bandwidth-ஐ குறைக்கும், ஆனால் coarser cache reconstruction-ஐ பயன்படுத்தும்."
+
+msgid "Adds a horizontal RTGI render margin as a fraction of the viewport width. Higher values can reduce edge noise during motion, but increase RT cost."
+msgstr "Viewport அகலத்தின் ஒரு பகுப்பாக horizontal RTGI render margin-ஐ சேர்க்கிறது. அதிக மதிப்புகள் motion-இல் edge noise-ஐ குறைக்கலாம், ஆனால் RT செலவை அதிகரிக்கும்."
+
+msgid "Adds a vertical RTGI render margin as a fraction of the viewport height. Higher values can reduce edge noise during motion, but increase RT cost."
+msgstr "Viewport உயரத்தின் ஒரு பகுப்பாக vertical RTGI render margin-ஐ சேர்க்கிறது. அதிக மதிப்புகள் motion-இல் edge noise-ஐ குறைக்கலாம், ஆனால் RT செலவை அதிகரிக்கும்."
+
+msgid "If [code]true[/code], enables the spatiotemporal RTGI radiance cache used for rough diffuse secondary bounces."
+msgstr "[code]true[/code] என்றால், rough diffuse secondary bounces-க்கு பயன்படுத்தப்படும் spatiotemporal RTGI radiance cache-ஐ இயக்கும்."
+
+msgid "Visual layers treated as static by STRC. Objects outside both STRC layer masks are ignored by probe updates and cache sampling. Layers present in both masks are treated as static."
+msgstr "STRC static எனக் கருதும் visual layers. இரு STRC layer masks-க்கும் வெளியே உள்ள objects probe updates மற்றும் cache sampling-இல் புறக்கணிக்கப்படும். இரு masks-லுமுள்ள layers static எனக் கருதப்படும்."
+
+msgid "Visual layers treated as dynamic by STRC. Dynamic hits use lower temporal confidence so they refresh more aggressively."
+msgstr "STRC dynamic எனக் கருதும் visual layers. Dynamic hits குறைந்த temporal confidence-ஐப் பயன்படுத்துவதால் அவை அதிகமாக refresh செய்யப்படும்."
+
+msgid "Controls how strongly valid STRC samples contribute to RTGI. Lower values rely more on freshly traced rays."
+msgstr "செல்லுபடியான STRC samples RTGI-க்கு எவ்வளவு வலுவாக பங்களிக்கும் என்பதை கட்டுப்படுத்துகிறது. குறைந்த மதிப்புகள் புதிதாக traced rays-ஐ அதிகமாக நம்பும்."
+
+msgid "Sets the number of camera-centered STRC cascades. More cascades extend cache coverage."
+msgstr "Camera-centered STRC cascades எண்ணிக்கையை அமைக்கிறது. அதிக cascades cache coverage-ஐ விரிவாக்கும்."
+
+msgid "Sets the probe count per axis for each STRC cascade. Higher values add detail, memory use, and update cost."
+msgstr "ஒவ்வொரு STRC cascade-க்கும் axis ஒன்றுக்கு probe எண்ணிக்கையை அமைக்கிறது. அதிக மதிப்புகள் detail, memory use, update cost ஆகியவற்றை அதிகரிக்கும்."
+
+msgid "Sets the world-space probe spacing for STRC cascade 0. Each farther cascade doubles this spacing."
+msgstr "STRC cascade 0-க்கான world-space probe spacing-ஐ அமைக்கிறது. தூரமான ஒவ்வொரு cascade-மும் இந்த spacing-ஐ இரட்டிப்பாக்கும்."
+
+msgid "Sets the per-frame ray budget for refreshing STRC probes. Higher values update the cache faster, but cost more GPU time."
+msgstr "STRC probes-ஐ refresh செய்ய ஒவ்வொரு frame-க்கும் ray budget-ஐ அமைக்கிறது. அதிக மதிப்புகள் cache-ஐ வேகமாக update செய்யும், ஆனால் கூடுதல் GPU time செலவாகும்."
+
+msgid "Controls temporal accumulation for STRC probe updates. Higher values stabilize the cache, but react more slowly to changes."
+msgstr "STRC probe updates-க்கான temporal accumulation-ஐ கட்டுப்படுத்துகிறது. அதிக மதிப்புகள் cache-ஐ நிலைப்படுத்தும், ஆனால் மாற்றங்களுக்கு மெதுவாக பதிலளிக்கும்."
+
+msgid "Sets how much the per-pixel motion vector can change, in texels, before TAA starts rejecting history for that pixel. Lower values reduce ghosting in motion, but can increase flickering."
+msgstr "TAA அந்த pixel-ன் history-ஐ நிராகரிக்கத் தொடங்கும் முன் per-pixel motion vector, texels-இல், எவ்வளவு மாறலாம் என்பதை அமைக்கிறது. குறைந்த மதிப்புகள் motion ghosting-ஐ குறைக்கும், ஆனால் flickering-ஐ அதிகரிக்கலாம்."
+
+msgid "Sets how much previous frame history contributes to the TAA resolve before additional rejection logic is applied. Higher values produce a more stable image, but can increase ghosting."
+msgstr "கூடுதல் rejection logic பயன்படுத்தப்படுவதற்கு முன் previous frame history TAA resolve-க்கு எவ்வளவு பங்களிக்கும் என்பதை அமைக்கிறது. அதிக மதிப்புகள் நிலையான படத்தை தரும், ஆனால் ghosting-ஐ அதிகரிக்கலாம்."
+
+msgid ""
+"Sets the number of jitter positions used by TAA. Higher values can improve still-image convergence, but take more frames to converge and can increase temporal instability in motion.\n"
+"[b]Note:[/b] This does not affect FSR2 or MetalFX temporal upscaling."
+msgstr ""
+"TAA பயன்படுத்தும் jitter positions எண்ணிக்கையை அமைக்கிறது. அதிக மதிப்புகள் still-image convergence-ஐ மேம்படுத்தலாம், ஆனால் converge ஆக அதிக frames தேவைப்படும் மற்றும் motion-இல் temporal instability அதிகரிக்கலாம்.\n"
+"[b]குறிப்பு:[/b] இது FSR2 அல்லது MetalFX temporal upscaling-ஐ பாதிக்காது."
+
+msgid ""
+"Scales the camera jitter offset used by TAA. Lower values reduce subpixel jitter, which can reduce shimmering but also reduces TAA's ability to reconstruct subpixel detail. A value of [code]0.0[/code] disables TAA camera jitter while leaving TAA resolve enabled.\n"
+"[b]Note:[/b] This does not affect FSR2 or MetalFX temporal upscaling."
+msgstr ""
+"TAA பயன்படுத்தும் camera jitter offset-ஐ scale செய்கிறது. குறைந்த மதிப்புகள் subpixel jitter-ஐ குறைக்கும், அதனால் shimmering குறையலாம், ஆனால் subpixel detail-ஐ reconstruct செய்யும் TAA திறனையும் குறைக்கும். [code]0.0[/code] மதிப்பு TAA camera jitter-ஐ முடக்கி TAA resolve-ஐ இயக்கியவாறே வைக்கும்.\n"
+"[b]குறிப்பு:[/b] இது FSR2 அல்லது MetalFX temporal upscaling-ஐ பாதிக்காது."
+
+msgid "Sets how much sharpening is applied during the TAA resolve. Higher values counteract TAA blur, but can increase shimmering or edge halos."
+msgstr "TAA resolve நடக்கும் போது எவ்வளவு sharpening பயன்படுத்தப்படும் என்பதை அமைக்கிறது. அதிக மதிப்புகள் TAA blur-ஐ குறைக்கும், ஆனால் shimmering அல்லது edge halos-ஐ அதிகரிக்கலாம்."

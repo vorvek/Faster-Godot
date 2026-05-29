@@ -18776,3 +18776,126 @@ msgstr ""
 "Lädt den gesamten Inhalt einer Datei im geladenen ZIP-Archiv in den Speicher "
 "und gibt diesen zurück.\n"
 "Darf erst nach [method open] verwendet werden."
+
+# RTGI and TAA inspector tooltips.
+msgid "Selects the RTGI backend. [constant RTGI_BACKEND_VULKAN_GENERIC] is the built-in Vulkan ray tracing path and the only active backend. Legacy vendor backend values fall back to [constant RTGI_BACKEND_VULKAN_GENERIC]."
+msgstr "Wählt das RTGI-Backend aus. [constant RTGI_BACKEND_VULKAN_GENERIC] ist der eingebaute Vulkan-Raytracing-Pfad und das einzige aktive Backend. Veraltete Anbieter-Backend-Werte fallen auf [constant RTGI_BACKEND_VULKAN_GENERIC] zurück."
+
+msgid "If [code]true[/code], disables RTGI only while this environment is previewed in the editor. Running projects and exported builds still use [member rtgi_enabled]."
+msgstr "Wenn [code]true[/code], wird RTGI nur deaktiviert, während diese Umgebung im Editor als Vorschau angezeigt wird. Laufende Projekte und exportierte Builds verwenden weiterhin [member rtgi_enabled]."
+
+msgid "If [code]true[/code], enables hardware ray-traced global illumination for this environment when the active renderer and GPU support Vulkan ray tracing."
+msgstr "Wenn [code]true[/code], wird hardwarebeschleunigte raytraced Global Illumination für diese Umgebung aktiviert, wenn der aktive Renderer und die GPU Vulkan-Raytracing unterstützen."
+
+msgid "Selects how RTGI contributes to the scene: specular/reflection paths only, full path-traced diffuse and specular lighting, or hybrid secondary lighting traced from the raster G-buffer."
+msgstr "Legt fest, wie RTGI zur Szene beiträgt: nur spekulare/Reflexionspfade, vollständig pfadverfolgte diffuse und spekulare Beleuchtung oder hybride Sekundärbeleuchtung aus dem Raster-G-Buffer."
+
+msgid "Sets the RTGI ray samples per pixel. Higher values reduce noise, but increase GPU cost."
+msgstr "Legt die RTGI-Strahlabtastungen pro Pixel fest. Höhere Werte reduzieren Rauschen, erhöhen aber die GPU-Kosten."
+
+msgid "Sets the maximum RTGI ray bounce count. Higher values can add secondary light, but increase cost and noise."
+msgstr "Legt die maximale Anzahl an RTGI-Strahl-Bounces fest. Höhere Werte können sekundäres Licht hinzufügen, erhöhen aber Kosten und Rauschen."
+
+msgid "Multiplier applied to the denoised RTGI contribution before composition."
+msgstr "Multiplikator, der vor der Komposition auf den entrauschten RTGI-Beitrag angewendet wird."
+
+msgid "Selects the RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser, [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION] denoises split lighting signals before recomposition, and [constant RTGI_DENOISER_NONE] shows the raw sampled result."
+msgstr "Wählt den RTGI-Denoiser aus. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] verwendet den eingebauten GPU-Denoiser, [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION] entrauscht getrennte Beleuchtungssignale vor der Rekombination, und [constant RTGI_DENOISER_NONE] zeigt das rohe abgetastete Ergebnis."
+
+msgid "Selects the RTGI debug visualization. Use it to inspect sampled buffers, material guides, rejection data, and reflection diagnostics."
+msgstr "Wählt die RTGI-Debug-Visualisierung aus. Verwenden Sie sie, um abgetastete Buffer, Material-Guides, Verwerfungsdaten und Reflexionsdiagnosen zu prüfen."
+
+msgid "Controls RTGI denoiser spatial filtering and noise cleanup strength. Higher values reduce speckles, but can blur fine indirect-light detail."
+msgstr "Steuert die Stärke der räumlichen Filterung und Rauschbereinigung des RTGI-Denoisers. Höhere Werte reduzieren Sprenkel, können aber feine Details des indirekten Lichts verwischen."
+
+msgid "Controls how much previous-frame RTGI radiance is reused. Higher values stabilize static surfaces, but can increase ghosting. A value of [code]0.0[/code] disables temporal reuse."
+msgstr "Steuert, wie viel RTGI-Radiance aus dem vorherigen Frame wiederverwendet wird. Höhere Werte stabilisieren statische Oberflächen, können aber Ghosting verstärken. Ein Wert von [code]0.0[/code] deaktiviert die zeitliche Wiederverwendung."
+
+msgid "Controls additional isolated bright-pixel suppression in the RTGI denoiser. Lower values preserve tiny highlights, but can leave more fireflies."
+msgstr "Steuert zusätzliche Unterdrückung isolierter heller Pixel im RTGI-Denoiser. Niedrigere Werte erhalten kleine Highlights, können aber mehr Fireflies übrig lassen."
+
+msgid "Controls how strongly the RTGI denoiser preserves high-frequency albedo and lighting detail. Lower values allow smoother, blurrier denoising."
+msgstr "Steuert, wie stark der RTGI-Denoiser hochfrequente Albedo- und Beleuchtungsdetails erhält. Niedrigere Werte erlauben glatteres, unschärferes Entrauschen."
+
+msgid "If [code]true[/code], keeps diffuse, direct light, emissive, sky, and specular RTGI signals separated for denoising when supported by the selected denoiser."
+msgstr "Wenn [code]true[/code], bleiben diffuse, direkte, emissive, Himmels- und spekulare RTGI-Signale für das Entrauschen getrennt, wenn der ausgewählte Denoiser dies unterstützt."
+
+msgid "Controls previous-frame reuse for specular RTGI. Higher values stabilize glossy reflections, but can increase ghosting."
+msgstr "Steuert die Wiederverwendung vorheriger Frames für spekulares RTGI. Höhere Werte stabilisieren glänzende Reflexionen, können aber Ghosting verstärken."
+
+msgid "Controls spatial filtering strength for specular RTGI. Higher values smooth noise, but can blur glossy detail."
+msgstr "Steuert die Stärke der räumlichen Filterung für spekulares RTGI. Höhere Werte glätten Rauschen, können aber glänzende Details verwischen."
+
+msgid "Applies a pre-denoiser clamp to extreme ray or path contributions. Higher values suppress fireflies before they enter temporal history, but can dim tiny highlights."
+msgstr "Wendet vor dem Denoiser eine Begrenzung auf extreme Strahl- oder Pfadbeiträge an. Höhere Werte unterdrücken Fireflies, bevor sie in die zeitliche History gelangen, können aber kleine Highlights abdunkeln."
+
+msgid "Sets the linear HDR luminance limit used by [member rtgi_ray_firefly_suppression]. A value of [code]0.0[/code] disables the pre-denoiser contribution clamp."
+msgstr "Legt die lineare HDR-Luminanzgrenze fest, die von [member rtgi_ray_firefly_suppression] verwendet wird. Ein Wert von [code]0.0[/code] deaktiviert die Beitragsbegrenzung vor dem Denoiser."
+
+msgid "If [code]true[/code], directly samples analytic lights during RTGI tracing."
+msgstr "Wenn [code]true[/code], werden analytische Lichter während des RTGI-Tracings direkt abgetastet."
+
+msgid "If [code]true[/code], directly samples bounded emissive surface candidates during RTGI tracing."
+msgstr "Wenn [code]true[/code], werden begrenzte emissive Oberflächenkandidaten während des RTGI-Tracings direkt abgetastet."
+
+msgid "If [code]true[/code], enables the screen-space diffuse radiance cache before ASVFG denoising. The cache reuses valid diffuse history and rejects it when guides or radiance change."
+msgstr "Wenn [code]true[/code], wird der screen-space Diffuse-Radiance-Cache vor dem ASVFG-Entrauschen aktiviert. Der Cache verwendet gültige diffuse History wieder und verwirft sie, wenn sich Guides oder Radiance ändern."
+
+msgid "Sets the maximum number of persistent diffuse radiance cache entries. Lower values reduce GPU memory and bandwidth, but use coarser cache reconstruction."
+msgstr "Legt die maximale Anzahl persistenter Diffuse-Radiance-Cache-Einträge fest. Niedrigere Werte reduzieren GPU-Speicher und Bandbreite, verwenden aber gröbere Cache-Rekonstruktion."
+
+msgid "Adds a horizontal RTGI render margin as a fraction of the viewport width. Higher values can reduce edge noise during motion, but increase RT cost."
+msgstr "Fügt einen horizontalen RTGI-Render-Rand als Anteil der Viewport-Breite hinzu. Höhere Werte können Kantenrauschen bei Bewegung reduzieren, erhöhen aber die RT-Kosten."
+
+msgid "Adds a vertical RTGI render margin as a fraction of the viewport height. Higher values can reduce edge noise during motion, but increase RT cost."
+msgstr "Fügt einen vertikalen RTGI-Render-Rand als Anteil der Viewport-Höhe hinzu. Höhere Werte können Kantenrauschen bei Bewegung reduzieren, erhöhen aber die RT-Kosten."
+
+msgid "If [code]true[/code], enables the spatiotemporal RTGI radiance cache used for rough diffuse secondary bounces."
+msgstr "Wenn [code]true[/code], wird der spatiotemporale RTGI-Radiance-Cache für raue diffuse sekundäre Bounces aktiviert."
+
+msgid "Visual layers treated as static by STRC. Objects outside both STRC layer masks are ignored by probe updates and cache sampling. Layers present in both masks are treated as static."
+msgstr "Sichtbarkeits-Layer, die von STRC als statisch behandelt werden. Objekte außerhalb beider STRC-Layer-Masken werden bei Probe-Updates und Cache-Abtastung ignoriert. Layer in beiden Masken gelten als statisch."
+
+msgid "Visual layers treated as dynamic by STRC. Dynamic hits use lower temporal confidence so they refresh more aggressively."
+msgstr "Sichtbarkeits-Layer, die von STRC als dynamisch behandelt werden. Dynamische Treffer verwenden geringeres zeitliches Vertrauen und werden daher aggressiver aktualisiert."
+
+msgid "Controls how strongly valid STRC samples contribute to RTGI. Lower values rely more on freshly traced rays."
+msgstr "Steuert, wie stark gültige STRC-Samples zu RTGI beitragen. Niedrigere Werte stützen sich stärker auf frisch verfolgte Strahlen."
+
+msgid "Sets the number of camera-centered STRC cascades. More cascades extend cache coverage."
+msgstr "Legt die Anzahl der kamera-zentrierten STRC-Kaskaden fest. Mehr Kaskaden erweitern die Cache-Abdeckung."
+
+msgid "Sets the probe count per axis for each STRC cascade. Higher values add detail, memory use, and update cost."
+msgstr "Legt die Probe-Anzahl pro Achse für jede STRC-Kaskade fest. Höhere Werte erhöhen Detail, Speichernutzung und Aktualisierungskosten."
+
+msgid "Sets the world-space probe spacing for STRC cascade 0. Each farther cascade doubles this spacing."
+msgstr "Legt den Weltabstand der Probes für STRC-Kaskade 0 fest. Jede weiter entfernte Kaskade verdoppelt diesen Abstand."
+
+msgid "Sets the per-frame ray budget for refreshing STRC probes. Higher values update the cache faster, but cost more GPU time."
+msgstr "Legt das Strahlenbudget pro Frame zum Aktualisieren von STRC-Probes fest. Höhere Werte aktualisieren den Cache schneller, kosten aber mehr GPU-Zeit."
+
+msgid "Controls temporal accumulation for STRC probe updates. Higher values stabilize the cache, but react more slowly to changes."
+msgstr "Steuert die zeitliche Akkumulation für STRC-Probe-Updates. Höhere Werte stabilisieren den Cache, reagieren aber langsamer auf Änderungen."
+
+msgid "Sets how much the per-pixel motion vector can change, in texels, before TAA starts rejecting history for that pixel. Lower values reduce ghosting in motion, but can increase flickering."
+msgstr "Legt fest, wie stark sich der Bewegungsvektor pro Pixel in Texeln ändern darf, bevor TAA die History für dieses Pixel verwirft. Niedrigere Werte reduzieren Ghosting bei Bewegung, können aber Flimmern verstärken."
+
+msgid "Sets how much previous frame history contributes to the TAA resolve before additional rejection logic is applied. Higher values produce a more stable image, but can increase ghosting."
+msgstr "Legt fest, wie stark die History des vorherigen Frames zum TAA-Resolve beiträgt, bevor zusätzliche Verwerfungslogik angewendet wird. Höhere Werte erzeugen ein stabileres Bild, können aber Ghosting verstärken."
+
+msgid ""
+"Sets the number of jitter positions used by TAA. Higher values can improve still-image convergence, but take more frames to converge and can increase temporal instability in motion.\n"
+"[b]Note:[/b] This does not affect FSR2 or MetalFX temporal upscaling."
+msgstr ""
+"Legt die Anzahl der von TAA verwendeten Jitter-Positionen fest. Höhere Werte können die Konvergenz von Standbildern verbessern, benötigen aber mehr Frames zur Konvergenz und können zeitliche Instabilität bei Bewegung erhöhen.\n"
+"[b]Hinweis:[/b] Dies beeinflusst FSR2 oder temporales MetalFX-Upscaling nicht."
+
+msgid ""
+"Scales the camera jitter offset used by TAA. Lower values reduce subpixel jitter, which can reduce shimmering but also reduces TAA's ability to reconstruct subpixel detail. A value of [code]0.0[/code] disables TAA camera jitter while leaving TAA resolve enabled.\n"
+"[b]Note:[/b] This does not affect FSR2 or MetalFX temporal upscaling."
+msgstr ""
+"Skaliert den von TAA verwendeten Kamera-Jitter-Versatz. Niedrigere Werte reduzieren Subpixel-Jitter und damit mögliches Schimmern, verringern aber auch die Fähigkeit von TAA, Subpixel-Details zu rekonstruieren. Ein Wert von [code]0.0[/code] deaktiviert den TAA-Kamera-Jitter, während der TAA-Resolve aktiv bleibt.\n"
+"[b]Hinweis:[/b] Dies beeinflusst FSR2 oder temporales MetalFX-Upscaling nicht."
+
+msgid "Sets how much sharpening is applied during the TAA resolve. Higher values counteract TAA blur, but can increase shimmering or edge halos."
+msgstr "Legt fest, wie stark während des TAA-Resolve geschärft wird. Höhere Werte wirken TAA-Unschärfe entgegen, können aber Schimmern oder Kantenhalos verstärken."

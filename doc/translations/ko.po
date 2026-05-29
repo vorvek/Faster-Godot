@@ -18542,3 +18542,126 @@ msgstr "AR/VR에서의 원점."
 
 msgid "Represents the size of the [enum TrackerHand] enum."
 msgstr "[enum TrackerHand] 열거형의 크기를 나타냅니다."
+
+# RTGI and TAA inspector tooltips.
+msgid "Selects the RTGI backend. [constant RTGI_BACKEND_VULKAN_GENERIC] is the built-in Vulkan ray tracing path and the only active backend. Legacy vendor backend values fall back to [constant RTGI_BACKEND_VULKAN_GENERIC]."
+msgstr "RTGI 백엔드를 선택합니다. [constant RTGI_BACKEND_VULKAN_GENERIC]은 내장 Vulkan 레이 트레이싱 경로이며 유일하게 활성화되는 백엔드입니다. 레거시 벤더 백엔드 값은 [constant RTGI_BACKEND_VULKAN_GENERIC]으로 대체됩니다."
+
+msgid "If [code]true[/code], disables RTGI only while this environment is previewed in the editor. Running projects and exported builds still use [member rtgi_enabled]."
+msgstr "[code]true[/code]이면 이 환경이 에디터에서 미리보기될 때만 RTGI를 비활성화합니다. 실행 중인 프로젝트와 내보낸 빌드는 계속 [member rtgi_enabled]를 사용합니다."
+
+msgid "If [code]true[/code], enables hardware ray-traced global illumination for this environment when the active renderer and GPU support Vulkan ray tracing."
+msgstr "[code]true[/code]이면 활성 렌더러와 GPU가 Vulkan 레이 트레이싱을 지원할 때 이 환경에 하드웨어 레이 트레이싱 전역 조명을 활성화합니다."
+
+msgid "Selects how RTGI contributes to the scene: specular/reflection paths only, full path-traced diffuse and specular lighting, or hybrid secondary lighting traced from the raster G-buffer."
+msgstr "RTGI가 씬에 기여하는 방식을 선택합니다: 스페큘러/반사 경로만, 완전한 패스 트레이싱 확산 및 스페큘러 조명, 또는 래스터 G-buffer에서 추적하는 하이브리드 보조 조명입니다."
+
+msgid "Sets the RTGI ray samples per pixel. Higher values reduce noise, but increase GPU cost."
+msgstr "픽셀당 RTGI 레이 샘플 수를 설정합니다. 값이 높을수록 노이즈가 줄어들지만 GPU 비용이 증가합니다."
+
+msgid "Sets the maximum RTGI ray bounce count. Higher values can add secondary light, but increase cost and noise."
+msgstr "RTGI 레이의 최대 반사 횟수를 설정합니다. 값이 높을수록 보조 조명이 추가될 수 있지만 비용과 노이즈가 증가합니다."
+
+msgid "Multiplier applied to the denoised RTGI contribution before composition."
+msgstr "합성 전에 디노이즈된 RTGI 기여도에 적용되는 배율입니다."
+
+msgid "Selects the RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser, [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION] denoises split lighting signals before recomposition, and [constant RTGI_DENOISER_NONE] shows the raw sampled result."
+msgstr "RTGI 디노이저를 선택합니다. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL]은 내장 GPU 디노이저를 사용하고, [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION]은 재합성 전에 분리된 조명 신호를 디노이즈하며, [constant RTGI_DENOISER_NONE]은 원시 샘플 결과를 보여 줍니다."
+
+msgid "Selects the RTGI debug visualization. Use it to inspect sampled buffers, material guides, rejection data, and reflection diagnostics."
+msgstr "RTGI 디버그 시각화를 선택합니다. 샘플링된 버퍼, 머티리얼 가이드, 거부 데이터, 반사 진단을 검사하는 데 사용합니다."
+
+msgid "Controls RTGI denoiser spatial filtering and noise cleanup strength. Higher values reduce speckles, but can blur fine indirect-light detail."
+msgstr "RTGI 디노이저의 공간 필터링과 노이즈 정리 강도를 제어합니다. 값이 높을수록 얼룩은 줄어들지만 미세한 간접광 디테일이 흐려질 수 있습니다."
+
+msgid "Controls how much previous-frame RTGI radiance is reused. Higher values stabilize static surfaces, but can increase ghosting. A value of [code]0.0[/code] disables temporal reuse."
+msgstr "이전 프레임의 RTGI 라디언스를 얼마나 재사용할지 제어합니다. 값이 높을수록 정적 표면은 안정화되지만 고스팅이 증가할 수 있습니다. [code]0.0[/code] 값은 시간적 재사용을 비활성화합니다."
+
+msgid "Controls additional isolated bright-pixel suppression in the RTGI denoiser. Lower values preserve tiny highlights, but can leave more fireflies."
+msgstr "RTGI 디노이저에서 고립된 밝은 픽셀을 추가로 억제하는 정도를 제어합니다. 값이 낮을수록 작은 하이라이트는 보존되지만 더 많은 파이어플라이가 남을 수 있습니다."
+
+msgid "Controls how strongly the RTGI denoiser preserves high-frequency albedo and lighting detail. Lower values allow smoother, blurrier denoising."
+msgstr "RTGI 디노이저가 고주파 알베도와 조명 디테일을 얼마나 강하게 보존할지 제어합니다. 값이 낮을수록 더 매끄럽고 흐릿한 디노이즈가 허용됩니다."
+
+msgid "If [code]true[/code], keeps diffuse, direct light, emissive, sky, and specular RTGI signals separated for denoising when supported by the selected denoiser."
+msgstr "[code]true[/code]이면 선택한 디노이저가 지원할 때 확산, 직접광, 이미시브, 하늘, 스페큘러 RTGI 신호를 디노이즈용으로 분리해 유지합니다."
+
+msgid "Controls previous-frame reuse for specular RTGI. Higher values stabilize glossy reflections, but can increase ghosting."
+msgstr "스페큘러 RTGI에 대한 이전 프레임 재사용을 제어합니다. 값이 높을수록 광택 반사는 안정화되지만 고스팅이 증가할 수 있습니다."
+
+msgid "Controls spatial filtering strength for specular RTGI. Higher values smooth noise, but can blur glossy detail."
+msgstr "스페큘러 RTGI의 공간 필터링 강도를 제어합니다. 값이 높을수록 노이즈가 부드러워지지만 광택 디테일이 흐려질 수 있습니다."
+
+msgid "Applies a pre-denoiser clamp to extreme ray or path contributions. Higher values suppress fireflies before they enter temporal history, but can dim tiny highlights."
+msgstr "극단적인 레이 또는 경로 기여도에 디노이저 전 클램프를 적용합니다. 값이 높을수록 파이어플라이가 시간 히스토리에 들어가기 전에 억제되지만 작은 하이라이트가 어두워질 수 있습니다."
+
+msgid "Sets the linear HDR luminance limit used by [member rtgi_ray_firefly_suppression]. A value of [code]0.0[/code] disables the pre-denoiser contribution clamp."
+msgstr "[member rtgi_ray_firefly_suppression]에서 사용하는 선형 HDR 휘도 한계를 설정합니다. [code]0.0[/code] 값은 디노이저 전 기여도 클램프를 비활성화합니다."
+
+msgid "If [code]true[/code], directly samples analytic lights during RTGI tracing."
+msgstr "[code]true[/code]이면 RTGI 추적 중 분석적 라이트를 직접 샘플링합니다."
+
+msgid "If [code]true[/code], directly samples bounded emissive surface candidates during RTGI tracing."
+msgstr "[code]true[/code]이면 RTGI 추적 중 경계가 있는 이미시브 표면 후보를 직접 샘플링합니다."
+
+msgid "If [code]true[/code], enables the screen-space diffuse radiance cache before ASVFG denoising. The cache reuses valid diffuse history and rejects it when guides or radiance change."
+msgstr "[code]true[/code]이면 ASVFG 디노이즈 전에 화면 공간 확산 라디언스 캐시를 활성화합니다. 캐시는 유효한 확산 히스토리를 재사용하고 가이드나 라디언스가 바뀌면 이를 거부합니다."
+
+msgid "Sets the maximum number of persistent diffuse radiance cache entries. Lower values reduce GPU memory and bandwidth, but use coarser cache reconstruction."
+msgstr "영구 확산 라디언스 캐시 항목의 최대 개수를 설정합니다. 값이 낮을수록 GPU 메모리와 대역폭은 줄어들지만 더 거친 캐시 재구성을 사용합니다."
+
+msgid "Adds a horizontal RTGI render margin as a fraction of the viewport width. Higher values can reduce edge noise during motion, but increase RT cost."
+msgstr "뷰포트 너비의 비율로 수평 RTGI 렌더 여백을 추가합니다. 값이 높을수록 움직임 중 가장자리 노이즈를 줄일 수 있지만 RT 비용이 증가합니다."
+
+msgid "Adds a vertical RTGI render margin as a fraction of the viewport height. Higher values can reduce edge noise during motion, but increase RT cost."
+msgstr "뷰포트 높이의 비율로 수직 RTGI 렌더 여백을 추가합니다. 값이 높을수록 움직임 중 가장자리 노이즈를 줄일 수 있지만 RT 비용이 증가합니다."
+
+msgid "If [code]true[/code], enables the spatiotemporal RTGI radiance cache used for rough diffuse secondary bounces."
+msgstr "[code]true[/code]이면 거친 확산 보조 반사에 사용되는 시공간 RTGI 라디언스 캐시를 활성화합니다."
+
+msgid "Visual layers treated as static by STRC. Objects outside both STRC layer masks are ignored by probe updates and cache sampling. Layers present in both masks are treated as static."
+msgstr "STRC가 정적으로 처리하는 시각 레이어입니다. 두 STRC 레이어 마스크 모두에 포함되지 않은 오브젝트는 프로브 업데이트와 캐시 샘플링에서 무시됩니다. 두 마스크 모두에 있는 레이어는 정적으로 처리됩니다."
+
+msgid "Visual layers treated as dynamic by STRC. Dynamic hits use lower temporal confidence so they refresh more aggressively."
+msgstr "STRC가 동적으로 처리하는 시각 레이어입니다. 동적 히트는 시간적 신뢰도가 낮아 더 적극적으로 새로 고쳐집니다."
+
+msgid "Controls how strongly valid STRC samples contribute to RTGI. Lower values rely more on freshly traced rays."
+msgstr "유효한 STRC 샘플이 RTGI에 얼마나 강하게 기여하는지 제어합니다. 값이 낮을수록 새로 추적한 레이에 더 의존합니다."
+
+msgid "Sets the number of camera-centered STRC cascades. More cascades extend cache coverage."
+msgstr "카메라 중심 STRC 캐스케이드 수를 설정합니다. 캐스케이드가 많을수록 캐시 범위가 확장됩니다."
+
+msgid "Sets the probe count per axis for each STRC cascade. Higher values add detail, memory use, and update cost."
+msgstr "각 STRC 캐스케이드의 축당 프로브 수를 설정합니다. 값이 높을수록 디테일, 메모리 사용량, 업데이트 비용이 증가합니다."
+
+msgid "Sets the world-space probe spacing for STRC cascade 0. Each farther cascade doubles this spacing."
+msgstr "STRC 캐스케이드 0의 월드 공간 프로브 간격을 설정합니다. 더 먼 각 캐스케이드는 이 간격을 두 배로 늘립니다."
+
+msgid "Sets the per-frame ray budget for refreshing STRC probes. Higher values update the cache faster, but cost more GPU time."
+msgstr "STRC 프로브를 새로 고치는 프레임당 레이 예산을 설정합니다. 값이 높을수록 캐시가 더 빨리 업데이트되지만 GPU 시간이 더 많이 듭니다."
+
+msgid "Controls temporal accumulation for STRC probe updates. Higher values stabilize the cache, but react more slowly to changes."
+msgstr "STRC 프로브 업데이트의 시간적 누적을 제어합니다. 값이 높을수록 캐시는 안정화되지만 변화에 더 느리게 반응합니다."
+
+msgid "Sets how much the per-pixel motion vector can change, in texels, before TAA starts rejecting history for that pixel. Lower values reduce ghosting in motion, but can increase flickering."
+msgstr "TAA가 해당 픽셀의 히스토리를 거부하기 시작하기 전에 픽셀별 모션 벡터가 텍셀 단위로 얼마나 변할 수 있는지 설정합니다. 값이 낮을수록 움직임의 고스팅은 줄어들지만 깜빡임이 증가할 수 있습니다."
+
+msgid "Sets how much previous frame history contributes to the TAA resolve before additional rejection logic is applied. Higher values produce a more stable image, but can increase ghosting."
+msgstr "추가 거부 로직이 적용되기 전에 이전 프레임 히스토리가 TAA resolve에 얼마나 기여하는지 설정합니다. 값이 높을수록 더 안정적인 이미지를 만들지만 고스팅이 증가할 수 있습니다."
+
+msgid ""
+"Sets the number of jitter positions used by TAA. Higher values can improve still-image convergence, but take more frames to converge and can increase temporal instability in motion.\n"
+"[b]Note:[/b] This does not affect FSR2 or MetalFX temporal upscaling."
+msgstr ""
+"TAA가 사용하는 지터 위치 수를 설정합니다. 값이 높을수록 정지 이미지 수렴이 좋아질 수 있지만 수렴에 더 많은 프레임이 필요하고 움직임에서 시간적 불안정성이 증가할 수 있습니다.\n"
+"[b]참고:[/b] FSR2 또는 MetalFX 시간 업스케일링에는 영향을 주지 않습니다."
+
+msgid ""
+"Scales the camera jitter offset used by TAA. Lower values reduce subpixel jitter, which can reduce shimmering but also reduces TAA's ability to reconstruct subpixel detail. A value of [code]0.0[/code] disables TAA camera jitter while leaving TAA resolve enabled.\n"
+"[b]Note:[/b] This does not affect FSR2 or MetalFX temporal upscaling."
+msgstr ""
+"TAA가 사용하는 카메라 지터 오프셋을 스케일합니다. 값이 낮을수록 서브픽셀 지터가 줄어들어 쉬머링이 줄 수 있지만, TAA가 서브픽셀 디테일을 재구성하는 능력도 줄어듭니다. [code]0.0[/code] 값은 TAA resolve는 활성 상태로 두고 TAA 카메라 지터를 비활성화합니다.\n"
+"[b]참고:[/b] FSR2 또는 MetalFX 시간 업스케일링에는 영향을 주지 않습니다."
+
+msgid "Sets how much sharpening is applied during the TAA resolve. Higher values counteract TAA blur, but can increase shimmering or edge halos."
+msgstr "TAA resolve 중 적용되는 샤프닝 양을 설정합니다. 값이 높을수록 TAA 흐림을 상쇄하지만 쉬머링이나 가장자리 halo가 증가할 수 있습니다."
