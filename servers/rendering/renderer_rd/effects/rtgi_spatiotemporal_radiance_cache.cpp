@@ -178,6 +178,7 @@ void RTGISpatioTemporalRadianceCache::process(Ref<RenderSceneBuffersRD> p_render
 	push_constant.mode = 0u;
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, atlas_size.x, atlas_size.y, 1);
+	RD::get_singleton()->compute_list_add_barrier(compute_list);
 	push_constant.mode = 1u;
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, push_constant.ray_count, 1, 1);

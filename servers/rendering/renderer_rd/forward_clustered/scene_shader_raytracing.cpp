@@ -619,7 +619,11 @@ uint32_t SceneShaderRaytracing::_register_slot(uint32_t /*p_shader_id*/, RID p_m
 		return 0;
 	}
 	if (!p_is_procedural && entry.uses_light_shader) {
-		WARN_PRINT_ONCE("RT: ShaderMaterial light() is a raster per-light hook and is not evaluated by the path tracer yet; surfaces that define it fall back to RT MaterialData, including any custom fragment() code in that shader.");
+		static bool light_shader_note_printed = false;
+		if (!light_shader_note_printed) {
+			light_shader_note_printed = true;
+			print_line("RT note: ShaderMaterial light() is raster-only for now; path tracing uses RT MaterialData for affected surfaces.");
+		}
 		return 0;
 	}
 	if (!p_is_procedural && !entry.vertex_code.is_empty()) {

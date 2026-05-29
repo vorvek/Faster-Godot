@@ -1140,6 +1140,66 @@ static RTGIBackendCapabilities _rtgi_static_backend_capabilities(RSE::Pathtracin
 	}
 }
 
+static bool _rtgi_backend_is_enabled(RSE::PathtracingBackend p_backend) {
+	return p_backend == RSE::PT_BACKEND_VULKAN_GENERIC;
+}
+
+static RTGIBackendCapabilities _rtgi_enabled_backend_capabilities(RSE::PathtracingBackend p_backend) {
+	if (_rtgi_backend_is_enabled(p_backend)) {
+		return _rtgi_static_backend_capabilities(p_backend);
+	}
+
+	const String disabled_reason = "Only the Vulkan Generic RTGI backend is enabled in this build.";
+	RTGIBackendCapabilities caps;
+	RenderingDevice *rd = RD::get_singleton();
+	caps.backend = p_backend;
+	switch (p_backend) {
+		case RSE::PT_BACKEND_NVIDIA_RTXPT:
+			caps.name = "NVIDIA RTXPT";
+			caps.runtime_name = "RenderingDevice Vulkan ray tracing pipeline";
+			caps.integration_path = "NVIDIA Godot fork-compatible RenderingDevice/Vulkan dispatch";
+			caps.denoiser_name = "ASVFG";
+			break;
+		case RSE::PT_BACKEND_AMD_HIP_RT:
+			caps.name = "AMD HIP RT";
+			caps.runtime_name = "HIP RT compute runtime";
+			caps.integration_path = "Vulkan/HIP external memory and semaphore interop";
+			caps.denoiser_name = "Internal Signal Decomposition";
+			break;
+		case RSE::PT_BACKEND_INTEL_EMBREE:
+		default:
+			caps.name = "Intel Embree/OSPRay";
+			caps.runtime_name = "CPU/SYCL";
+			caps.integration_path = "Vulkan upload/import or deliberate staged copy";
+			caps.denoiser_name = "Internal Signal Decomposition";
+			break;
+	}
+	caps.available = false;
+	caps.rendering_device_family = _rtgi_rd_device_family_name(rd);
+	caps.rendering_device_name = _rtgi_rd_device_name(rd);
+	caps.rendering_device_vendor_id = _rtgi_rd_device_vendor_id(rd);
+	caps.rendering_device_vendor = _rtgi_rd_device_vendor_name(caps.rendering_device_vendor_id);
+	caps.backend_compiled = false;
+	caps.runtime_detected = false;
+	caps.device_supported = false;
+	caps.resource_exchange_supported = false;
+	caps.implementation_ready = false;
+	caps.sdk_headers_present = false;
+	caps.vulkan_interop_mode = "none";
+	caps.resource_exchange_sync = "none";
+	caps.native_probe_update = false;
+	caps.generic_probe_update_fallback = true;
+	caps.probe_update_path = "Vulkan Generic STRC probe fallback";
+	caps.denoiser_runtime_detected = false;
+	caps.denoiser_available = false;
+	caps.denoiser_handoff = false;
+	caps.denoiser_failure_reason = disabled_reason;
+	caps.compile_failure_reason = disabled_reason;
+	caps.availability_failure = _rtgi_availability_failure(caps.backend_compiled, caps.runtime_detected, caps.device_supported, caps.resource_exchange_supported, caps.implementation_ready);
+	caps.fallback_reason = disabled_reason;
+	return caps;
+}
+
 static uint64_t _rt_history_mix(uint64_t p_hash, uint64_t p_value) {
 	return p_hash ^ (p_value + 0x9e3779b97f4a7c15ULL + (p_hash << 6) + (p_hash >> 2));
 }
@@ -4989,9 +5049,6 @@ void RenderRaytracing::initialize(RenderForwardClustered *p_owner) {
 	owner = p_owner;
 	bindless_block = memnew(BindlessBlock);
 	rtgi_backends[RSE::PT_BACKEND_VULKAN_GENERIC] = memnew(VulkanGenericRTGIBackend);
-	rtgi_backends[RSE::PT_BACKEND_NVIDIA_RTXPT] = memnew(VendorRTGIBackend(RSE::PT_BACKEND_NVIDIA_RTXPT));
-	rtgi_backends[RSE::PT_BACKEND_AMD_HIP_RT] = memnew(VendorRTGIBackend(RSE::PT_BACKEND_AMD_HIP_RT));
-	rtgi_backends[RSE::PT_BACKEND_INTEL_EMBREE] = memnew(VendorRTGIBackend(RSE::PT_BACKEND_INTEL_EMBREE));
 	String fallback_reason;
 	rtgi_backend_initialized[RSE::PT_BACKEND_VULKAN_GENERIC] = rtgi_backends[RSE::PT_BACKEND_VULKAN_GENERIC]->initialize(owner, this, &fallback_reason);
 	for (uint32_t i = 0; i < RSE::PT_BACKEND_MAX; i++) {
@@ -5053,7 +5110,7 @@ RenderRaytracing::~RenderRaytracing() {
 bool RenderRaytracing::_initialize_backend(RSE::PathtracingBackend p_backend, String *r_fallback_reason) {
 	if (p_backend < 0 || p_backend >= RSE::PT_BACKEND_MAX || rtgi_backends[p_backend] == nullptr) {
 		if (r_fallback_reason) {
-			*r_fallback_reason = "Unknown RTGI backend.";
+			*r_fallback_reason = p_backend >= 0 && p_backend < RSE::PT_BACKEND_MAX ? "Only the Vulkan Generic RTGI backend is enabled in this build." : "Unknown RTGI backend.";
 		}
 		return false;
 	}
@@ -5083,12 +5140,10 @@ void RenderRaytracing::_activate_backend(RSE::PathtracingBackend p_backend) {
 
 RTGIBackendCapabilities RenderRaytracing::get_backend_capabilities(RSE::PathtracingBackend p_backend) const {
 	if (p_backend < 0 || p_backend >= RSE::PT_BACKEND_MAX || rtgi_backends[p_backend] == nullptr) {
-		RTGIBackendCapabilities caps;
-		caps.backend = p_backend >= 0 && p_backend < RSE::PT_BACKEND_MAX ? p_backend : RSE::PT_BACKEND_VULKAN_GENERIC;
-		caps.name = "Unknown";
-		caps.available = false;
-		caps.fallback_reason = "Unknown RTGI backend.";
-		return caps;
+		if (p_backend >= 0 && p_backend < RSE::PT_BACKEND_MAX) {
+			return _rtgi_backend_effective_capabilities(_rtgi_enabled_backend_capabilities(p_backend));
+		}
+		return _rtgi_backend_effective_capabilities(_rtgi_enabled_backend_capabilities(RSE::PT_BACKEND_VULKAN_GENERIC));
 	}
 	return _rtgi_backend_effective_capabilities(rtgi_backends[p_backend]->query_capabilities());
 }
@@ -5214,12 +5269,6 @@ Dictionary RenderRaytracing::get_backend_status_dictionary(RSE::PathtracingBacke
 RSE::PathtracingBackend RenderRaytracing::backend_from_env_param(float p_backend) {
 	const int backend = int(p_backend);
 	switch (backend) {
-		case RSE::PT_BACKEND_NVIDIA_RTXPT:
-			return RSE::PT_BACKEND_NVIDIA_RTXPT;
-		case RSE::PT_BACKEND_AMD_HIP_RT:
-			return RSE::PT_BACKEND_AMD_HIP_RT;
-		case RSE::PT_BACKEND_INTEL_EMBREE:
-			return RSE::PT_BACKEND_INTEL_EMBREE;
 		case RSE::PT_BACKEND_VULKAN_GENERIC:
 		default:
 			return RSE::PT_BACKEND_VULKAN_GENERIC;
@@ -5307,13 +5356,13 @@ Array RenderRaytracing::get_backend_capabilities_dictionaries() const {
 Array RenderRaytracing::get_static_backend_capabilities_dictionaries() {
 	Array result;
 	for (int i = 0; i < RSE::PT_BACKEND_MAX; i++) {
-		result.push_back(_rtgi_backend_capabilities_to_dictionary(_rtgi_backend_effective_capabilities(_rtgi_static_backend_capabilities((RSE::PathtracingBackend)i)), false));
+		result.push_back(_rtgi_backend_capabilities_to_dictionary(_rtgi_backend_effective_capabilities(_rtgi_enabled_backend_capabilities((RSE::PathtracingBackend)i)), false));
 	}
 	return result;
 }
 
 Dictionary RenderRaytracing::get_static_backend_status_dictionary() {
-	const RTGIBackendCapabilities generic_capabilities = _rtgi_backend_effective_capabilities(_rtgi_static_backend_capabilities(RSE::PT_BACKEND_VULKAN_GENERIC));
+	const RTGIBackendCapabilities generic_capabilities = _rtgi_backend_effective_capabilities(_rtgi_enabled_backend_capabilities(RSE::PT_BACKEND_VULKAN_GENERIC));
 	const Dictionary generic_capabilities_dict = _rtgi_backend_capabilities_to_dictionary(generic_capabilities, false);
 
 	Dictionary result;
@@ -5339,8 +5388,8 @@ Dictionary RenderRaytracing::get_static_backend_status_dictionary(RSE::Pathtraci
 		p_requested = RSE::PT_BACKEND_VULKAN_GENERIC;
 	}
 
-	const RTGIBackendCapabilities requested_capabilities = _rtgi_backend_effective_capabilities(_rtgi_static_backend_capabilities(p_requested));
-	const RTGIBackendCapabilities generic_capabilities = _rtgi_backend_effective_capabilities(_rtgi_static_backend_capabilities(RSE::PT_BACKEND_VULKAN_GENERIC));
+	const RTGIBackendCapabilities requested_capabilities = _rtgi_backend_effective_capabilities(_rtgi_enabled_backend_capabilities(p_requested));
+	const RTGIBackendCapabilities generic_capabilities = _rtgi_backend_effective_capabilities(_rtgi_enabled_backend_capabilities(RSE::PT_BACKEND_VULKAN_GENERIC));
 	const bool use_fallback = p_requested != RSE::PT_BACKEND_VULKAN_GENERIC && !requested_capabilities.available;
 	const RSE::PathtracingBackend active_backend = use_fallback ? RSE::PT_BACKEND_VULKAN_GENERIC : p_requested;
 	const RTGIBackendCapabilities active_capabilities = use_fallback ? generic_capabilities : requested_capabilities;
@@ -10375,7 +10424,7 @@ void RenderRaytracing::copy_output_texture(const RenderDataRD *p_render_data) {
 	// Copy raytracing output to main color buffer
 	const Rect2i src_rect(rb_data->rt_get_visible_origin(), rb_data->rt_get_visible_size());
 	for (uint32_t v = 0; v < rb->get_view_count(); v++) {
-		RID src = rb_data->rt_get_texture();
+		RID src = rb->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, v, 0);
 		RID dst = rb->get_internal_texture(v);
 		owner->copy_effects->copy_to_rect_region(src, dst, src_rect, Vector2i(), false, false, false, false, true);
 	}

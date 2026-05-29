@@ -37,19 +37,19 @@
 
 namespace TestEnvironment {
 
-static void check_rtgi_backend_reaches_render_params(const Ref<Environment> &p_environment, Environment::RTGIBackend p_backend) {
-	p_environment->set_rtgi_backend(p_backend);
-	CHECK_EQ(p_environment->get_rtgi_backend(), p_backend);
+static void check_rtgi_backend_reaches_render_params(const Ref<Environment> &p_environment, Environment::RTGIBackend p_requested_backend, Environment::RTGIBackend p_expected_backend) {
+	p_environment->set_rtgi_backend(p_requested_backend);
+	CHECK_EQ(p_environment->get_rtgi_backend(), p_expected_backend);
 
 	RenderingServer *rendering_server = RenderingServer::get_singleton();
 	REQUIRE(rendering_server != nullptr);
 
 	const PackedFloat32Array params = rendering_server->environment_get_pathtracing_params(p_environment->get_rid());
 	REQUIRE_GT(params.size(), RSE::PT_PARAM_RTGI_BACKEND);
-	CHECK_EQ(int(params[RSE::PT_PARAM_RTGI_BACKEND]), int(p_backend));
+	CHECK_EQ(int(params[RSE::PT_PARAM_RTGI_BACKEND]), int(p_expected_backend));
 }
 
-TEST_CASE("[SceneTree][Environment] RTGI backend selection preserves vendor requests and falls back only for invalid values") {
+TEST_CASE("[SceneTree][Environment] RTGI backend selection clamps legacy vendor and invalid values to Vulkan Generic") {
 	Ref<Environment> environment;
 	environment.instantiate();
 
@@ -58,10 +58,10 @@ TEST_CASE("[SceneTree][Environment] RTGI backend selection preserves vendor requ
 	REQUIRE_GT(params.size(), RSE::PT_PARAM_RTGI_BACKEND);
 	CHECK_EQ(int(params[RSE::PT_PARAM_RTGI_BACKEND]), int(Environment::RTGI_BACKEND_VULKAN_GENERIC));
 
-	check_rtgi_backend_reaches_render_params(environment, Environment::RTGI_BACKEND_VULKAN_GENERIC);
-	check_rtgi_backend_reaches_render_params(environment, Environment::RTGI_BACKEND_NVIDIA_RTXPT);
-	check_rtgi_backend_reaches_render_params(environment, Environment::RTGI_BACKEND_AMD_HIP_RT);
-	check_rtgi_backend_reaches_render_params(environment, Environment::RTGI_BACKEND_INTEL_EMBREE);
+	check_rtgi_backend_reaches_render_params(environment, Environment::RTGI_BACKEND_VULKAN_GENERIC, Environment::RTGI_BACKEND_VULKAN_GENERIC);
+	check_rtgi_backend_reaches_render_params(environment, Environment::RTGI_BACKEND_NVIDIA_RTXPT, Environment::RTGI_BACKEND_VULKAN_GENERIC);
+	check_rtgi_backend_reaches_render_params(environment, Environment::RTGI_BACKEND_AMD_HIP_RT, Environment::RTGI_BACKEND_VULKAN_GENERIC);
+	check_rtgi_backend_reaches_render_params(environment, Environment::RTGI_BACKEND_INTEL_EMBREE, Environment::RTGI_BACKEND_VULKAN_GENERIC);
 
 	environment->set_rtgi_backend((Environment::RTGIBackend)-1);
 	CHECK_EQ(environment->get_rtgi_backend(), Environment::RTGI_BACKEND_VULKAN_GENERIC);

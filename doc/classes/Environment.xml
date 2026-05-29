@@ -203,7 +203,7 @@
 			The reflected (specular) light source.
 		</member>
 		<member name="rtgi_backend" type="int" setter="set_rtgi_backend" getter="get_rtgi_backend" enum="Environment.RTGIBackend" default="0">
-			Selects the requested RTGI backend. [constant RTGI_BACKEND_VULKAN_GENERIC] is the built-in Vulkan ray tracing path. Vendor backends remain serialized even when unavailable on the current platform; the renderer warns once and falls back at runtime without changing this resource.
+			Selects the requested RTGI backend. [constant RTGI_BACKEND_VULKAN_GENERIC] is the built-in Vulkan ray tracing path and the only active RTGI backend. Legacy vendor backend values are clamped to [constant RTGI_BACKEND_VULKAN_GENERIC].
 		</member>
 		<member name="rtgi_disable_in_editor" type="bool" setter="set_rtgi_disable_in_editor" getter="is_rtgi_disabled_in_editor" default="true">
 			If [code]true[/code], disables RTGI while this environment is previewed in the editor. This does not affect running projects or exported builds.
@@ -570,13 +570,13 @@
 			Use the built-in Vulkan ray tracing RTGI backend.
 		</constant>
 		<constant name="RTGI_BACKEND_NVIDIA_RTXPT" value="1" enum="RTGIBackend">
-			Request the NVIDIA RTXPT backend. Uses the NVIDIA Godot fork-compatible RenderingDevice/Vulkan dispatch path when the RTXPT module is compiled, with denoising/runtime support gated separately.
+			Legacy NVIDIA RTXPT backend identifier. The runtime currently uses [constant RTGI_BACKEND_VULKAN_GENERIC] instead.
 		</constant>
 		<constant name="RTGI_BACKEND_AMD_HIP_RT" value="2" enum="RTGIBackend">
-			Request the AMD HIP RT backend. Requires the HIP RT module, runtime libraries, and Vulkan/HIP external memory and semaphore interop; otherwise it falls back to [constant RTGI_BACKEND_VULKAN_GENERIC].
+			Legacy AMD HIP RT backend identifier. The runtime currently uses [constant RTGI_BACKEND_VULKAN_GENERIC] instead.
 		</constant>
 		<constant name="RTGI_BACKEND_INTEL_EMBREE" value="3" enum="RTGIBackend">
-			Request the Intel Embree/OSPRay backend. Uses compiled CPU rendering with synchronized RD upload when available; otherwise it falls back to [constant RTGI_BACKEND_VULKAN_GENERIC].
+			Legacy Intel Embree/OSPRay backend identifier. The runtime currently uses [constant RTGI_BACKEND_VULKAN_GENERIC] instead.
 		</constant>
 		<constant name="RTGI_MODE_REFLECTIONS_RT_ONLY" value="0" enum="RTGIMode">
 			Use RTGI for specular/reflection paths only while diffuse GI remains owned by raster GI systems.

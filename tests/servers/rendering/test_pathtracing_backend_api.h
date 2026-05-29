@@ -367,22 +367,22 @@ TEST_CASE("[SceneTree][RenderingServer][PathTracing] Backend status and capabili
 	}
 }
 
-TEST_CASE("[RenderingServer][PathTracing] Backend environment parameter mapping preserves known backends and clamps invalid values") {
+TEST_CASE("[RenderingServer][PathTracing] Backend environment parameter mapping clamps legacy vendor and invalid values") {
 	CHECK_EQ(int(Environment::RTGI_BACKEND_VULKAN_GENERIC), int(RSE::PT_BACKEND_VULKAN_GENERIC));
 	CHECK_EQ(int(Environment::RTGI_BACKEND_NVIDIA_RTXPT), int(RSE::PT_BACKEND_NVIDIA_RTXPT));
 	CHECK_EQ(int(Environment::RTGI_BACKEND_AMD_HIP_RT), int(RSE::PT_BACKEND_AMD_HIP_RT));
 	CHECK_EQ(int(Environment::RTGI_BACKEND_INTEL_EMBREE), int(RSE::PT_BACKEND_INTEL_EMBREE));
 
 	CHECK_EQ(RendererSceneRenderImplementation::RenderRaytracing::backend_from_env_param(float(RSE::PT_BACKEND_VULKAN_GENERIC)), RSE::PT_BACKEND_VULKAN_GENERIC);
-	CHECK_EQ(RendererSceneRenderImplementation::RenderRaytracing::backend_from_env_param(float(RSE::PT_BACKEND_NVIDIA_RTXPT)), RSE::PT_BACKEND_NVIDIA_RTXPT);
-	CHECK_EQ(RendererSceneRenderImplementation::RenderRaytracing::backend_from_env_param(float(RSE::PT_BACKEND_AMD_HIP_RT)), RSE::PT_BACKEND_AMD_HIP_RT);
-	CHECK_EQ(RendererSceneRenderImplementation::RenderRaytracing::backend_from_env_param(float(RSE::PT_BACKEND_INTEL_EMBREE)), RSE::PT_BACKEND_INTEL_EMBREE);
+	CHECK_EQ(RendererSceneRenderImplementation::RenderRaytracing::backend_from_env_param(float(RSE::PT_BACKEND_NVIDIA_RTXPT)), RSE::PT_BACKEND_VULKAN_GENERIC);
+	CHECK_EQ(RendererSceneRenderImplementation::RenderRaytracing::backend_from_env_param(float(RSE::PT_BACKEND_AMD_HIP_RT)), RSE::PT_BACKEND_VULKAN_GENERIC);
+	CHECK_EQ(RendererSceneRenderImplementation::RenderRaytracing::backend_from_env_param(float(RSE::PT_BACKEND_INTEL_EMBREE)), RSE::PT_BACKEND_VULKAN_GENERIC);
 
 	CHECK_EQ(RendererSceneRenderImplementation::RenderRaytracing::backend_from_env_param(-1.0f), RSE::PT_BACKEND_VULKAN_GENERIC);
 	CHECK_EQ(RendererSceneRenderImplementation::RenderRaytracing::backend_from_env_param(float(RSE::PT_BACKEND_MAX)), RSE::PT_BACKEND_VULKAN_GENERIC);
 }
 
-TEST_CASE("[RenderingServer][PathTracing] Vendor backend selection preserves the request and falls back only when unavailable") {
+TEST_CASE("[RenderingServer][PathTracing] Legacy vendor backend status preserves the request metadata and falls back to Vulkan Generic") {
 	const RSE::PathtracingBackend vendor_backends[] = {
 		RSE::PT_BACKEND_NVIDIA_RTXPT,
 		RSE::PT_BACKEND_AMD_HIP_RT,
@@ -403,28 +403,19 @@ TEST_CASE("[RenderingServer][PathTracing] Vendor backend selection preserves the
 		CHECK_FALSE(String(status["fallback_reason"]).to_lower().contains("dx12"));
 		CHECK_EQ(int(requested_capabilities["backend"]), int(backend));
 		const Dictionary availability_checks = requested_capabilities["availability_checks"];
-
-		if (requested_available) {
-			CHECK_EQ(String(availability_checks["failure"]), String("none"));
-			CHECK_EQ(int(status["active_backend"]), int(backend));
-			CHECK_FALSE(bool(status["using_fallback"]));
-			CHECK_EQ(int(status["fallback_backend"]), -1);
-			CHECK(String(status["fallback_backend_name"]).is_empty());
-			CHECK_EQ(int(active_capabilities["backend"]), int(backend));
-		} else {
-			CHECK_NE(String(availability_checks["failure"]), String("none"));
-			CHECK_EQ(int(status["active_backend"]), int(RSE::PT_BACKEND_VULKAN_GENERIC));
-			CHECK(bool(status["using_fallback"]));
-			CHECK_EQ(int(status["fallback_backend"]), int(RSE::PT_BACKEND_VULKAN_GENERIC));
-			CHECK_EQ(String(status["fallback_backend_name"]), String("Vulkan Generic"));
-			CHECK_EQ(int(active_capabilities["backend"]), int(RSE::PT_BACKEND_VULKAN_GENERIC));
-			CHECK_FALSE(String(status["fallback_reason"]).is_empty());
-			CHECK_FALSE(String(requested_capabilities["fallback_reason"]).is_empty());
-		}
+		CHECK_FALSE(requested_available);
+		CHECK_NE(String(availability_checks["failure"]), String("none"));
+		CHECK_EQ(int(status["active_backend"]), int(RSE::PT_BACKEND_VULKAN_GENERIC));
+		CHECK(bool(status["using_fallback"]));
+		CHECK_EQ(int(status["fallback_backend"]), int(RSE::PT_BACKEND_VULKAN_GENERIC));
+		CHECK_EQ(String(status["fallback_backend_name"]), String("Vulkan Generic"));
+		CHECK_EQ(int(active_capabilities["backend"]), int(RSE::PT_BACKEND_VULKAN_GENERIC));
+		CHECK_FALSE(String(status["fallback_reason"]).is_empty());
+		CHECK_FALSE(String(requested_capabilities["fallback_reason"]).is_empty());
 	}
 }
 
-TEST_CASE("[RenderingServer][PathTracing] Vendor backend compiled checks are tied to backend-specific optional modules") {
+TEST_CASE("[RenderingServer][PathTracing] Legacy vendor backend checks report inactive RTGI adapters") {
 	auto check_backend_not_compiled = [](RSE::PathtracingBackend p_backend) {
 		const Dictionary status = RendererSceneRenderImplementation::RenderRaytracing::get_static_backend_status_dictionary(p_backend);
 		const Dictionary requested_capabilities = status["requested_capabilities"];
@@ -432,31 +423,25 @@ TEST_CASE("[RenderingServer][PathTracing] Vendor backend compiled checks are tie
 		CHECK_FALSE(bool(availability_checks["backend_compiled"]));
 		CHECK_FALSE(bool(requested_capabilities["available"]));
 		CHECK_EQ(String(availability_checks["failure"]), String("backend_not_compiled"));
+		CHECK(String(availability_checks["compile_failure_reason"]).contains("Only the Vulkan Generic"));
 		CHECK_FALSE(String(requested_capabilities["fallback_reason"]).is_empty());
 	};
 
-#ifndef MODULE_RTXPT_ENABLED
 	check_backend_not_compiled(RSE::PT_BACKEND_NVIDIA_RTXPT);
-#endif
-
-#ifndef MODULE_HIPRT_ENABLED
 	check_backend_not_compiled(RSE::PT_BACKEND_AMD_HIP_RT);
-#endif
-
-#if !defined(MODULE_EMBREE_ENABLED) && !defined(MODULE_OSPRAY_ENABLED) && !(defined(MODULE_RAYCAST_ENABLED) && defined(RTGI_BUILTIN_EMBREE_ENABLED))
 	check_backend_not_compiled(RSE::PT_BACKEND_INTEL_EMBREE);
-#endif
 }
 
-TEST_CASE("[RenderingServer][PathTracing] Compiled vendor adapters remain unavailable until SDK entrypoints are linked") {
+TEST_CASE("[RenderingServer][PathTracing] Optional vendor modules do not enable RTGI adapters") {
 	auto check_compiled_adapter_gate = [](RSE::PathtracingBackend p_backend) {
 		const Dictionary status = RendererSceneRenderImplementation::RenderRaytracing::get_static_backend_status_dictionary(p_backend);
 		const Dictionary requested_capabilities = status["requested_capabilities"];
 		const Dictionary availability_checks = requested_capabilities["availability_checks"];
-		CHECK(bool(availability_checks["backend_compiled"]));
+		CHECK_FALSE(bool(availability_checks["backend_compiled"]));
 		CHECK_FALSE(bool(availability_checks["implementation_ready"]));
 		CHECK_FALSE(bool(requested_capabilities["available"]));
-		CHECK_FALSE(String(availability_checks["implementation_failure_reason"]).is_empty());
+		CHECK_EQ(String(availability_checks["failure"]), String("backend_not_compiled"));
+		CHECK(String(availability_checks["compile_failure_reason"]).contains("Only the Vulkan Generic"));
 		CHECK_FALSE(String(requested_capabilities["fallback_reason"]).is_empty());
 		CHECK_FALSE(String(requested_capabilities["probe_update_path"]).is_empty());
 		CHECK_FALSE(bool(requested_capabilities["denoiser_handoff"]));
@@ -480,28 +465,36 @@ TEST_CASE("[RenderingServer][PathTracing] Compiled vendor adapters remain unavai
 #endif
 }
 
-TEST_CASE("[RenderingServer][PathTracing] RTXPT backend reports linked NVIDIA fork-compatible dispatch when compiled") {
+TEST_CASE("[RenderingServer][PathTracing] RTXPT backend reports legacy metadata but remains disabled when compiled") {
 #if defined(RTGI_RTXPT_BACKEND_IMPLEMENTED)
 	const Dictionary status = RendererSceneRenderImplementation::RenderRaytracing::get_static_backend_status_dictionary(RSE::PT_BACKEND_NVIDIA_RTXPT);
 	const Dictionary requested_capabilities = status["requested_capabilities"];
 	const Dictionary availability_checks = requested_capabilities["availability_checks"];
-	CHECK(bool(availability_checks["backend_compiled"]));
-	CHECK(bool(availability_checks["runtime_detected"]));
-	CHECK(bool(availability_checks["implementation_ready"]));
+	CHECK_FALSE(bool(availability_checks["backend_compiled"]));
+	CHECK_EQ(String(availability_checks["failure"]), String("backend_not_compiled"));
+	CHECK(String(availability_checks["compile_failure_reason"]).contains("Only the Vulkan Generic"));
+	CHECK_FALSE(bool(availability_checks["implementation_ready"]));
+	CHECK_FALSE(bool(requested_capabilities["available"]));
+	CHECK_EQ(int(status["active_backend"]), int(RSE::PT_BACKEND_VULKAN_GENERIC));
+	CHECK(bool(status["using_fallback"]));
 	CHECK(String(requested_capabilities["runtime_name"]).contains("RenderingDevice"));
 	CHECK(String(requested_capabilities["integration_path"]).contains("NVIDIA Godot fork"));
 	CHECK_FALSE(String(requested_capabilities["probe_update_path"]).is_empty());
 #endif
 }
 
-TEST_CASE("[RenderingServer][PathTracing] HIP RT backend reports linked trace dispatch when compiled") {
+TEST_CASE("[RenderingServer][PathTracing] HIP RT backend reports legacy metadata but remains disabled when compiled") {
 #if defined(RTGI_HIPRT_BACKEND_IMPLEMENTED)
 	const Dictionary status = RendererSceneRenderImplementation::RenderRaytracing::get_static_backend_status_dictionary(RSE::PT_BACKEND_AMD_HIP_RT);
 	const Dictionary requested_capabilities = status["requested_capabilities"];
 	const Dictionary availability_checks = requested_capabilities["availability_checks"];
-	CHECK(bool(availability_checks["backend_compiled"]));
-	CHECK(bool(availability_checks["sdk_headers_present"]));
-	CHECK(bool(availability_checks["implementation_ready"]));
+	CHECK_FALSE(bool(availability_checks["backend_compiled"]));
+	CHECK_EQ(String(availability_checks["failure"]), String("backend_not_compiled"));
+	CHECK(String(availability_checks["compile_failure_reason"]).contains("Only the Vulkan Generic"));
+	CHECK_FALSE(bool(availability_checks["implementation_ready"]));
+	CHECK_FALSE(bool(requested_capabilities["available"]));
+	CHECK_EQ(int(status["active_backend"]), int(RSE::PT_BACKEND_VULKAN_GENERIC));
+	CHECK(bool(status["using_fallback"]));
 	CHECK(String(requested_capabilities["runtime_name"]).contains("HIP RT"));
 	CHECK(String(requested_capabilities["integration_path"]).contains("Vulkan/HIP"));
 	const String vulkan_interop_mode = requested_capabilities["vulkan_interop_mode"];
@@ -516,14 +509,18 @@ TEST_CASE("[RenderingServer][PathTracing] HIP RT backend reports linked trace di
 #endif
 }
 
-TEST_CASE("[RenderingServer][PathTracing] Built-in Embree backend reports linked implementation gate") {
+TEST_CASE("[RenderingServer][PathTracing] Built-in Embree backend reports legacy metadata but remains disabled when compiled") {
 #if defined(RTGI_EMBREE_OSPRAY_BACKEND_IMPLEMENTED)
 	const Dictionary status = RendererSceneRenderImplementation::RenderRaytracing::get_static_backend_status_dictionary(RSE::PT_BACKEND_INTEL_EMBREE);
 	const Dictionary requested_capabilities = status["requested_capabilities"];
 	const Dictionary availability_checks = requested_capabilities["availability_checks"];
-	CHECK(bool(availability_checks["backend_compiled"]));
-	CHECK(bool(availability_checks["sdk_headers_present"]));
-	CHECK(bool(availability_checks["implementation_ready"]));
+	CHECK_FALSE(bool(availability_checks["backend_compiled"]));
+	CHECK_EQ(String(availability_checks["failure"]), String("backend_not_compiled"));
+	CHECK(String(availability_checks["compile_failure_reason"]).contains("Only the Vulkan Generic"));
+	CHECK_FALSE(bool(availability_checks["implementation_ready"]));
+	CHECK_FALSE(bool(requested_capabilities["available"]));
+	CHECK_EQ(int(status["active_backend"]), int(RSE::PT_BACKEND_VULKAN_GENERIC));
+	CHECK(bool(status["using_fallback"]));
 	CHECK_FALSE(String(requested_capabilities["probe_update_path"]).is_empty());
 	CHECK(bool(requested_capabilities["generic_probe_update_fallback"]));
 #endif

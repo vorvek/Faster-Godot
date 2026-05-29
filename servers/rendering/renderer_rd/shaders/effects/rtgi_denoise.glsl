@@ -859,6 +859,7 @@ void main() {
 	vec3 specular = remodulate_specular_radiance(sanitize_color(texelFetch(specular_buffer, pos, 0).rgb), normal_roughness, albedo_metalness, specular_guide);
 	vec3 output_color = sanitize_color(diffuse + specular);
 	float center_luma = luminance(output_color);
+#if 0
 	if (center_luma > 0.0) {
 		vec3 neighbor_sum = vec3(0.0);
 		float neighbor_luma_sum = 0.0;
@@ -920,6 +921,7 @@ void main() {
 		// Force bypass of any neighborhood blending in composite
 		output_color = output_color; // sanitize_color(mix(output_color, neighbor_color, unsupported_near_black * 0.90));
 	}
+#endif
 	imageStore(output_image, pos, vec4(output_color, 1.0));
 }
 
@@ -949,13 +951,17 @@ float signal_decomposition_activity(ivec2 pos) {
 	return tonemap_luma(activity);
 }
 
+vec3 signal_decomposition_full_color(ivec2 pos, vec4 normal_roughness, vec4 albedo_metalness, vec4 specular_guide) {
+	vec3 diffuse = sanitize_color(texelFetch(diffuse_buffer, pos, 0).rgb);
+	vec3 specular = remodulate_specular_radiance(sanitize_color(texelFetch(specular_buffer, pos, 0).rgb), normal_roughness, albedo_metalness, specular_guide);
+	return sanitize_color(diffuse + specular);
+}
+
 vec3 signal_decomposition_full_color(ivec2 pos) {
 	vec4 normal_roughness = texelFetch(normal_roughness_buffer, pos, 0);
 	vec4 albedo_metalness = texelFetch(albedo_metalness_buffer, pos, 0);
 	vec4 specular_guide = texelFetch(specular_guide_buffer, pos, 0);
-	vec3 diffuse = sanitize_color(texelFetch(diffuse_buffer, pos, 0).rgb);
-	vec3 specular = remodulate_specular_radiance(sanitize_color(texelFetch(specular_buffer, pos, 0).rgb), normal_roughness, albedo_metalness, specular_guide);
-	return sanitize_color(diffuse + specular);
+	return signal_decomposition_full_color(pos, normal_roughness, albedo_metalness, specular_guide);
 }
 
 void main() {
@@ -969,7 +975,7 @@ void main() {
 	vec4 specular_guide = texelFetch(specular_guide_buffer, pos, 0);
 	vec3 center_n = decode_normal(normal_roughness);
 	float center_signal_activity = signal_decomposition_activity(pos);
-	vec3 output_color = signal_decomposition_full_color(pos);
+	vec3 output_color = signal_decomposition_full_color(pos, normal_roughness, albedo_metalness, specular_guide);
 	float center_luma = luminance(output_color);
 
 	vec3 neighbor_sum = vec3(0.0);
@@ -1001,7 +1007,7 @@ void main() {
 			float signal_delta = abs(signal_decomposition_activity(tap_pos) - center_signal_activity);
 			float signal_w = exp(-signal_delta * 4.0);
 			float w = exp(-dot(vec2(x, y), vec2(x, y)) * 0.20) * pow(normal_similarity, 6.0) * exp(-albedo_delta * 3.0) * signal_w * mix(1.0, guide_w, guide_active(specular_guide) * smoothstep(0.25, 0.85, specular_surface));
-			vec3 tap_color = signal_decomposition_full_color(tap_pos);
+			vec3 tap_color = signal_decomposition_full_color(tap_pos, tap_nr, tap_albedo, tap_guide);
 			float tap_luma = luminance(tap_color);
 			neighbor_sum += tap_color * w;
 			neighbor_luma_sum += tap_luma * w;
