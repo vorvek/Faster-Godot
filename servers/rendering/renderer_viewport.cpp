@@ -397,32 +397,27 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 	}
 
 	bool is_fg_enabled = (p_viewport->frame_generation_mode == RS::VIEWPORT_FRAME_GENERATION_INTERPOLATED);
-	bool is_fg_active = false;
-	if (is_fg_enabled) {
-		if (p_viewport->frame_generation_target_fps > 0) {
-			float base_fps = p_viewport->last_real_frame_delta_usec > 0 ? (1000000.0f / p_viewport->last_real_frame_delta_usec) : 0.0f;
-			if (p_viewport->frame_generation_is_active) {
-				if (base_fps * 2.0f >= (float)p_viewport->frame_generation_target_fps * 1.1f) {
-					is_fg_active = false;
-				} else {
-					is_fg_active = true;
-				}
-			} else {
-				if (base_fps > 0.0f && base_fps < (float)p_viewport->frame_generation_target_fps) {
-					is_fg_active = true;
-				} else {
-					is_fg_active = false;
-				}
-			}
-		} else {
-			is_fg_active = true;
-		}
-	}
+	bool is_fg_active = is_fg_enabled;
 	p_viewport->frame_generation_is_active = is_fg_active;
 
 	Ref<RenderSceneBuffersRD> rb = p_viewport->render_buffers;
 
 	if (is_fg_active && rb.is_valid()) {
+		if (p_viewport->frame_generation_target_fps > 0) {
+			uint64_t target_interval_usec = 1000000 / p_viewport->frame_generation_target_fps;
+			uint64_t current_time = OS::get_singleton()->get_ticks_usec();
+			if (p_viewport->last_frame_step_time_usec != 0) {
+				uint64_t elapsed_usec = current_time - p_viewport->last_frame_step_time_usec;
+				if (elapsed_usec < target_interval_usec) {
+					uint64_t delay_usec = target_interval_usec - elapsed_usec;
+					OS::get_singleton()->delay_usec(delay_usec);
+				}
+			}
+			p_viewport->last_frame_step_time_usec = OS::get_singleton()->get_ticks_usec();
+		} else {
+			p_viewport->last_frame_step_time_usec = 0;
+		}
+
 		Rect2i rect(Point2i(), p_viewport->size);
 		RID render_target_texture = RendererRD::TextureStorage::get_singleton()->render_target_get_rd_texture(p_viewport->render_target);
 		RID frame_gen_current = rb->get_frame_gen_buffer_current();
@@ -482,6 +477,7 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 			p_viewport->frame_generation_step = 2; // prevent overflow while keeping phase
 		}
 	} else {
+		p_viewport->last_frame_step_time_usec = 0;
 		p_viewport->frame_generation_step = 0;
 		p_viewport->last_real_frame_time_usec = 0;
 		p_viewport->last_real_frame_delta_usec = 0;

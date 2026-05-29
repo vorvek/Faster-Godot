@@ -87,6 +87,7 @@ public:
 		uint64_t last_real_frame_delta_usec = 0;
 		bool frame_generation_is_active = false;
 		uint64_t frame_generation_step = 0;
+		uint64_t last_frame_step_time_usec = 0;
 
 		RendererSceneRender::CameraData prev_camera_data;
 		uint64_t prev_camera_data_frame = 0;
