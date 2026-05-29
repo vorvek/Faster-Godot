@@ -181,7 +181,7 @@ V mul(const M &m, const V &v) {
 // Used by both the production indirect-bounce path and the matching debug
 // visualization so they remain in sync.
 #ifndef RT_SHADING_NORMAL_CLAMP_THRESHOLD
-#define RT_SHADING_NORMAL_CLAMP_THRESHOLD 0.4f
+#define RT_SHADING_NORMAL_CLAMP_THRESHOLD 0.15f
 #endif
 
 // Enable below-hemisphere sample recovery.
