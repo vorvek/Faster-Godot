@@ -40,7 +40,16 @@ vec4 sample_rt_blue_noise(uvec2 pixel, uint frame_index, uint sample_idx) {
 	uint frame_x = uint(fract(float(frame_index) * 0.61803398875) * 128.0);
 	uint frame_y = uint(fract(float(frame_index) * 0.75487766625) * 128.0);
 	uvec2 tile_pixel = (pixel + uvec2(frame_x, frame_y) + uvec2(sample_idx * 37u, sample_idx * 17u)) & uvec2(tile_mask);
-	return texelFetch(sampler2D(rt_blue_noise_texture, rt_blue_noise_sampler), ivec2(tile_pixel), 0);
+	vec4 blue_noise = texelFetch(sampler2D(rt_blue_noise_texture, rt_blue_noise_sampler), ivec2(tile_pixel), 0);
+
+	// Apply Cranley-Patterson rotation using a high-quality 4D hash of pixel, frame, and sample index
+	uint hash_x = pcg_hash(pixel.x ^ (pixel.y * 397u) ^ (frame_index * 13u) ^ (sample_idx * 101u));
+	uint hash_y = pcg_hash(pixel.y ^ (pixel.x * 397u) ^ (frame_index * 17u) ^ (sample_idx * 103u));
+	uint hash_z = pcg_hash((pixel.x + pixel.y) ^ (frame_index * 19u) ^ (sample_idx * 107u));
+	uint hash_w = pcg_hash((pixel.x - pixel.y) ^ (frame_index * 23u) ^ (sample_idx * 109u));
+	vec4 offset = vec4(float(hash_x & 0xFFFFu), float(hash_y & 0xFFFFu), float(hash_z & 0xFFFFu), float(hash_w & 0xFFFFu)) / 65536.0;
+
+	return fract(blue_noise + offset);
 }
 
 uint init_blue_noise_rng(uvec2 pixel, uint frame_index, uint sample_idx) {
