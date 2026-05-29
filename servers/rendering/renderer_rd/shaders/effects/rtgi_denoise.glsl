@@ -126,6 +126,18 @@ vec3 remodulate_radiance(vec3 radiance, vec4 normal_roughness, vec4 albedo_metal
 	return sanitize_color(radiance * radiance_modulation(normal_roughness, albedo_metalness, view_z));
 }
 
+float surface_detail_preservation_guard(float local_albedo_detail, float local_normal_detail, float detail_weight) {
+	float albedo_detail_guard = smoothstep(0.030, 0.16, local_albedo_detail) * detail_weight * params.detail_preservation;
+	float normal_detail_guard = smoothstep(0.010, 0.095, local_normal_detail) * detail_weight * params.detail_preservation;
+	return max(albedo_detail_guard, normal_detail_guard);
+}
+
+float supported_specular_highlight_guard(float specular_surface, float bright_support_ratio) {
+	float specular_guard = smoothstep(0.32, 0.82, specular_surface);
+	float support_guard = smoothstep(0.08, 0.36, bright_support_ratio);
+	return specular_guard * support_guard * params.detail_preservation;
+}
+
 vec3 specular_virtual_brdf(vec4 normal_roughness, vec4 albedo_metalness, vec4 guide) {
 	float roughness = clamp(normal_roughness.a, 0.0, 1.0);
 	float metalness = clamp(albedo_metalness.a, 0.0, 1.0);
@@ -965,6 +977,8 @@ void main() {
 	float neighbor_luma_sq_sum = 0.0;
 	float neighbor_weight_sum = 0.0;
 	float bright_support_sum = 0.0;
+	float local_albedo_detail = 0.0;
+	float local_normal_detail = 0.0;
 	for (int y = -2; y <= 2; y++) {
 		for (int x = -2; x <= 2; x++) {
 			if (x == 0 && y == 0) {
@@ -976,6 +990,10 @@ void main() {
 			vec4 tap_guide = texelFetch(specular_guide_buffer, tap_pos, 0);
 			float normal_similarity = max(dot(center_n, decode_normal(tap_nr)), 0.0);
 			float albedo_delta = length(tap_albedo.rgb - albedo_metalness.rgb) + abs(tap_albedo.a - albedo_metalness.a);
+			if (abs(x) <= 1 && abs(y) <= 1) {
+				local_albedo_detail = max(local_albedo_detail, albedo_delta);
+				local_normal_detail = max(local_normal_detail, 1.0 - normal_similarity);
+			}
 			float guide_hitdist_scale = max(max(specular_guide.y, tap_guide.y), 1.0);
 			float guide_hitdist_error = abs(specular_guide.y - tap_guide.y) / guide_hitdist_scale;
 			float specular_surface = guide_specular_risk(specular_guide, normal_roughness, albedo_metalness);
@@ -1008,6 +1026,10 @@ void main() {
 		unsupported *= 1.0 - smoothstep(0.10, 0.38, bright_support);
 		unsupported *= mix(0.75, 1.0, smoothstep(0.5, 7.0, center_motion_px));
 		float suppress = clamp(unsupported * params.denoise_strength * params.firefly_suppression * low_resolution_firefly_boost(), 0.0, 1.0);
+		float rough_diffuse_plane = smoothstep(0.28, 0.72, normal_roughness.a) * (1.0 - metallic);
+		float surface_detail_guard = surface_detail_preservation_guard(local_albedo_detail, local_normal_detail, rough_diffuse_plane);
+		float supported_specular_guard = supported_specular_highlight_guard(specular_surface, bright_support);
+		suppress *= mix(1.0, 0.25, max(surface_detail_guard, supported_specular_guard));
 		output_color = sanitize_color(mix(output_color, neighbor_color, suppress));
 	}
 
@@ -1396,16 +1418,17 @@ void main() {
 		float dark_neighborhood = 1.0 - smoothstep(0.08, 0.35, neighbor_luma);
 		vec3 outlier_reference = mix(neighbor_color, lower_neighbor_color, dark_neighborhood);
 		float reactive_detail = center_reactivity;
-		float albedo_detail_guard = smoothstep(0.045, 0.22, local_albedo_detail) * rough_diffuse_plane * params.detail_preservation;
-		float normal_detail_guard = smoothstep(0.018, 0.16, local_normal_detail) * rough_diffuse_plane * params.detail_preservation;
-		float surface_detail_guard = max(albedo_detail_guard, normal_detail_guard);
-		float supported_texture_guard = surface_detail_guard * (1.0 - dark_neighborhood) * smoothstep(0.12, 0.50, bright_support_sum / neighbor_weight_sum);
+		float bright_support_ratio = bright_support_sum / neighbor_weight_sum;
+		float surface_detail_guard = surface_detail_preservation_guard(local_albedo_detail, local_normal_detail, rough_diffuse_plane);
+		float supported_texture_guard = surface_detail_guard * (1.0 - dark_neighborhood) * smoothstep(0.12, 0.50, bright_support_ratio);
+		float supported_specular_guard = supported_specular_highlight_guard(specular_surface, bright_support_ratio);
+		float preservation_guard = max(supported_texture_guard, supported_specular_guard);
 		float final_outlier_strength = clamp(outlier * mix(0.85, 1.0, specular_surface) * params.denoise_strength * params.firefly_suppression * low_resolution_firefly_boost() * mix(1.0, 0.42, reactive_detail), 0.0, 1.0);
-		final_outlier_strength *= mix(1.0, 0.72, supported_texture_guard);
+		final_outlier_strength *= mix(1.0, 0.25, preservation_guard);
 		denoised = sanitize_color(mix(denoised, mix(capped, outlier_reference, mix(0.55, 0.92, specular_surface)), final_outlier_strength));
 		center_final_luma = luminance(denoised);
 
-		float bright_support = bright_support_sum / neighbor_weight_sum;
+		float bright_support = bright_support_ratio;
 		float isolated_bright = (1.0 - smoothstep(0.08, 0.35, bright_support)) *
 				smoothstep(neighbor_luma + 0.008, neighbor_luma + mix(0.105, 0.045, specular_surface), center_final_luma);
 		float isolated_dim = dark_neighborhood * (1.0 - smoothstep(0.08, 0.35, bright_support)) *
@@ -1428,7 +1451,7 @@ void main() {
 			suppress = max(suppress, unsupported_specular_twinkle * params.denoise_strength * params.firefly_suppression * mix(1.0, 0.42, reactive_detail));
 		}
 		suppress = min(suppress * low_resolution_firefly_boost() * mix(1.0, params.radiance_space_history > 0.5 ? 6.50 : 3.80, dark_neighborhood), 1.0);
-		suppress *= mix(1.0, 0.80, supported_texture_guard);
+		suppress *= mix(1.0, 0.28, preservation_guard);
 		denoised = sanitize_color(mix(denoised, lower_neighbor_color, suppress));
 		center_final_luma = luminance(denoised);
 
@@ -1437,10 +1460,11 @@ void main() {
 				smoothstep(0.00008, 0.006, neighbor_variance) *
 				(1.0 - smoothstep(0.35, 0.95, bright_support));
 		float plane_grain_smooth = rough_diffuse_plane * local_grain * params.denoise_strength * mix(1.0, 0.35, reactive_detail);
-		plane_grain_smooth *= mix(1.0, 0.16, surface_detail_guard);
+		plane_grain_smooth *= mix(1.0, 0.08, surface_detail_guard);
 		denoised = sanitize_color(mix(denoised, neighbor_color, min(plane_grain_smooth * mix(2.40, 0.58, surface_detail_guard), 0.88)));
 		center_final_luma = luminance(denoised);
 
+		float fine_detail_guard = max(surface_detail_guard, supported_specular_guard * 0.6);
 		float dark_flat_noise = dark_neighborhood *
 				rough_diffuse_plane *
 				smoothstep(0.006, 0.050, abs(center_final_luma - neighbor_luma)) *
@@ -1448,6 +1472,7 @@ void main() {
 				(1.0 - smoothstep(0.018, 0.14, local_normal_detail)) *
 				(1.0 - smoothstep(0.18, 0.48, bright_support)) *
 				params.denoise_strength * params.firefly_suppression * mix(1.0, 0.45, reactive_detail);
+		dark_flat_noise *= mix(1.0, 0.10, fine_detail_guard);
 		denoised = sanitize_color(mix(denoised, neighbor_color, min(dark_flat_noise * 1.35, 0.84)));
 		center_final_luma = luminance(denoised);
 
@@ -1458,6 +1483,7 @@ void main() {
 				(1.0 - smoothstep(0.03, 0.12, local_albedo_detail)) *
 				(1.0 - smoothstep(0.018, 0.14, local_normal_detail)) *
 				params.denoise_strength * params.firefly_suppression * mix(1.0, 0.35, reactive_detail);
+		dark_hole *= mix(1.0, 0.15, surface_detail_guard);
 		denoised = sanitize_color(mix(denoised, neighbor_color, min(dark_hole * 0.80, 0.70)));
 	}
 
@@ -1512,6 +1538,10 @@ void main() {
 		float orphan_limit = mix(max(orphan_luma * 7.0 + 0.28, orphan_luma_max * 3.0 + 0.22), max(orphan_luma * 2.6 + 0.045, orphan_luma_max * 1.7 + 0.035), dark_orphan);
 		float orphan_hot = smoothstep(orphan_limit, orphan_limit + max(orphan_limit * 0.18, 0.06), center_final_luma) * no_bright_support * params.denoise_strength * params.firefly_suppression;
 		orphan_hot = max(orphan_hot, dark_orphan * smoothstep(orphan_luma + 0.010, orphan_luma + 0.050, center_final_luma) * params.denoise_strength * params.firefly_suppression);
+		float orphan_surface_guard = surface_detail_preservation_guard(local_albedo_detail, local_normal_detail, rough_diffuse_plane);
+		float orphan_bright_support = smoothstep(center_final_luma * 0.18 + 0.002, center_final_luma * 0.72 + 0.020, orphan_luma_max);
+		float orphan_specular_guard = supported_specular_highlight_guard(guide_specular_surface, orphan_bright_support);
+		orphan_hot *= mix(1.0, 0.22, max(orphan_surface_guard, orphan_specular_guard));
 		denoised = sanitize_color(mix(denoised, orphan_avg, clamp(orphan_hot, 0.0, 1.0)));
 	}
 

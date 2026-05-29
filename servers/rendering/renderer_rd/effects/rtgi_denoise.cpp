@@ -528,6 +528,7 @@ void RTGIDenoise::composite_signal_decomposition(Ref<RenderSceneBuffersRD> p_ren
 		const StringName &p_output_texture,
 		float p_denoise_strength,
 		float p_firefly_suppression,
+		float p_detail_preservation,
 		const Size2i &p_process_size,
 		uint32_t p_view) {
 	ERR_FAIL_COND(p_render_buffers.is_null());
@@ -557,6 +558,7 @@ void RTGIDenoise::composite_signal_decomposition(Ref<RenderSceneBuffersRD> p_ren
 	push_constant.resolution_height = (float)p_process_size.y;
 	push_constant.denoise_strength = CLAMP(p_denoise_strength, 0.0f, 1.0f);
 	push_constant.firefly_suppression = CLAMP(p_firefly_suppression, 0.0f, 1.0f);
+	push_constant.detail_preservation = CLAMP(p_detail_preservation, 0.0f, 1.0f);
 
 	_dispatch_signal_decomposition_composite(push_constant, direct, emissive, indirect, sky, specular, diffuse, p_velocity, p_normal_roughness, p_albedo_metalness, p_specular_guide, output);
 }
