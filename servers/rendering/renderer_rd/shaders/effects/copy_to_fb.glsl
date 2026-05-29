@@ -122,6 +122,11 @@ vec3 linear_to_srgb(vec3 color) {
 	return mix((vec3(1.0f) + a) * pow(color.rgb, vec3(1.0f / 2.4f)) - a, 12.92f * color.rgb, lessThan(color.rgb, vec3(0.0031308f)));
 }
 
+vec3 srgb_to_linear(vec3 color) {
+	const vec3 a = vec3(0.055f);
+	return mix(pow((color.rgb + a) * (1.0f / (vec3(1.0f) + a)), vec3(2.4f)), color.rgb * (1.0f / 12.92f), lessThan(color.rgb, vec3(0.04045f)));
+}
+
 #ifdef MODE_SHARP_BILINEAR
 vec4 sample_sharp_bilinear(sampler2D tex, vec2 uv) {
 	vec2 texel = uv / params.pixel_size;
