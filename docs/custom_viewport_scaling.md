@@ -57,3 +57,14 @@ A quick summary of files changed to support this feature:
 * [copy_effects.cpp](file:///d:/dev/faster-godot-4.6.3/servers/rendering/renderer_rd/effects/copy_effects.cpp): Appended corresponding preprocessor defines to compiler modes, handled texture size query, and mapped enums to shader pipelines.
 * [renderer_scene_render_rd.cpp](file:///d:/dev/faster-godot-4.6.3/servers/rendering/renderer_rd/renderer_scene_render_rd.cpp): Enabled scaling copy-pass for our modes and passed active scale mode.
 * [copy_to_fb.glsl](file:///d:/dev/faster-godot-4.6.3/servers/rendering/renderer_rd/shaders/effects/copy_to_fb.glsl): Implemented GLSL shaders for Sharp Bilinear, Bicubic + CAS, and SGSR.
+
+---
+
+## 5. DLSS Hiding & Enum Index Preservation
+
+Because we are not integrating DLSS, we have disabled/hidden it completely from the user interface while strictly preserving the C++ enum order (keeping `DLSS` at index `5` so indices `6`, `7`, `8`, and `9` for our custom upscalers remain fully aligned and backward-compatible):
+
+* **Viewport Property Inspector**: Hidden from the Viewport's `scaling_3d_mode` property dropdown by replacing `"DLSS"` with an empty slot `, ,` at index `5` in `scene/main/viewport.cpp`'s `PROPERTY_HINT_ENUM` declaration.
+* **Project Settings Dropdown**: Hidden from `rendering/scaling_3d/mode` by completely removing `"DLSS:5"` from the `mode_hints_arr` vector in `servers/rendering/rendering_server.cpp`. Since every remaining mode explicitly specifies its numeric index suffix (e.g., `Nearest:6`, `Sharp Bilinear:7`), the dropdown items map directly to their exact enum indices, skipping index `5` in the UI entirely.
+* **Fallback Safety**: If any legacy scene or custom script attempts to load index `5`, the engine prints a graceful, one-time warning and falls back to FSR 2.2 (`SCALING_3D_MODE_FSR2`) inside `servers/rendering/renderer_viewport.cpp` to ensure the viewport remains stable and compiles without errors.
+
