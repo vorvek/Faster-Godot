@@ -116,9 +116,141 @@ vec3 linear_to_srgb(vec3 color) {
 	return mix((vec3(1.0f) + a) * pow(color.rgb, vec3(1.0f / 2.4f)) - a, 12.92f * color.rgb, lessThan(color.rgb, vec3(0.0031308f)));
 }
 
-vec3 srgb_to_linear(vec3 color) {
-	return mix(pow((color.rgb + vec3(0.055)) * (1.0 / (1.0 + 0.055)), vec3(2.4)), color.rgb * (1.0 / 12.92), lessThan(color.rgb, vec3(0.04045)));
+#ifdef MODE_SHARP_BILINEAR
+vec4 sample_sharp_bilinear(sampler2D tex, vec2 uv) {
+	vec2 texel = uv / params.pixel_size;
+	vec2 texel_floor = floor(texel);
+	vec2 texel_fract = texel - texel_floor - 0.5;
+	vec2 scale = 1.0 / max(vec2(0.0001), fwidth(texel));
+	vec2 edge = clamp(texel_fract * scale, -0.5, 0.5);
+	vec2 sharp_uv = (texel_floor + 0.5 + edge) * params.pixel_size;
+	return textureLod(tex, sharp_uv, 0.0);
 }
+#endif
+
+#ifdef MODE_BICUBIC
+vec4 sample_bicubic_catmull_rom(sampler2D tex, vec2 uv) {
+	vec2 texel = uv / params.pixel_size - 0.5;
+	vec2 fcase = floor(texel);
+	vec2 f = texel - fcase;
+
+	vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+	vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+	vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+	vec2 w3 = f * f * (-0.5 + 0.5 * f);
+
+	vec2 s0 = w0;
+	vec2 s1 = w1 + w2;
+	vec2 s2 = w3;
+
+	vec2 o0 = vec2(-1.0);
+	vec2 o1 = w2 / s1;
+	vec2 o2 = vec2(2.0);
+
+	vec2 tc0 = (fcase + o0 + 0.5) * params.pixel_size;
+	vec2 tc1 = (fcase + o1 + 0.5) * params.pixel_size;
+	vec2 tc2 = (fcase + o2 + 0.5) * params.pixel_size;
+
+	vec4 color = vec4(0.0);
+
+	// Grid of 9 samples:
+	color += textureLod(tex, vec2(tc0.x, tc0.y), 0.0) * (s0.x * s0.y);
+	color += textureLod(tex, vec2(tc1.x, tc0.y), 0.0) * (s1.x * s0.y);
+	color += textureLod(tex, vec2(tc2.x, tc0.y), 0.0) * (s2.x * s0.y);
+
+	color += textureLod(tex, vec2(tc0.x, tc1.y), 0.0) * (s0.x * s1.y);
+	color += textureLod(tex, vec2(tc1.x, tc1.y), 0.0) * (s1.x * s1.y);
+	color += textureLod(tex, vec2(tc2.x, tc1.y), 0.0) * (s2.x * s1.y);
+
+	color += textureLod(tex, vec2(tc0.x, tc2.y), 0.0) * (s0.x * s2.y);
+	color += textureLod(tex, vec2(tc1.x, tc2.y), 0.0) * (s1.x * s2.y);
+	color += textureLod(tex, vec2(tc2.x, tc2.y), 0.0) * (s2.x * s2.y);
+
+	// CAS (Contrast Adaptive Sharpening) integration
+	vec2 d_uv = fwidth(uv);
+	if (d_uv.x == 0.0 || d_uv.y == 0.0) {
+		d_uv = params.pixel_size * 0.5;
+	}
+
+	vec4 n = textureLod(tex, uv + vec2(0.0, -d_uv.y), 0.0);
+	vec4 s = textureLod(tex, uv + vec2(0.0, d_uv.y), 0.0);
+	vec4 w = textureLod(tex, uv + vec2(-d_uv.x, 0.0), 0.0);
+	vec4 e = textureLod(tex, uv + vec2(d_uv.x, 0.0), 0.0);
+
+	float luma_c = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+	float luma_n = dot(n.rgb, vec3(0.299, 0.587, 0.114));
+	float luma_s = dot(s.rgb, vec3(0.299, 0.587, 0.114));
+	float luma_w = dot(w.rgb, vec3(0.299, 0.587, 0.114));
+	float luma_e = dot(e.rgb, vec3(0.299, 0.587, 0.114));
+
+	float mn = min(luma_c, min(min(luma_n, luma_s), min(luma_w, luma_e)));
+	float mx = max(luma_c, max(max(luma_n, luma_s), max(luma_w, luma_e)));
+
+	float sharpness = 0.5; // Premium customizable sharpness default
+	float amp = mix(-0.125, -0.05, sharpness);
+	float r_mx = mx > 0.0001 ? 1.0 / mx : 1.0;
+	float peak = sqrt(min(mn, 1.0 - mx) * r_mx);
+	float weight = peak * amp;
+
+	vec4 sharp_color = (color + (n + s + w + e) * weight) / (1.0 + 4.0 * weight);
+	return clamp(sharp_color, vec4(0.0), vec4(1.0));
+}
+#endif
+
+#ifdef MODE_SGSR
+vec4 sample_sgsr(sampler2D tex, vec2 uv) {
+	vec2 texel = uv / params.pixel_size - 0.5;
+	vec2 fcase = floor(texel);
+	vec2 f = texel - fcase;
+
+	vec2 tc0 = (fcase + 0.5) * params.pixel_size;
+	vec2 tc1 = tc0 + params.pixel_size;
+
+	vec4 c00 = textureLod(tex, vec2(tc0.x, tc0.y), 0.0);
+	vec4 c10 = textureLod(tex, vec2(tc1.x, tc0.y), 0.0);
+	vec4 c01 = textureLod(tex, vec2(tc0.x, tc1.y), 0.0);
+	vec4 c11 = textureLod(tex, vec2(tc1.x, tc1.y), 0.0);
+
+	const vec3 luma_weight = vec3(0.299, 0.587, 0.114);
+	float l00 = dot(c00.rgb, luma_weight);
+	float l10 = dot(c10.rgb, luma_weight);
+	float l01 = dot(c01.rgb, luma_weight);
+	float l11 = dot(c11.rgb, luma_weight);
+
+	float d1 = abs(l00 - l11);
+	float d2 = abs(l10 - l01);
+
+	vec4 color;
+	if (d1 < d2) {
+		float k = f.x + f.y;
+		if (k < 1.0) {
+			color = mix(c00, mix(c10, c01, 0.5), k);
+		} else {
+			color = mix(c11, mix(c10, c01, 0.5), 2.0 - k);
+		}
+	} else {
+		float k = f.x - f.y;
+		if (k > 0.0) {
+			color = mix(c10, mix(c00, c11, 0.5), 1.0 - k);
+		} else {
+			color = mix(c01, mix(c00, c11, 0.5), 1.0 + k);
+		}
+	}
+
+	vec4 bilinear_color = mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
+	float edge_strength = abs(d1 - d2) / (0.01 + d1 + d2);
+	color = mix(bilinear_color, color, edge_strength);
+
+	float min_l = min(min(l00, l10), min(l01, l11));
+	float max_l = max(max(l00, l10), max(l01, l11));
+	float r_max = max_l > 0.0001 ? 1.0 / max_l : 1.0;
+	float peak = sqrt(min(min_l, 1.0 - max_l) * r_max);
+	float sharpen_weight = peak * -0.15;
+
+	vec4 sharp_color = color + sharpen_weight * (c00 + c10 + c01 + c11 - 4.0 * color);
+	return clamp(sharp_color, vec4(0.0), vec4(1.0));
+}
+#endif
 
 void main() {
 #ifdef MODE_SET_COLOR
@@ -166,14 +298,30 @@ void main() {
 #else
 
 #ifdef USE_MULTIVIEW
+#ifdef MODE_SHARP_BILINEAR
+	vec4 color = sample_sharp_bilinear(source_color, uv);
+#elif defined(MODE_BICUBIC)
+	vec4 color = sample_bicubic_catmull_rom(source_color, uv);
+#elif defined(MODE_SGSR)
+	vec4 color = sample_sgsr(source_color, uv);
+#else
 	vec4 color = textureLod(source_color, uv, 0.0);
+#endif
 #ifdef MODE_TWO_SOURCES
 	// In multiview our 2nd input will be our depth map
 	depth = textureLod(source_depth, uv, 0.0).r;
 #endif /* MODE_TWO_SOURCES */
 
 #else /* USE_MULTIVIEW */
+#ifdef MODE_SHARP_BILINEAR
+	vec4 color = sample_sharp_bilinear(source_color, uv);
+#elif defined(MODE_BICUBIC)
+	vec4 color = sample_bicubic_catmull_rom(source_color, uv);
+#elif defined(MODE_SGSR)
+	vec4 color = sample_sgsr(source_color, uv);
+#else
 	vec4 color = textureLod(source_color, uv, 0.0);
+#endif
 #ifdef MODE_TWO_SOURCES
 	color += textureLod(source_color2, uv, 0.0);
 #endif /* MODE_TWO_SOURCES */

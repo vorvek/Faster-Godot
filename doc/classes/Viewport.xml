@@ -450,6 +450,23 @@
 		<member name="snap_2d_vertices_to_pixel" type="bool" setter="set_snap_2d_vertices_to_pixel" getter="is_snap_2d_vertices_to_pixel_enabled" default="false">
 			If [code]true[/code], vertices of [CanvasItem] nodes will snap to full pixels. Only affects the final vertex positions, not the transforms. This can lead to a crisper appearance at the cost of less smooth movement, especially when [Camera2D] smoothing is enabled.
 		</member>
+		<member name="taa_disocclusion_threshold" type="float" setter="set_taa_disocclusion_threshold" getter="get_taa_disocclusion_threshold" default="2.25">
+			Sets how much the per-pixel motion vector can change, in texels, before TAA starts rejecting history for that pixel. Lower values reduce ghosting in motion, but can increase flickering.
+		</member>
+		<member name="taa_history_weight" type="float" setter="set_taa_history_weight" getter="get_taa_history_weight" default="0.93">
+			Sets how much previous frame history contributes to the TAA resolve before additional rejection logic is applied. Higher values produce a more stable image, but can increase ghosting.
+		</member>
+		<member name="taa_jitter_phase_count" type="int" setter="set_taa_jitter_phase_count" getter="get_taa_jitter_phase_count" default="16">
+			Sets the number of jitter positions used by TAA. Higher values can improve still-image convergence, but take more frames to converge and can increase temporal instability in motion.
+			[b]Note:[/b] This does not affect FSR2 or MetalFX temporal upscaling.
+		</member>
+		<member name="taa_jitter_scale" type="float" setter="set_taa_jitter_scale" getter="get_taa_jitter_scale" default="0.85">
+			Scales the camera jitter offset used by TAA. Lower values reduce subpixel jitter, which can reduce shimmering but also reduces TAA's ability to reconstruct subpixel detail. A value of [code]0.0[/code] disables TAA camera jitter while leaving TAA resolve enabled.
+			[b]Note:[/b] This does not affect FSR2 or MetalFX temporal upscaling.
+		</member>
+		<member name="taa_sharpness" type="float" setter="set_taa_sharpness" getter="get_taa_sharpness" default="0.1">
+			Sets how much sharpening is applied during the TAA resolve. Higher values counteract TAA blur, but can increase shimmering or edge halos.
+		</member>
 		<member name="texture_mipmap_bias" type="float" setter="set_texture_mipmap_bias" getter="get_texture_mipmap_bias" default="0.0">
 			Affects the final texture sharpness by reading from a lower or higher mipmap (also called "texture LOD bias"). Negative values make mipmapped textures sharper but grainier when viewed at a distance, while positive values make mipmapped textures blurrier (even when up close).
 			Enabling temporal antialiasing ([member use_taa]) will automatically apply a [code]-0.5[/code] offset to this value, while enabling FXAA ([member screen_space_aa]) will automatically apply a [code]-0.25[/code] offset to this value. If both TAA and FXAA are enabled at the same time, an offset of [code]-0.75[/code] is applied to this value.

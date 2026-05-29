@@ -520,7 +520,9 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 	bool use_fxaa = rb->get_screen_space_aa() == RSE::VIEWPORT_SCREEN_SPACE_AA_FXAA;
 	bool use_smaa = smaa && rb->get_screen_space_aa() == RSE::VIEWPORT_SCREEN_SPACE_AA_SMAA && !temporal_upscaler_active;
 	// If doing bilinear or nearest scaling + FXAA / SMAA, the framebuffer must be scaled in a framebuffer copy after AA is applied.
-	bool using_scaling_pass = spatial_upscaler || ((use_fxaa || use_smaa) && (scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_BILINEAR || scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_NEAREST));
+	bool using_scaling_pass = spatial_upscaler ||
+			(scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_SHARP_BILINEAR || scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_BICUBIC || scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_SGSR) ||
+			((use_fxaa || use_smaa) && (scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_BILINEAR || scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_NEAREST));
 
 	RID render_target = rb->get_render_target();
 	RID color_texture = use_upscaled_texture ? rb->get_upscaled_texture() : rb->get_internal_texture();
@@ -948,7 +950,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 			RID source_texture = rb->get_texture(use_smaa ? SNAME("SMAA") : SNAME("Tonemapper"), SNAME("destination"));
 			RID dest_texture = texture_storage->render_target_get_rd_texture(render_target);
 			RID dest_fb = FramebufferCacheRD::get_singleton()->get_cache(dest_texture);
-			copy_effects->copy_to_fb_rect(source_texture, dest_fb, Rect2i(Point2i(), rb->get_target_size()), false, false, false, false, RID(), rb->get_view_count() > 1, false, false, false, Rect2(), 1.0, scale_mode != RSE::VIEWPORT_SCALING_3D_MODE_NEAREST);
+			copy_effects->copy_to_fb_rect(source_texture, dest_fb, Rect2i(Point2i(), rb->get_target_size()), false, false, false, false, RID(), rb->get_view_count() > 1, false, false, false, Rect2(), 1.0, scale_mode != RSE::VIEWPORT_SCALING_3D_MODE_NEAREST, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_NONE, (int)scale_mode);
 		}
 
 		if (dest_is_msaa_2d) {

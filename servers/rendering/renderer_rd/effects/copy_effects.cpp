@@ -118,6 +118,9 @@ CopyEffects::CopyEffects(BitField<RasterEffects> p_raster_effects) {
 		copy_modes.push_back("\n#define MODE_TWO_SOURCES\n"); // COPY_TO_FB_COPY2
 		copy_modes.push_back("\n#define MODE_SET_COLOR\n"); // COPY_TO_FB_SET_COLOR
 		copy_modes.push_back("\n#define MODE_COPY_DEPTH\n"); // COPY_TO_FB_COPY_DEPTH
+		copy_modes.push_back("\n#define MODE_SHARP_BILINEAR\n"); // COPY_TO_FB_SHARP_BILINEAR
+		copy_modes.push_back("\n#define MODE_BICUBIC\n"); // COPY_TO_FB_BICUBIC
+		copy_modes.push_back("\n#define MODE_SGSR\n"); // COPY_TO_FB_SGSR
 		copy_modes.push_back("\n#define USE_MULTIVIEW\n"); // COPY_TO_FB_MULTIVIEW
 		copy_modes.push_back("\n#define USE_MULTIVIEW\n#define MODE_TWO_SOURCES\n"); // COPY_TO_FB_MULTIVIEW_WITH_DEPTH
 
@@ -692,7 +695,7 @@ void CopyEffects::copy_r32f_to_depth_fb(RID p_source_r32f, RID p_dest_depth_fram
 	RD::get_singleton()->draw_list_end();
 }
 
-void CopyEffects::copy_to_fb_rect(RID p_source_rd_texture, RID p_dest_framebuffer, const Rect2i &p_rect, bool p_flip_y, bool p_force_luminance, bool p_alpha_to_zero, bool p_srgb, RID p_secondary, bool p_multiview, bool p_alpha_to_one, bool p_linear, bool p_normal, const Rect2 &p_src_rect, float p_linear_luminance_multiplier, bool p_bilinear_filtering, CopyToFbFlagMode p_flag_mode) {
+void CopyEffects::copy_to_fb_rect(RID p_source_rd_texture, RID p_dest_framebuffer, const Rect2i &p_rect, bool p_flip_y, bool p_force_luminance, bool p_alpha_to_zero, bool p_srgb, RID p_secondary, bool p_multiview, bool p_alpha_to_one, bool p_linear, bool p_normal, const Rect2 &p_src_rect, float p_linear_luminance_multiplier, bool p_bilinear_filtering, CopyToFbFlagMode p_flag_mode, int p_scaling_3d_mode) {
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
@@ -700,6 +703,12 @@ void CopyEffects::copy_to_fb_rect(RID p_source_rd_texture, RID p_dest_framebuffe
 
 	memset(&copy_to_fb.push_constant, 0, sizeof(CopyToFbPushConstant));
 	copy_to_fb.push_constant.luminance_multiplier = 1.0;
+
+	if (p_source_rd_texture.is_valid()) {
+		RD::TextureFormat format = RD::get_singleton()->texture_get_format(p_source_rd_texture);
+		copy_to_fb.push_constant.pixel_size[0] = 1.0f / (float)format.width;
+		copy_to_fb.push_constant.pixel_size[1] = 1.0f / (float)format.height;
+	}
 
 	if (p_flip_y) {
 		copy_to_fb.push_constant.flags |= COPY_TO_FB_FLAG_FLIP_Y;
@@ -744,6 +753,12 @@ void CopyEffects::copy_to_fb_rect(RID p_source_rd_texture, RID p_dest_framebuffe
 	CopyToFBMode mode;
 	if (p_multiview) {
 		mode = p_secondary.is_valid() ? COPY_TO_FB_MULTIVIEW_WITH_DEPTH : COPY_TO_FB_MULTIVIEW;
+	} else if (p_scaling_3d_mode == RSE::VIEWPORT_SCALING_3D_MODE_SHARP_BILINEAR) {
+		mode = COPY_TO_FB_SHARP_BILINEAR;
+	} else if (p_scaling_3d_mode == RSE::VIEWPORT_SCALING_3D_MODE_BICUBIC) {
+		mode = COPY_TO_FB_BICUBIC;
+	} else if (p_scaling_3d_mode == RSE::VIEWPORT_SCALING_3D_MODE_SGSR) {
+		mode = COPY_TO_FB_SGSR;
 	} else {
 		mode = p_secondary.is_valid() ? COPY_TO_FB_COPY2 : COPY_TO_FB_COPY;
 	}

@@ -1067,11 +1067,11 @@ void RendererViewport::viewport_set_scaling_3d_scale(RID p_viewport, float p_sca
 	// Clamp to reasonable values that are actually useful.
 	// Values above 2.0 don't serve a practical purpose since the viewport
 	// isn't displayed with mipmaps.
-	if (viewport->scaling_3d_scale == CLAMP(p_scaling_3d_scale, 0.1, 2.0)) {
+	if (viewport->scaling_3d_scale == CLAMP(p_scaling_3d_scale, 0.1, 100.0)) {
 		return;
 	}
 
-	viewport->scaling_3d_scale = CLAMP(p_scaling_3d_scale, 0.1, 2.0);
+	viewport->scaling_3d_scale = CLAMP(p_scaling_3d_scale, 0.1, 100.0);
 	_configure_3d_render_buffers(viewport);
 }
 
