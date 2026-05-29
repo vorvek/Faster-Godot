@@ -671,7 +671,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	uint total_bounces = get_total_bounces(ps.packed_bounces_flags);
 	uint diffuse_bounces = get_diffuse_bounces(ps.packed_bounces_flags);
 	float material_roughness = clamp(m.roughness, 0.0, 1.0);
-	float path_min_roughness = min(0.75, 0.02 + 0.05 * float(total_bounces));
+	float path_min_roughness = (RT_GET_SAMPLE_COUNT() >= 16u) ? 0.0 : min(0.75, 0.02 + 0.05 * float(total_bounces));
 	float sampling_roughness = max(material_roughness, path_min_roughness);
 	uint rtgi_sampling_controls = uint(get_rt_param(RT_PARAM_RTGI_SAMPLING_CONTROLS));
 	uint rt_mode = uint(get_rt_param(RT_PARAM_MODE));
