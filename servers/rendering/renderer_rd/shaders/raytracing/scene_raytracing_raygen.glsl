@@ -159,7 +159,7 @@ bool rtgi_load_raster_surface(ivec2 visible_pixel, vec2 visible_uv, mat4 inv_vie
 		return false;
 	}
 
-	vec4 view_h = inv_projection_unjittered * vec4(visible_uv * 2.0 - 1.0, depth, 1.0);
+	vec4 view_h = scene_data_block.data.inv_projection_matrix * vec4(visible_uv * 2.0 - 1.0, depth, 1.0);
 	if (any(isnan(view_h)) || any(isinf(view_h)) || abs(view_h.w) <= 1e-6) {
 		return false;
 	}
@@ -306,7 +306,7 @@ void main() {
 			scene_data_block.data.inv_view_matrix[2],
 			vec4(0.0, 0.0, 0.0, 1.0)));
 
-	vec4 target = inv_projection_unjittered * vec4(d.x, d.y, 1.0, 1.0);
+	vec4 target = scene_data_block.data.inv_projection_matrix * vec4(d.x, d.y, 1.0, 1.0);
 	vec4 origin = inv_view * vec4(0.0, 0.0, 0.0, 1.0);
 	vec4 direction = inv_view * vec4(normalize(target.xyz), 0);
 
@@ -420,7 +420,7 @@ void main() {
 			// Jitter primary ray for anti-aliasing (supersampling)
 			vec2 jitter = (rand2(ps.rng_state) - vec2(0.5)) / rt_visible_size();
 			vec2 jittered_d = d + jitter * 2.0;
-			vec4 target_j = inv_projection_unjittered * vec4(jittered_d.x, jittered_d.y, 1.0, 1.0);
+			vec4 target_j = scene_data_block.data.inv_projection_matrix * vec4(jittered_d.x, jittered_d.y, 1.0, 1.0);
 
 			vec3 ray_origin = origin.xyz;
 			vec3 ray_dir = (inv_view * vec4(normalize(target_j.xyz), 0.0)).xyz;

@@ -2596,7 +2596,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 
 		if (p_render_data->environment.is_valid()) {
-			if (environment_get_sdfgi_enabled(p_render_data->environment) && get_debug_draw_mode() != RSE::VIEWPORT_DEBUG_DRAW_UNSHADED) {
+			if (!rt_replaces_opaque && environment_get_sdfgi_enabled(p_render_data->environment) && get_debug_draw_mode() != RSE::VIEWPORT_DEBUG_DRAW_UNSHADED) {
 				scene_features.set(SCENE_FEATURE_SDFGI);
 			}
 			if (environment_get_ssr_enabled(p_render_data->environment)) {
@@ -3546,6 +3546,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 						composite_rt_volumetric_fog(v);
 					}
 				}
+			}
+
+			if (rt_replaces_opaque && using_viewport_taa) {
+				RD::get_singleton()->draw_command_begin_label("RT TAA (Post Denoise)");
+				taa->process_texture(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, SNAME("rtgi_taa"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, rb_data->rt_get_velocity_texture(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, false, rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), 0.94f, rb_data->rt_get_size(), rb_data->rt_get_depth_texture());
+				RD::get_singleton()->draw_command_end_label();
 			}
 
 			if (rt_replaces_opaque) {
@@ -5577,6 +5583,24 @@ void RenderForwardClustered::sdfgi_update(const Ref<RenderSceneBuffers> &p_rende
 	// RTGI only suppresses it after RT setup succeeds for the frame, so raster
 	// fallback/multiview never loses SDFGI merely because Path Traced was requested.
 	bool needs_sdfgi = p_environment.is_valid() && environment_get_sdfgi_enabled(p_environment);
+
+	bool is_full_path_tracing = false;
+	if (p_environment.is_valid() && RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_enabled(p_environment)) {
+		const float *rt_env_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_environment);
+		if (rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING) {
+			if (rb->get_view_count() <= 1) {
+				is_full_path_tracing = true;
+			}
+		}
+	}
+
+	if (is_full_path_tracing) {
+		if (needs_sdfgi) {
+			WARN_PRINT_ONCE("SDFGI is not supported and will be disabled when Full Path Tracing is enabled.");
+		}
+		needs_sdfgi = false;
+	}
+
 	bool needs_reset = sdfgi.is_valid() ? sdfgi->version != gi.sdfgi_current_version : false;
 
 	if (!needs_sdfgi || needs_reset) {
