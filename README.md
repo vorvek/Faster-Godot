@@ -2,7 +2,7 @@
   <img src="fast-godot.svg" alt="Faster-Godot FG gear logo" width="160">
 </p>
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Z8Z0VIV09)
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Z8Z0VIV09) [![X: @vorvek](https://img.shields.io/badge/X-@vorvek-000000?logo=x&logoColor=white)](https://x.com/vorvek) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.txt) ![Godot 4.6.3-stable](https://img.shields.io/badge/Godot-4.6.3--stable-478CBF) ![Platform: Windows | Linux](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-2ea44f)
 
 # Faster-Godot
 
