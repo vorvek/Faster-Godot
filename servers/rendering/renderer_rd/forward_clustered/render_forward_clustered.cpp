@@ -1243,17 +1243,17 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::ensure_mfx_tempor
 void RenderForwardClustered::RenderBufferDataForwardClustered::free_data() {
 	// JIC, should already have been cleared
 	if (render_buffers) {
+		RenderForwardClustered *rfc = RenderForwardClustered::get_singleton();
+		if (rfc && rfc->raytracing) {
+			rfc->raytracing->free_viewport_state(render_buffers);
+		}
+
 		render_buffers->clear_context(RB_SCOPE_FORWARD_CLUSTERED);
 		render_buffers->clear_context(RB_SCOPE_DLSS_RR);
 		render_buffers->clear_context(RB_SCOPE_SSDS);
 		render_buffers->clear_context(RB_SCOPE_SSIL);
 		render_buffers->clear_context(RB_SCOPE_SSAO);
 		render_buffers->clear_context(RB_SCOPE_SSR);
-
-		RenderForwardClustered *rfc = RenderForwardClustered::get_singleton();
-		if (rfc && rfc->raytracing) {
-			rfc->raytracing->free_viewport_state(render_buffers);
-		}
 	}
 
 	if (cluster_builder) {

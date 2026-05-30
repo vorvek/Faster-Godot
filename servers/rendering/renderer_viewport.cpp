@@ -1600,6 +1600,7 @@ void RendererViewport::viewport_set_msaa_2d(RID p_viewport, RS::ViewportMSAA p_m
 	}
 	viewport->msaa_2d = p_msaa;
 	RSG::texture_storage->render_target_set_msaa(viewport->render_target, p_msaa);
+	_configure_3d_render_buffers(viewport);
 }
 
 void RendererViewport::viewport_set_msaa_3d(RID p_viewport, RS::ViewportMSAA p_msaa) {
