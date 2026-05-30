@@ -6,7 +6,6 @@
   <a href="https://x.com/vorvek"><img src="https://img.shields.io/badge/%40vorvek-000000?logo=x&logoColor=white" alt="X: @vorvek"></a>
   <a href="LICENSE.txt"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/Godot-4.6.3--stable-478CBF" alt="Godot 4.6.3-stable">
-  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-2ea44f" alt="Platform: Windows | Linux">
 </p>
 
 <p align="center">
