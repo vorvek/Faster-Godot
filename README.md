@@ -2,6 +2,10 @@
   <img src="fast-godot.svg" alt="Faster-Godot FG gear logo" width="160">
 </p>
 
+<p align="center">
+  <a href="https://ko-fi.com/Z8Z0VIV09" target="_blank"><img height="36" style="border:0;height:36px;" src="https://storage.ko-fi.com/cdn/kofi2.png?v=6" border="0" alt="Buy Me a Coffee at ko-fi.com"></a>
+</p>
+
 # Faster-Godot
 
 Faster-Godot is a performance-first fork of Godot 4.6.3-stable for desktop
