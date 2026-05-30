@@ -15,7 +15,7 @@
 using namespace RendererRD;
 
 static constexpr int RTGI_DIFFUSE_CACHE_SLOT_COUNT = 4;
-static constexpr int RTGI_DIFFUSE_CACHE_SPG_PROBE_SPACING = 4;
+static constexpr int RTGI_DIFFUSE_CACHE_SPG_PROBE_SPACING = 8;
 static constexpr int RTGI_DIFFUSE_CACHE_SPG_DIRECTION_RESOLUTION = 4;
 static constexpr int RTGI_DIFFUSE_CACHE_SPG_REFINED_SUBDIVS = 2;
 static constexpr int RTGI_DIFFUSE_CACHE_SPG_REFINED_DIRECTION_RESOLUTION = 2;
@@ -84,6 +84,8 @@ bool RTGIDiffuseCache::_ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffer
 	const bool has_spg_visibility = p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_VISIBILITY);
 	const bool has_spg_refined_radiance = p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_RADIANCE);
 	const bool has_surface_radiance = p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_RADIANCE);
+	const bool has_surface_meta = p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_META);
+	const bool has_surface_meta_next = p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_META_NEXT);
 	const bool has_slot_surface_key = p_render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SLOT_SURFACE_KEY);
 
 	bool needs_clear = false;
@@ -129,6 +131,16 @@ bool RTGIDiffuseCache::_ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffer
 	}
 	if (has_surface_radiance &&
 			p_render_buffers->get_texture_slice_size(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_RADIANCE, 0) != persistent_cache_size) {
+		needs_clear = true;
+	}
+	if (has_surface_meta &&
+			(p_render_buffers->get_texture_slice_size(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_META, 0) != persistent_cache_size ||
+					p_render_buffers->get_texture_format(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_META).format != RD::DATA_FORMAT_R8G8B8A8_UNORM)) {
+		needs_clear = true;
+	}
+	if (has_surface_meta_next &&
+			(p_render_buffers->get_texture_slice_size(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_META_NEXT, 0) != persistent_cache_size ||
+					p_render_buffers->get_texture_format(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_META_NEXT).format != RD::DATA_FORMAT_R8G8B8A8_UNORM)) {
 		needs_clear = true;
 	}
 	if (has_slot_surface_key &&
@@ -241,8 +253,8 @@ bool RTGIDiffuseCache::_ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffer
 	p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_HISTORY_ID_NEXT, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, spg_refined_atlas_size);
 	RID surface_radiance = p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_RADIANCE, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, persistent_cache_size);
 	p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_RADIANCE_NEXT, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, persistent_cache_size);
-	RID surface_meta = p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_META, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, persistent_cache_size);
-	p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_META_NEXT, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, persistent_cache_size);
+	RID surface_meta = p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_META, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, persistent_cache_size);
+	p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_META_NEXT, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, persistent_cache_size);
 	RID surface_stats = p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_STATS, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, persistent_cache_size);
 	p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_STATS_NEXT, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, persistent_cache_size);
 	RID surface_history_id = p_render_buffers->create_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_HISTORY_ID, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, persistent_cache_size);
@@ -303,6 +315,7 @@ void RTGIDiffuseCache::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 		float p_strc_base_probe_spacing,
 		const Size2i &p_process_size,
 		uint32_t p_max_cache_entries,
+		bool p_capture_raw_debug,
 		uint32_t p_view) {
 	ERR_FAIL_COND(p_render_buffers.is_null());
 	ERR_FAIL_COND(p_process_size.x <= 0 || p_process_size.y <= 0);
@@ -367,7 +380,53 @@ void RTGIDiffuseCache::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 	RID slot_surface_key_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SLOT_SURFACE_KEY_NEXT, p_view, 0);
 	RID surface_claim = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_CLAIM, p_view, 0);
 
-	RD::get_singleton()->texture_copy(p_diffuse_radiance, raw, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, p_view, 0);
+	RD *rd = RD::get_singleton();
+	if (p_capture_raw_debug) {
+		rd->texture_copy(p_diffuse_radiance, raw, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, p_view, 0);
+	}
+	RID source_radiance = p_render_buffers->get_view_count() > 1 ? p_render_buffers->get_texture_slice(SNAME("forward_clustered"), SNAME("rt_diffuse_radiance"), p_view, 0) : p_diffuse_radiance;
+	auto refresh_cache_slices = [&]() {
+		radiance = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RADIANCE, p_view, 0);
+		radiance_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RADIANCE_NEXT, p_view, 0);
+		meta = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_META, p_view, 0);
+		meta_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_META_NEXT, p_view, 0);
+		stats = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_STATS, p_view, 0);
+		stats_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_STATS_NEXT, p_view, 0);
+		history_id = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_HISTORY_ID, p_view, 0);
+		history_id_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_HISTORY_ID_NEXT, p_view, 0);
+		spg_radiance = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_RADIANCE, p_view, 0);
+		spg_radiance_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_RADIANCE_NEXT, p_view, 0);
+		spg_meta = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_META, p_view, 0);
+		spg_meta_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_META_NEXT, p_view, 0);
+		spg_stats = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_STATS, p_view, 0);
+		spg_stats_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_STATS_NEXT, p_view, 0);
+		spg_visibility = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_VISIBILITY, p_view, 0);
+		spg_visibility_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_VISIBILITY_NEXT, p_view, 0);
+		spg_history_id = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_HISTORY_ID, p_view, 0);
+		spg_history_id_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_HISTORY_ID_NEXT, p_view, 0);
+		spg_refinement_mask = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINEMENT_MASK, p_view, 0);
+		spg_refinement_mask_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINEMENT_MASK_NEXT, p_view, 0);
+		spg_refined_radiance = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_RADIANCE, p_view, 0);
+		spg_refined_radiance_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_RADIANCE_NEXT, p_view, 0);
+		spg_refined_meta = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_META, p_view, 0);
+		spg_refined_meta_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_META_NEXT, p_view, 0);
+		spg_refined_stats = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_STATS, p_view, 0);
+		spg_refined_stats_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_STATS_NEXT, p_view, 0);
+		spg_refined_visibility = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_VISIBILITY, p_view, 0);
+		spg_refined_visibility_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_VISIBILITY_NEXT, p_view, 0);
+		spg_refined_history_id = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_HISTORY_ID, p_view, 0);
+		spg_refined_history_id_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_HISTORY_ID_NEXT, p_view, 0);
+		surface_radiance = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_RADIANCE, p_view, 0);
+		surface_radiance_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_RADIANCE_NEXT, p_view, 0);
+		surface_meta = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_META, p_view, 0);
+		surface_meta_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_META_NEXT, p_view, 0);
+		surface_stats = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_STATS, p_view, 0);
+		surface_stats_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_STATS_NEXT, p_view, 0);
+		surface_history_id = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_HISTORY_ID, p_view, 0);
+		surface_history_id_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_HISTORY_ID_NEXT, p_view, 0);
+		slot_surface_key = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SLOT_SURFACE_KEY, p_view, 0);
+		slot_surface_key_next = p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SLOT_SURFACE_KEY_NEXT, p_view, 0);
+	};
 
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
@@ -413,78 +472,95 @@ void RTGIDiffuseCache::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 	RID strc_metadata = strc_available ? p_render_buffers->get_texture_slice(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_METADATA, p_view, 0) : texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
 
 	LocalVector<RD::Uniform> uniforms;
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 0, raw));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ linear_sampler, radiance })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, Vector<RID>({ nearest_sampler, meta })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 3, Vector<RID>({ nearest_sampler, stats })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 4, Vector<RID>({ nearest_sampler, velocity_slice })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 5, Vector<RID>({ nearest_sampler, normal_roughness_slice })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 6, Vector<RID>({ nearest_sampler, viewz_hitdist_slice })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 7, Vector<RID>({ nearest_sampler, history_validity_slice })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 8, Vector<RID>({ nearest_sampler, prev_history_validity_slice })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 9, Vector<RID>({ nearest_sampler, history_id_slice })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 10, Vector<RID>({ nearest_sampler, prev_history_id_slice })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 11, Vector<RID>({ nearest_sampler, signal_confidence_slice })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 12, output));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 13, radiance_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 14, meta_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 15, stats_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 16, diagnostic));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 17, age));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 18, rejection));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 19, Vector<RID>({ nearest_sampler, history_id })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 20, history_id_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 21, Vector<RID>({ nearest_sampler, albedo_metalness_slice })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 22, reconstruction_signal_confidence));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 23, Vector<RID>({ nearest_sampler, receiver_surface_id_slice })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 24, Vector<RID>({ nearest_sampler, prev_receiver_surface_id_slice })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 25, Vector<RID>({ nearest_sampler, depth_slice })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 26, Vector<RID>({ nearest_sampler, strc_irradiance })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 27, Vector<RID>({ nearest_sampler, strc_distance })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 28, Vector<RID>({ nearest_sampler, strc_metadata })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 29, Vector<RID>({ nearest_sampler, primary_diffuse_direction_slice })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 30, Vector<RID>({ linear_sampler, spg_radiance })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 31, Vector<RID>({ nearest_sampler, spg_meta })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 32, Vector<RID>({ nearest_sampler, spg_history_id })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 33, spg_radiance_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 34, spg_meta_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 35, spg_history_id_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 36, Vector<RID>({ nearest_sampler, spg_stats })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 37, spg_stats_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 38, Vector<RID>({ nearest_sampler, spg_visibility })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 39, spg_visibility_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 40, spg_rejection));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 41, Vector<RID>({ nearest_sampler, spg_refinement_mask })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 42, spg_refinement_mask_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 43, Vector<RID>({ linear_sampler, spg_refined_radiance })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 44, Vector<RID>({ nearest_sampler, spg_refined_meta })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 45, Vector<RID>({ nearest_sampler, spg_refined_stats })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 46, Vector<RID>({ nearest_sampler, spg_refined_visibility })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 47, Vector<RID>({ nearest_sampler, spg_refined_history_id })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 48, spg_refined_radiance_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 49, spg_refined_meta_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 50, spg_refined_stats_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 51, spg_refined_visibility_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 52, spg_refined_history_id_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 53, Vector<RID>({ linear_sampler, surface_radiance })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 54, Vector<RID>({ nearest_sampler, surface_meta })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 55, Vector<RID>({ nearest_sampler, surface_stats })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 56, Vector<RID>({ nearest_sampler, surface_history_id })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 57, surface_radiance_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 58, surface_meta_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 59, surface_stats_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 60, surface_history_id_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 61, surface_cache_key_slice));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 62, slot_surface_key));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 63, slot_surface_key_next));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 64, surface_claim));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 65, surface_feedback_key_slice));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 66, Vector<RID>({ nearest_sampler, surface_feedback_radiance_slice })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 67, Vector<RID>({ nearest_sampler, surface_feedback_meta_slice })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 68, Vector<RID>({ nearest_sampler, surface_feedback_stats_slice })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 69, surface_feedback_diagnostic_slice));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 70, Vector<RID>({ nearest_sampler, secondary_cache_source_slice })));
-	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 71, Vector<RID>({ nearest_sampler, secondary_cache_rejection_slice })));
+	auto rebuild_uniforms = [&]() {
+		uniforms.clear();
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 0, source_radiance));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ linear_sampler, radiance })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, Vector<RID>({ nearest_sampler, meta })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 3, Vector<RID>({ nearest_sampler, stats })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 4, Vector<RID>({ nearest_sampler, velocity_slice })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 5, Vector<RID>({ nearest_sampler, normal_roughness_slice })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 6, Vector<RID>({ nearest_sampler, viewz_hitdist_slice })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 7, Vector<RID>({ nearest_sampler, history_validity_slice })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 8, Vector<RID>({ nearest_sampler, prev_history_validity_slice })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 9, Vector<RID>({ nearest_sampler, history_id_slice })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 10, Vector<RID>({ nearest_sampler, prev_history_id_slice })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 11, Vector<RID>({ nearest_sampler, signal_confidence_slice })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 12, output));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 13, radiance_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 14, meta_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 15, stats_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 16, diagnostic));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 17, age));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 18, rejection));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 19, Vector<RID>({ nearest_sampler, history_id })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 20, history_id_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 21, Vector<RID>({ nearest_sampler, albedo_metalness_slice })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 22, reconstruction_signal_confidence));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 23, Vector<RID>({ nearest_sampler, receiver_surface_id_slice })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 24, Vector<RID>({ nearest_sampler, prev_receiver_surface_id_slice })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 25, Vector<RID>({ nearest_sampler, depth_slice })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 26, Vector<RID>({ nearest_sampler, strc_irradiance })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 27, Vector<RID>({ nearest_sampler, strc_distance })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 28, Vector<RID>({ nearest_sampler, strc_metadata })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 29, Vector<RID>({ nearest_sampler, primary_diffuse_direction_slice })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 30, Vector<RID>({ linear_sampler, spg_radiance })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 31, Vector<RID>({ nearest_sampler, spg_meta })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 32, Vector<RID>({ nearest_sampler, spg_history_id })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 33, spg_radiance_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 34, spg_meta_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 35, spg_history_id_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 36, Vector<RID>({ nearest_sampler, spg_stats })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 37, spg_stats_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 38, Vector<RID>({ nearest_sampler, spg_visibility })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 39, spg_visibility_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 40, spg_rejection));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 41, Vector<RID>({ nearest_sampler, spg_refinement_mask })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 42, spg_refinement_mask_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 43, Vector<RID>({ linear_sampler, spg_refined_radiance })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 44, Vector<RID>({ nearest_sampler, spg_refined_meta })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 45, Vector<RID>({ nearest_sampler, spg_refined_stats })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 46, Vector<RID>({ nearest_sampler, spg_refined_visibility })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 47, Vector<RID>({ nearest_sampler, spg_refined_history_id })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 48, spg_refined_radiance_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 49, spg_refined_meta_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 50, spg_refined_stats_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 51, spg_refined_visibility_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 52, spg_refined_history_id_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 53, Vector<RID>({ linear_sampler, surface_radiance })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 54, Vector<RID>({ nearest_sampler, surface_meta })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 55, Vector<RID>({ nearest_sampler, surface_stats })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 56, Vector<RID>({ nearest_sampler, surface_history_id })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 57, surface_radiance_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 58, surface_meta_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 59, surface_stats_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 60, surface_history_id_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 61, surface_cache_key_slice));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 62, slot_surface_key));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 63, slot_surface_key_next));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 64, surface_claim));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 65, surface_feedback_key_slice));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 66, Vector<RID>({ nearest_sampler, surface_feedback_radiance_slice })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 67, Vector<RID>({ nearest_sampler, surface_feedback_meta_slice })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 68, Vector<RID>({ nearest_sampler, surface_feedback_stats_slice })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 69, surface_feedback_diagnostic_slice));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 70, Vector<RID>({ nearest_sampler, secondary_cache_source_slice })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 71, Vector<RID>({ nearest_sampler, secondary_cache_rejection_slice })));
+	};
+	rebuild_uniforms();
+
+	const bool use_texture_swaps = p_render_buffers->get_view_count() == 1;
+	auto pingpong_texture = [&](const StringName &p_current_name, const StringName &p_next_name, RID p_next, RID p_current, const Size2i &p_size) -> bool {
+		if (use_texture_swaps) {
+			return p_render_buffers->swap_textures(RB_SCOPE_RTGI_DIFFUSE_CACHE, p_current_name, p_next_name);
+		}
+		rd->texture_copy(p_next, p_current, Vector3(), Vector3(), Vector3(p_size.x, p_size.y, 1), 0, 0, 0, 0);
+		return true;
+	};
+	auto refresh_uniforms_after_pingpong = [&]() {
+		refresh_cache_slices();
+		rebuild_uniforms();
+	};
 
 	PushConstant push_constant;
 	memset(&push_constant, 0, sizeof(PushConstant));
@@ -504,80 +580,88 @@ void RTGIDiffuseCache::process(Ref<RenderSceneBuffersRD> p_render_buffers,
 	push_constant.strc_cascade_count = CLAMP(p_strc_cascade_count, 1u, 4u);
 	push_constant.strc_enabled = strc_available ? 1u : 0u;
 
-	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
-	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
-	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
+	RD::ComputeListID compute_list = rd->compute_list_begin();
+	rd->compute_list_bind_compute_pipeline(compute_list, pipeline);
+	rd->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
 	push_constant.mode = 0u;
-	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
-	RD::get_singleton()->compute_list_dispatch_threads(compute_list, cache_size.x, cache_size.y, 1);
+	rd->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
+	rd->compute_list_dispatch_threads(compute_list, cache_size.x, cache_size.y, 1);
 	push_constant.mode = 2u;
-	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
-	RD::get_singleton()->compute_list_dispatch_threads(compute_list, spg_atlas_size.x, spg_atlas_size.y, 1);
-	RD::get_singleton()->compute_list_end();
+	rd->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
+	rd->compute_list_dispatch_threads(compute_list, spg_atlas_size.x, spg_atlas_size.y, 1);
+	rd->compute_list_add_barrier(compute_list);
+	rd->compute_list_end();
 
-	RD::get_singleton()->texture_copy(radiance_next, radiance, Vector3(), Vector3(), Vector3(persistent_cache_size.x, persistent_cache_size.y, 1), 0, 0, 0, 0);
-	RD::get_singleton()->texture_copy(meta_next, meta, Vector3(), Vector3(), Vector3(persistent_cache_size.x, persistent_cache_size.y, 1), 0, 0, 0, 0);
-	RD::get_singleton()->texture_copy(stats_next, stats, Vector3(), Vector3(), Vector3(persistent_cache_size.x, persistent_cache_size.y, 1), 0, 0, 0, 0);
-	RD::get_singleton()->texture_copy(history_id_next, history_id, Vector3(), Vector3(), Vector3(persistent_cache_size.x, persistent_cache_size.y, 1), 0, 0, 0, 0);
-	RD::get_singleton()->texture_copy(slot_surface_key_next, slot_surface_key, Vector3(), Vector3(), Vector3(persistent_cache_size.x, persistent_cache_size.y, 1), 0, 0, 0, 0);
-	RD::get_singleton()->texture_copy(spg_radiance_next, spg_radiance, Vector3(), Vector3(), Vector3(spg_atlas_size.x, spg_atlas_size.y, 1), 0, 0, 0, 0);
-	RD::get_singleton()->texture_copy(spg_meta_next, spg_meta, Vector3(), Vector3(), Vector3(spg_atlas_size.x, spg_atlas_size.y, 1), 0, 0, 0, 0);
-	RD::get_singleton()->texture_copy(spg_stats_next, spg_stats, Vector3(), Vector3(), Vector3(spg_atlas_size.x, spg_atlas_size.y, 1), 0, 0, 0, 0);
-	RD::get_singleton()->texture_copy(spg_visibility_next, spg_visibility, Vector3(), Vector3(), Vector3(spg_atlas_size.x, spg_atlas_size.y, 1), 0, 0, 0, 0);
-	RD::get_singleton()->texture_copy(spg_history_id_next, spg_history_id, Vector3(), Vector3(), Vector3(spg_atlas_size.x, spg_atlas_size.y, 1), 0, 0, 0, 0);
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_RADIANCE, RB_TEX_RTGI_DIFFUSE_CACHE_RADIANCE_NEXT, radiance_next, radiance, persistent_cache_size));
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_META, RB_TEX_RTGI_DIFFUSE_CACHE_META_NEXT, meta_next, meta, persistent_cache_size));
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_STATS, RB_TEX_RTGI_DIFFUSE_CACHE_STATS_NEXT, stats_next, stats, persistent_cache_size));
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_HISTORY_ID, RB_TEX_RTGI_DIFFUSE_CACHE_HISTORY_ID_NEXT, history_id_next, history_id, persistent_cache_size));
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SLOT_SURFACE_KEY, RB_TEX_RTGI_DIFFUSE_CACHE_SLOT_SURFACE_KEY_NEXT, slot_surface_key_next, slot_surface_key, persistent_cache_size));
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_RADIANCE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_RADIANCE_NEXT, spg_radiance_next, spg_radiance, spg_atlas_size));
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_META, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_META_NEXT, spg_meta_next, spg_meta, spg_atlas_size));
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_STATS, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_STATS_NEXT, spg_stats_next, spg_stats, spg_atlas_size));
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_VISIBILITY, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_VISIBILITY_NEXT, spg_visibility_next, spg_visibility, spg_atlas_size));
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_HISTORY_ID, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_HISTORY_ID_NEXT, spg_history_id_next, spg_history_id, spg_atlas_size));
+	refresh_uniforms_after_pingpong();
 
-	compute_list = RD::get_singleton()->compute_list_begin();
-	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
-	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
+	compute_list = rd->compute_list_begin();
+	rd->compute_list_bind_compute_pipeline(compute_list, pipeline);
+	rd->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
 	push_constant.mode = 3u;
-	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
-	RD::get_singleton()->compute_list_dispatch_threads(compute_list, spg_probe_size.x, spg_probe_size.y, 1);
-	RD::get_singleton()->compute_list_end();
+	rd->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
+	rd->compute_list_dispatch_threads(compute_list, spg_probe_size.x, spg_probe_size.y, 1);
+	rd->compute_list_add_barrier(compute_list);
+	rd->compute_list_end();
 
-	RD::get_singleton()->texture_copy(spg_refinement_mask_next, spg_refinement_mask, Vector3(), Vector3(), Vector3(spg_probe_size.x, spg_probe_size.y, 1), 0, 0, 0, 0);
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINEMENT_MASK, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINEMENT_MASK_NEXT, spg_refinement_mask_next, spg_refinement_mask, spg_probe_size));
+	refresh_uniforms_after_pingpong();
 
-	compute_list = RD::get_singleton()->compute_list_begin();
-	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
-	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
+	compute_list = rd->compute_list_begin();
+	rd->compute_list_bind_compute_pipeline(compute_list, pipeline);
+	rd->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
 	push_constant.mode = 4u;
-	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
-	RD::get_singleton()->compute_list_dispatch_threads(compute_list, spg_refined_atlas_size.x, spg_refined_atlas_size.y, 1);
-	RD::get_singleton()->compute_list_end();
+	rd->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
+	rd->compute_list_dispatch_threads(compute_list, spg_refined_atlas_size.x, spg_refined_atlas_size.y, 1);
+	rd->compute_list_add_barrier(compute_list);
+	rd->compute_list_end();
 
-	RD::get_singleton()->texture_copy(spg_refined_radiance_next, spg_refined_radiance, Vector3(), Vector3(), Vector3(spg_refined_atlas_size.x, spg_refined_atlas_size.y, 1), 0, 0, 0, 0);
-	RD::get_singleton()->texture_copy(spg_refined_meta_next, spg_refined_meta, Vector3(), Vector3(), Vector3(spg_refined_atlas_size.x, spg_refined_atlas_size.y, 1), 0, 0, 0, 0);
-	RD::get_singleton()->texture_copy(spg_refined_stats_next, spg_refined_stats, Vector3(), Vector3(), Vector3(spg_refined_atlas_size.x, spg_refined_atlas_size.y, 1), 0, 0, 0, 0);
-	RD::get_singleton()->texture_copy(spg_refined_visibility_next, spg_refined_visibility, Vector3(), Vector3(), Vector3(spg_refined_atlas_size.x, spg_refined_atlas_size.y, 1), 0, 0, 0, 0);
-	RD::get_singleton()->texture_copy(spg_refined_history_id_next, spg_refined_history_id, Vector3(), Vector3(), Vector3(spg_refined_atlas_size.x, spg_refined_atlas_size.y, 1), 0, 0, 0, 0);
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_RADIANCE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_RADIANCE_NEXT, spg_refined_radiance_next, spg_refined_radiance, spg_refined_atlas_size));
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_META, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_META_NEXT, spg_refined_meta_next, spg_refined_meta, spg_refined_atlas_size));
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_STATS, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_STATS_NEXT, spg_refined_stats_next, spg_refined_stats, spg_refined_atlas_size));
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_VISIBILITY, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_VISIBILITY_NEXT, spg_refined_visibility_next, spg_refined_visibility, spg_refined_atlas_size));
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_HISTORY_ID, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_HISTORY_ID_NEXT, spg_refined_history_id_next, spg_refined_history_id, spg_refined_atlas_size));
+	refresh_uniforms_after_pingpong();
 
-	compute_list = RD::get_singleton()->compute_list_begin();
-	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
-	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
+	compute_list = rd->compute_list_begin();
+	rd->compute_list_bind_compute_pipeline(compute_list, pipeline);
+	rd->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
 	push_constant.mode = 5u;
-	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
-	RD::get_singleton()->compute_list_dispatch_threads(compute_list, persistent_cache_size.x, persistent_cache_size.y, 1);
-	RD::get_singleton()->compute_list_add_barrier(compute_list);
+	rd->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
+	rd->compute_list_dispatch_threads(compute_list, persistent_cache_size.x, persistent_cache_size.y, 1);
+	rd->compute_list_add_barrier(compute_list);
 	push_constant.mode = 6u;
-	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
-	RD::get_singleton()->compute_list_dispatch_threads(compute_list, persistent_cache_size.x, persistent_cache_size.y, 1);
-	RD::get_singleton()->compute_list_add_barrier(compute_list);
+	rd->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
+	rd->compute_list_dispatch_threads(compute_list, persistent_cache_size.x, persistent_cache_size.y, 1);
+	rd->compute_list_add_barrier(compute_list);
 	push_constant.mode = 7u;
-	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
-	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_process_size.x, p_process_size.y, 1);
-	RD::get_singleton()->compute_list_end();
+	rd->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
+	rd->compute_list_dispatch_threads(compute_list, p_process_size.x, p_process_size.y, 1);
+	rd->compute_list_add_barrier(compute_list);
+	rd->compute_list_end();
 
-	RD::get_singleton()->texture_copy(surface_radiance_next, surface_radiance, Vector3(), Vector3(), Vector3(persistent_cache_size.x, persistent_cache_size.y, 1), 0, 0, 0, 0);
-	RD::get_singleton()->texture_copy(surface_meta_next, surface_meta, Vector3(), Vector3(), Vector3(persistent_cache_size.x, persistent_cache_size.y, 1), 0, 0, 0, 0);
-	RD::get_singleton()->texture_copy(surface_stats_next, surface_stats, Vector3(), Vector3(), Vector3(persistent_cache_size.x, persistent_cache_size.y, 1), 0, 0, 0, 0);
-	RD::get_singleton()->texture_copy(surface_history_id_next, surface_history_id, Vector3(), Vector3(), Vector3(persistent_cache_size.x, persistent_cache_size.y, 1), 0, 0, 0, 0);
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_RADIANCE, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_RADIANCE_NEXT, surface_radiance_next, surface_radiance, persistent_cache_size));
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_META, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_META_NEXT, surface_meta_next, surface_meta, persistent_cache_size));
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_STATS, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_STATS_NEXT, surface_stats_next, surface_stats, persistent_cache_size));
+	ERR_FAIL_COND(!pingpong_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_HISTORY_ID, RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_HISTORY_ID_NEXT, surface_history_id_next, surface_history_id, persistent_cache_size));
+	refresh_uniforms_after_pingpong();
 
-	compute_list = RD::get_singleton()->compute_list_begin();
-	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
-	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
+	compute_list = rd->compute_list_begin();
+	rd->compute_list_bind_compute_pipeline(compute_list, pipeline);
+	rd->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
 	push_constant.mode = 1u;
-	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
-	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_process_size.x, p_process_size.y, 1);
-	RD::get_singleton()->compute_list_end();
+	rd->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
+	rd->compute_list_dispatch_threads(compute_list, p_process_size.x, p_process_size.y, 1);
+	rd->compute_list_end();
 
-	RD::get_singleton()->texture_copy(output, p_diffuse_radiance, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, 0, p_view);
+	rd->texture_copy(output, p_diffuse_radiance, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, 0, p_view);
 }

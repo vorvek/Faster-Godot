@@ -242,7 +242,7 @@ pages without maturing into full-trust card data.
 The first upstream sampling hook now uses that provenance too. Rough
 single-sample primary diffuse continuations use a screen-probe-like
 low-discrepancy sequence when RTGI is scaled below native resolution. The
-current base probe spacing covers four scaled-RT pixels, while angular bins use
+current base probe spacing covers eight scaled-RT pixels, while angular bins use
 a separate `4x4` direction tile. The selected direction can then consult
 previous STRC radiance and gently steer toward the strongest valid
 normal-oriented world-radiance candidate for the receiver layer.
@@ -337,7 +337,7 @@ or laggier than a true Surface Cache plus World Radiance Cache chain.
 The current research-backed divergence list is:
 
 - Keep probe spacing separate from directional resolution. The current defaults
-  are four scaled-RT pixels per base probe and a `4x4` angular tile per probe,
+  are eight scaled-RT pixels per base probe and a `4x4` angular tile per probe,
   but larger Screen Probe Gather designs treat both as independent quality
   levers.
 - Extend SPG debug visibility from atlas coverage to rejection reasons. The

@@ -505,6 +505,19 @@ Size2i RenderSceneBuffersRD::get_texture_slice_size(const StringName &p_context,
 	return named_texture.sizes[p_mipmap];
 }
 
+bool RenderSceneBuffersRD::swap_textures(const StringName &p_context, const StringName &p_texture_name_a, const StringName &p_texture_name_b) {
+	NTKey key_a(p_context, p_texture_name_a);
+	NTKey key_b(p_context, p_texture_name_b);
+
+	NamedTexture *texture_a = named_textures.getptr(key_a);
+	NamedTexture *texture_b = named_textures.getptr(key_b);
+	ERR_FAIL_NULL_V(texture_a, false);
+	ERR_FAIL_NULL_V(texture_b, false);
+
+	SWAP(*texture_a, *texture_b);
+	return true;
+}
+
 void RenderSceneBuffersRD::clear_texture(const StringName &p_context, const StringName &p_texture_name) {
 	NTKey key(p_context, p_texture_name);
 

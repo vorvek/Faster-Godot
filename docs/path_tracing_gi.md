@@ -489,7 +489,7 @@ STRC also feeds the first upstream sampling hook toward a Lumen-style
 history-guided final gather. For single-sample Full Path Tracing, rough
 non-metal primary diffuse continuations use a screen-probe-like direction
 sequence when RTGI is scaled below native resolution. The current base probe
-spacing is four scaled-RT pixels and the current angular atlas uses `4x4`
+spacing is eight scaled-RT pixels and the current angular atlas uses `4x4`
 direction bins; these are separate internal constants so probe density can be
 changed independently from directional resolution. Nearby pixels trace a shared
 probe-cell distribution instead of unrelated random BRDF directions. The same

@@ -94,6 +94,7 @@ public:
 			float p_strc_base_probe_spacing,
 			const Size2i &p_process_size,
 			uint32_t p_max_cache_entries,
+			bool p_capture_raw_debug,
 			uint32_t p_view = 0);
 
 private:

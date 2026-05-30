@@ -200,15 +200,15 @@ layout(set = 0, binding = 92, rgba16f) readonly uniform image2D rtgi_diffuse_cac
 layout(set = 0, binding = 93, rgba8) readonly uniform image2D rtgi_diffuse_cache_spg_refined_history_id_image;
 layout(set = 0, binding = 96, r32ui) uniform uimage2D rt_surface_cache_key_image;
 layout(set = 0, binding = 97, rgba16f) readonly uniform image2D rtgi_diffuse_cache_surface_radiance_image;
-layout(set = 0, binding = 98, rgba16f) readonly uniform image2D rtgi_diffuse_cache_surface_meta_image;
+layout(set = 0, binding = 98, rgba8) readonly uniform image2D rtgi_diffuse_cache_surface_meta_image;
 layout(set = 0, binding = 99, rgba16f) readonly uniform image2D rtgi_diffuse_cache_surface_stats_image;
 layout(set = 0, binding = 100, rgba8) readonly uniform image2D rtgi_diffuse_cache_surface_history_id_image;
-layout(set = 0, binding = 101, rgba16f) uniform image2D rt_surface_cache_diagnostic_image;
-layout(set = 0, binding = 102, rgba16f) uniform image2D rt_secondary_cache_surface_image;
+layout(set = 0, binding = 101, rgba8) uniform image2D rt_surface_cache_diagnostic_image;
+layout(set = 0, binding = 102, rgba8) uniform image2D rt_secondary_cache_surface_image;
 layout(set = 0, binding = 103, r32ui) uniform uimage2D rt_surface_cache_feedback_key_image;
 layout(set = 0, binding = 104, rgba16f) uniform image2D rt_surface_cache_feedback_radiance_image;
-layout(set = 0, binding = 105, rgba16f) uniform image2D rt_surface_cache_feedback_meta_image;
-layout(set = 0, binding = 106, rgba16f) uniform image2D rt_surface_cache_feedback_stats_image;
+layout(set = 0, binding = 105, rgba8) uniform image2D rt_surface_cache_feedback_meta_image;
+layout(set = 0, binding = 106, rgba8) uniform image2D rt_surface_cache_feedback_stats_image;
 layout(set = 0, binding = 45, rgba16f) uniform image2D rt_source_candidate_image;
 layout(set = 0, binding = 46, rgba16f) uniform image2D rt_source_candidate_prev_image;
 layout(set = 0, binding = 47, r32ui) uniform uimage2D rt_source_candidate_key_image;
@@ -220,8 +220,8 @@ layout(set = 0, binding = 52, rgba8) uniform image2D rt_prev_history_id_image;
 layout(set = 0, binding = 53, rgba16f) uniform image2D rt_source_normal_roughness_prev_image;
 layout(set = 0, binding = 54, rgba16f) uniform image2D rt_source_viewz_hitdist_prev_image;
 layout(set = 0, binding = 55, rgba16f) uniform image2D rt_source_rejection_image;
-layout(set = 0, binding = 94, rgba16f) uniform image2D rt_secondary_cache_source_image;
-layout(set = 0, binding = 95, rgba16f) uniform image2D rt_secondary_cache_rejection_image;
+layout(set = 0, binding = 94, rgba8) uniform image2D rt_secondary_cache_source_image;
+layout(set = 0, binding = 95, rgba8) uniform image2D rt_secondary_cache_rejection_image;
 layout(set = 0, binding = 56, rgba16f) uniform image2D rt_source_direct_candidate_image;
 layout(set = 0, binding = 57, rgba16f) uniform image2D rt_source_direct_candidate_prev_image;
 layout(set = 0, binding = 58, r32ui) uniform uimage2D rt_source_direct_candidate_key_image;
@@ -435,7 +435,7 @@ void rtgi_surface_cache_feedback_reject(ivec2 pixel, float reason) {
 	imageStore(rt_surface_cache_feedback_key_image, pixel, uvec4(0u));
 	imageStore(rt_surface_cache_feedback_radiance_image, pixel, vec4(0.0));
 	imageStore(rt_surface_cache_feedback_meta_image, pixel, vec4(0.5, 0.5, 1.0, 0.0));
-	imageStore(rt_surface_cache_feedback_stats_image, pixel, vec4(0.0, 0.0, 0.0, reason));
+	imageStore(rt_surface_cache_feedback_stats_image, pixel, vec4(0.0, 0.0, 0.0, clamp(reason / 2.0, 0.0, 1.0)));
 }
 
 void rtgi_surface_cache_feedback_record_source(ivec2 pixel, uint surface_key, vec3 normal, float roughness, vec3 demodulated_lighting, float confidence, float support, uint source_class) {
@@ -458,7 +458,7 @@ void rtgi_surface_cache_feedback_record_source(ivec2 pixel, uint surface_key, ve
 	imageStore(rt_surface_cache_feedback_key_image, pixel, uvec4(surface_key, 0u, 0u, 0u));
 	imageStore(rt_surface_cache_feedback_radiance_image, pixel, vec4(lighting, clamp(confidence * 0.72 + source_quality * 0.28, 0.0, 1.0)));
 	imageStore(rt_surface_cache_feedback_meta_image, pixel, vec4(normalize(normal) * 0.5 + 0.5, clamp(roughness, 0.0, 1.0)));
-	imageStore(rt_surface_cache_feedback_stats_image, pixel, vec4(source_quality, support, radiance_weight, float(source_class)));
+	imageStore(rt_surface_cache_feedback_stats_image, pixel, vec4(source_quality, support, radiance_weight, rtgi_surface_source_bucket(source_class)));
 }
 
 void rtgi_surface_cache_feedback_record(ivec2 pixel, uint surface_key, vec3 normal, float roughness, vec3 demodulated_lighting, float confidence, float support, uint source_mask) {
@@ -482,7 +482,7 @@ uint rt_receiver_surface_id(vec3 world_pos, vec3 normal, float roughness, vec3 a
 }
 
 #define RTGI_DIFFUSE_CACHE_RAY_SLOT_COUNT 4
-#define RTGI_DIFFUSE_CACHE_SPG_PROBE_SPACING 4
+#define RTGI_DIFFUSE_CACHE_SPG_PROBE_SPACING 8
 #define RTGI_DIFFUSE_CACHE_SPG_DIRECTION_RESOLUTION 4
 #define RTGI_DIFFUSE_CACHE_SPG_REFINED_SUBDIVS 2
 #define RTGI_DIFFUSE_CACHE_SPG_REFINED_DIRECTION_RESOLUTION 2

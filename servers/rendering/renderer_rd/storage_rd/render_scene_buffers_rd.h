@@ -230,6 +230,7 @@ public:
 	RID get_texture_slice(const StringName &p_context, const StringName &p_texture_name, const uint32_t p_layer, const uint32_t p_mipmap, const uint32_t p_layers = 1, const uint32_t p_mipmaps = 1);
 	RID get_texture_slice_view(const StringName &p_context, const StringName &p_texture_name, const uint32_t p_layer, const uint32_t p_mipmap, const uint32_t p_layers = 1, const uint32_t p_mipmaps = 1, RD::TextureView p_view = RD::TextureView());
 	Size2i get_texture_slice_size(const StringName &p_context, const StringName &p_texture_name, const uint32_t p_mipmap);
+	bool swap_textures(const StringName &p_context, const StringName &p_texture_name_a, const StringName &p_texture_name_b);
 
 	void clear_texture(const StringName &p_context, const StringName &p_texture_name);
 	void clear_context(const StringName &p_context);

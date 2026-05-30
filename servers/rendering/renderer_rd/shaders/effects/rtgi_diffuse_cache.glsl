@@ -7,7 +7,7 @@
 #define GROUP_SIZE 8
 #define MAX_RADIANCE 32768.0
 #define CACHE_SLOT_COUNT 4
-#define SPG_PROBE_SPACING 4
+#define SPG_PROBE_SPACING 8
 #define SPG_DIRECTION_RESOLUTION 4
 #define SPG_REFINED_SUBDIVS 2
 #define SPG_REFINED_DIRECTION_RESOLUTION 2
@@ -109,7 +109,7 @@ layout(set = 0, binding = 54) uniform sampler2D previous_surface_meta;
 layout(set = 0, binding = 55) uniform sampler2D previous_surface_stats;
 layout(set = 0, binding = 56) uniform sampler2D previous_surface_history_id;
 layout(set = 0, binding = 57, rgba16f) uniform image2D next_surface_radiance_image;
-layout(set = 0, binding = 58, rgba16f) uniform image2D next_surface_meta_image;
+layout(set = 0, binding = 58, rgba8) uniform image2D next_surface_meta_image;
 layout(set = 0, binding = 59, rgba16f) uniform image2D next_surface_stats_image;
 layout(set = 0, binding = 60, rgba8) uniform image2D next_surface_history_id_image;
 layout(set = 0, binding = 61, r32ui) readonly uniform uimage2D current_surface_key_image;
@@ -120,7 +120,7 @@ layout(set = 0, binding = 65, r32ui) readonly uniform uimage2D surface_feedback_
 layout(set = 0, binding = 66) uniform sampler2D surface_feedback_radiance;
 layout(set = 0, binding = 67) uniform sampler2D surface_feedback_meta;
 layout(set = 0, binding = 68) uniform sampler2D surface_feedback_stats;
-layout(set = 0, binding = 69, rgba16f) uniform image2D surface_feedback_diagnostic_image;
+layout(set = 0, binding = 69, rgba8) uniform image2D surface_feedback_diagnostic_image;
 layout(set = 0, binding = 70) uniform sampler2D secondary_cache_source_feedback;
 layout(set = 0, binding = 71) uniform sampler2D secondary_cache_rejection_feedback;
 
@@ -2223,7 +2223,7 @@ void inject_receiver_surface_cache_entry(ivec2 receiver_pos) {
 void inject_feedback_surface_cache_entry(ivec2 feedback_pos) {
 	uint surface_key = imageLoad(surface_feedback_key_image, feedback_pos).r;
 	if (surface_key == 0u) {
-		float reject_reason = texelFetch(surface_feedback_stats, feedback_pos, 0).w;
+		float reject_reason = round(texelFetch(surface_feedback_stats, feedback_pos, 0).w * 2.0);
 		if (reject_reason == 1.0) {
 			store_surface_feedback_diagnostic(feedback_pos, SURFACE_FEEDBACK_STATUS_DYNAMIC_INELIGIBLE, 1.0, 0.0, 0.0);
 		} else if (reject_reason > 1.0) {
@@ -2241,7 +2241,7 @@ void inject_feedback_surface_cache_entry(ivec2 feedback_pos) {
 	float source_quality = clamp(stats_sample.x, 0.0, 1.0);
 	float support_hint = clamp(stats_sample.y, 0.0, 1.0);
 	float radiance_weight = clamp(stats_sample.z, 0.0, 1.0);
-	float source_class = clamp(floor(stats_sample.w + 0.5), SURFACE_CACHE_SOURCE_NONE, SURFACE_CACHE_SOURCE_MAX);
+	float source_class = surface_cache_source_from_bucket(stats_sample.w);
 	float source_provenance_quality = surface_cache_source_quality(source_class);
 	float radiance_luma = luminance(radiance_sample.rgb);
 	if (confidence <= 0.012) {

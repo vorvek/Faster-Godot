@@ -483,6 +483,23 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 		textures_changed = true;
 	}
 
+	auto rt_texture_format_mismatch = [&](const StringName &p_texture_name, RD::DataFormat p_format) {
+		if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, p_texture_name)) {
+			return false;
+		}
+		return render_buffers->get_texture_format(RB_SCOPE_FORWARD_CLUSTERED, p_texture_name).format != p_format;
+	};
+	if (rt_texture_format_mismatch(RB_TEX_RT_SURFACE_CACHE_DIAGNOSTIC, RD::DATA_FORMAT_R8G8B8A8_UNORM) ||
+			rt_texture_format_mismatch(RB_TEX_RT_SECONDARY_CACHE_SOURCE, RD::DATA_FORMAT_R8G8B8A8_UNORM) ||
+			rt_texture_format_mismatch(RB_TEX_RT_SECONDARY_CACHE_REJECTION, RD::DATA_FORMAT_R8G8B8A8_UNORM) ||
+			rt_texture_format_mismatch(RB_TEX_RT_SECONDARY_CACHE_SURFACE, RD::DATA_FORMAT_R8G8B8A8_UNORM) ||
+			rt_texture_format_mismatch(RB_TEX_RT_SURFACE_CACHE_FEEDBACK_META, RD::DATA_FORMAT_R8G8B8A8_UNORM) ||
+			rt_texture_format_mismatch(RB_TEX_RT_SURFACE_CACHE_FEEDBACK_STATS, RD::DATA_FORMAT_R8G8B8A8_UNORM) ||
+			rt_texture_format_mismatch(RB_TEX_RT_SURFACE_CACHE_FEEDBACK_DIAGNOSTIC, RD::DATA_FORMAT_R8G8B8A8_UNORM)) {
+		rt_clear_textures();
+		textures_changed = true;
+	}
+
 	uint32_t usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT |
 			RD::TEXTURE_USAGE_SAMPLING_BIT |
 			RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT |
@@ -779,7 +796,7 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 		source_history_created = true;
 	}
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_DIAGNOSTIC)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_DIAGNOSTIC, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
+		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_DIAGNOSTIC, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
 		source_history_created = true;
 	}
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_NORMAL_ROUGHNESS_PREV)) {
@@ -847,15 +864,15 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 		source_history_created = true;
 	}
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_SOURCE)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_SOURCE, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
+		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_SOURCE, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
 		source_history_created = true;
 	}
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_REJECTION)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_REJECTION, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
+		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_REJECTION, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
 		source_history_created = true;
 	}
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_SURFACE)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_SURFACE, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
+		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_SURFACE, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
 		source_history_created = true;
 	}
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_KEY)) {
@@ -867,15 +884,15 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 		source_history_created = true;
 	}
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_META)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_META, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
+		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_META, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
 		source_history_created = true;
 	}
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_STATS)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_STATS, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
+		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_STATS, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
 		source_history_created = true;
 	}
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_DIAGNOSTIC)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_DIAGNOSTIC, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
+		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_DIAGNOSTIC, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
 		source_history_created = true;
 	}
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA16F)) {
@@ -4257,7 +4274,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 							RD::get_singleton()->draw_command_begin_label("RTGI Diffuse Cache");
 							RENDER_TIMESTAMP("RTGI Diffuse Cache");
 							const Projection rt_inv_view_projection = Projection(p_render_data->scene_data->cam_transform) * p_render_data->scene_data->view_projection[v].inverse();
-							rtgi_diffuse_cache->process(rb, rb_data->rt_get_diffuse_radiance(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rb_data->rt_get_receiver_surface_id(), rb_data->rt_get_prev_receiver_surface_id(), rb_data->rt_get_signal_confidence(), rb_data->rt_get_primary_diffuse_direction(), p_render_data->scene_data->cam_transform.origin, rt_inv_view_projection, rt_strc_enabled, rt_strc_cascade_count, rt_strc_grid_size, rt_strc_base_probe_spacing, rb_data->rt_get_size(), rt_diffuse_cache_max_entries, v);
+							rtgi_diffuse_cache->process(rb, rb_data->rt_get_diffuse_radiance(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rb_data->rt_get_receiver_surface_id(), rb_data->rt_get_prev_receiver_surface_id(), rb_data->rt_get_signal_confidence(), rb_data->rt_get_primary_diffuse_direction(), p_render_data->scene_data->cam_transform.origin, rt_inv_view_projection, rt_strc_enabled, rt_strc_cascade_count, rt_strc_grid_size, rt_strc_base_probe_spacing, rb_data->rt_get_size(), rt_diffuse_cache_max_entries, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_RAW_DIFFUSE, v);
 							RD::get_singleton()->draw_command_end_label();
 						}
 						rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DIFFUSE_RADIANCE, RB_SCOPE_RTGI_DENOISE_DIFFUSE, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), RID(), RID(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight, rt_denoise_strength, rt_firefly_suppression, rt_detail_preservation, false, true, false, rb_data->rt_get_size(), v, 5);
