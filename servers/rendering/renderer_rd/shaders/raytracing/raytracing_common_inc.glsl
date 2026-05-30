@@ -91,7 +91,7 @@ vec3 rt_clamp_path_contribution(vec3 contribution, float roughness, float metaln
 	float specular_risk = max(1.0 - clamp(roughness, 0.0, 1.0), clamp(metalness, 0.0, 1.0));
 	float path_risk = max(specular_risk, indirect_path ? 0.55 : 0.0);
 	path_risk = max(path_risk, secondary_emissive_or_miss ? 0.75 : 0.0);
-	float limit = max(0.001, max_radiance) * mix(1.05, 0.32, clamp(path_risk, 0.0, 1.0));
+	float limit = max(0.001, max_radiance) * mix(0.85, 0.15, clamp(path_risk, 0.0, 1.0));
 	limit *= indirect_path ? 0.72 : 1.0;
 	limit *= secondary_emissive_or_miss ? 0.58 : 1.0;
 	float luma = rt_luminance(contribution);
@@ -448,6 +448,7 @@ void rtgi_surface_cache_feedback_record_source(ivec2 pixel, uint surface_key, ve
 	}
 
 	vec3 lighting = sanitize_payload_vec3(demodulated_lighting);
+	lighting = rt_clamp_path_contribution(lighting, roughness, 0.0, true, true);
 	float luma = rt_luminance(lighting);
 	float radiance_weight = smoothstep(0.00035, 0.0055, luma);
 	float source_quality = clamp(confidence * support * radiance_weight, 0.0, 1.0);

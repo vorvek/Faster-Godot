@@ -275,72 +275,8 @@ void write_primary_hit_velocity(vec3 hit_pos) {
 // ============================================================================
 
 #ifdef RT_STAGE_CLOSEST_HIT
-bool rtgi_trace_specular_reflected_hit(HitData h, vec3 normal, vec3 view_dir, out float hit_distance, out vec3 hit_normal, out vec3 reflection_dir) {
-	hit_distance = RT_FP16_MAX;
-	hit_normal = vec3(0.0);
-	reflection_dir = reflect(-view_dir, normal);
-	if (dot(reflection_dir, h.geometry_normal) < 0.0) {
-		vec3 recovered_reflection_dir;
-		if (recoverBelowHemisphereSample(reflection_dir, h.geometry_normal, recovered_reflection_dir)) {
-			reflection_dir = recovered_reflection_dir;
-		} else {
-			return false;
-		}
-	}
-
-	vec3 reflection_origin = offset_ray_origin(h.hit_pos, h.geometry_normal);
-	rayQueryEXT reflection_rq;
-	rayQueryInitializeEXT(reflection_rq, tlas, RT_RAY_FLAGS | gl_RayFlagsTerminateOnFirstHitEXT,
-			RT_INSTANCE_MASK_VISIBLE, reflection_origin, 0.001, reflection_dir, 10000.0);
-	float unsupported_t = 1e20;
-	while (rayQueryProceedEXT(reflection_rq)) {
-		uint candidate_type = rayQueryGetIntersectionTypeEXT(reflection_rq, false);
-		if (candidate_type == gl_RayQueryCandidateIntersectionTriangleEXT) {
-			uint candidate_geometry_idx = rayQueryGetIntersectionInstanceCustomIndexEXT(reflection_rq, false);
-			MaterialData candidate_mat = materials[candidate_geometry_idx];
-			if ((candidate_mat.flags & (RT_MAT_FLAG_ALPHA_TEST | RT_MAT_FLAG_CUSTOM_SHADER)) ==
-					(RT_MAT_FLAG_ALPHA_TEST | RT_MAT_FLAG_CUSTOM_SHADER)) {
-				unsupported_t = min(unsupported_t, rayQueryGetIntersectionTEXT(reflection_rq, false));
-				continue;
-			}
-			if (ray_query_alpha_test(
-						candidate_geometry_idx,
-						rayQueryGetIntersectionPrimitiveIndexEXT(reflection_rq, false),
-						rayQueryGetIntersectionBarycentricsEXT(reflection_rq, false),
-						rayQueryGetIntersectionObjectRayOriginEXT(reflection_rq, false) +
-								rayQueryGetIntersectionObjectRayDirectionEXT(reflection_rq, false) *
-										rayQueryGetIntersectionTEXT(reflection_rq, false))) {
-				rayQueryConfirmIntersectionEXT(reflection_rq);
-			}
-		} else if (candidate_type == gl_RayQueryCandidateIntersectionAABBEXT) {
-			unsupported_t = min(unsupported_t, rayQueryGetIntersectionTEXT(reflection_rq, false));
-		}
-	}
-	if (rayQueryGetIntersectionTypeEXT(reflection_rq, true) != gl_RayQueryCommittedIntersectionTriangleEXT) {
-		return false;
-	}
-
-	float committed_t = rayQueryGetIntersectionTEXT(reflection_rq, true);
-	if (unsupported_t < committed_t) {
-		return false;
-	}
-
-	uint committed_geometry_idx = rayQueryGetIntersectionInstanceCustomIndexEXT(reflection_rq, true);
-	GeometryData geom = geometries[committed_geometry_idx];
-	vec2 bary_xy = rayQueryGetIntersectionBarycentricsEXT(reflection_rq, true);
-	vec3 bary = vec3(1.0 - bary_xy.x - bary_xy.y, bary_xy.x, bary_xy.y);
-	uint i0, i1, i2;
-	get_triangle_indices_ex(geom, rayQueryGetIntersectionPrimitiveIndexEXT(reflection_rq, true), i0, i1, i2);
-	TBNResult tbn = fetch_tbn(geom, i0, i1, i2, bary);
-	vec3 world_normal = normalize(transpose(mat3(rayQueryGetIntersectionWorldToObjectEXT(reflection_rq, true))) * tbn.normal);
-	if (dot(world_normal, -reflection_dir) < 0.0) {
-		world_normal = -world_normal;
-	}
-
-	hit_distance = committed_t;
-	hit_normal = world_normal;
-	return true;
-}
+// rtgi_trace_specular_reflected_hit removed (deferred to raygen)
+#endif
 
 uint rtgi_surface_cache_key(HitData h, MaterialResult m, out uint zero_reason) {
 	zero_reason = RTGI_SURFACE_KEY_REASON_VALID;
@@ -425,36 +361,18 @@ void write_primary_hit_guides(HitData h, MaterialResult m) {
 	imageStore(rt_normal_roughness_image, pixel, vec4(normal * 0.5 + 0.5, guide_roughness));
 	imageStore(rt_viewz_hitdist_image, pixel, vec4(abs(view_pos.z), max(gl_HitTEXT, 0.0), expected_prev_view_z, 0.0));
 	float specular_risk = max(1.0 - guide_roughness, clamp(m.metalness, 0.0, 1.0));
-	float reflected_hit_distance = RT_FP16_MAX;
-	vec3 reflected_hit_normal = vec3(0.0);
-	vec3 reflection_dir = vec3(0.0);
 	vec3 view_dir = normalize(-gl_WorldRayDirectionEXT);
 	int vis_mode = int(get_rt_param(RT_PARAM_VIS_MODE));
-	bool needs_reflected_guide = specular_risk > 0.55 && guide_roughness <= 0.35;
-	bool reflected_hit_valid = needs_reflected_guide && rtgi_trace_specular_reflected_hit(h, normal, view_dir, reflected_hit_distance, reflected_hit_normal, reflection_dir);
-	float guide_hit_distance = reflected_hit_valid ? reflected_hit_distance : max(gl_HitTEXT, 0.0);
+	float guide_hit_distance = max(gl_HitTEXT, 0.0);
 	imageStore(rt_specular_guide_image, pixel, vec4(guide_roughness, guide_hit_distance, specular_risk, 1.0));
-	vec4 specular_reprojection = vec4(0.0);
-	if (reflected_hit_valid) {
-		vec3 virtual_pos = h.hit_pos + reflection_dir * reflected_hit_distance;
-		vec2 curr_virtual_uv;
-		vec2 prev_virtual_uv;
-		if (project_uv_checked(virtual_pos, curr_vp_unjittered, curr_virtual_uv) &&
-				project_uv_checked(virtual_pos, prev_vp_unjittered, prev_virtual_uv)) {
-			vec2 curr_virtual_texture_uv = rt_visible_to_texture_uv(curr_virtual_uv, rt_current_origin());
-			vec2 prev_virtual_texture_uv = rt_visible_to_texture_uv(prev_virtual_uv, rt_previous_origin());
-			specular_reprojection = vec4(prev_virtual_texture_uv - curr_virtual_texture_uv, clamp(reflected_hit_distance / 128.0, 0.0, 1.0), 1.0);
-		}
-	}
-	imageStore(rt_specular_reprojection_image, pixel, specular_reprojection);
+	imageStore(rt_specular_reprojection_image, pixel, vec4(0.0));
 	if (vis_mode == RT_VIS_MODE_SPECULAR_REFLECTION_DIRECTION) {
 		vec3 diagnostic_reflection_dir = normalize(reflect(-view_dir, normal));
 		imageStore(rt_specular_reflection_direction_image, pixel, vec4(diagnostic_reflection_dir * 0.5 + 0.5, specular_risk));
 	} else if (vis_mode == RT_VIS_MODE_SPECULAR_REFLECTED_HIT_DISTANCE) {
-		float encoded_reflected_hit_distance = reflected_hit_valid ? max(reflected_hit_distance, 0.0) + 1.0 : 0.0;
-		imageStore(rt_specular_reflection_direction_image, pixel, vec4(encoded_reflected_hit_distance, 0.0, 0.0, reflected_hit_valid ? specular_risk : 0.0));
+		imageStore(rt_specular_reflection_direction_image, pixel, vec4(0.0, 0.0, 0.0, 0.0));
 	} else if (vis_mode == RT_VIS_MODE_SPECULAR_REFLECTED_HIT_NORMAL) {
-		imageStore(rt_specular_reflection_direction_image, pixel, vec4(reflected_hit_valid ? reflected_hit_normal * 0.5 + 0.5 : vec3(0.0), specular_risk));
+		imageStore(rt_specular_reflection_direction_image, pixel, vec4(vec3(0.0), specular_risk));
 	}
 	rt_signal_set_primary_confidence(pixel, specular_risk, float(geom_idx & 1023u) / 1023.0, 1.0);
 }
@@ -924,57 +842,8 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 
 		imageStore(dlss_rr_normal_roughness, pixel, vec4(N, material_roughness));
 
-		// Specular hit distance via inline ray query (only for smooth surfaces).
+		// Specular hit distance deferred to RayGen
 		float spec_hit_dist = -1.0;
-		if (material_roughness < MAX_DENOISER_SPECULAR_HIT_THRESHOLD) {
-			vec3 spec_dir = reflect(-V, N);
-			bool spec_dir_valid = true;
-			if (dot(spec_dir, h.geometry_normal) < 0.0) {
-				vec3 recovered_spec_dir;
-				if (recoverBelowHemisphereSample(spec_dir, h.geometry_normal, recovered_spec_dir)) {
-					spec_dir = recovered_spec_dir;
-				} else {
-					spec_dir_valid = false;
-				}
-			}
-			if (spec_dir_valid) {
-				vec3 spec_origin = offset_ray_origin(h.hit_pos, h.geometry_normal);
-
-				rayQueryEXT spec_rq;
-				rayQueryInitializeEXT(spec_rq, tlas, RT_RAY_FLAGS | gl_RayFlagsTerminateOnFirstHitEXT,
-						RT_INSTANCE_MASK_VISIBLE, spec_origin, 0.001, spec_dir, 10000.0);
-				float spec_unsupported_t = 1e20;
-				while (rayQueryProceedEXT(spec_rq)) {
-					uint candidate_type = rayQueryGetIntersectionTypeEXT(spec_rq, false);
-					if (candidate_type == gl_RayQueryCandidateIntersectionTriangleEXT) {
-						uint candidate_geometry_idx = rayQueryGetIntersectionInstanceCustomIndexEXT(spec_rq, false);
-						MaterialData candidate_mat = materials[candidate_geometry_idx];
-						if ((candidate_mat.flags & (RT_MAT_FLAG_ALPHA_TEST | RT_MAT_FLAG_CUSTOM_SHADER)) ==
-								(RT_MAT_FLAG_ALPHA_TEST | RT_MAT_FLAG_CUSTOM_SHADER)) {
-							spec_unsupported_t = min(spec_unsupported_t, rayQueryGetIntersectionTEXT(spec_rq, false));
-							continue;
-						}
-						if (ray_query_alpha_test(
-									candidate_geometry_idx,
-									rayQueryGetIntersectionPrimitiveIndexEXT(spec_rq, false),
-									rayQueryGetIntersectionBarycentricsEXT(spec_rq, false),
-									rayQueryGetIntersectionObjectRayOriginEXT(spec_rq, false) +
-											rayQueryGetIntersectionObjectRayDirectionEXT(spec_rq, false) *
-													rayQueryGetIntersectionTEXT(spec_rq, false))) {
-							rayQueryConfirmIntersectionEXT(spec_rq);
-						}
-					} else if (candidate_type == gl_RayQueryCandidateIntersectionAABBEXT) {
-						spec_unsupported_t = min(spec_unsupported_t, rayQueryGetIntersectionTEXT(spec_rq, false));
-					}
-				}
-				if (rayQueryGetIntersectionTypeEXT(spec_rq, true) != gl_RayQueryCommittedIntersectionNoneEXT) {
-					float committed_t = rayQueryGetIntersectionTEXT(spec_rq, true);
-					if (spec_unsupported_t >= committed_t) {
-						spec_hit_dist = committed_t;
-					}
-				}
-			}
-		}
 		imageStore(dlss_rr_specular_hit_dist, pixel, vec4(spec_hit_dist));
 	}
 #endif

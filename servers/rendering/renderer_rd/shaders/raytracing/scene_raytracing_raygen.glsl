@@ -13,6 +13,11 @@
 
 #pragma shader_stage(raygen)
 #extension GL_EXT_ray_tracing : enable
+#extension GL_EXT_ray_query : enable
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_buffer_reference2 : require
+#extension GL_ARB_gpu_shader_int64 : require
+#extension GL_EXT_nonuniform_qualifier : require
 #ifdef USE_SER
 #extension GL_NV_shader_invocation_reorder : enable
 #endif
@@ -27,6 +32,101 @@ layout(set = 0, binding = 61) uniform texture2D rt_blue_noise_texture;
 layout(set = 0, binding = 62) uniform sampler rt_blue_noise_sampler;
 
 layout(location = 0) rayPayloadEXT PathPayload payload;
+
+#include "brdf_inc.glsl"
+#include "raytracing_hit_inc.glsl"
+
+layout(set = 1, binding = 0) uniform texture2D bindless_textures[];
+#include "raytracing_samplers_inc.glsl"
+
+// clang-format off
+layout(set = 0, binding = 3, std430) readonly buffer GeometryBuffer {
+	GeometryData geometries[];
+};
+
+layout(set = 0, binding = 4, std430) readonly buffer MotionIndexBuffer {
+	int motion_indices[];
+};
+
+layout(set = 0, binding = 5, std430) readonly buffer MaterialBuffer {
+	MaterialData materials[];
+};
+// clang-format on
+
+#include "raytracing_lights_inc.glsl"
+
+// clang-format off
+layout(set = 0, binding = 32, std430) readonly buffer MotionTransforms {
+	InstanceMotionData motion_transforms[];
+};
+// clang-format on
+
+bool rtgi_trace_specular_reflected_hit_raygen(vec3 hit_pos, vec3 geometry_normal, vec3 normal, vec3 view_dir, out float hit_distance, out vec3 hit_normal, out vec3 reflection_dir) {
+	hit_distance = RT_FP16_MAX;
+	hit_normal = vec3(0.0);
+	reflection_dir = reflect(-view_dir, normal);
+	if (dot(reflection_dir, geometry_normal) < 0.0) {
+		vec3 recovered_reflection_dir;
+		if (recoverBelowHemisphereSample(reflection_dir, geometry_normal, recovered_reflection_dir)) {
+			reflection_dir = recovered_reflection_dir;
+		} else {
+			return false;
+		}
+	}
+
+	vec3 reflection_origin = offset_ray_origin(hit_pos, geometry_normal);
+	rayQueryEXT reflection_rq;
+	rayQueryInitializeEXT(reflection_rq, tlas, RT_RAY_FLAGS | gl_RayFlagsTerminateOnFirstHitEXT,
+			RT_INSTANCE_MASK_VISIBLE, reflection_origin, 0.001, reflection_dir, 10000.0);
+	float unsupported_t = 1e20;
+	while (rayQueryProceedEXT(reflection_rq)) {
+		uint candidate_type = rayQueryGetIntersectionTypeEXT(reflection_rq, false);
+		if (candidate_type == gl_RayQueryCandidateIntersectionTriangleEXT) {
+			uint candidate_geometry_idx = rayQueryGetIntersectionInstanceCustomIndexEXT(reflection_rq, false);
+			MaterialData candidate_mat = materials[candidate_geometry_idx];
+			if ((candidate_mat.flags & (RT_MAT_FLAG_ALPHA_TEST | RT_MAT_FLAG_CUSTOM_SHADER)) ==
+					(RT_MAT_FLAG_ALPHA_TEST | RT_MAT_FLAG_CUSTOM_SHADER)) {
+				unsupported_t = min(unsupported_t, rayQueryGetIntersectionTEXT(reflection_rq, false));
+				continue;
+			}
+			if (ray_query_alpha_test(
+						candidate_geometry_idx,
+						rayQueryGetIntersectionPrimitiveIndexEXT(reflection_rq, false),
+						rayQueryGetIntersectionBarycentricsEXT(reflection_rq, false),
+						rayQueryGetIntersectionObjectRayOriginEXT(reflection_rq, false) +
+								rayQueryGetIntersectionObjectRayDirectionEXT(reflection_rq, false) *
+										rayQueryGetIntersectionTEXT(reflection_rq, false))) {
+				rayQueryConfirmIntersectionEXT(reflection_rq);
+			}
+		} else if (candidate_type == gl_RayQueryCandidateIntersectionAABBEXT) {
+			unsupported_t = min(unsupported_t, rayQueryGetIntersectionTEXT(reflection_rq, false));
+		}
+	}
+	if (rayQueryGetIntersectionTypeEXT(reflection_rq, true) != gl_RayQueryCommittedIntersectionTriangleEXT) {
+		return false;
+	}
+
+	float committed_t = rayQueryGetIntersectionTEXT(reflection_rq, true);
+	if (unsupported_t < committed_t) {
+		return false;
+	}
+
+	uint committed_geometry_idx = rayQueryGetIntersectionInstanceCustomIndexEXT(reflection_rq, true);
+	GeometryData geom = geometries[committed_geometry_idx];
+	vec2 bary_xy = rayQueryGetIntersectionBarycentricsEXT(reflection_rq, true);
+	vec3 bary = vec3(1.0 - bary_xy.x - bary_xy.y, bary_xy.x, bary_xy.y);
+	uint i0, i1, i2;
+	get_triangle_indices_ex(geom, rayQueryGetIntersectionPrimitiveIndexEXT(reflection_rq, true), i0, i1, i2);
+	TBNResult tbn = fetch_tbn(geom, i0, i1, i2, bary);
+	vec3 world_normal = normalize(transpose(mat3(rayQueryGetIntersectionWorldToObjectEXT(reflection_rq, true))) * tbn.normal);
+	if (dot(world_normal, -reflection_dir) < 0.0) {
+		world_normal = -world_normal;
+	}
+
+	hit_distance = committed_t;
+	hit_normal = world_normal;
+	return true;
+}
 
 const int RTGI_RAYGEN_BRDF_DIFFUSE = 1;
 const int RTGI_RAYGEN_BRDF_SPECULAR = 2;
@@ -437,6 +537,11 @@ void main() {
 			}
 		}
 	} else {
+		vec3 sample0_hit_pos = vec3(0.0);
+		vec3 sample0_geometry_normal = vec3(0.0);
+		vec3 sample0_ray_dir = vec3(0.0);
+		bool sample0_has_hit = false;
+
 		[[dont_unroll]] for (uint sample_idx = 0u; sample_idx < samples_per_pixel; sample_idx++) {
 			PathState ps;
 			ps.radiance = vec3(0.0);
@@ -485,6 +590,12 @@ void main() {
 #endif
 
 				ps = path_unpack(payload);
+				if (sample_idx == 0u && bounce == 0u && !is_path_terminated(ps.packed_bounces_flags)) {
+					sample0_hit_pos = ray_origin + ray_dir * ps.hit_t;
+					sample0_geometry_normal = ps.offset_normal;
+					sample0_ray_dir = ray_dir;
+					sample0_has_hit = true;
+				}
 				if (is_path_terminated(ps.packed_bounces_flags)) {
 					break;
 				}
@@ -505,6 +616,110 @@ void main() {
 			} else {
 				total_radiance += ps.radiance;
 			}
+		}
+
+		if (sample0_has_hit) {
+			vec4 normal_roughness = imageLoad(rt_normal_roughness_image, pixel_i);
+			vec3 normal = normalize(normal_roughness.xyz * 2.0 - 1.0);
+			float guide_roughness = normal_roughness.w;
+
+			vec4 albedo_metalness = imageLoad(rt_albedo_metalness_image, pixel_i);
+			float metalness = albedo_metalness.w;
+
+			float specular_risk = max(1.0 - guide_roughness, metalness);
+			bool needs_reflected_guide = specular_risk > 0.55 && guide_roughness <= 0.35;
+
+			if (needs_reflected_guide) {
+				float reflected_hit_distance = RT_FP16_MAX;
+				vec3 reflected_hit_normal = vec3(0.0);
+				vec3 reflection_dir = vec3(0.0);
+				vec3 view_dir = normalize(-sample0_ray_dir);
+				bool reflected_hit_valid = rtgi_trace_specular_reflected_hit_raygen(sample0_hit_pos, sample0_geometry_normal, normal, view_dir, reflected_hit_distance, reflected_hit_normal, reflection_dir);
+				
+				float guide_hit_distance = reflected_hit_valid ? reflected_hit_distance : max(imageLoad(rt_viewz_hitdist_image, pixel_i).y, 0.0);
+				imageStore(rt_specular_guide_image, pixel_i, vec4(guide_roughness, guide_hit_distance, specular_risk, 1.0));
+				
+				vec4 specular_reprojection = vec4(0.0);
+				if (reflected_hit_valid) {
+					vec3 virtual_pos = sample0_hit_pos + reflection_dir * reflected_hit_distance;
+					vec2 curr_virtual_uv;
+					vec2 prev_virtual_uv;
+					if (project_uv_checked(virtual_pos, curr_vp_unjittered, curr_virtual_uv) &&
+							project_uv_checked(virtual_pos, prev_vp_unjittered, prev_virtual_uv)) {
+						vec2 curr_virtual_texture_uv = rt_visible_to_texture_uv(curr_virtual_uv, rt_current_origin());
+						vec2 prev_virtual_texture_uv = rt_visible_to_texture_uv(prev_virtual_uv, rt_previous_origin());
+						specular_reprojection = vec4(prev_virtual_texture_uv - curr_virtual_texture_uv, clamp(reflected_hit_distance / 128.0, 0.0, 1.0), 1.0);
+					}
+				}
+				imageStore(rt_specular_reprojection_image, pixel_i, specular_reprojection);
+
+				int vis_mode = int(get_rt_param(RT_PARAM_VIS_MODE));
+				if (vis_mode == RT_VIS_MODE_SPECULAR_REFLECTION_DIRECTION) {
+					vec3 diagnostic_reflection_dir = normalize(reflect(-view_dir, normal));
+					imageStore(rt_specular_reflection_direction_image, pixel_i, vec4(diagnostic_reflection_dir * 0.5 + 0.5, specular_risk));
+				} else if (vis_mode == RT_VIS_MODE_SPECULAR_REFLECTED_HIT_DISTANCE) {
+					float encoded_reflected_hit_distance = reflected_hit_valid ? max(reflected_hit_distance, 0.0) + 1.0 : 0.0;
+					imageStore(rt_specular_reflection_direction_image, pixel_i, vec4(encoded_reflected_hit_distance, 0.0, 0.0, reflected_hit_valid ? specular_risk : 0.0));
+				} else if (vis_mode == RT_VIS_MODE_SPECULAR_REFLECTED_HIT_NORMAL) {
+					imageStore(rt_specular_reflection_direction_image, pixel_i, vec4(reflected_hit_valid ? reflected_hit_normal * 0.5 + 0.5 : vec3(0.0), specular_risk));
+				}
+			}
+
+#ifdef DLSS_RR_ENABLED
+			float material_roughness = guide_roughness;
+			float spec_hit_dist = -1.0;
+			if (material_roughness < MAX_DENOISER_SPECULAR_HIT_THRESHOLD) {
+				vec3 V = normalize(-sample0_ray_dir);
+				vec3 spec_dir = reflect(-V, normal);
+				bool spec_dir_valid = true;
+				if (dot(spec_dir, sample0_geometry_normal) < 0.0) {
+					vec3 recovered_spec_dir;
+					if (recoverBelowHemisphereSample(spec_dir, sample0_geometry_normal, recovered_spec_dir)) {
+						spec_dir = recovered_spec_dir;
+					} else {
+						spec_dir_valid = false;
+					}
+				}
+				if (spec_dir_valid) {
+					vec3 spec_origin = offset_ray_origin(sample0_hit_pos, sample0_geometry_normal);
+
+					rayQueryEXT spec_rq;
+					rayQueryInitializeEXT(spec_rq, tlas, RT_RAY_FLAGS | gl_RayFlagsTerminateOnFirstHitEXT,
+							RT_INSTANCE_MASK_VISIBLE, spec_origin, 0.001, spec_dir, 10000.0);
+					float spec_unsupported_t = 1e20;
+					while (rayQueryProceedEXT(spec_rq)) {
+						uint candidate_type = rayQueryGetIntersectionTypeEXT(spec_rq, false);
+						if (candidate_type == gl_RayQueryCandidateIntersectionTriangleEXT) {
+							uint candidate_geometry_idx = rayQueryGetIntersectionInstanceCustomIndexEXT(spec_rq, false);
+							MaterialData candidate_mat = materials[candidate_geometry_idx];
+							if ((candidate_mat.flags & (RT_MAT_FLAG_ALPHA_TEST | RT_MAT_FLAG_CUSTOM_SHADER)) ==
+									(RT_MAT_FLAG_ALPHA_TEST | RT_MAT_FLAG_CUSTOM_SHADER)) {
+								spec_unsupported_t = min(spec_unsupported_t, rayQueryGetIntersectionTEXT(spec_rq, false));
+								continue;
+							}
+							if (ray_query_alpha_test(
+										candidate_geometry_idx,
+										rayQueryGetIntersectionPrimitiveIndexEXT(spec_rq, false),
+										rayQueryGetIntersectionBarycentricsEXT(spec_rq, false),
+										rayQueryGetIntersectionObjectRayOriginEXT(spec_rq, false) +
+												rayQueryGetIntersectionObjectRayDirectionEXT(spec_rq, false) *
+														rayQueryGetIntersectionTEXT(spec_rq, false))) {
+								rayQueryConfirmIntersectionEXT(spec_rq);
+							}
+						} else if (candidate_type == gl_RayQueryCandidateIntersectionAABBEXT) {
+							spec_unsupported_t = min(spec_unsupported_t, rayQueryGetIntersectionTEXT(spec_rq, false));
+						}
+					}
+					if (rayQueryGetIntersectionTypeEXT(spec_rq, true) != gl_RayQueryCommittedIntersectionNoneEXT) {
+						float committed_t = rayQueryGetIntersectionTEXT(spec_rq, true);
+						if (spec_unsupported_t >= committed_t) {
+							spec_hit_dist = committed_t;
+						}
+					}
+				}
+			}
+			imageStore(dlss_rr_specular_hit_dist, pixel_i, vec4(spec_hit_dist));
+#endif
 		}
 	}
 
