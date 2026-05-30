@@ -1832,53 +1832,69 @@ public:
 	}
 
 	virtual bool dispatch_path_trace(RTGIBackendFrameContext &p_context, String *r_fallback_reason) override {
-		if (raytracing == nullptr || !p_context.pipeline.is_valid() || !p_context.uniform_set.is_valid()) {
+		RenderingDevice *rd = RD::get_singleton();
+		if (raytracing == nullptr || rd == nullptr || !p_context.pipeline.is_valid() || !p_context.uniform_set.is_valid() || !rd->uniform_set_is_valid(p_context.uniform_set)) {
 			if (r_fallback_reason) {
 				*r_fallback_reason = "Vulkan Generic path trace dispatch is missing a pipeline or uniform set.";
 			}
 			return false;
 		}
 
-		RD::RaytracingListID raytracing_list = RD::get_singleton()->raytracing_list_begin();
-		RD::get_singleton()->raytracing_list_bind_raytracing_pipeline(raytracing_list, p_context.pipeline);
-		RD::get_singleton()->raytracing_list_bind_uniform_set(raytracing_list, p_context.uniform_set, 0);
+		RD::RaytracingListID raytracing_list = rd->raytracing_list_begin();
+		rd->raytracing_list_bind_raytracing_pipeline(raytracing_list, p_context.pipeline);
+		rd->raytracing_list_bind_uniform_set(raytracing_list, p_context.uniform_set, 0);
 		RID bindless_set = raytracing->get_bindless_uniform_set();
 		if (bindless_set.is_valid()) {
-			RD::get_singleton()->raytracing_list_bind_uniform_set(raytracing_list, bindless_set, 1);
+			if (!rd->uniform_set_is_valid(bindless_set)) {
+				if (r_fallback_reason) {
+					*r_fallback_reason = "Vulkan Generic path trace dispatch has a stale bindless uniform set.";
+				}
+				rd->raytracing_list_end();
+				return false;
+			}
+			rd->raytracing_list_bind_uniform_set(raytracing_list, bindless_set, 1);
 		}
 
 		if (!_add_generic_dependencies(raytracing_list)) {
-			RD::get_singleton()->raytracing_list_end();
+			rd->raytracing_list_end();
 			return false;
 		}
 
-		RD::get_singleton()->raytracing_list_trace_rays(raytracing_list, 0, raytracing->get_shader()->get_hit_sbt(p_context.rt_flags), p_context.output_size.width, p_context.output_size.height, 1);
-		RD::get_singleton()->raytracing_list_end();
+		rd->raytracing_list_trace_rays(raytracing_list, 0, raytracing->get_shader()->get_hit_sbt(p_context.rt_flags), p_context.output_size.width, p_context.output_size.height, 1);
+		rd->raytracing_list_end();
 		return true;
 	}
 
 	virtual bool dispatch_probe_update(RTGIBackendFrameContext &p_context, uint32_t p_probe_flags, RID p_probe_pipeline, RID p_probe_uniform_set, RID p_probe_output_buffer, uint32_t p_ray_count, String *r_fallback_reason) override {
-		if (raytracing == nullptr || !p_probe_pipeline.is_valid() || !p_probe_uniform_set.is_valid() || !p_probe_output_buffer.is_valid()) {
+		RenderingDevice *rd = RD::get_singleton();
+		if (raytracing == nullptr || rd == nullptr || !p_probe_pipeline.is_valid() || !p_probe_uniform_set.is_valid() || !rd->uniform_set_is_valid(p_probe_uniform_set) || !p_probe_output_buffer.is_valid()) {
 			if (r_fallback_reason) {
 				*r_fallback_reason = "Vulkan Generic STRC probe dispatch is missing a pipeline, uniform set, or output buffer.";
 			}
 			return false;
 		}
 
-		RD::RaytracingListID probe_list = RD::get_singleton()->raytracing_list_begin();
-		RD::get_singleton()->raytracing_list_bind_raytracing_pipeline(probe_list, p_probe_pipeline);
-		RD::get_singleton()->raytracing_list_bind_uniform_set(probe_list, p_probe_uniform_set, 0);
+		RD::RaytracingListID probe_list = rd->raytracing_list_begin();
+		rd->raytracing_list_bind_raytracing_pipeline(probe_list, p_probe_pipeline);
+		rd->raytracing_list_bind_uniform_set(probe_list, p_probe_uniform_set, 0);
 		RID probe_bindless_set = raytracing->get_bindless_uniform_set();
 		if (probe_bindless_set.is_valid()) {
-			RD::get_singleton()->raytracing_list_bind_uniform_set(probe_list, probe_bindless_set, 1);
+			if (!rd->uniform_set_is_valid(probe_bindless_set)) {
+				if (r_fallback_reason) {
+					*r_fallback_reason = "Vulkan Generic STRC probe dispatch has a stale bindless uniform set.";
+				}
+				rd->raytracing_list_end();
+				return false;
+			}
+			rd->raytracing_list_bind_uniform_set(probe_list, probe_bindless_set, 1);
 		}
 		if (!_add_generic_dependencies(probe_list, 1)) {
-			RD::get_singleton()->raytracing_list_end();
+			rd->raytracing_list_end();
 			return false;
 		}
-		RD::get_singleton()->raytracing_list_add_buffer_dependency(probe_list, p_probe_output_buffer, true);
-		RD::get_singleton()->raytracing_list_trace_rays(probe_list, 0, raytracing->get_shader()->get_hit_sbt(p_probe_flags), p_ray_count, 1, 1);
-		RD::get_singleton()->raytracing_list_end();
+		rd->raytracing_list_add_buffer_dependency(probe_list, p_probe_output_buffer, true);
+		rd->raytracing_list_trace_rays(probe_list, 0, raytracing->get_shader()->get_hit_sbt(p_probe_flags), p_ray_count, 1, 1);
+		rd->raytracing_list_end();
 		return true;
 	}
 

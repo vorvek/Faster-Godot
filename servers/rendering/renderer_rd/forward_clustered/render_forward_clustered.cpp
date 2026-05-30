@@ -358,8 +358,10 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_clear_textures
 	rt_reconstructed_valid = false;
 }
 
-void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_textures(bool p_external_memory_exportable) {
-	ERR_FAIL_NULL(render_buffers);
+bool RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_textures(bool p_external_memory_exportable) {
+	ERR_FAIL_NULL_V(render_buffers, false);
+
+	bool textures_changed = false;
 
 	if (rt_size == Size2i()) {
 		rt_size = render_buffers->get_internal_size();
@@ -367,72 +369,76 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 		rt_visible_origin = Vector2i();
 		rt_prev_visible_origin = Vector2i();
 		rt_overscan_initialized = true;
+		textures_changed = true;
 	}
 
 	if (render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING) &&
 			render_buffers->get_texture_slice_size(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, 0) != rt_size) {
 		rt_clear_textures();
+		textures_changed = true;
 	}
 
-	auto rt_texture_size_mismatch = [&](const StringName &p_texture_name) {
-		return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, p_texture_name) &&
+	auto rt_texture_missing_or_size_mismatch = [&](const StringName &p_texture_name) {
+		return !render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, p_texture_name) ||
 				render_buffers->get_texture_slice_size(RB_SCOPE_FORWARD_CLUSTERED, p_texture_name, 0) != rt_size;
 	};
-	if (rt_texture_size_mismatch(RB_TEX_RT_DEPTH) ||
-			rt_texture_size_mismatch(RB_TEX_RT_VELOCITY) ||
-			rt_texture_size_mismatch(RB_TEX_RT_HISTORY_VALIDITY) ||
-			rt_texture_size_mismatch(RB_TEX_RT_HISTORY_VALIDITY_PREV) ||
-			rt_texture_size_mismatch(RB_TEX_RT_HISTORY_ID) ||
-			rt_texture_size_mismatch(RB_TEX_RT_HISTORY_ID_PREV) ||
-			rt_texture_size_mismatch(RB_TEX_RT_RECEIVER_SURFACE_ID) ||
-			rt_texture_size_mismatch(RB_TEX_RT_RECEIVER_SURFACE_ID_PREV) ||
-			rt_texture_size_mismatch(RB_TEX_RT_TAA_HISTORY_VALIDITY_PREV) ||
-			rt_texture_size_mismatch(RB_TEX_RT_TAA_HISTORY_ID_PREV) ||
-			rt_texture_size_mismatch(RB_TEX_RT_HYBRID_TAA_HISTORY_VALIDITY_PREV) ||
-			rt_texture_size_mismatch(RB_TEX_RT_HYBRID_TAA_HISTORY_ID_PREV) ||
-			rt_texture_size_mismatch(RB_TEX_RT_TAA_REACTIVITY) ||
-			rt_texture_size_mismatch(RB_TEX_RT_NORMAL_ROUGHNESS) ||
-			rt_texture_size_mismatch(RB_TEX_RT_ALBEDO_METALNESS) ||
-			rt_texture_size_mismatch(RB_TEX_RT_VIEWZ_HITDIST) ||
-			rt_texture_size_mismatch(RB_TEX_RT_DIFFUSE_RADIANCE) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SPECULAR_RADIANCE) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SPECULAR_GUIDE) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SPECULAR_REPROJECTION) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SPECULAR_REFLECTION_DIRECTION) ||
-			rt_texture_size_mismatch(RB_TEX_RT_PRIMARY_DIFFUSE_DIRECTION) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SIGNAL_DIRECT_LIGHT) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SIGNAL_EMISSIVE) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SIGNAL_INDIRECT) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SIGNAL_SKY) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SIGNAL_CONFIDENCE) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SOURCE_CANDIDATE) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SOURCE_CANDIDATE_PREV) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SOURCE_CANDIDATE_KEY) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SOURCE_CANDIDATE_KEY_PREV) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SOURCE_NORMAL_ROUGHNESS_PREV) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SOURCE_VIEWZ_HITDIST_PREV) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SOURCE_HISTORY) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SOURCE_TEMPORAL_DELTA) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SOURCE_REJECTION) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SECONDARY_CACHE_SOURCE) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SECONDARY_CACHE_REJECTION) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SECONDARY_CACHE_SURFACE) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SURFACE_CACHE_FEEDBACK_KEY) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SURFACE_CACHE_FEEDBACK_RADIANCE) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SURFACE_CACHE_FEEDBACK_META) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SURFACE_CACHE_FEEDBACK_STATS) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SURFACE_CACHE_FEEDBACK_DIAGNOSTIC) ||
-			rt_texture_size_mismatch(RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA16F) ||
-			rt_texture_size_mismatch(RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA8) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SOURCE_DIRECT_CANDIDATE) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SOURCE_DIRECT_CANDIDATE_PREV) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SOURCE_DIRECT_CANDIDATE_KEY) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SOURCE_DIRECT_CANDIDATE_KEY_PREV) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SOURCE_DIRECT_RESERVOIR) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SOURCE_DIRECT_RESERVOIR_PREV) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SOURCE_DIRECT_RESERVOIR_LIGHTING) ||
-			rt_texture_size_mismatch(RB_TEX_RT_SOURCE_DIRECT_RESERVOIR_LIGHTING_PREV)) {
+	if (render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING) &&
+			(rt_texture_missing_or_size_mismatch(RB_TEX_RT_DEPTH) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_VELOCITY) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_HISTORY_VALIDITY) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_HISTORY_VALIDITY_PREV) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_HISTORY_ID) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_HISTORY_ID_PREV) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_RECEIVER_SURFACE_ID) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_RECEIVER_SURFACE_ID_PREV) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_TAA_HISTORY_VALIDITY_PREV) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_TAA_HISTORY_ID_PREV) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_HYBRID_TAA_HISTORY_VALIDITY_PREV) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_HYBRID_TAA_HISTORY_ID_PREV) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_TAA_REACTIVITY) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_NORMAL_ROUGHNESS) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_ALBEDO_METALNESS) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_VIEWZ_HITDIST) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_DIFFUSE_RADIANCE) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SPECULAR_RADIANCE) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SPECULAR_GUIDE) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SPECULAR_REPROJECTION) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SPECULAR_REFLECTION_DIRECTION) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_PRIMARY_DIFFUSE_DIRECTION) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SIGNAL_DIRECT_LIGHT) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SIGNAL_EMISSIVE) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SIGNAL_INDIRECT) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SIGNAL_SKY) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SIGNAL_CONFIDENCE) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SOURCE_CANDIDATE) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SOURCE_CANDIDATE_PREV) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SOURCE_CANDIDATE_KEY) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SOURCE_CANDIDATE_KEY_PREV) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SOURCE_NORMAL_ROUGHNESS_PREV) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SOURCE_VIEWZ_HITDIST_PREV) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SOURCE_HISTORY) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SOURCE_TEMPORAL_DELTA) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SOURCE_REJECTION) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SECONDARY_CACHE_SOURCE) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SECONDARY_CACHE_REJECTION) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SECONDARY_CACHE_SURFACE) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SURFACE_CACHE_FEEDBACK_KEY) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SURFACE_CACHE_FEEDBACK_RADIANCE) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SURFACE_CACHE_FEEDBACK_META) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SURFACE_CACHE_FEEDBACK_STATS) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SURFACE_CACHE_FEEDBACK_DIAGNOSTIC) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA16F) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA8) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SOURCE_DIRECT_CANDIDATE) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SOURCE_DIRECT_CANDIDATE_PREV) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SOURCE_DIRECT_CANDIDATE_KEY) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SOURCE_DIRECT_CANDIDATE_KEY_PREV) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SOURCE_DIRECT_RESERVOIR) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SOURCE_DIRECT_RESERVOIR_PREV) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SOURCE_DIRECT_RESERVOIR_LIGHTING) ||
+					rt_texture_missing_or_size_mismatch(RB_TEX_RT_SOURCE_DIRECT_RESERVOIR_LIGHTING_PREV))) {
 		rt_clear_textures();
+		textures_changed = true;
 	}
 
 	auto rt_texture_exportability_mismatch = [&](const StringName &p_texture_name) {
@@ -446,6 +452,7 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 			rt_texture_exportability_mismatch(RB_TEX_RT_DIFFUSE_RADIANCE) ||
 			rt_texture_exportability_mismatch(RB_TEX_RT_SPECULAR_RADIANCE)) {
 		rt_clear_textures();
+		textures_changed = true;
 	}
 
 	uint32_t usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT |
@@ -458,10 +465,12 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 		const RD::TextureFormat rt_format = render_buffers->get_texture_format(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING);
 		if ((rt_format.usage_bits & RD::TEXTURE_USAGE_CAN_UPDATE_BIT) == 0) {
 			rt_clear_textures();
+			textures_changed = true;
 		}
 	}
 
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING)) {
+		textures_changed = true;
 		render_buffers->create_texture(
 				RB_SCOPE_FORWARD_CLUSTERED,
 				RB_TEX_RAYTRACING,
@@ -850,6 +859,9 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 		source_history_created = true;
 	}
 	if (source_history_created) {
+		textures_changed = true;
+	}
+	if (source_history_created) {
 		const uint32_t view_count = render_buffers->get_view_count();
 		RD::get_singleton()->texture_clear(rt_get_source_normal_roughness_prev(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
 		RD::get_singleton()->texture_clear(rt_get_source_viewz_hitdist_prev(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
@@ -880,6 +892,8 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 		RD::get_singleton()->texture_clear(rt_get_diffuse_cache_fallback_rgba16f(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
 		RD::get_singleton()->texture_clear(rt_get_diffuse_cache_fallback_rgba8(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
 	}
+
+	return textures_changed;
 }
 
 RID RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_depth_attachment() {
@@ -3878,11 +3892,23 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		RENDER_TIMESTAMP("TLAS Build");
 
 		// Ensure raytracing output textures exist
-		rb_data->rt_ensure_textures(rt_requires_external_resource_exchange);
+		bool rt_resources_ready = true;
+		if (rb_data->rt_ensure_textures(rt_requires_external_resource_exchange)) {
+			rt_resources_ready = setup_rt_state();
+			if (!rt_resources_ready) {
+				ERR_PRINT_ONCE_ED("Failed to reinitialize RTGI after rebuilding render resources. Rendering will continue with RT disabled for this frame.");
+				scene_features.rt = false;
+				scene_features.rt_replaces_opaque = false;
+				rt_replaces_opaque = false;
+				using_rt_denoise = false;
+				using_rt_internal_taa = false;
+				using_taa = using_viewport_taa;
+			}
+		}
 
 		RENDER_TIMESTAMP("Pathtracer");
 
-		const RTGIBackendDispatchResult rt_dispatch_result = raytracing->dispatch_path_trace_backend(rt_backend_context);
+		const RTGIBackendDispatchResult rt_dispatch_result = rt_resources_ready ? raytracing->dispatch_path_trace_backend(rt_backend_context) : RTGI_BACKEND_DISPATCH_SAFE_FAILURE;
 		bool rt_dispatch_ok = rt_dispatch_result == RTGI_BACKEND_DISPATCH_OK;
 		if (!rt_dispatch_ok) {
 			ERR_PRINT_ONCE_ED(rt_dispatch_result == RTGI_BACKEND_DISPATCH_SAFE_FAILURE ? "Failed to dispatch the active RTGI backend after recovering RTGI output ownership. Rendering will continue with RT disabled for this frame." : "Failed to dispatch the active RTGI backend and recover RTGI output ownership. Rendering will continue with RT disabled for this frame.");
