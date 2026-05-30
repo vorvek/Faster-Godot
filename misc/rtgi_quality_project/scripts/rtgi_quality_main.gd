@@ -955,7 +955,7 @@ func _animate_specular_objects(frame: int) -> void:
 
 
 func _capture_debug_views(base_name: String) -> void:
-	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "strc_visibility", "strc_age", "strc_variance", "strc_rejection", "variance", "history_length", "rejection", "final"]
+	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "secondary_cache_source", "secondary_cache_rejection", "secondary_cache_surface", "surface_feedback", "surface_key", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "strc_visibility", "strc_age", "strc_variance", "strc_rejection", "variance", "history_length", "rejection", "final"]
 	for view in views:
 		if view.begins_with("cache_") and not _cache_debug_available():
 			continue
@@ -970,7 +970,7 @@ func _capture_debug_views(base_name: String) -> void:
 func _measure_signal_debug_views() -> Dictionary:
 	var result := {}
 	var previous_view := _debug_view
-	var signal_views := ["signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "strc_visibility", "strc_age", "strc_variance", "strc_rejection", "noisy", "final"]
+	var signal_views := ["signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "secondary_cache_source", "secondary_cache_rejection", "secondary_cache_surface", "surface_feedback", "surface_key", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "strc_visibility", "strc_age", "strc_variance", "strc_rejection", "noisy", "final"]
 	for view in signal_views:
 		if view.begins_with("cache_") and not _cache_debug_available():
 			continue
@@ -999,6 +999,16 @@ func _measure_signal_debug_views() -> Dictionary:
 			result.merge(_measure_source_temporal_delta_diagnostic(image), true)
 		elif view == "source_rejection":
 			result.merge(_measure_source_rejection_diagnostic(image), true)
+		elif view == "secondary_cache_source":
+			result.merge(_measure_secondary_cache_source_diagnostic(image), true)
+		elif view == "secondary_cache_rejection":
+			result.merge(_measure_secondary_cache_rejection_diagnostic(image), true)
+		elif view == "secondary_cache_surface":
+			result.merge(_measure_surface_cache_query_diagnostic(image), true)
+		elif view == "surface_feedback":
+			result.merge(_measure_surface_feedback_diagnostic(image), true)
+		elif view == "surface_key":
+			result.merge(_measure_surface_key_diagnostic(image), true)
 	_apply_debug_view(previous_view)
 	return result
 
@@ -1365,6 +1375,393 @@ func _measure_source_rejection_diagnostic(image: Image) -> Dictionary:
 		"rtgi_source_direct_reuse_reject_pdf_ratio_fraction": float(direct_reject_buckets["pdf_weight"]) / direct_history_denom,
 		"rtgi_source_direct_reuse_reject_weight_ratio_fraction": float(direct_reject_buckets["weight_ratio"]) / direct_history_denom,
 		"rtgi_source_direct_reuse_reject_low_confidence_fraction": float(direct_reject_buckets["low_confidence"]) / direct_history_denom,
+	}
+
+
+func _measure_secondary_cache_source_diagnostic(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var count: int = max(width * height, 1)
+	var queried := 0
+	var accepted := 0
+	var receiver := 0
+	var strc := 0
+	var base_spg := 0
+	var refined_spg := 0
+	var surface := 0
+	var screen_trace := 0
+	var secondary_hit := 0
+	var screen_trace_accepted := 0
+	var screen_trace_base_spg := 0
+	var screen_trace_refined_spg := 0
+	var screen_trace_surface := 0
+	var secondary_hit_accepted := 0
+	var secondary_hit_base_spg := 0
+	var secondary_hit_refined_spg := 0
+	var secondary_hit_surface := 0
+	var weight_sum := 0.0
+	for y in range(height):
+		for x in range(width):
+			var c := image.get_pixel(x, y)
+			if c.b <= 0.0 and c.r <= 0.0:
+				continue
+			queried += 1
+			if c.b >= 0.5:
+				screen_trace += 1
+			else:
+				secondary_hit += 1
+			var source := clampi(int(round(c.r * 5.0)), 0, 5)
+			if source <= 0:
+				continue
+			accepted += 1
+			if c.b >= 0.5:
+				screen_trace_accepted += 1
+			else:
+				secondary_hit_accepted += 1
+			weight_sum += c.g
+			match source:
+				1:
+					receiver += 1
+				2:
+					strc += 1
+				3:
+					base_spg += 1
+					if c.b >= 0.5:
+						screen_trace_base_spg += 1
+					else:
+						secondary_hit_base_spg += 1
+				4:
+					refined_spg += 1
+					if c.b >= 0.5:
+						screen_trace_refined_spg += 1
+					else:
+						secondary_hit_refined_spg += 1
+				5:
+					surface += 1
+					if c.b >= 0.5:
+						screen_trace_surface += 1
+					else:
+						secondary_hit_surface += 1
+	var queried_denom := maxf(float(queried), 1.0)
+	var accepted_denom := maxf(float(accepted), 1.0)
+	var screen_trace_accepted_denom := maxf(float(screen_trace_accepted), 1.0)
+	var secondary_hit_accepted_denom := maxf(float(secondary_hit_accepted), 1.0)
+	return {
+		"rtgi_secondary_cache_query_rate": float(queried) / float(count),
+		"rtgi_secondary_cache_accept_rate": float(accepted) / queried_denom,
+		"rtgi_secondary_cache_no_source_rate": float(queried - accepted) / queried_denom,
+		"rtgi_secondary_cache_receiver_fraction": float(receiver) / accepted_denom,
+		"rtgi_secondary_cache_strc_fraction": float(strc) / accepted_denom,
+		"rtgi_secondary_cache_base_spg_fraction": float(base_spg) / accepted_denom,
+		"rtgi_secondary_cache_refined_spg_fraction": float(refined_spg) / accepted_denom,
+		"rtgi_secondary_cache_spg_fraction": float(base_spg + refined_spg) / accepted_denom,
+		"rtgi_secondary_cache_surface_fraction": float(surface) / accepted_denom,
+		"rtgi_secondary_cache_screen_trace_query_fraction": float(screen_trace) / queried_denom,
+		"rtgi_secondary_cache_secondary_hit_query_fraction": float(secondary_hit) / queried_denom,
+		"rtgi_secondary_cache_screen_trace_accept_fraction": float(screen_trace_accepted) / accepted_denom,
+		"rtgi_secondary_cache_screen_trace_spg_fraction": float(screen_trace_base_spg + screen_trace_refined_spg) / screen_trace_accepted_denom,
+		"rtgi_secondary_cache_screen_trace_surface_fraction": float(screen_trace_surface) / screen_trace_accepted_denom,
+		"rtgi_secondary_cache_secondary_hit_accept_fraction": float(secondary_hit_accepted) / accepted_denom,
+		"rtgi_secondary_cache_secondary_hit_spg_fraction": float(secondary_hit_base_spg + secondary_hit_refined_spg) / secondary_hit_accepted_denom,
+		"rtgi_secondary_cache_secondary_hit_surface_fraction": float(secondary_hit_surface) / secondary_hit_accepted_denom,
+		"rtgi_secondary_cache_weight_mean": weight_sum / accepted_denom,
+	}
+
+
+func _measure_secondary_cache_rejection_diagnostic(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var count: int = max(width * height, 1)
+	var rejected := 0
+	var screen_trace := 0
+	var secondary_hit := 0
+	var detail_sum := 0.0
+	var buckets := []
+	for i in range(10):
+		buckets.append(0)
+	for y in range(height):
+		for x in range(width):
+			var c := image.get_pixel(x, y)
+			var reason := clampi(int(round(c.r * 9.0)), 0, 9)
+			if reason <= 0:
+				continue
+			rejected += 1
+			buckets[reason] += 1
+			detail_sum += c.b
+			if c.g >= 0.5:
+				screen_trace += 1
+			else:
+				secondary_hit += 1
+	var rejected_denom := maxf(float(rejected), 1.0)
+	return {
+		"rtgi_secondary_cache_rejection_rate": float(rejected) / float(count),
+		"rtgi_secondary_cache_rejection_ineligible_fraction": float(buckets[1]) / rejected_denom,
+		"rtgi_secondary_cache_rejection_no_source_fraction": float(buckets[2]) / rejected_denom,
+		"rtgi_secondary_cache_rejection_receiver_weak_fraction": float(buckets[3]) / rejected_denom,
+		"rtgi_secondary_cache_rejection_refined_spg_weak_fraction": float(buckets[4]) / rejected_denom,
+		"rtgi_secondary_cache_rejection_base_spg_weak_fraction": float(buckets[5]) / rejected_denom,
+		"rtgi_secondary_cache_rejection_strc_weak_fraction": float(buckets[6]) / rejected_denom,
+		"rtgi_secondary_cache_rejection_screen_no_hit_fraction": float(buckets[7]) / rejected_denom,
+		"rtgi_secondary_cache_rejection_screen_low_weight_fraction": float(buckets[8]) / rejected_denom,
+		"rtgi_secondary_cache_rejection_surface_weak_fraction": float(buckets[9]) / rejected_denom,
+		"rtgi_secondary_cache_rejection_screen_trace_fraction": float(screen_trace) / rejected_denom,
+		"rtgi_secondary_cache_rejection_secondary_hit_fraction": float(secondary_hit) / rejected_denom,
+		"rtgi_secondary_cache_rejection_detail_mean": detail_sum / rejected_denom,
+	}
+
+
+func _measure_surface_cache_query_diagnostic(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var count: int = max(width * height, 1)
+	var queried := 0
+	var screen_trace := 0
+	var secondary_hit := 0
+	var detail_sum := 0.0
+	var source_none := 0
+	var source_receiver := 0
+	var source_base_spg := 0
+	var source_refined_spg := 0
+	var source_visible_current := 0
+	var source_direct := 0
+	var source_emissive := 0
+	var source_sky := 0
+	var source_strc := 0
+	var source_mixed := 0
+	var buckets := []
+	for i in range(15):
+		buckets.append(0)
+	for y in range(height):
+		for x in range(width):
+			var c := image.get_pixel(x, y)
+			var reason := clampi(int(round(c.r * 14.0)), 0, 14)
+			if reason <= 0:
+				continue
+			queried += 1
+			buckets[reason] += 1
+			detail_sum += c.a
+			var source := clampi(int(round(c.g * 9.0)), 0, 9)
+			match source:
+				0:
+					source_none += 1
+				1:
+					source_receiver += 1
+				2:
+					source_base_spg += 1
+				3:
+					source_refined_spg += 1
+				4:
+					source_visible_current += 1
+				5:
+					source_direct += 1
+				6:
+					source_emissive += 1
+				7:
+					source_sky += 1
+				8:
+					source_strc += 1
+				9:
+					source_mixed += 1
+			if c.b >= 0.5:
+				screen_trace += 1
+			else:
+				secondary_hit += 1
+	var queried_denom := maxf(float(queried), 1.0)
+	return {
+		"rtgi_surface_cache_query_rate": float(queried) / float(count),
+		"rtgi_surface_cache_query_accept_fraction": float(buckets[1]) / queried_denom,
+		"rtgi_surface_cache_query_early_source_fraction": float(buckets[2]) / queried_denom,
+		"rtgi_surface_cache_query_ineligible_fraction": float(buckets[3]) / queried_denom,
+		"rtgi_surface_cache_query_no_key_fraction": float(buckets[4]) / queried_denom,
+		"rtgi_surface_cache_query_dynamic_ineligible_fraction": float(buckets[5]) / queried_denom,
+		"rtgi_surface_cache_query_no_page_fraction": float(buckets[6]) / queried_denom,
+		"rtgi_surface_cache_query_id_mismatch_fraction": float(buckets[7]) / queried_denom,
+		"rtgi_surface_cache_query_low_confidence_fraction": float(buckets[8]) / queried_denom,
+		"rtgi_surface_cache_query_low_support_fraction": float(buckets[9]) / queried_denom,
+		"rtgi_surface_cache_query_low_variance_fraction": float(buckets[10]) / queried_denom,
+		"rtgi_surface_cache_query_stale_fraction": float(buckets[11]) / queried_denom,
+		"rtgi_surface_cache_query_normal_mismatch_fraction": float(buckets[12]) / queried_denom,
+		"rtgi_surface_cache_query_weak_radiance_fraction": float(buckets[13]) / queried_denom,
+		"rtgi_surface_cache_query_weak_quality_fraction": float(buckets[14]) / queried_denom,
+		"rtgi_surface_cache_query_screen_trace_fraction": float(screen_trace) / queried_denom,
+		"rtgi_surface_cache_query_secondary_hit_fraction": float(secondary_hit) / queried_denom,
+		"rtgi_surface_cache_query_detail_mean": detail_sum / queried_denom,
+		"rtgi_surface_cache_query_source_none_fraction": float(source_none) / queried_denom,
+		"rtgi_surface_cache_query_source_receiver_fraction": float(source_receiver) / queried_denom,
+		"rtgi_surface_cache_query_source_base_spg_fraction": float(source_base_spg) / queried_denom,
+		"rtgi_surface_cache_query_source_refined_spg_fraction": float(source_refined_spg) / queried_denom,
+		"rtgi_surface_cache_query_source_visible_current_fraction": float(source_visible_current) / queried_denom,
+		"rtgi_surface_cache_query_source_direct_fraction": float(source_direct) / queried_denom,
+		"rtgi_surface_cache_query_source_emissive_fraction": float(source_emissive) / queried_denom,
+		"rtgi_surface_cache_query_source_sky_fraction": float(source_sky) / queried_denom,
+		"rtgi_surface_cache_query_source_strc_fraction": float(source_strc) / queried_denom,
+		"rtgi_surface_cache_query_source_mixed_fraction": float(source_mixed) / queried_denom,
+	}
+
+
+func _measure_surface_feedback_diagnostic(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var count: int = max(width * height, 1)
+	var active := 0
+	var selected := 0
+	var invalid := 0
+	var no_radiance := 0
+	var budget_starved := 0
+	var collision := 0
+	var atomic_skipped := 0
+	var low_confidence := 0
+	var low_quality := 0
+	var stale := 0
+	var dynamic := 0
+	var source_none := 0
+	var source_receiver := 0
+	var source_base_spg := 0
+	var source_refined_spg := 0
+	var source_visible_current := 0
+	var source_direct := 0
+	var source_emissive := 0
+	var source_sky := 0
+	var source_strc := 0
+	var source_mixed := 0
+	var selected_source_visible_current := 0
+	var selected_source_direct := 0
+	var selected_source_emissive := 0
+	var selected_source_sky := 0
+	var selected_source_strc := 0
+	var selected_source_mixed := 0
+	var detail_sum := 0.0
+	var quality_sum := 0.0
+	for y in range(height):
+		for x in range(width):
+			var c := image.get_pixel(x, y)
+			var status := clampi(int(round(c.r * 10.0)), 0, 10)
+			if status <= 0:
+				continue
+			active += 1
+			detail_sum += c.a
+			quality_sum += c.b
+			var source := clampi(int(round(c.g * 9.0)), 0, 9)
+			match source:
+				0:
+					source_none += 1
+				1:
+					source_receiver += 1
+				2:
+					source_base_spg += 1
+				3:
+					source_refined_spg += 1
+				4:
+					source_visible_current += 1
+				5:
+					source_direct += 1
+				6:
+					source_emissive += 1
+				7:
+					source_sky += 1
+				8:
+					source_strc += 1
+				9:
+					source_mixed += 1
+			match status:
+				1:
+					selected += 1
+				2:
+					invalid += 1
+				3:
+					no_radiance += 1
+				4:
+					budget_starved += 1
+				5:
+					collision += 1
+				6:
+					atomic_skipped += 1
+				7:
+					low_confidence += 1
+				8:
+					low_quality += 1
+				9:
+					stale += 1
+					selected += 1
+				10:
+					dynamic += 1
+			if status == 1 or status == 9:
+				match source:
+					4:
+						selected_source_visible_current += 1
+					5:
+						selected_source_direct += 1
+					6:
+						selected_source_emissive += 1
+					7:
+						selected_source_sky += 1
+					8:
+						selected_source_strc += 1
+					9:
+						selected_source_mixed += 1
+	var active_denom := maxf(float(active), 1.0)
+	var selected_denom := maxf(float(selected), 1.0)
+	return {
+		"rtgi_surface_feedback_active_rate": float(active) / float(count),
+		"rtgi_surface_feedback_selected_fraction": float(selected) / active_denom,
+		"rtgi_surface_feedback_invalid_fraction": float(invalid) / active_denom,
+		"rtgi_surface_feedback_no_radiance_fraction": float(no_radiance) / active_denom,
+		"rtgi_surface_feedback_budget_starved_fraction": float(budget_starved) / active_denom,
+		"rtgi_surface_feedback_collision_fraction": float(collision) / active_denom,
+		"rtgi_surface_feedback_atomic_skipped_fraction": float(atomic_skipped) / active_denom,
+		"rtgi_surface_feedback_low_confidence_fraction": float(low_confidence) / active_denom,
+		"rtgi_surface_feedback_low_quality_fraction": float(low_quality) / active_denom,
+		"rtgi_surface_feedback_stale_refresh_fraction": float(stale) / active_denom,
+		"rtgi_surface_feedback_dynamic_ineligible_fraction": float(dynamic) / active_denom,
+		"rtgi_surface_feedback_source_none_fraction": float(source_none) / active_denom,
+		"rtgi_surface_feedback_source_receiver_fraction": float(source_receiver) / active_denom,
+		"rtgi_surface_feedback_source_base_spg_fraction": float(source_base_spg) / active_denom,
+		"rtgi_surface_feedback_source_refined_spg_fraction": float(source_refined_spg) / active_denom,
+		"rtgi_surface_feedback_source_visible_current_fraction": float(source_visible_current) / active_denom,
+		"rtgi_surface_feedback_source_direct_fraction": float(source_direct) / active_denom,
+		"rtgi_surface_feedback_source_emissive_fraction": float(source_emissive) / active_denom,
+		"rtgi_surface_feedback_source_sky_fraction": float(source_sky) / active_denom,
+		"rtgi_surface_feedback_source_strc_fraction": float(source_strc) / active_denom,
+		"rtgi_surface_feedback_source_mixed_fraction": float(source_mixed) / active_denom,
+		"rtgi_surface_feedback_selected_source_visible_current_fraction": float(selected_source_visible_current) / selected_denom,
+		"rtgi_surface_feedback_selected_source_direct_fraction": float(selected_source_direct) / selected_denom,
+		"rtgi_surface_feedback_selected_source_emissive_fraction": float(selected_source_emissive) / selected_denom,
+		"rtgi_surface_feedback_selected_source_sky_fraction": float(selected_source_sky) / selected_denom,
+		"rtgi_surface_feedback_selected_source_strc_fraction": float(selected_source_strc) / selected_denom,
+		"rtgi_surface_feedback_selected_source_mixed_fraction": float(selected_source_mixed) / selected_denom,
+		"rtgi_surface_feedback_detail_mean": detail_sum / active_denom,
+		"rtgi_surface_feedback_source_quality_mean": quality_sum / active_denom,
+	}
+
+
+func _measure_surface_key_diagnostic(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var count: int = max(width * height, 1)
+	var covered := 0
+	var static_eligible := 0
+	var buckets := []
+	for i in range(7):
+		buckets.append(0)
+	for y in range(height):
+		for x in range(width):
+			var c := image.get_pixel(x, y)
+			if c.r > 0.5:
+				covered += 1
+			if c.b > 0.5:
+				static_eligible += 1
+			var reason := clampi(int(round(c.g * 6.0)), 0, 6)
+			buckets[reason] += 1
+	return {
+		"rtgi_surface_key_coverage": float(covered) / float(count),
+		"rtgi_surface_key_static_eligible_fraction": float(static_eligible) / float(count),
+		"rtgi_surface_key_reason_valid_fraction": float(buckets[0]) / float(count),
+		"rtgi_surface_key_reason_empty_fraction": float(buckets[1]) / float(count),
+		"rtgi_surface_key_reason_raster_fraction": float(buckets[2]) / float(count),
+		"rtgi_surface_key_reason_history_invalid_fraction": float(buckets[3]) / float(count),
+		"rtgi_surface_key_reason_deformed_fraction": float(buckets[4]) / float(count),
+		"rtgi_surface_key_reason_procedural_fraction": float(buckets[5]) / float(count),
+		"rtgi_surface_key_reason_zero_key_fraction": float(buckets[6]) / float(count),
 	}
 
 
@@ -1769,6 +2166,16 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_TEMPORAL_DELTA
 		"source_rejection":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_REJECTION
+		"secondary_cache_source":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SECONDARY_CACHE_SOURCE
+		"secondary_cache_rejection":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SECONDARY_CACHE_REJECTION
+		"secondary_cache_surface":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SECONDARY_CACHE_SURFACE
+		"surface_feedback":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SURFACE_FEEDBACK
+		"surface_key":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SURFACE_KEY
 		"cache_raw_diffuse":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_RAW_DIFFUSE
 		"cache_filtered_diffuse":

@@ -8,12 +8,23 @@
 #include "rtgi_denoise.h"
 
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 
 using namespace RendererRD;
 
+static constexpr uint32_t RTGI_TAA_REACTIVITY_SCOPE_COUNT = 6;
+static constexpr uint32_t RTGI_TAA_REACTIVITY_OUTPUT_BINDING = 2 + RTGI_TAA_REACTIVITY_SCOPE_COUNT * 4;
+static constexpr uint32_t RTGI_RECONSTRUCT_SCOPE_COUNT = 6;
+static constexpr uint32_t RTGI_RECONSTRUCT_DIAGNOSTIC_BINDING = 8;
+static constexpr uint32_t RTGI_RECONSTRUCT_OUTPUT_BINDING = 7;
+static constexpr uint32_t RTGI_RECONSTRUCT_REACTIVITY_OUTPUT_BINDING = RTGI_RECONSTRUCT_DIAGNOSTIC_BINDING + RTGI_RECONSTRUCT_SCOPE_COUNT * 4;
+static constexpr uint32_t RTGI_RECONSTRUCT_MATERIAL_BINDING = RTGI_RECONSTRUCT_REACTIVITY_OUTPUT_BINDING + 1;
+
 RTGIDenoise::RTGIDenoise() {
 	Vector<String> modes;
+	modes.push_back("\n#define MODE_RECONSTRUCT");
+	modes.push_back("\n#define MODE_RECONSTRUCT_REFINE");
 	modes.push_back("\n#define MODE_TEMPORAL");
 	modes.push_back("\n#define MODE_VARIANCE_PREFILTER");
 	modes.push_back("\n#define MODE_ATROUS");
@@ -22,6 +33,9 @@ RTGIDenoise::RTGIDenoise() {
 	modes.push_back("\n#define MODE_SPLIT_COMPOSITE");
 	modes.push_back("\n#define MODE_SIGNAL_DECOMPOSITION_COMPOSITE");
 	modes.push_back("\n#define MODE_VOLUMETRIC_FOG");
+	modes.push_back("\n#define MODE_TAA_REACTIVITY");
+	modes.push_back("\n#define MODE_RECONSTRUCT_COMPOSITE_SPLIT");
+	modes.push_back("\n#define MODE_RECONSTRUCT_HISTORY");
 
 	shader.initialize(modes);
 	shader_version = shader.version_create();
@@ -88,6 +102,43 @@ bool RTGIDenoise::_ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, co
 	RD::get_singleton()->texture_clear(prev_specular_guide, Color(1, 65504.0, 0, 0), 0, 1, 0, p_render_buffers->get_view_count());
 
 	return true;
+}
+
+void RTGIDenoise::_dispatch_reconstruct(Mode p_mode, const PushConstant &p_push_constant, RID p_source, RID p_source_depth, RID p_source_normal_roughness, RID p_target_depth, RID p_target_normal_roughness, RID p_target_normal, RID p_target_orm, RID p_taa_reactivity, RID p_signal_confidence, const RID *p_variance, const RID *p_history_length, const RID *p_rejection, const RID *p_reactivity, RID p_output, RID p_reactivity_output) {
+	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
+	ERR_FAIL_NULL(uniform_set_cache);
+	MaterialStorage *material_storage = MaterialStorage::get_singleton();
+	ERR_FAIL_NULL(material_storage);
+
+	RID nearest_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID shader_rd = shader.version_get_shader(shader_version, p_mode);
+
+	LocalVector<RD::Uniform> uniforms;
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ nearest_sampler, p_source })));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ nearest_sampler, p_source_depth })));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, Vector<RID>({ nearest_sampler, p_source_normal_roughness })));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 3, Vector<RID>({ nearest_sampler, p_target_depth })));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 4, Vector<RID>({ nearest_sampler, p_target_normal_roughness })));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 5, Vector<RID>({ nearest_sampler, p_taa_reactivity })));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 6, Vector<RID>({ nearest_sampler, p_signal_confidence })));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, RTGI_RECONSTRUCT_OUTPUT_BINDING, p_output));
+	for (uint32_t i = 0; i < RTGI_RECONSTRUCT_SCOPE_COUNT; i++) {
+		const uint32_t binding = RTGI_RECONSTRUCT_DIAGNOSTIC_BINDING + i * 4;
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, binding + 0, Vector<RID>({ nearest_sampler, p_variance[i] })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, binding + 1, Vector<RID>({ nearest_sampler, p_history_length[i] })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, binding + 2, Vector<RID>({ nearest_sampler, p_rejection[i] })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, binding + 3, Vector<RID>({ nearest_sampler, p_reactivity[i] })));
+	}
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, RTGI_RECONSTRUCT_REACTIVITY_OUTPUT_BINDING, p_reactivity_output));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, RTGI_RECONSTRUCT_MATERIAL_BINDING + 0, Vector<RID>({ nearest_sampler, p_target_normal })));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, RTGI_RECONSTRUCT_MATERIAL_BINDING + 1, Vector<RID>({ nearest_sampler, p_target_orm })));
+
+	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[p_mode]);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
+	RD::get_singleton()->compute_list_set_push_constant(compute_list, &p_push_constant, sizeof(PushConstant));
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, (uint32_t)p_push_constant.resolution_width, (uint32_t)p_push_constant.resolution_height, 1);
+	RD::get_singleton()->compute_list_end();
 }
 
 void RTGIDenoise::_dispatch_temporal(const PushConstant &p_push_constant, RID p_source, RID p_velocity, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_specular_guide, RID p_prev_specular_guide, RID p_specular_reprojection, RID p_history, RID p_moments, RID p_prev_normal_roughness, RID p_prev_viewz_hitdist, RID p_prev_albedo_metalness, RID p_history_validity, RID p_prev_history_validity, RID p_history_id, RID p_prev_history_id, RID p_temporal_out, RID p_moments_out, RID p_variance_out, RID p_rejection_out, RID p_reactivity_out, RID p_history_length_out) {
@@ -261,6 +312,52 @@ void RTGIDenoise::_dispatch_split_composite(const PushConstant &p_push_constant,
 	RD::get_singleton()->compute_list_end();
 }
 
+void RTGIDenoise::_dispatch_reconstruct_composite_split(const PushConstant &p_push_constant, RID p_diffuse, RID p_specular, RID p_target_albedo, RID p_target_normal, RID p_target_orm, RID p_output) {
+	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
+	ERR_FAIL_NULL(uniform_set_cache);
+	MaterialStorage *material_storage = MaterialStorage::get_singleton();
+	ERR_FAIL_NULL(material_storage);
+
+	RID nearest_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID shader_rd = shader.version_get_shader(shader_version, MODE_RECONSTRUCT_COMPOSITE_SPLIT);
+
+	RD::Uniform u_diffuse(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ nearest_sampler, p_diffuse }));
+	RD::Uniform u_specular(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ nearest_sampler, p_specular }));
+	RD::Uniform u_target_albedo(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, Vector<RID>({ nearest_sampler, p_target_albedo }));
+	RD::Uniform u_target_normal(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 3, Vector<RID>({ nearest_sampler, p_target_normal }));
+	RD::Uniform u_target_orm(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 4, Vector<RID>({ nearest_sampler, p_target_orm }));
+	RD::Uniform u_output(RD::UNIFORM_TYPE_IMAGE, 5, p_output);
+
+	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[MODE_RECONSTRUCT_COMPOSITE_SPLIT]);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_rd, 0, u_diffuse, u_specular, u_target_albedo, u_target_normal, u_target_orm, u_output), 0);
+	RD::get_singleton()->compute_list_set_push_constant(compute_list, &p_push_constant, sizeof(PushConstant));
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, (uint32_t)p_push_constant.resolution_width, (uint32_t)p_push_constant.resolution_height, 1);
+	RD::get_singleton()->compute_list_end();
+}
+
+void RTGIDenoise::_dispatch_reconstruct_history(const PushConstant &p_push_constant, RID p_source_history_validity, RID p_source_history_id, RID p_output_history_validity, RID p_output_history_id) {
+	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
+	ERR_FAIL_NULL(uniform_set_cache);
+	MaterialStorage *material_storage = MaterialStorage::get_singleton();
+	ERR_FAIL_NULL(material_storage);
+
+	RID nearest_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID shader_rd = shader.version_get_shader(shader_version, MODE_RECONSTRUCT_HISTORY);
+
+	RD::Uniform u_source_history_validity(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ nearest_sampler, p_source_history_validity }));
+	RD::Uniform u_source_history_id(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ nearest_sampler, p_source_history_id }));
+	RD::Uniform u_output_history_validity(RD::UNIFORM_TYPE_IMAGE, 2, p_output_history_validity);
+	RD::Uniform u_output_history_id(RD::UNIFORM_TYPE_IMAGE, 3, p_output_history_id);
+
+	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[MODE_RECONSTRUCT_HISTORY]);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_rd, 0, u_source_history_validity, u_source_history_id, u_output_history_validity, u_output_history_id), 0);
+	RD::get_singleton()->compute_list_set_push_constant(compute_list, &p_push_constant, sizeof(PushConstant));
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, (uint32_t)p_push_constant.resolution_width, (uint32_t)p_push_constant.resolution_height, 1);
+	RD::get_singleton()->compute_list_end();
+}
+
 void RTGIDenoise::_dispatch_signal_decomposition_composite(const PushConstant &p_push_constant, RID p_direct, RID p_emissive, RID p_indirect, RID p_sky, RID p_specular, RID p_diffuse, RID p_velocity, RID p_normal_roughness, RID p_albedo_metalness, RID p_specular_guide, RID p_output) {
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
@@ -307,6 +404,35 @@ void RTGIDenoise::_dispatch_volumetric_fog(const PushConstant &p_push_constant, 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[MODE_VOLUMETRIC_FOG]);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_rd, 0, u_color, u_viewz_hitdist, u_fog_map), 0);
+	RD::get_singleton()->compute_list_set_push_constant(compute_list, &p_push_constant, sizeof(PushConstant));
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, (uint32_t)p_push_constant.resolution_width, (uint32_t)p_push_constant.resolution_height, 1);
+	RD::get_singleton()->compute_list_end();
+}
+
+void RTGIDenoise::_dispatch_taa_reactivity(const PushConstant &p_push_constant, RID p_velocity, RID p_history_validity, const RID *p_variance, const RID *p_history_length, const RID *p_rejection, const RID *p_reactivity, RID p_output) {
+	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
+	ERR_FAIL_NULL(uniform_set_cache);
+	MaterialStorage *material_storage = MaterialStorage::get_singleton();
+	ERR_FAIL_NULL(material_storage);
+
+	RID nearest_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID shader_rd = shader.version_get_shader(shader_version, MODE_TAA_REACTIVITY);
+
+	LocalVector<RD::Uniform> uniforms;
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ nearest_sampler, p_velocity })));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ nearest_sampler, p_history_validity })));
+	for (uint32_t i = 0; i < RTGI_TAA_REACTIVITY_SCOPE_COUNT; i++) {
+		const uint32_t binding = 2 + i * 4;
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, binding + 0, Vector<RID>({ nearest_sampler, p_variance[i] })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, binding + 1, Vector<RID>({ nearest_sampler, p_history_length[i] })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, binding + 2, Vector<RID>({ nearest_sampler, p_rejection[i] })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, binding + 3, Vector<RID>({ nearest_sampler, p_reactivity[i] })));
+	}
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, RTGI_TAA_REACTIVITY_OUTPUT_BINDING, p_output));
+
+	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[MODE_TAA_REACTIVITY]);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &p_push_constant, sizeof(PushConstant));
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, (uint32_t)p_push_constant.resolution_width, (uint32_t)p_push_constant.resolution_height, 1);
 	RD::get_singleton()->compute_list_end();
@@ -475,6 +601,194 @@ void RTGIDenoise::capture_noisy(Ref<RenderSceneBuffersRD> p_render_buffers,
 	RD::get_singleton()->texture_copy(source, noisy, Vector3(), Vector3(), Vector3(p_process_size.x, p_process_size.y, 1), 0, 0, 0, 0);
 }
 
+void RTGIDenoise::compose_taa_reactivity(Ref<RenderSceneBuffersRD> p_render_buffers,
+		const Vector<StringName> &p_denoise_scopes,
+		RID p_velocity,
+		RID p_history_validity,
+		RID p_output,
+		const Size2i &p_process_size,
+		uint32_t p_view) {
+	ERR_FAIL_COND(p_render_buffers.is_null());
+	ERR_FAIL_COND(p_process_size.x <= 0 || p_process_size.y <= 0);
+	ERR_FAIL_COND(!p_velocity.is_valid() || !p_history_validity.is_valid() || !p_output.is_valid());
+	ERR_FAIL_UNSIGNED_INDEX(p_view, p_render_buffers->get_view_count());
+
+	TextureStorage *texture_storage = TextureStorage::get_singleton();
+	ERR_FAIL_NULL(texture_storage);
+
+	RID black = texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+	RID white = texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
+
+	RID variance[RTGI_TAA_REACTIVITY_SCOPE_COUNT];
+	RID history_length[RTGI_TAA_REACTIVITY_SCOPE_COUNT];
+	RID rejection[RTGI_TAA_REACTIVITY_SCOPE_COUNT];
+	RID reactivity[RTGI_TAA_REACTIVITY_SCOPE_COUNT];
+	for (uint32_t i = 0; i < RTGI_TAA_REACTIVITY_SCOPE_COUNT; i++) {
+		variance[i] = black;
+		history_length[i] = white;
+		rejection[i] = black;
+		reactivity[i] = black;
+	}
+
+	uint32_t valid_scope_count = 0;
+	for (int i = 0; i < p_denoise_scopes.size() && valid_scope_count < RTGI_TAA_REACTIVITY_SCOPE_COUNT; i++) {
+		const StringName &scope = p_denoise_scopes[i];
+		if (!p_render_buffers->has_texture(scope, RB_TEX_RTGI_DENOISE_VARIANCE) ||
+				!p_render_buffers->has_texture(scope, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH) ||
+				!p_render_buffers->has_texture(scope, RB_TEX_RTGI_DENOISE_REJECTION) ||
+				!p_render_buffers->has_texture(scope, RB_TEX_RTGI_DENOISE_REACTIVITY) ||
+				p_render_buffers->get_texture_slice_size(scope, RB_TEX_RTGI_DENOISE_VARIANCE, 0) != p_process_size) {
+			continue;
+		}
+
+		variance[valid_scope_count] = p_render_buffers->get_texture_slice(scope, RB_TEX_RTGI_DENOISE_VARIANCE, p_view, 0);
+		history_length[valid_scope_count] = p_render_buffers->get_texture_slice(scope, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH, p_view, 0);
+		rejection[valid_scope_count] = p_render_buffers->get_texture_slice(scope, RB_TEX_RTGI_DENOISE_REJECTION, p_view, 0);
+		reactivity[valid_scope_count] = p_render_buffers->get_texture_slice(scope, RB_TEX_RTGI_DENOISE_REACTIVITY, p_view, 0);
+		valid_scope_count++;
+	}
+
+	PushConstant push_constant;
+	memset(&push_constant, 0, sizeof(PushConstant));
+	push_constant.resolution_width = (float)p_process_size.x;
+	push_constant.resolution_height = (float)p_process_size.y;
+	push_constant.diagnostic_scope_count = (float)valid_scope_count;
+
+	_dispatch_taa_reactivity(push_constant, p_velocity, p_history_validity, variance, history_length, rejection, reactivity, p_output);
+}
+
+void RTGIDenoise::reconstruct(Ref<RenderSceneBuffersRD> p_render_buffers,
+		const StringName &p_source_context,
+		const StringName &p_source_texture,
+		const StringName &p_output_context,
+		const StringName &p_output_texture,
+		const StringName &p_intermediate_context,
+		const StringName &p_intermediate_texture,
+		const StringName &p_reactivity_context,
+		const StringName &p_reactivity_texture,
+		const Vector<StringName> &p_denoise_scopes,
+		RID p_taa_reactivity,
+		RID p_signal_confidence,
+		RID p_source_depth,
+		RID p_source_normal_roughness,
+		RID p_target_depth,
+		RID p_target_normal_roughness,
+		RID p_target_normal,
+		RID p_target_orm,
+		const Vector2i &p_source_visible_origin,
+		const Size2i &p_source_visible_size,
+		const Size2i &p_output_size,
+		bool p_use_target_guides,
+		uint32_t p_view) {
+	ERR_FAIL_COND(p_render_buffers.is_null());
+	ERR_FAIL_COND(p_source_visible_size.x <= 0 || p_source_visible_size.y <= 0);
+	ERR_FAIL_COND(p_output_size.x <= 0 || p_output_size.y <= 0);
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_source_context, p_source_texture));
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_output_context, p_output_texture));
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_intermediate_context, p_intermediate_texture));
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_reactivity_context, p_reactivity_texture));
+	ERR_FAIL_COND(!p_source_depth.is_valid() || !p_source_normal_roughness.is_valid());
+	ERR_FAIL_UNSIGNED_INDEX(p_view, p_render_buffers->get_view_count());
+
+	const bool use_target_material_guides = p_target_normal.is_valid() && p_target_orm.is_valid();
+	const bool use_target_guides = p_use_target_guides && p_target_depth.is_valid() && (p_target_normal_roughness.is_valid() || use_target_material_guides);
+	RID source = p_render_buffers->get_texture_slice(p_source_context, p_source_texture, p_view, 0);
+	RID output = p_render_buffers->get_texture_slice(p_output_context, p_output_texture, p_view, 0);
+	RID intermediate = p_render_buffers->get_texture_slice(p_intermediate_context, p_intermediate_texture, p_view, 0);
+	RID reactivity_output = p_render_buffers->get_texture_slice(p_reactivity_context, p_reactivity_texture, p_view, 0);
+
+	TextureStorage *texture_storage = TextureStorage::get_singleton();
+	ERR_FAIL_NULL(texture_storage);
+
+	RID black = texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+	RID white = texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
+
+	RID variance[RTGI_RECONSTRUCT_SCOPE_COUNT];
+	RID history_length[RTGI_RECONSTRUCT_SCOPE_COUNT];
+	RID rejection[RTGI_RECONSTRUCT_SCOPE_COUNT];
+	RID reactivity[RTGI_RECONSTRUCT_SCOPE_COUNT];
+	for (uint32_t i = 0; i < RTGI_RECONSTRUCT_SCOPE_COUNT; i++) {
+		variance[i] = black;
+		history_length[i] = white;
+		rejection[i] = black;
+		reactivity[i] = black;
+	}
+
+	const Size2i source_size = p_render_buffers->get_texture_slice_size(p_source_context, p_source_texture, 0);
+	uint32_t valid_scope_count = 0;
+	for (int i = 0; i < p_denoise_scopes.size() && valid_scope_count < RTGI_RECONSTRUCT_SCOPE_COUNT; i++) {
+		const StringName &scope = p_denoise_scopes[i];
+		if (!p_render_buffers->has_texture(scope, RB_TEX_RTGI_DENOISE_VARIANCE) ||
+				!p_render_buffers->has_texture(scope, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH) ||
+				!p_render_buffers->has_texture(scope, RB_TEX_RTGI_DENOISE_REJECTION) ||
+				!p_render_buffers->has_texture(scope, RB_TEX_RTGI_DENOISE_REACTIVITY) ||
+				p_render_buffers->get_texture_slice_size(scope, RB_TEX_RTGI_DENOISE_VARIANCE, 0) != source_size) {
+			continue;
+		}
+
+		variance[valid_scope_count] = p_render_buffers->get_texture_slice(scope, RB_TEX_RTGI_DENOISE_VARIANCE, p_view, 0);
+		history_length[valid_scope_count] = p_render_buffers->get_texture_slice(scope, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH, p_view, 0);
+		rejection[valid_scope_count] = p_render_buffers->get_texture_slice(scope, RB_TEX_RTGI_DENOISE_REJECTION, p_view, 0);
+		reactivity[valid_scope_count] = p_render_buffers->get_texture_slice(scope, RB_TEX_RTGI_DENOISE_REACTIVITY, p_view, 0);
+		valid_scope_count++;
+	}
+
+	RID taa_reactivity = p_taa_reactivity.is_valid() ? p_taa_reactivity : black;
+	RID signal_confidence = p_signal_confidence.is_valid() ? p_signal_confidence : black;
+	RID target_depth = use_target_guides ? p_target_depth : p_source_depth;
+	RID target_normal_roughness = use_target_guides && p_target_normal_roughness.is_valid() ? p_target_normal_roughness : p_source_normal_roughness;
+	RID target_normal = use_target_material_guides ? p_target_normal : texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_NORMAL);
+	RID target_orm = use_target_material_guides ? p_target_orm : white;
+
+	PushConstant push_constant;
+	memset(&push_constant, 0, sizeof(PushConstant));
+	push_constant.resolution_width = (float)p_output_size.x;
+	push_constant.resolution_height = (float)p_output_size.y;
+	push_constant.visible_origin_width = (float)p_source_visible_origin.x;
+	push_constant.visible_origin_height = (float)p_source_visible_origin.y;
+	push_constant.visible_size_width = (float)p_source_visible_size.x;
+	push_constant.visible_size_height = (float)p_source_visible_size.y;
+	push_constant.specular_guide_enabled = use_target_guides ? 1.0f : 0.0f;
+	push_constant.diagnostic_scope_count = (float)valid_scope_count;
+	push_constant.target_material_guide_enabled = use_target_material_guides ? 1.0f : 0.0f;
+
+	_dispatch_reconstruct(MODE_RECONSTRUCT, push_constant, source, p_source_depth, p_source_normal_roughness, target_depth, target_normal_roughness, target_normal, target_orm, taa_reactivity, signal_confidence, variance, history_length, rejection, reactivity, intermediate, reactivity_output);
+	_dispatch_reconstruct(MODE_RECONSTRUCT_REFINE, push_constant, intermediate, p_source_depth, p_source_normal_roughness, target_depth, target_normal_roughness, target_normal, target_orm, taa_reactivity, signal_confidence, variance, history_length, rejection, reactivity, output, reactivity_output);
+}
+
+void RTGIDenoise::reconstruct_history(Ref<RenderSceneBuffersRD> p_render_buffers,
+		RID p_source_history_validity,
+		RID p_source_history_id,
+		const StringName &p_output_history_validity_texture,
+		const StringName &p_output_history_id_texture,
+		const Vector2i &p_source_visible_origin,
+		const Size2i &p_source_visible_size,
+		const Size2i &p_output_size,
+		uint32_t p_view) {
+	ERR_FAIL_COND(p_render_buffers.is_null());
+	ERR_FAIL_COND(!p_source_history_validity.is_valid() || !p_source_history_id.is_valid());
+	ERR_FAIL_COND(p_output_size.x <= 0 || p_output_size.y <= 0);
+	ERR_FAIL_COND(p_source_visible_size.x <= 0 || p_source_visible_size.y <= 0);
+	ERR_FAIL_COND(!p_render_buffers->has_texture(SNAME("forward_clustered"), p_output_history_validity_texture));
+	ERR_FAIL_COND(!p_render_buffers->has_texture(SNAME("forward_clustered"), p_output_history_id_texture));
+	ERR_FAIL_UNSIGNED_INDEX(p_view, p_render_buffers->get_view_count());
+
+	RID output_history_validity = p_render_buffers->get_texture_slice(SNAME("forward_clustered"), p_output_history_validity_texture, p_view, 0);
+	RID output_history_id = p_render_buffers->get_texture_slice(SNAME("forward_clustered"), p_output_history_id_texture, p_view, 0);
+	ERR_FAIL_COND(!output_history_validity.is_valid() || !output_history_id.is_valid());
+
+	PushConstant push_constant;
+	memset(&push_constant, 0, sizeof(PushConstant));
+	push_constant.resolution_width = (float)p_output_size.x;
+	push_constant.resolution_height = (float)p_output_size.y;
+	push_constant.visible_origin_width = (float)p_source_visible_origin.x;
+	push_constant.visible_origin_height = (float)p_source_visible_origin.y;
+	push_constant.visible_size_width = (float)p_source_visible_size.x;
+	push_constant.visible_size_height = (float)p_source_visible_size.y;
+
+	_dispatch_reconstruct_history(push_constant, p_source_history_validity, p_source_history_id, output_history_validity, output_history_id);
+}
+
 void RTGIDenoise::composite_split(Ref<RenderSceneBuffersRD> p_render_buffers,
 		const StringName &p_source_context,
 		const StringName &p_diffuse_texture,
@@ -511,6 +825,36 @@ void RTGIDenoise::composite_split(Ref<RenderSceneBuffersRD> p_render_buffers,
 	push_constant.detail_preservation = CLAMP(p_detail_preservation, 0.0f, 1.0f);
 
 	_dispatch_split_composite(push_constant, diffuse, specular, p_velocity, p_normal_roughness, p_albedo_metalness, p_specular_guide, output);
+}
+
+void RTGIDenoise::composite_reconstructed_split(Ref<RenderSceneBuffersRD> p_render_buffers,
+		const StringName &p_source_context,
+		const StringName &p_diffuse_texture,
+		const StringName &p_specular_texture,
+		RID p_target_albedo,
+		RID p_target_normal,
+		RID p_target_orm,
+		const StringName &p_output_texture,
+		const Size2i &p_process_size,
+		uint32_t p_view) {
+	ERR_FAIL_COND(p_render_buffers.is_null());
+	ERR_FAIL_COND(p_process_size.x <= 0 || p_process_size.y <= 0);
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_source_context, p_diffuse_texture));
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_source_context, p_specular_texture));
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_source_context, p_output_texture));
+	ERR_FAIL_COND(!p_target_albedo.is_valid() || !p_target_normal.is_valid() || !p_target_orm.is_valid());
+	ERR_FAIL_UNSIGNED_INDEX(p_view, p_render_buffers->get_view_count());
+
+	RID diffuse = p_render_buffers->get_texture_slice(p_source_context, p_diffuse_texture, p_view, 0);
+	RID specular = p_render_buffers->get_texture_slice(p_source_context, p_specular_texture, p_view, 0);
+	RID output = p_render_buffers->get_texture_slice(p_source_context, p_output_texture, p_view, 0);
+
+	PushConstant push_constant;
+	memset(&push_constant, 0, sizeof(PushConstant));
+	push_constant.resolution_width = (float)p_process_size.x;
+	push_constant.resolution_height = (float)p_process_size.y;
+
+	_dispatch_reconstruct_composite_split(push_constant, diffuse, specular, p_target_albedo, p_target_normal, p_target_orm, output);
 }
 
 void RTGIDenoise::composite_signal_decomposition(Ref<RenderSceneBuffersRD> p_render_buffers,

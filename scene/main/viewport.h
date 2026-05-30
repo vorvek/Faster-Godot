@@ -321,11 +321,11 @@ private:
 	MSAA msaa_3d = MSAA_DISABLED;
 	ScreenSpaceAA screen_space_aa = SCREEN_SPACE_AA_DISABLED;
 	bool use_taa = false;
-	float taa_sharpness = 0.10f;
-	float taa_history_weight = 0.93f;
-	float taa_disocclusion_threshold = 2.25f;
+	float taa_sharpness = 0.0f;
+	float taa_history_weight = 0.9375f;
+	float taa_disocclusion_threshold = 2.5f;
 	int taa_jitter_phase_count = 16;
-	float taa_jitter_scale = 0.85f;
+	float taa_jitter_scale = 1.0f;
 
 	Scaling3DMode scaling_3d_mode = SCALING_3D_MODE_BILINEAR;
 	float scaling_3d_scale = 1.0;

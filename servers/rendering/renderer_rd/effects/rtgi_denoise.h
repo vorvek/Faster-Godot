@@ -109,6 +109,17 @@ public:
 			const Size2i &p_process_size,
 			uint32_t p_view = 0);
 
+	void composite_reconstructed_split(Ref<RenderSceneBuffersRD> p_render_buffers,
+			const StringName &p_source_context,
+			const StringName &p_diffuse_texture,
+			const StringName &p_specular_texture,
+			RID p_target_albedo,
+			RID p_target_normal,
+			RID p_target_orm,
+			const StringName &p_output_texture,
+			const Size2i &p_process_size,
+			uint32_t p_view = 0);
+
 	void composite_signal_decomposition(Ref<RenderSceneBuffersRD> p_render_buffers,
 			const StringName &p_source_context,
 			const StringName &p_direct_texture,
@@ -142,8 +153,52 @@ public:
 			bool p_legacy_blending,
 			uint32_t p_view = 0);
 
+	void compose_taa_reactivity(Ref<RenderSceneBuffersRD> p_render_buffers,
+			const Vector<StringName> &p_denoise_scopes,
+			RID p_velocity,
+			RID p_history_validity,
+			RID p_output,
+			const Size2i &p_process_size,
+			uint32_t p_view = 0);
+
+	void reconstruct(Ref<RenderSceneBuffersRD> p_render_buffers,
+			const StringName &p_source_context,
+			const StringName &p_source_texture,
+			const StringName &p_output_context,
+			const StringName &p_output_texture,
+			const StringName &p_intermediate_context,
+			const StringName &p_intermediate_texture,
+			const StringName &p_reactivity_context,
+			const StringName &p_reactivity_texture,
+			const Vector<StringName> &p_denoise_scopes,
+			RID p_taa_reactivity,
+			RID p_signal_confidence,
+			RID p_source_depth,
+			RID p_source_normal_roughness,
+			RID p_target_depth,
+			RID p_target_normal_roughness,
+			RID p_target_normal,
+			RID p_target_orm,
+			const Vector2i &p_source_visible_origin,
+			const Size2i &p_source_visible_size,
+			const Size2i &p_output_size,
+			bool p_use_target_guides,
+			uint32_t p_view = 0);
+
+	void reconstruct_history(Ref<RenderSceneBuffersRD> p_render_buffers,
+			RID p_source_history_validity,
+			RID p_source_history_id,
+			const StringName &p_output_history_validity_texture,
+			const StringName &p_output_history_id_texture,
+			const Vector2i &p_source_visible_origin,
+			const Size2i &p_source_visible_size,
+			const Size2i &p_output_size,
+			uint32_t p_view = 0);
+
 private:
 	enum Mode {
+		MODE_RECONSTRUCT,
+		MODE_RECONSTRUCT_REFINE,
 		MODE_TEMPORAL,
 		MODE_VARIANCE_PREFILTER,
 		MODE_ATROUS,
@@ -152,6 +207,9 @@ private:
 		MODE_SPLIT_COMPOSITE,
 		MODE_SIGNAL_DECOMPOSITION_COMPOSITE,
 		MODE_VOLUMETRIC_FOG,
+		MODE_TAA_REACTIVITY,
+		MODE_RECONSTRUCT_COMPOSITE_SPLIT,
+		MODE_RECONSTRUCT_HISTORY,
 		MODE_MAX
 	};
 
@@ -180,6 +238,14 @@ private:
 		float fog_legacy_blending;
 		float specular_guide_enabled;
 		float history_clip_sigma;
+		float diagnostic_scope_count;
+		float target_material_guide_enabled;
+		float pad0;
+		float pad1;
+		float pad2;
+		float pad3;
+		float pad4;
+		float pad5;
 	};
 
 	RtgiDenoiseShaderRD shader;
@@ -193,8 +259,12 @@ private:
 	void _dispatch_composite(const PushConstant &p_push_constant, RID p_filtered, RID p_temporal, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_reactivity, RID p_specular_guide, RID p_history_id, RID p_output);
 	void _dispatch_blotch_stabilize(const PushConstant &p_push_constant, RID p_input, RID p_normal_roughness, RID p_albedo_metalness, RID p_viewz_hitdist, RID p_velocity, RID p_reactivity, RID p_output);
 	void _dispatch_split_composite(const PushConstant &p_push_constant, RID p_diffuse, RID p_specular, RID p_velocity, RID p_normal_roughness, RID p_albedo_metalness, RID p_specular_guide, RID p_output);
+	void _dispatch_reconstruct_composite_split(const PushConstant &p_push_constant, RID p_diffuse, RID p_specular, RID p_target_albedo, RID p_target_normal, RID p_target_orm, RID p_output);
 	void _dispatch_signal_decomposition_composite(const PushConstant &p_push_constant, RID p_direct, RID p_emissive, RID p_indirect, RID p_sky, RID p_specular, RID p_diffuse, RID p_velocity, RID p_normal_roughness, RID p_albedo_metalness, RID p_specular_guide, RID p_output);
 	void _dispatch_volumetric_fog(const PushConstant &p_push_constant, RID p_color, RID p_viewz_hitdist, RID p_fog_map);
+	void _dispatch_taa_reactivity(const PushConstant &p_push_constant, RID p_velocity, RID p_history_validity, const RID *p_variance, const RID *p_history_length, const RID *p_rejection, const RID *p_reactivity, RID p_output);
+	void _dispatch_reconstruct(Mode p_mode, const PushConstant &p_push_constant, RID p_source, RID p_source_depth, RID p_source_normal_roughness, RID p_target_depth, RID p_target_normal_roughness, RID p_target_normal, RID p_target_orm, RID p_taa_reactivity, RID p_signal_confidence, const RID *p_variance, const RID *p_history_length, const RID *p_rejection, const RID *p_reactivity, RID p_output, RID p_reactivity_output);
+	void _dispatch_reconstruct_history(const PushConstant &p_push_constant, RID p_source_history_validity, RID p_source_history_id, RID p_output_history_validity, RID p_output_history_id);
 };
 
 } // namespace RendererRD

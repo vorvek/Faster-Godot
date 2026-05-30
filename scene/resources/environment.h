@@ -229,6 +229,7 @@ private:
 	RTGIBackend rtgi_backend = RTGI_BACKEND_VULKAN_GENERIC;
 	RTGIMode rtgi_mode = RTGI_MODE_REFLECTIONS_RT_ONLY;
 	float rtgi_energy = 1.0;
+	float rtgi_resolution_scale = 0.5f;
 	bool rtgi_disable_in_editor = true;
 	float rtgi_denoiser_strength = 0.90f;
 	float rtgi_denoiser_history_weight = 0.95f;
@@ -468,6 +469,8 @@ public:
 	int get_rtgi_max_bounces() const;
 	void set_rtgi_energy(float p_energy);
 	float get_rtgi_energy() const;
+	void set_rtgi_resolution_scale(float p_scale);
+	float get_rtgi_resolution_scale() const;
 	void set_rtgi_disable_in_editor(bool p_disabled);
 	bool is_rtgi_disabled_in_editor() const;
 	void set_rtgi_denoiser_strength(float p_strength);

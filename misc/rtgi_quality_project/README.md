@@ -92,17 +92,71 @@ Profiles:
 
 Useful Euphorica split options:
 
+- By default the harness keeps Euphorica's scene-authored `GameViewport` size
+  (`1920x1080` in `res://scenes/main/main.tscn`). Use
+  `--euphorica-resolution=<width>x<height>` only when intentionally running a
+  lower-resolution stress test; `--euphorica-resolution=native` restores the
+  scene-authored size.
 - `--euphorica-split-signals=on|off|both` selects the denoiser topology. The
   comparison profiles default to `both`.
 - `--euphorica-diffuse-cache-max-entries=4096..4194304` sets the bounded
   diffuse cache entry budget for each RTGI case.
+- `--euphorica-strc=on|off|default` overrides Euphorica's scene-authored STRC
+  setting for radiance-cache experiments. `default` preserves the project file.
+- `--euphorica-strc-strength=0..1`,
+  `--euphorica-strc-rays-per-frame=0..32768`,
+  `--euphorica-strc-grid-size=12..32`,
+  `--euphorica-strc-base-probe-spacing=0.25..8`, and
+  `--euphorica-strc-temporal-weight=0..0.995` tune forced STRC runs.
+- Euphorica captures default STRC visual layers to static layer `1` and dynamic
+  layer `0`, so the world layer seeds STRC while character/dynamic layers stay
+  out of the probe cache. Override with
+  `--euphorica-strc-static-layers=<mask>` and
+  `--euphorica-strc-dynamic-layers=<mask>` when testing layer classification.
+- `--euphorica-rtgi-resolution-scale=0.25..1.0` sets one RTGI trace scale for
+  each case.
+- `--euphorica-rtgi-resolution-scales=0.5,1.0` sweeps multiple RTGI trace
+  scales. Use this with `--euphorica-profile=reconstruction` to compare the
+  half-resolution reconstruction path against full-resolution RTGI while still
+  recording the already-scaled Euphorica `GameViewport` size separately.
+- `--euphorica-camera-motion=yaw --euphorica-camera-motion-degrees=8` rotates
+  the current `GameViewport` camera left-to-right during the capture frames.
+  This is intended for Path Tracing motion-stability checks; it keeps the
+  scene-authored `GameViewport` size unless `--euphorica-resolution` is also
+  provided.
+- `--euphorica-analysis-scale=0.5` keeps rendering and saved captures at the
+  requested/native resolution, but computes expensive metrics on a downsampled
+  copy. This is useful for native 1080p motion A/B runs where relative metrics
+  matter more than full-resolution metric precision.
 - `--euphorica-case-filter=<substring>` runs only matching cases, plus the
   no-RTGI baseline when needed, so long matrices can be resumed in chunks.
+- `--euphorica-fast` is for shader-iteration smoke checks. It uses 12 warmup
+  frames, 8 sparkle frames, disables the automatic no-RTGI baseline, uses
+  smoke metrics, and keeps analysis downsampled. Pair it with a case filter for
+  focused Path Tracing checks that finish quickly.
+- `--euphorica-skip-baseline` disables the automatic no-RTGI baseline without
+  changing warmup or capture frame counts. Use `--euphorica-include-baseline`
+  to force the baseline back on.
+- `--euphorica-metrics=full|smoke|none` selects metric cost. `full` is for
+  checkpoint A/B runs; `smoke` records basic luma and last-frame temporal
+  sparkle; `none` records only metadata and captures.
 - `--euphorica-list-cases` writes a summary with the planned case names and
   exits without rendering.
 - `--euphorica-capture-debug` writes RTGI denoiser debug captures for each RTGI
   case, including source attribution, cache diagnostics, cache raw diffuse,
-  cache filtered diffuse, and final buffers when those views are available.
+  cache filtered diffuse, reconstructed output, reconstructed reactivity, and
+  final buffers when those views are available.
+
+The `reconstruction` profile writes no-RTGI, Hybrid RTGI, and Full Path Tracing
+cases across the requested `rtgi_resolution_scale` values. Each metrics JSON
+includes a `resolution_context` block with the requested `GameViewport` size,
+whether that size came from the native scene or an override, captured game/final
+image sizes, root window size, the viewport 3D scaling mode/scale, the
+estimated 3D render size, the RTGI scale, and the estimated RTGI trace texture
+size. This matters for Euphorica because the game render is already inside a
+scaled SubViewport before RTGI applies its own scale. For example, the native
+`1920x1080` GameViewport with `scaling_3d_scale = 0.33333334` and
+`rtgi_resolution_scale = 0.5` traces roughly `320x180`, not `960x540`.
 
 Each case writes `_game.png`, `_final.png`, per-case metrics JSON, and
 `euphorica_rtgi_summary.json` with effective RTGI knob values, the active RTGI

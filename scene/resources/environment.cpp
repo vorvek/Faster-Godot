@@ -745,6 +745,15 @@ float Environment::get_rtgi_energy() const {
 	return rtgi_energy;
 }
 
+void Environment::set_rtgi_resolution_scale(float p_scale) {
+	rtgi_resolution_scale = CLAMP(p_scale, 0.25f, 1.0f);
+	_update_pathtracing();
+}
+
+float Environment::get_rtgi_resolution_scale() const {
+	return rtgi_resolution_scale;
+}
+
 void Environment::set_rtgi_disable_in_editor(bool p_disabled) {
 	rtgi_disable_in_editor = p_disabled;
 	_update_pathtracing();
@@ -1032,7 +1041,7 @@ void Environment::_update_pathtracing() {
 	params.write[RSE::PT_PARAM_MAX_BOUNCES] = (float)pathtracing_max_bounces;
 	params.write[RSE::PT_PARAM_DENOISER] = (float)(int)pathtracing_denoiser;
 	params.write[RSE::PT_PARAM_ENERGY] = rtgi_energy;
-	params.write[RSE::PT_PARAM_RESERVED_5] = 0.0f;
+	params.write[RSE::PT_PARAM_RTGI_RESOLUTION_SCALE] = rtgi_resolution_scale;
 	params.write[RSE::PT_PARAM_MODE] = (float)(int)rtgi_mode;
 	params.write[RSE::PT_PARAM_RESERVED_11] = 0.0f;
 	params.write[RSE::PT_PARAM_OVERSCAN_HORIZONTAL] = rtgi_overscan_horizontal;
@@ -1917,6 +1926,8 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_rtgi_max_bounces"), &Environment::get_rtgi_max_bounces);
 	ClassDB::bind_method(D_METHOD("set_rtgi_energy", "energy"), &Environment::set_rtgi_energy);
 	ClassDB::bind_method(D_METHOD("get_rtgi_energy"), &Environment::get_rtgi_energy);
+	ClassDB::bind_method(D_METHOD("set_rtgi_resolution_scale", "scale"), &Environment::set_rtgi_resolution_scale);
+	ClassDB::bind_method(D_METHOD("get_rtgi_resolution_scale"), &Environment::get_rtgi_resolution_scale);
 	ClassDB::bind_method(D_METHOD("set_rtgi_disable_in_editor", "disabled"), &Environment::set_rtgi_disable_in_editor);
 	ClassDB::bind_method(D_METHOD("is_rtgi_disabled_in_editor"), &Environment::is_rtgi_disabled_in_editor);
 	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser_strength", "strength"), &Environment::set_rtgi_denoiser_strength);
@@ -1979,6 +1990,7 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_samples_per_pixel", PROPERTY_HINT_RANGE, "1,16,1"), "set_rtgi_samples_per_pixel", "get_rtgi_samples_per_pixel");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_max_bounces", PROPERTY_HINT_RANGE, "1,8,1"), "set_rtgi_max_bounces", "get_rtgi_max_bounces");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_energy", PROPERTY_HINT_RANGE, "0,16,0.01,or_greater"), "set_rtgi_energy", "get_rtgi_energy");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_resolution_scale", PROPERTY_HINT_RANGE, "0.25,1,0.01"), "set_rtgi_resolution_scale", "get_rtgi_resolution_scale");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_disable_in_editor"), "set_rtgi_disable_in_editor", "is_rtgi_disabled_in_editor");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_strength", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_denoiser_strength", "get_rtgi_denoiser_strength");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_history_weight", PROPERTY_HINT_RANGE, "0,0.98,0.001"), "set_rtgi_denoiser_history_weight", "get_rtgi_denoiser_history_weight");

@@ -22,9 +22,11 @@ The feature is exposed on `Environment`, so it appears through the same
 - `rtgi_mode`
   - `Reflections RT Only`
   - `Full Path Tracing`
+  - `Hybrid RTGI`
 - `rtgi_samples_per_pixel`
 - `rtgi_max_bounces`
 - `rtgi_energy`
+- `rtgi_resolution_scale`
 - `rtgi_disable_in_editor`
 - `rtgi_denoiser_strength`
 - `rtgi_denoiser_history_weight`
@@ -81,6 +83,9 @@ The feature is exposed on `Environment`, so it appears through the same
     and then composites transparent raster overlays after RT denoising. This is
     heavier and is intended for high-quality dark scenes, captures, and RT
     debugging rather than broad fallback compatibility.
+  - `Hybrid RTGI`: keeps the normal Forward+ raster opaque pass and traces RTGI
+    against raster G-buffer guides, then denoises and blends the RTGI
+    contribution into the raster frame.
 - `rtgi_samples_per_pixel`
   - Controls how many RT samples are traced per pixel each frame. Higher values
     reduce raw noise but cost more GPU time. Lower values rely more heavily on
@@ -92,6 +97,13 @@ The feature is exposed on `Environment`, so it appears through the same
 - `rtgi_energy`
   - Multiplies the RT lighting contribution after tracing. This is an artistic
     intensity control, not a replacement for physically scaled light energy.
+- `rtgi_resolution_scale`
+  - Scales the internal RTGI render size before denoising and temporal
+    stabilization, then reconstructs the result to the viewport's internal
+    resolution. The default is `0.5`, similar to the way real-time GI systems
+    usually trace lighting below final display resolution and rely on guided
+    reconstruction. Raise it toward `1.0` for sharper GI and lower it toward
+    `0.25` for cheaper tracing with more denoiser/reconstruction pressure.
 - `rtgi_disable_in_editor`
   - Disables RTGI only for editor viewport previews. This lets authored scenes
     keep RTGI enabled for the running project and exported builds without
@@ -160,7 +172,15 @@ The feature is exposed on `Environment`, so it appears through the same
     render layers participate in STRC probe updates and cache sampling; objects
     outside both masks are ignored by STRC. Layers present in both masks are
     treated as static, while dynamic-only layers are traced into the cache with
-    lower temporal confidence so they refresh more aggressively.
+    lower temporal confidence so they refresh more aggressively. STRC probe
+    updates store bounced radiance separately from first-hit visibility distance
+    so probe occlusion stays tied to the surface seen from the probe, not the
+    last segment of the bounced path. Low-confidence STRC hits now contribute
+    partially and let the residual path continue instead of terminating every
+    cache hit outright. The Euphorica capture harness pins STRC to static
+    visual layer `1` and dynamic layer `0` by default, so world geometry can
+    seed the world-radiance prior without character layers contaminating the
+    probe history during Path Tracing stability checks.
 
 ## Backend Capability Contract
 
@@ -263,11 +283,43 @@ backends can dispatch directly through `RenderingDevice`.
   - `VIEWPORT_DEBUG_DRAW_RTGI_VARIANCE`: temporal luminance variance.
   - `VIEWPORT_DEBUG_DRAW_RTGI_HISTORY_LENGTH`: normalized history length.
   - `VIEWPORT_DEBUG_DRAW_RTGI_REJECTION`: disocclusion/history rejection mask.
-  - `VIEWPORT_DEBUG_DRAW_RTGI_FINAL`: final denoised RTGI texture before crop or
-    composition.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_FINAL`: scaled denoised RTGI texture before
+    reconstruction, crop, or composition.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED`: full-resolution RTGI
+    reconstruction used for Full Path Tracing copy-out and Hybrid RTGI
+    composition when `rtgi_resolution_scale` is below `1.0`.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED_REACTIVITY`: full-resolution
+    reactivity mask produced by RTGI reconstruction and consumed by the
+    post-reconstruction RTGI TAA resolve.
   - `VIEWPORT_DEBUG_DRAW_RTGI_CACHE_FILTERED_DIFFUSE`: split-signal diffuse
     radiance after the diffuse cache and before ASVFG consumes it. This view is
     available only when the RTGI diffuse radiance cache is active.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_CACHE_SPG_RADIANCE`: directional screen-probe
+    gather atlas radiance. This is the downsampled directional cache before it
+    is gathered back into full-resolution diffuse reconstruction.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_CACHE_SPG_CONFIDENCE`: alpha confidence from the
+    directional screen-probe gather atlas.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_CACHE_SPG_STATS`: packed SPG quality metadata.
+    Red is age, green is local support, blue is radiance coherence, and alpha is
+    depth-plane quality.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_CACHE_SPG_PLANE_QUALITY`: SPG depth-plane quality
+    expanded to luminance, useful for finding mixed-surface probe bins that
+    should not feed reconstruction or ray-side reuse.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_CACHE_SPG_VISIBILITY`: directional SPG
+    visibility/hit-distance atlas. It is shown as log luminance from the stored
+    hit distance and receiver depth; the atlas also carries hit-distance quality
+    and support used by reconstruction.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_CACHE_SPG_REJECTION`: full-resolution SPG
+    reconstruction diagnostic. Red stores the dominant rejection class, green
+    stores rejection/sample strength, blue stores gathered support, and alpha
+    stores accepted SPG confidence. Rejection classes currently cover low
+    confidence, stats, normal, depth, history, surface identity, visibility,
+    hemisphere, radiance delta, and low final quality.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_CACHE_SPG_REFINEMENT`: base-probe refinement mask.
+    Red is request strength, green is geometry/plane risk, blue is
+    radiance/visibility risk, and alpha is the hysteresis-held request.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_CACHE_SPG_REFINED_CONFIDENCE`: alpha confidence
+    from the refined SPG atlas.
   - `VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_CANDIDATE`: source-selection diagnostic
     for RTGI. Red marks the selected source class, green marks
     source confidence, blue marks normalized candidate weight, and alpha stores
@@ -285,17 +337,33 @@ backends can dispatch directly through `RenderingDevice`.
     validation diagnostic for RTGI. Red marks direct analytic candidates, green
     marks dominant-source history eligibility, and blue stores the primary
     rejection reason bucket.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_SECONDARY_CACHE_SOURCE`: ray-side secondary
+    diffuse cache attribution for accepted Path Tracing cache reuse. Red marks
+    the selected cache source (`receiver`, `STRC`, base SPG, or refined SPG),
+    green stores the accepted cache weight, blue marks the query family
+    (secondary-hit cache query or current-screen trace query), and alpha stores
+    log-scaled cached luminance. This view records accepted reuse only; cache
+    misses and rejection reasons still live in the cache/SPG rejection
+    diagnostics.
+  - `VIEWPORT_DEBUG_DRAW_RTGI_SECONDARY_CACHE_REJECTION`: ray-side secondary
+    diffuse cache rejection attribution. Red stores the dominant miss reason,
+    green marks the query family, blue stores normalized near-hit/weak-source
+    detail, and alpha stores the fallback source hint. Reasons distinguish
+    ineligible material/query, no source, weak receiver cache, weak refined SPG,
+    weak base SPG, weak STRC, current-screen trace miss, and current-screen
+    trace low final weight.
 
 ## Rendering Behavior
 
 RTGI is a view-time override. Existing SDFGI and VoxelGI resources stay in the
 scene for fallback and comparison. `Reflections RT Only` preserves raster GI
-ownership for diffuse lighting and suppresses diffuse RT paths, while
-`Full Path Tracing` disables incompatible baked and screen-space GI
-contributions for the view.
+ownership for diffuse lighting and suppresses diffuse RT paths, `Hybrid RTGI`
+adds denoised ray-traced GI onto the raster frame, and `Full Path Tracing`
+disables incompatible baked and screen-space GI contributions for the view.
 
 `Reflections RT Only` writes ray-traced specular/reflection lighting into the
-existing Forward+ composition path. `Full Path Tracing` routes full lighting
+existing Forward+ composition path. `Hybrid RTGI` writes a denoised RTGI
+contribution before additive blending. `Full Path Tracing` routes full lighting
 through the ray tracing path and disables incompatible screen-space or baked GI
 contributions for that view.
 
@@ -307,17 +375,344 @@ reflections. This avoids particle-driven TLAS spikes and black RT speckle from
 billboard particle geometry.
 
 RTGI writes noisy radiance, depth, velocity, normal/roughness,
-albedo/metalness, view-Z, hit-distance, validity, and history ID guides at RT
-texture size. The RTGI denoiser consumes those guides directly on the GPU and uses
-previous-frame radiance history controlled by `rtgi_denoiser_history_weight`.
-Fast movement and disocclusion favor current-frame samples through guide-based
-rejection.
+albedo/metalness, view-Z, hit-distance, validity, and history ID guides at the
+scaled RT texture size. Hybrid RTGI maps those scaled GI pixels back onto the
+full-resolution raster depth, normal/roughness, and color guide textures before
+tracing. Scaled Full Path Tracing now runs an opaque full-resolution material
+guide prepass before ray tracing. That prepass stores depth, albedo, normal,
+ORM, emission, and view-Z guide outputs; reconstruction currently uses the
+full-resolution depth plus material normal and true ORM roughness so it no
+longer depends on the packed raster normal/roughness alpha used by the regular
+Forward+ guide buffer. The RTGI denoiser consumes the scaled guides directly on
+the GPU and uses
+previous-frame radiance history controlled by
+`rtgi_denoiser_history_weight`. Fast movement and disocclusion favor
+current-frame samples through guide-based rejection.
+
+When split-signal ASVFG is active, the pre-ASVFG diffuse radiance cache runs
+before diffuse denoising. It demodulates the primary surface albedo out of the
+raw diffuse signal, stores a bounded screen-space lighting history, and
+remodulates that filtered lighting for the current pixel before ASVFG sees the
+diffuse layer. Reuse is also motion-gated so the cache contributes less during
+high-velocity reprojection. Each cache cell stores four receiver-surface slots
+instead of one representative texel. The cache identity is a coarse
+camera-stable receiver hash built from quantized world position, normal,
+roughness, and albedo proxy; the strict ray-hit history ID is still used for
+RT TAA/reprojection rejection. Candidate cache entries must still pass
+persistent receiver identity, previous-validity, normal, depth, hit-distance,
+radiance-delta, variance, age, and confidence checks. The cache also measures
+luminance coherence across the accepted neighborhood and reduces reuse when
+otherwise valid cache entries disagree. Each updated cache cell now integrates a
+small guide-coherent current-frame receiver neighborhood before temporal reuse,
+so the cache behaves more like a small screen-space receiver-probe gather than
+a single chosen low-resolution texel. This is still not Lumen's full Screen
+Probe Gather/surface-card/world-radiance-cache chain, but it addresses the main
+divergence in the current scaled Path Tracing path: sparse GI reuse now has
+multiple surface identities per cell before ASVFG and full-resolution
+reconstruction run. The weighted reconstruction lets stable surfaces reuse
+nearby diffuse lighting, while disoccluded, internally inconsistent,
+high-motion, or high-risk surfaces fall back toward the current sample before
+ASVFG does the final temporal/spatial cleanup.
+The cache also writes a reconstruction confidence mask derived from its hit
+state, accepted-cache stability, confidence, variance, age, rejection, and the
+original RT signal-risk channels. Full Path Tracing uses that cache-authored
+mask for diffuse split-signal reconstruction only, so stable cached diffuse
+lighting can stay sharper while cache misses, disocclusions, or rejected
+regions get wider full-resolution smoothing. Specular reconstruction keeps the
+original RT signal confidence.
+High source-signal risk no longer makes an otherwise valid receiver sample
+unusable for the diffuse cache. Instead, valid guided samples enter with a
+reduced confidence floor so noisy GI can still be accumulated by the cache,
+while variance, radiance-delta, age, and rejection gates decide how much of that
+history is safe to reuse.
+Diffuse cache reconstruction also has a conservative same-surface fallback for
+Path Tracing receiver coverage. Exact receiver-surface matches are preferred,
+but mature high-confidence cache entries can contribute across adjacent
+receiver-ID differences when normal, depth, hit-distance, variance, age, and
+radiance-delta checks all agree. The fallback is deliberately downweighted so it
+can bridge stable quantization/history fragmentation without becoming a broad
+cross-surface blur.
+
+The receiver diffuse cache is also visible to Full Path Tracing secondary
+diffuse hits before the next stochastic bounce is sampled. A rough secondary
+surface projects its hit point into the previous frame, searches the matching
+screen-space receiver-cache cell and neighbors, and only accepts exact
+receiver-surface IDs that pass normal, previous-view depth, camera-distance,
+variance, age, and confidence tests. The accepted receiver cache is the
+high-detail, screen-visible layer in the handoff.
+
+The directional screen-probe atlas participates in that handoff too. When the
+receiver cache has no viable local hit, a rough secondary diffuse surface can
+sample the previous-frame `4x4`/16-direction screen-probe atlas at the
+reprojected hit point. Probe bins are accepted only when their receiver
+identity, guide normal, previous depth, direction hemisphere, radiance
+confidence, SPG history quality, current material roughness, and reconstructed
+previous-frame receiver plane all agree. The ray-side query reconstructs an
+approximate previous-frame probe-plane position from the SPG probe UV and
+stored view depth, then rejects samples whose normal plane is too far from the
+current hit. The contribution is capped well below a strong receiver-cache hit,
+but it gives the path tracer a directional screen-visible fallback before it
+asks the lower-frequency world cache. This mirrors Lumen's broad ordering:
+screen-visible radiance first, then a more persistent scene/cache fallback.
+
+If the receiver lookup misses or returns only a weak result, the same
+secondary-hit cache decision can query STRC as a lower-frequency world-radiance
+fallback. This is closer to the Lumen-style hierarchy: screen-visible reuse is
+preferred for local detail, while a camera-centered world cache can provide
+more stable offscreen or disoccluded lighting. STRC fallback is deliberately
+capped, never terminates the path by itself, and only reduces remaining path
+throughput when the sampled world cache has nonblack radiance. A confidence-only
+or black STRC sample keeps tracing instead of consuming the bounce.
+When this fallback is enabled internally for Path Tracing, it uses a compact
+`16^3` three-cascade cache with a higher probe-ray update budget than the
+artist-facing default. This gives the world cache a practical warmup cycle for
+camera motion tests while keeping it lower-frequency than the screen-visible
+receiver cache. STRC probe confidence now represents usable radiance confidence:
+near-black radiance does not keep a probe texel alive as a lighting fallback.
+Probe updates also classify their radiance provenance. Direct light, emissive,
+sky, indirect fallback, dynamic-hit state, and black/no-source updates are
+carried into the STRC cache metadata. The cache resolve preserves previous
+lighting when a new update has no valid source or only black radiance, and STRC
+sampling weights entries by that source quality before they can contribute to a
+secondary diffuse hit.
+STRC updates are no longer a purely blind atlas sweep. Each probe ray now writes
+the exact atlas texel it traced into the result buffer, which lets the raygen
+stage spend part of the update budget on camera-visible, camera-forward probe
+directions while the resolve stage still writes the correct cache texel. The
+remaining budget keeps the old cascade-weighted background sweep so offscreen
+coverage continues to age forward. This is closer to a Lumen-style world
+radiance-cache update budget: visible cache cells can refresh sooner during
+camera motion, but the world cache remains a coarse prior behind the
+screen-visible receiver cache.
+
+STRC also feeds the first upstream sampling hook toward a Lumen-style
+history-guided final gather. For single-sample Full Path Tracing, rough
+non-metal primary diffuse continuations use a screen-probe-like direction
+sequence when RTGI is scaled below native resolution. The current base probe
+spacing is four scaled-RT pixels and the current angular atlas uses `4x4`
+direction bins; these are separate internal constants so probe density can be
+changed independently from directional resolution. Nearby pixels trace a shared
+probe-cell distribution instead of unrelated random BRDF directions. The same
+continuation can then query the previous STRC atlas and nudge the selected
+direction toward the strongest valid normal-oriented world-radiance candidate.
+This happens before ASVFG and reconstruction see the sample, so the denoiser
+receives a less random rough diffuse path instead of only filtering a random ray
+after the fact. The STRC blend is small, layer-masked by the STRC visual-layer
+settings, and only uses a compact candidate set around the receiver normal to
+avoid turning every primary hit into a full probe scan.
+
+The diffuse cache now records that primary rough-diffuse direction into an
+internal directional screen-probe gather atlas. Each scaled-RT probe stores a
+`4x4` angular tile with demodulated diffuse lighting, guide normal, view-depth,
+receiver identity, confidence, and short temporal reuse. A compact SPG stats
+atlas travels with it: age, local support, radiance coherence, and depth-plane
+quality. A second SPG visibility atlas stores representative per-direction hit
+distance, hit-distance coherence, receiver view-depth, and support. Probe-bin
+construction first elects a surface anchor and downweights mixed
+normal/depth/roughness support, so a single bin is less likely to average
+different surfaces just because they share a screen probe cell and direction
+bin. During diffuse reconstruction the full-resolution pixel gathers nearby
+probe cells, weights bins by surface compatibility, hemisphere direction, SPG
+stats quality, and the visibility atlas. The visibility term is intentionally a
+soft confidence-weighted downweight rather than a hard reject, because
+single-frame hit distance can be noisy until adaptive/refined probes exist.
+The full-resolution SPG rejection debug view records the dominant failure mode
+for the current reconstruction pixel, which is the map used to decide where a
+future adaptive/refined probe layer should spend extra samples. A first
+deterministic refined layer is now present: risky base probes get a stable `2x2`
+subprobe layout with a lower `2x2` angular tile, reusing the same atlas texel
+budget as the base `4x4` angular tile. Refined probes are gated by the
+refinement mask, carry the same radiance/meta/stats/visibility/history payloads,
+and blend conservatively before base SPG so a partial refined layer cannot
+dominate stable receiver-cache or base-SPG history. The ray-side secondary
+diffuse query now sees the same refined atlas: receiver-cache hits still win,
+but risky receiver misses can query the refined SPG hierarchy before falling
+back to the base SPG or STRC. This makes refinement part of the Path Tracing GI
+reuse path instead of only a final reconstruction detail layer.
+A dedicated `rt_secondary_cache_source` debug texture now records which
+ray-side cache layer actually reduced Path Tracing throughput. It is a
+provenance view for accepted secondary diffuse reuse, separate from the
+full-resolution reconstruction views: receiver-cache hits, STRC fallback,
+base-SPG reuse, refined-SPG reuse, surface-cache reuse, and current-screen trace reuse can be
+distinguished without inferring them from final color. The current view does
+not encode failed lookup reasons; those are written to a separate
+`rt_secondary_cache_rejection` debug texture so accepted source attribution and
+miss attribution stay semantically separate while both raytracing outputs remain
+write-only for RD graph compatibility.
+Surface-cache lookup also has its own `rt_secondary_cache_surface` diagnostic.
+That view reports whether a strict surface-page query was accepted, skipped
+because another cache layer won first, or rejected for no key, no page,
+collision/id mismatch, stale data, low confidence/support/variance, normal
+mismatch, dynamic ineligibility, weak radiance, or weak quality. The same view
+also encodes the accepted or early-source class in RGB-captured diagnostics, so
+the harness can report whether the query path used receiver, base SPG, refined
+SPG, visible-current pages, STRC, or a surface page without relying on final
+color.
+This is still not Lumen's full Screen Probe
+Gather/surface-card/world-radiance-cache chain: the atlas is screen-space,
+previous-frame only for ray-side reuse, and intentionally confidence-capped. It
+does add the missing directional screen-probe layer so half-resolution Path
+Tracing is no longer reconstructed only from scalar receiver-cache samples.
+The first screen-trace fallback layer is now present for rough diffuse
+continuations. After the BRDF direction is sampled, Path Tracing raygen can
+march that direction through the current raster depth/normal guides. If the ray
+intersects a current-screen surface, the shader queries the receiver/STRC cache
+at that hit point, adds a capped cached diffuse continuation, and leaves the
+remaining throughput to keep tracing normally. This follows Lumen's ordering in
+spirit: current screen data is tried before relying entirely on the lower-detail
+world/cache representation, but it remains a conservative assist rather than a
+hard screen-space replacement.
+
+The first surface-cache bridge is now present for Full Path Tracing. Primary
+and secondary hits generate a coarse camera-stable world-space surface-page key
+from static geometry history, quantized world position, normal, and material
+class. Ray tracing samples the previous surface atlas between refined/base SPG
+and STRC, while secondary misses write per-RT-pixel demand feedback containing
+the demanded surface key, guide normal/roughness, demodulated direct/emissive
+lighting, conservative sky-visible seeds, and STRC-seeded low-frequency priors
+with direct/emissive/sky provenance. `RTGIDiffuseCache` consumes
+that feedback into a small associative hashed surface atlas using atomic
+claims and deterministic budget gating. The `surface_feedback` debug view
+reports which feedback pixels were selected, starved by budget, skipped by an
+atomic claim, rejected for collision/no-radiance/low-confidence/low-quality, or
+classified as invalid, dynamic/ineligible, or stale-refresh updates. Feedback
+also carries a private source class for current-hit direct lighting, explicit
+emissive lighting, sky-visible seeding, STRC-prior seeding, or mixed current-hit
+radiance. The
+consumer writes that provenance into surface-page stats and the ray-side
+surface lookup uses it as a confidence cap, so STRC pages can seed low-frequency
+reuse without being trusted like receiver-promoted or direct/emissive current
+surface pages. Visible receiver-cache promotion derives its normal/roughness
+guide from the representative full-resolution receiver pixel for the cache slot,
+then can promote receiver, refined screen-probe, base screen-probe, or a
+conservatively gated current visible diffuse sample into the surface page with
+matching provenance. The current visible source is accepted only when the guide
+is valid, the current strict surface key still matches the demanded page key,
+signal risk is low, receiver variance is controlled, and the current
+demodulated lighting agrees with receiver history. This is
+still not a full Lumen Surface Cache: there are no explicit cards, no compacted
+page queue, no exact SSBO page counters, and no material page captures. The
+public STRC controls remain available, but Full Path Tracing can also run an
+internal fallback path when split-signal denoising and the diffuse receiver
+cache are active, so the receiver-cache chain does not drop to a silent zero
+just because previous-frame screen projection failed.
+Current-screen secondary hits now carry the strict surface key from the hit
+pixel into surface-cache lookup and can write bounded receiver/STRC/SPG-sourced
+surface feedback for future frames when that key is valid. The SPG refinement
+mask also reads secondary-cache source and rejection diagnostics, so screen
+trace accepts, screen misses, weak screen hits, weak SPG hits, and weak surface
+hits can request refined probes instead of relying only on local variance.
+
+When `rtgi_resolution_scale` is below `1.0`, RTGI no longer relies on the
+generic color copy or additive blend to hide the lower-resolution signal. A
+dedicated two-stage RTGI reconstruction path first upsamples into
+`rt_reconstructed_temp`, then refines the result into the full-resolution
+`rt_reconstructed` texture before Full Path Tracing copy-out or Hybrid RTGI
+additive composition. Hybrid and Reflections modes guide both stages with
+full-resolution raster depth and normal/roughness textures. Scaled Full Path
+Tracing uses its material guide prepass for full-resolution depth, normal, and
+roughness, so the final reconstruction is anchored to full-resolution primary
+visibility and material roughness instead of scaled RT primary-hit guides.
+Composited final radiance is still never albedo-demodulated, because it mixes
+direct, emissive, indirect, and specular energy. When split-signal ASVFG is
+active, scaled Full Path Tracing reconstructs diffuse and specular lighting
+separately, then composites the full-resolution split outputs with the
+full-resolution material guides. That keeps material-space transfer on a
+diffuse/specular lighting boundary instead of trying to reinterpret the final
+color after composition.
+The reconstruction path is
+confidence-aware: high-history, low-variance pixels use tighter guide
+filtering, while rejected, reactive, low-history, or high-variance pixels use
+wider smoothing. The full-resolution refinement pass only smooths
+low-confidence/unstable regions, and samples the RT signal confidence buffer so
+valid low-risk direct, emissive, and specular energy keeps more of its local
+intensity instead of being blurred into surrounding GI.
+For cached diffuse GI, that confidence buffer is replaced with the cache's
+post-reconstruction confidence handoff, which lets the low-resolution
+radiance/probe layer and the full-resolution reconstruction layer make the same
+reliability decision instead of disagreeing about which pixels are stable.
+The first stage uses a bilinear low-resolution seed instead of a nearest-texel
+anchor, which reduces persistent 2x2 block signatures before the guide filter
+and temporal pass refine the result. Reconstruction diagnostics such as
+instability and signal confidence are sampled bilinearly as well, so filter
+radius, energy preservation, and the post-reconstruction reactivity mask change
+smoothly across full-resolution pixels instead of stepping at low-resolution
+texel boundaries. If a full-resolution guide is unavailable, reconstruction can
+still fall back to bilinear source-space depth/normal/roughness guides. That
+source guide interpolation is edge-aware: strong depth, normal, or roughness
+discontinuities fall back toward the nearest stable source guide and raise the
+post-reconstruction reactivity mask so temporal accumulation does not smear
+synthetic guides across geometry edges. For scaled Full Path Tracing, raygen also
+keeps primary camera-ray jitter in final-pixel units instead of scaled-RT-pixel
+units, and makes that primary-visibility jitter screen-stable for scaled Full
+Path Tracing. This keeps stochastic primary samples closer to the source
+positions that reconstruction assumes, reducing low-resolution crawl while
+preserving the full-resolution behavior when `rtgi_resolution_scale` is `1.0`.
+For single-sample Full Path Tracing, the first primary surface also reseeds
+lighting and BRDF sampling from stable geometry, world-position, UV, normal, and
+material keys plus the frame index. This keeps sampling temporally varying for
+denoising while avoiding purely screen-pixel-seeded noise crawling across the
+same wall during camera motion. Single-sample Full Path Tracing also treats
+rough non-metal BRDF continuation as a diffuse-GI gather path instead of
+roulette-selecting the specular lobe on those surfaces. Direct specular lighting
+and glossy/metallic continuation stay unchanged, but broad rough GI avoids rare
+high-throughput specular continuation samples that are hard for temporal history
+to hide at `0.5` scale. At native RTGI resolution that rough diffuse
+continuation uses a 16-step low-discrepancy temporal direction sequence with a
+stable per-surface rotation. At scaled RTGI resolution, the sequence becomes
+screen-probe-like: each `4x4` scaled-RT pixel cell covers the 16 directions in
+the current frame and rotates that set over time. This makes the visible
+diffuse gather behave more like a persistent screen radiance cache than
+independent per-frame random BRDF picks. When valid STRC world radiance is
+available for the receiver layer, that sequence can be slightly guided toward
+the previous frame's strongest normal-oriented world radiance candidate, which
+is the current lightweight stand-in for Lumen's previous-frame lighting-guided
+ray selection. Raygen also expands each scaled RT velocity
+sample over the matching full-resolution pixel footprint. The
+post-reconstruction TAA pass therefore sees coherent full-resolution motion
+vectors at `rtgi_resolution_scale` values below `1.0` instead of receiving valid
+vectors only in the scaled RT texture's top-left footprint. Reconstruction also
+writes a full-resolution `rt_reconstructed_reactivity` mask,
+which is used by a dedicated post-reconstruction RTGI TAA resolve. That resolve runs in
+separate history contexts for Full Path Tracing, Hybrid RTGI, and
+Reflections-only RT so full-resolution GI history is stabilized before copy-out
+or additive composition without sharing state with the normal viewport TAA.
+The reconstruction step also builds full-resolution history-validity and
+history-ID textures from the low-resolution RT guides. These are conservative:
+the nearest low-resolution identity is used only when the local source support
+agrees, and ambiguous low-resolution edge footprints are invalidated. The
+post-reconstruction TAA resolve consumes those full-resolution gates so
+reconstructed GI history cannot freely accumulate across surface-ID changes just
+because velocity/depth reprojection still lands on screen.
+Hybrid/Reflections RTGI also requests the raster motion-vector pass for this
+internal stabilization even when the user-facing viewport TAA option is off, so
+the GI reconstruction does not rely on final-frame TAA to hide low-resolution
+lighting.
+
+After RTGI denoising, the renderer also builds an internal `rt_taa_reactivity`
+mask from the denoiser's diagnostics: light-change reactivity, rejection,
+low history length, high variance, invalid history, and high motion. This mask
+is not exposed as a project setting. It is consumed by the internal TAA resolve
+to force more current-frame contribution only where RTGI history is unreliable,
+so high TAA history weights do less damage during camera movement.
+
+Full Path Tracing keeps the existing post-denoise RT TAA placement. Transparent
+raster overlays are still rendered after RT TAA. Hybrid RTGI now runs a
+dedicated internal TAA resolve on the denoised `RB_TEX_RAYTRACING` texture
+before that texture is additively blended into the raster frame. These RTGI TAA
+resolves are driven by the RTGI denoiser path rather than the public viewport
+TAA toggle, and use a separate `rtgi_hybrid_taa` history context so Hybrid RTGI
+cannot share history with the full path-tracing resolve or the normal viewport
+TAA context. The RTGI TAA resolves also keep their previous-frame
+validity/history-ID buffers separate
+from the RTGI denoiser's previous-frame buffers, so denoiser history updates do
+not make the later TAA validation compare against same-frame IDs.
 
 The `ASVFG (Experimental)` option uses the dedicated `RTGIDenoise` RD effect for
 both RTGI modes. It runs temporal reprojection, guided
 stabilization, light-change reactivity, luminance moments, variance
 prefiltering, and edge-aware atrous filtering before the path-traced output is
-written at the visible internal render size. Newly visible geometry, newly loaded
+written back to the viewport. Newly visible geometry, newly loaded
 materials, and geometry that has just become RT-ready therefore start from fresh
 samples instead of borrowing stale accumulated lighting.
 
@@ -390,12 +785,17 @@ the existing non-ray-traced path instead of destructively changing scene data.
     then runs a current-frame guided stabilizer to reduce broad diffuse
     blotches. Max denoiser strength uses stronger isolated-outlier suppression
     instead of forcing an extra large-radius atrous pass.
+  - Builds the internal RTGI TAA reactivity mask from existing denoiser
+    diagnostics for Full Path Tracing and Hybrid RTGI resolves.
 - `servers/rendering/renderer_rd/effects/taa.*`
-  - Remains the normal viewport TAA path and fallback temporal resolve. Path
-    traced RTGI uses its dedicated RTGI denoiser before transparent rendering.
+  - Remains the normal viewport TAA path and fallback temporal resolve.
+    RTGI-only resolves can consume the internal reactivity mask before the
+    final viewport TAA path runs.
 - `servers/rendering/renderer_rd/shaders/effects/taa_resolve.glsl`
   - Rejects reprojected history when RT validity or history ID checks fail in
     fallback RT temporal resolves.
+  - Uses the internal RTGI reactivity mask to raise current-frame contribution
+    in unreliable RTGI history regions.
 - `servers/rendering/renderer_rd/effects/depth_reconstruct.*`
   - Adds depth reconstruction used by the ray tracing path.
 - `servers/rendering/storage/ltc/`
@@ -471,8 +871,10 @@ region luminance, and high-frequency texture detail. Use it for Phase 2 baseline
 captures before enabling experimental direct-light reuse.
 
 The harness and Euphorica capture script also consume the `source_candidate`,
-`source_history`, `source_temporal_delta`, and `source_rejection` debug views
-when requested. The reported `rtgi_source_candidate_*` metrics expose
+`source_history`, `source_temporal_delta`, `source_rejection`,
+`secondary_cache_source`, and `secondary_cache_rejection` debug views when
+requested. The reported
+`rtgi_source_candidate_*` metrics expose
 source-class coverage,
 confidence, candidate weight percentiles, contribution percentiles, temporal
 eligible fraction, class agreement, exact source-key reuse, direct dominant-key
@@ -482,6 +884,13 @@ behavior. Direct lighting attribution still stores one dominant analytic source
 key alongside the aggregate direct contribution, so temporal deltas are
 diagnostics for dominant-source stability rather than proof of source-specific
 radiance reuse safety.
+The `rtgi_secondary_cache_*` metrics report accepted ray-side cache source
+coverage, selected source fractions, accepted weight, and whether accepted reuse
+came from a direct secondary-hit query or the current-screen trace shortcut.
+The `rtgi_secondary_cache_rejection_*` metrics report ray-side miss coverage,
+dominant rejection buckets, query-family split, and weak-source detail so
+surface-cache misses can be separated from screen-trace misses before adding
+more reuse.
 
 The temporal source-key metrics are diagnostics-only in this phase. Analytic
 lights use a 28-bit run-local hash of the light instance RID and light type.

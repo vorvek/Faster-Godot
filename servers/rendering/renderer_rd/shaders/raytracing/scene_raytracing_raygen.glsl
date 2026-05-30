@@ -25,10 +25,6 @@ layout(set = 0, binding = 0, rgba16f) uniform image2D image;
 layout(set = 0, binding = 1) uniform accelerationStructureEXT tlas;
 layout(set = 0, binding = 61) uniform texture2D rt_blue_noise_texture;
 layout(set = 0, binding = 62) uniform sampler rt_blue_noise_sampler;
-layout(set = 0, binding = 71) uniform texture2D raster_depth_texture;
-layout(set = 0, binding = 72) uniform texture2D raster_normal_roughness_texture;
-layout(set = 0, binding = 73) uniform texture2D raster_color_texture;
-layout(set = 0, binding = 74) uniform sampler raster_nearest_sampler;
 
 layout(location = 0) rayPayloadEXT PathPayload payload;
 
@@ -91,16 +87,6 @@ uint rtgi_mix_history_id(uint id, uint value) {
 	return h == 0u ? 1u : h;
 }
 
-float rtgi_decode_raster_roughness(float encoded_roughness) {
-	float roughness = encoded_roughness > 0.5 ? 1.0 - encoded_roughness : encoded_roughness;
-	return clamp(roughness / (127.0 / 255.0), 0.0, 1.0);
-}
-
-vec3 rtgi_decode_raster_world_normal(vec4 normal_roughness, mat4 inv_view) {
-	vec3 view_normal = normalize(normal_roughness.xyz * 2.0 - 1.0);
-	return normalize(mat3(inv_view) * view_normal);
-}
-
 void rtgi_make_basis(vec3 n, out vec3 tangent, out vec3 bitangent) {
 	vec3 up = abs(n.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
 	tangent = normalize(cross(up, n));
@@ -127,14 +113,19 @@ vec3 rtgi_sample_rough_specular(vec2 u, vec3 n, vec3 view_dir, float roughness) 
 	return ray_dir;
 }
 
-uint rtgi_raster_history_id(ivec2 visible_pixel, float depth, vec3 normal) {
+uint rtgi_raster_history_id(vec3 world_pos, vec3 normal, float roughness, vec3 albedo_proxy) {
 	uint h = 0x68796272u;
-	h = rtgi_mix_history_id(h, uint(visible_pixel.x));
-	h = rtgi_mix_history_id(h, uint(visible_pixel.y));
-	h = rtgi_mix_history_id(h, floatBitsToUint(depth));
-	h = rtgi_mix_history_id(h, floatBitsToUint(normal.x));
-	h = rtgi_mix_history_id(h, floatBitsToUint(normal.y));
-	h = rtgi_mix_history_id(h, floatBitsToUint(normal.z));
+	ivec3 quantized_position = ivec3(floor(world_pos * 4.0 + vec3(0.5)));
+	uvec3 quantized_normal = uvec3(clamp(floor(normal * 127.0 + vec3(128.0)), vec3(0.0), vec3(255.0)));
+	uvec3 quantized_albedo = uvec3(clamp(floor(clamp(albedo_proxy, vec3(0.0), vec3(1.0)) * 31.0 + vec3(0.5)), vec3(0.0), vec3(31.0)));
+	uint quantized_roughness = uint(clamp(floor(clamp(roughness, 0.0, 1.0) * 63.0 + 0.5), 0.0, 63.0));
+	uint normal_key = quantized_normal.x | (quantized_normal.y << 8u) | (quantized_normal.z << 16u);
+	uint material_key = quantized_albedo.x | (quantized_albedo.y << 5u) | (quantized_albedo.z << 10u) | (quantized_roughness << 15u);
+	h = rtgi_mix_history_id(h, uint(quantized_position.x));
+	h = rtgi_mix_history_id(h, uint(quantized_position.y));
+	h = rtgi_mix_history_id(h, uint(quantized_position.z));
+	h = rtgi_mix_history_id(h, normal_key);
+	h = rtgi_mix_history_id(h, material_key);
 	return h;
 }
 
@@ -142,6 +133,9 @@ void rtgi_store_empty_raster_guides(ivec2 pixel) {
 	imageStore(rt_depth_image, pixel, vec4(0.0));
 	imageStore(rt_history_validity_image, pixel, vec4(0.0));
 	imageStore(rt_history_id_image, pixel, vec4(0.0));
+	imageStore(rt_receiver_surface_id_image, pixel, vec4(0.0));
+	imageStore(rt_surface_cache_key_image, pixel, uvec4(0u));
+	rtgi_store_surface_key_diagnostic(pixel, 0u, RTGI_SURFACE_KEY_REASON_EMPTY, 0.0);
 	imageStore(rt_normal_roughness_image, pixel, vec4(0.5, 0.5, 1.0, 1.0));
 	imageStore(rt_albedo_metalness_image, pixel, vec4(1.0, 1.0, 1.0, 0.0));
 	imageStore(rt_viewz_hitdist_image, pixel, vec4(65504.0, 65504.0, 0.0, 0.0));
@@ -149,6 +143,7 @@ void rtgi_store_empty_raster_guides(ivec2 pixel) {
 	imageStore(rt_specular_reprojection_image, pixel, vec4(0.0));
 	imageStore(rt_diffuse_radiance_image, pixel, vec4(0.0));
 	imageStore(rt_specular_radiance_image, pixel, vec4(0.0));
+	imageStore(rt_primary_diffuse_direction_image, pixel, vec4(0.0));
 	imageStore(image, pixel, vec4(0.0, 0.0, 0.0, 1.0));
 	rt_store_invalid_primary_velocity(pixel);
 }
@@ -184,7 +179,8 @@ bool rtgi_load_raster_surface(ivec2 visible_pixel, vec2 visible_uv, mat4 inv_vie
 }
 
 void rtgi_store_raster_guides(ivec2 pixel, ivec2 visible_pixel, vec2 visible_uv, float depth, vec3 view_pos, vec3 world_pos, vec3 world_normal, float roughness, vec3 albedo_proxy) {
-	uint history_id = rtgi_raster_history_id(visible_pixel, depth, world_normal);
+	uint history_id = rtgi_raster_history_id(world_pos, world_normal, roughness, albedo_proxy);
+	uint surface_id = rt_receiver_surface_id(world_pos, world_normal, roughness, albedo_proxy);
 	float hit_distance = length(world_pos - rt_camera_world_origin());
 	float specular_risk = smoothstep(0.15, 0.85, 1.0 - roughness);
 
@@ -198,6 +194,9 @@ void rtgi_store_raster_guides(ivec2 pixel, ivec2 visible_pixel, vec2 visible_uv,
 	imageStore(rt_depth_image, pixel, vec4(depth));
 	imageStore(rt_history_validity_image, pixel, vec4(1.0, 0.0, 0.0, 0.0));
 	imageStore(rt_history_id_image, pixel, rtgi_pack_history_id(history_id));
+	imageStore(rt_receiver_surface_id_image, pixel, rt_pack_u32_rgba8(surface_id));
+	imageStore(rt_surface_cache_key_image, pixel, uvec4(0u));
+	rtgi_store_surface_key_diagnostic(pixel, 0u, RTGI_SURFACE_KEY_REASON_RASTER, 0.0);
 	imageStore(rt_normal_roughness_image, pixel, vec4(world_normal * 0.5 + 0.5, roughness));
 	imageStore(rt_albedo_metalness_image, pixel, vec4(albedo_proxy, 0.0));
 	imageStore(rt_viewz_hitdist_image, pixel, vec4(abs(view_pos.z), hit_distance, expected_prev_view_z, 0.0));
@@ -254,6 +253,9 @@ void rt_strc_probe_update_main() {
 	ps.offset_normal = vec3(0.0, 1.0, 0.0);
 	ps.next_ray_dir = ray_dir;
 
+	float first_hit_distance = 65504.0;
+	vec3 first_hit_normal = ps.offset_normal;
+	bool first_hit_recorded = false;
 	const uint max_bounces = RT_GET_MAX_BOUNCES();
 	[[dont_unroll]] for (uint bounce = 0u; bounce <= max_bounces; bounce++) {
 		path_pack(payload, ps);
@@ -270,6 +272,11 @@ void rt_strc_probe_update_main() {
 		traceRayEXT(tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
 #endif
 		ps = path_unpack(payload);
+		if (!first_hit_recorded) {
+			first_hit_distance = clamp(ps.hit_t, 0.0, 65504.0);
+			first_hit_normal = ps.offset_normal;
+			first_hit_recorded = true;
+		}
 		if (is_path_terminated(ps.packed_bounces_flags)) {
 			break;
 		}
@@ -280,10 +287,29 @@ void rt_strc_probe_update_main() {
 
 	vec3 radiance = sanitize_payload_vec3(ps.radiance);
 	bool dynamic_hit = has_strc_dynamic_hit(ps.packed_bounces_flags);
-	float confidence = clamp(rt_luminance(radiance) > 0.0 ? (dynamic_hit ? 0.45 : 1.0) : 0.35, 0.0, 1.0);
-	rt_strc_probe_ray_results[ray_index].radiance_distance = vec4(radiance, clamp(ps.hit_t, 0.0, 65504.0));
-	rt_strc_probe_ray_results[ray_index].normal_confidence = vec4(ps.offset_normal * 0.5 + 0.5, confidence);
-	rt_strc_probe_ray_results[ray_index].metadata = vec4(dynamic_hit ? 1.0 : 0.0, confidence, 0.0, 0.0);
+	float radiance_luma = rt_luminance(radiance);
+	uint source_mask = get_strc_source_mask(ps.packed_bounces_flags);
+	if (source_mask == 0u && radiance_luma > 0.0005) {
+		source_mask = STRC_SOURCE_MASK_INDIRECT;
+	}
+	float source_quality = 0.0;
+	if ((source_mask & STRC_SOURCE_MASK_DIRECT) != 0u) {
+		source_quality = max(source_quality, 1.0);
+	}
+	if ((source_mask & STRC_SOURCE_MASK_EMISSIVE) != 0u) {
+		source_quality = max(source_quality, 0.95);
+	}
+	if ((source_mask & STRC_SOURCE_MASK_SKY) != 0u) {
+		source_quality = max(source_quality, 0.80);
+	}
+	if ((source_mask & STRC_SOURCE_MASK_INDIRECT) != 0u) {
+		source_quality = max(source_quality, 0.60);
+	}
+	float radiance_validity = smoothstep(0.0005, 0.0060, radiance_luma);
+	float confidence = radiance_validity * source_quality * (dynamic_hit ? 0.45 : 1.0);
+	rt_strc_probe_ray_results[ray_index].radiance_distance = vec4(radiance, first_hit_distance);
+	rt_strc_probe_ray_results[ray_index].normal_confidence = vec4(first_hit_normal * 0.5 + 0.5, confidence);
+	rt_strc_probe_ray_results[ray_index].metadata = vec4(dynamic_hit ? 1.0 : 0.0, confidence, float(source_mask), float(update_index));
 }
 
 void main() {
@@ -298,6 +324,8 @@ void main() {
 	ivec2 visible_pixel_i = pixel_i - ivec2(round(rt_current_origin()));
 	ivec2 visible_size_i = ivec2(round(rt_visible_size()));
 	bool pixel_in_visible = all(greaterThanEqual(visible_pixel_i, ivec2(0))) && all(lessThan(visible_pixel_i, visible_size_i));
+	ivec2 raster_size_i = max(ivec2(round(scene_data_block.data.viewport_size)), ivec2(1));
+	ivec2 raster_pixel_i = clamp(ivec2(floor(in_uv * vec2(raster_size_i))), ivec2(0), raster_size_i - ivec2(1));
 	uvec2 rng_pixel = pixel_in_visible ? uvec2(visible_pixel_i) : pixel + uvec2(131071u, 524287u);
 	vec2 d = in_uv * 2.0 - 1.0;
 
@@ -332,14 +360,14 @@ void main() {
 		vec3 raster_world_normal;
 		float raster_roughness;
 		vec3 raster_albedo_proxy;
-		bool raster_hit_valid = pixel_in_visible && rtgi_load_raster_surface(visible_pixel_i, in_uv, inv_view, raster_depth, raster_view_pos, raster_world_pos, raster_world_normal, raster_roughness, raster_albedo_proxy);
+		bool raster_hit_valid = pixel_in_visible && rtgi_load_raster_surface(raster_pixel_i, in_uv, inv_view, raster_depth, raster_view_pos, raster_world_pos, raster_world_normal, raster_roughness, raster_albedo_proxy);
 
 		if (!raster_hit_valid) {
 			rtgi_store_empty_raster_guides(pixel_i);
 			return;
 		}
 
-		rtgi_store_raster_guides(pixel_i, visible_pixel_i, in_uv, raster_depth, raster_view_pos, raster_world_pos, raster_world_normal, raster_roughness, raster_albedo_proxy);
+		rtgi_store_raster_guides(pixel_i, raster_pixel_i, in_uv, raster_depth, raster_view_pos, raster_world_pos, raster_world_normal, raster_roughness, raster_albedo_proxy);
 
 		vec3 view_dir = normalize(rt_camera_world_origin() - raster_world_pos);
 		float specular_probability = clamp(mix(0.08, 0.82, smoothstep(0.10, 0.90, 1.0 - raster_roughness)), 0.05, 0.90);
@@ -417,8 +445,19 @@ void main() {
 			ps.packed_bounces_flags = (sample_idx == 0u) ? set_sample_zero(0u) : 0u;
 			ps.rng_state = init_blue_noise_rng(rng_pixel, frame_index, sample_idx);
 
-			// Jitter primary ray for anti-aliasing (supersampling)
-			vec2 jitter = (rand2(ps.rng_state) - vec2(0.5)) / rt_visible_size();
+			// Jitter primary rays in final-pixel units for scaled Full Path Tracing.
+			// Reconstruction treats each scaled RT sample as a stable source sample;
+			// letting it wander over the whole low-resolution footprint produces
+			// visible crawl that the full-resolution resolve cannot locate. Keep
+			// this primary-visibility jitter screen-stable for scaled tracing while
+			// leaving the path/BRDF random sequence frame-varying.
+			bool scaled_path_traced = rt_mode == RT_MODE_PATH_TRACED && get_rt_param(RT_PARAM_RTGI_RESOLUTION_SCALE) < 0.999;
+			uint primary_jitter_state = scaled_path_traced ? init_blue_noise_rng(rng_pixel, 0u, sample_idx) : ps.rng_state;
+			vec2 jitter_denominator = scaled_path_traced ? max(scene_data_block.data.viewport_size, vec2(1.0)) : rt_visible_size();
+			vec2 jitter = (rand2(primary_jitter_state) - vec2(0.5)) / jitter_denominator;
+			if (!scaled_path_traced) {
+				ps.rng_state = primary_jitter_state;
+			}
 			vec2 jittered_d = d + jitter * 2.0;
 			vec4 target_j = scene_data_block.data.inv_projection_matrix * vec4(jittered_d.x, jittered_d.y, 1.0, 1.0);
 
@@ -563,6 +602,9 @@ void main() {
 				float history_valid = (curr_valid && prev_valid) ? 1.0 : 0.0;
 				imageStore(rt_history_validity_image, pixel, vec4(history_valid, 0.0, 0.0, 0.0));
 				imageStore(rt_history_id_image, pixel, vec4(sky_direction * 0.5 + 0.5, 1.0));
+				imageStore(rt_receiver_surface_id_image, pixel, vec4(0.0));
+				imageStore(rt_surface_cache_key_image, pixel, uvec4(0u));
+				rtgi_store_surface_key_diagnostic(pixel, 0u, RTGI_SURFACE_KEY_REASON_EMPTY, 0.0);
 				imageStore(rt_normal_roughness_image, pixel, vec4(-sky_direction * 0.5 + 0.5, 1.0));
 				imageStore(rt_albedo_metalness_image, pixel, vec4(1.0, 1.0, 1.0, 0.0));
 				imageStore(rt_viewz_hitdist_image, pixel, vec4(65504.0, 65504.0, 0.0, 0.0));
@@ -645,6 +687,9 @@ void main() {
 			uint sky_total_bounces = get_total_bounces(ps.packed_bounces_flags);
 			vec3 sky_contribution = ps.throughput * sky_color;
 			vec3 clamped_sky = sky_total_bounces > 0u ? rt_clamp_path_contribution(sky_contribution, 0.0, 1.0, true, true) : sky_contribution;
+			if (rt_strc_probe_update_mode() && rt_luminance(sanitize_payload_vec3(clamped_sky)) > 0.0005) {
+				ps.packed_bounces_flags = set_strc_sky_source(ps.packed_bounces_flags);
+			}
 			rt_signal_add_sky(ivec2(gl_LaunchIDEXT.xy), clamped_sky, sky_total_bounces > 0u, rt_signal_clamp_delta(sky_contribution, clamped_sky));
 			ps.radiance += clamped_sky;
 			if (sky_total_bounces == 0u || get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {
@@ -658,6 +703,9 @@ void main() {
 	uint sky_total_bounces = get_total_bounces(ps.packed_bounces_flags);
 	vec3 sky_contribution = ps.throughput * sky_color;
 	vec3 clamped_sky = sky_total_bounces > 0u ? rt_clamp_path_contribution(sky_contribution, 0.0, 1.0, true, true) : sky_contribution;
+	if (rt_strc_probe_update_mode() && rt_luminance(sanitize_payload_vec3(clamped_sky)) > 0.0005) {
+		ps.packed_bounces_flags = set_strc_sky_source(ps.packed_bounces_flags);
+	}
 	rt_signal_add_sky(ivec2(gl_LaunchIDEXT.xy), clamped_sky, sky_total_bounces > 0u, rt_signal_clamp_delta(sky_contribution, clamped_sky));
 	ps.radiance += clamped_sky;
 	if (sky_total_bounces == 0u || get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {

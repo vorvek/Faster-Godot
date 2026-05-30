@@ -32,6 +32,14 @@ layout(push_constant, std430) uniform Params {
 	float fog_legacy_blending;
 	float specular_guide_enabled;
 	float history_clip_sigma;
+	float diagnostic_scope_count;
+	float target_material_guide_enabled;
+	float pad0;
+	float pad1;
+	float pad2;
+	float pad3;
+	float pad4;
+	float pad5;
 }
 params;
 
@@ -156,6 +164,495 @@ vec3 demodulate_specular_radiance(vec3 radiance, vec4 normal_roughness, vec4 alb
 vec3 remodulate_specular_radiance(vec3 radiance, vec4 normal_roughness, vec4 albedo_metalness, vec4 guide) {
 	return sanitize_color(radiance * specular_virtual_brdf(normal_roughness, albedo_metalness, guide));
 }
+
+#if defined(MODE_RECONSTRUCT) || defined(MODE_RECONSTRUCT_REFINE)
+
+layout(set = 0, binding = 0) uniform sampler2D source_color_buffer;
+layout(set = 0, binding = 1) uniform sampler2D source_depth_buffer;
+layout(set = 0, binding = 2) uniform sampler2D source_normal_roughness_buffer;
+layout(set = 0, binding = 3) uniform sampler2D target_depth_buffer;
+layout(set = 0, binding = 4) uniform sampler2D target_normal_roughness_buffer;
+layout(set = 0, binding = 5) uniform sampler2D taa_reactivity_buffer;
+layout(set = 0, binding = 6) uniform sampler2D signal_confidence_buffer;
+layout(rgba16f, set = 0, binding = 7) uniform restrict writeonly image2D reconstruction_out;
+layout(set = 0, binding = 8) uniform sampler2D reconstruct_variance_buffer_0;
+layout(set = 0, binding = 9) uniform sampler2D reconstruct_history_length_buffer_0;
+layout(set = 0, binding = 10) uniform sampler2D reconstruct_rejection_buffer_0;
+layout(set = 0, binding = 11) uniform sampler2D reconstruct_reactivity_buffer_0;
+layout(set = 0, binding = 12) uniform sampler2D reconstruct_variance_buffer_1;
+layout(set = 0, binding = 13) uniform sampler2D reconstruct_history_length_buffer_1;
+layout(set = 0, binding = 14) uniform sampler2D reconstruct_rejection_buffer_1;
+layout(set = 0, binding = 15) uniform sampler2D reconstruct_reactivity_buffer_1;
+layout(set = 0, binding = 16) uniform sampler2D reconstruct_variance_buffer_2;
+layout(set = 0, binding = 17) uniform sampler2D reconstruct_history_length_buffer_2;
+layout(set = 0, binding = 18) uniform sampler2D reconstruct_rejection_buffer_2;
+layout(set = 0, binding = 19) uniform sampler2D reconstruct_reactivity_buffer_2;
+layout(set = 0, binding = 20) uniform sampler2D reconstruct_variance_buffer_3;
+layout(set = 0, binding = 21) uniform sampler2D reconstruct_history_length_buffer_3;
+layout(set = 0, binding = 22) uniform sampler2D reconstruct_rejection_buffer_3;
+layout(set = 0, binding = 23) uniform sampler2D reconstruct_reactivity_buffer_3;
+layout(set = 0, binding = 24) uniform sampler2D reconstruct_variance_buffer_4;
+layout(set = 0, binding = 25) uniform sampler2D reconstruct_history_length_buffer_4;
+layout(set = 0, binding = 26) uniform sampler2D reconstruct_rejection_buffer_4;
+layout(set = 0, binding = 27) uniform sampler2D reconstruct_reactivity_buffer_4;
+layout(set = 0, binding = 28) uniform sampler2D reconstruct_variance_buffer_5;
+layout(set = 0, binding = 29) uniform sampler2D reconstruct_history_length_buffer_5;
+layout(set = 0, binding = 30) uniform sampler2D reconstruct_rejection_buffer_5;
+layout(set = 0, binding = 31) uniform sampler2D reconstruct_reactivity_buffer_5;
+layout(r8, set = 0, binding = 32) uniform restrict writeonly image2D reconstruction_reactivity_out;
+layout(set = 0, binding = 33) uniform sampler2D target_normal_buffer;
+layout(set = 0, binding = 34) uniform sampler2D target_orm_buffer;
+
+float reconstruct_depth_weight(float source_depth, float target_depth, float instability) {
+	if (source_depth <= 0.000001 || target_depth <= 0.000001) {
+		return 1.0;
+	}
+	float delta = abs(source_depth - target_depth);
+	float depth_window = mix(0.00012, 0.0060, clamp(max(source_depth, target_depth), 0.0, 1.0)) * mix(1.0, 1.75, instability);
+	return 1.0 - smoothstep(depth_window, depth_window * mix(3.25, 5.0, instability), delta);
+}
+
+float reconstruct_instability_from_scope(sampler2D variance_buffer, sampler2D history_length_buffer, sampler2D rejection_buffer, sampler2D reactivity_buffer, ivec2 pos) {
+	float variance = texelFetch(variance_buffer, pos, 0).r;
+	float history_length = texelFetch(history_length_buffer, pos, 0).r;
+	float rejection = texelFetch(rejection_buffer, pos, 0).r;
+	float reactivity = texelFetch(reactivity_buffer, pos, 0).r;
+
+	float mask = reactivity;
+	mask = max(mask, rejection * 0.90);
+	mask = max(mask, (1.0 - smoothstep(0.08, 0.38, history_length)) * 0.62);
+	mask = max(mask, smoothstep(0.006, 0.12, variance) * 0.58);
+	return clamp(mask, 0.0, 1.0);
+}
+
+float reconstruct_instability_at(ivec2 pos) {
+	float mask = texelFetch(taa_reactivity_buffer, pos, 0).r;
+	if (params.diagnostic_scope_count > 0.5) {
+		mask = max(mask, reconstruct_instability_from_scope(reconstruct_variance_buffer_0, reconstruct_history_length_buffer_0, reconstruct_rejection_buffer_0, reconstruct_reactivity_buffer_0, pos));
+	}
+	if (params.diagnostic_scope_count > 1.5) {
+		mask = max(mask, reconstruct_instability_from_scope(reconstruct_variance_buffer_1, reconstruct_history_length_buffer_1, reconstruct_rejection_buffer_1, reconstruct_reactivity_buffer_1, pos));
+	}
+	if (params.diagnostic_scope_count > 2.5) {
+		mask = max(mask, reconstruct_instability_from_scope(reconstruct_variance_buffer_2, reconstruct_history_length_buffer_2, reconstruct_rejection_buffer_2, reconstruct_reactivity_buffer_2, pos));
+	}
+	if (params.diagnostic_scope_count > 3.5) {
+		mask = max(mask, reconstruct_instability_from_scope(reconstruct_variance_buffer_3, reconstruct_history_length_buffer_3, reconstruct_rejection_buffer_3, reconstruct_reactivity_buffer_3, pos));
+	}
+	if (params.diagnostic_scope_count > 4.5) {
+		mask = max(mask, reconstruct_instability_from_scope(reconstruct_variance_buffer_4, reconstruct_history_length_buffer_4, reconstruct_rejection_buffer_4, reconstruct_reactivity_buffer_4, pos));
+	}
+	if (params.diagnostic_scope_count > 5.5) {
+		mask = max(mask, reconstruct_instability_from_scope(reconstruct_variance_buffer_5, reconstruct_history_length_buffer_5, reconstruct_rejection_buffer_5, reconstruct_reactivity_buffer_5, pos));
+	}
+
+	vec4 signal_confidence = texelFetch(signal_confidence_buffer, pos, 0);
+	float signal_risk = max(signal_confidence.r, signal_confidence.g);
+	mask = max(mask, smoothstep(0.15, 0.75, signal_risk) * 0.25);
+	return clamp(mask, 0.0, 1.0);
+}
+
+float reconstruct_signal_confidence_at(ivec2 pos) {
+	vec4 signal_confidence = texelFetch(signal_confidence_buffer, pos, 0);
+	float signal_risk = max(signal_confidence.r, signal_confidence.g);
+	return clamp(signal_confidence.a * (1.0 - smoothstep(0.08, 0.65, signal_risk)), 0.0, 1.0);
+}
+
+void reconstruct_bilinear_points(ivec2 source_size, vec2 source_coord, out ivec2 p0, out ivec2 p1, out vec2 f) {
+	vec2 clamped_coord = clamp(source_coord, vec2(0.0), vec2(source_size) - vec2(1.0));
+	p0 = ivec2(floor(clamped_coord));
+	p1 = min(p0 + ivec2(1), source_size - ivec2(1));
+	f = fract(clamped_coord);
+}
+
+float reconstruct_instability_sample(ivec2 source_size, vec2 source_coord) {
+	ivec2 p0;
+	ivec2 p1;
+	vec2 f;
+	reconstruct_bilinear_points(source_size, source_coord, p0, p1, f);
+
+	float v00 = reconstruct_instability_at(p0);
+	float v10 = reconstruct_instability_at(ivec2(p1.x, p0.y));
+	float v01 = reconstruct_instability_at(ivec2(p0.x, p1.y));
+	float v11 = reconstruct_instability_at(p1);
+	return mix(mix(v00, v10, f.x), mix(v01, v11, f.x), f.y);
+}
+
+float reconstruct_signal_confidence_sample(ivec2 source_size, vec2 source_coord) {
+	ivec2 p0;
+	ivec2 p1;
+	vec2 f;
+	reconstruct_bilinear_points(source_size, source_coord, p0, p1, f);
+
+	float v00 = reconstruct_signal_confidence_at(p0);
+	float v10 = reconstruct_signal_confidence_at(ivec2(p1.x, p0.y));
+	float v01 = reconstruct_signal_confidence_at(ivec2(p0.x, p1.y));
+	float v11 = reconstruct_signal_confidence_at(p1);
+	return mix(mix(v00, v10, f.x), mix(v01, v11, f.x), f.y);
+}
+
+vec3 reconstruct_source_bilinear(ivec2 source_size, vec2 source_coord) {
+	ivec2 p0;
+	ivec2 p1;
+	vec2 f;
+	reconstruct_bilinear_points(source_size, source_coord, p0, p1, f);
+
+	vec3 c00 = sanitize_color(texelFetch(source_color_buffer, p0, 0).rgb);
+	vec3 c10 = sanitize_color(texelFetch(source_color_buffer, ivec2(p1.x, p0.y), 0).rgb);
+	vec3 c01 = sanitize_color(texelFetch(source_color_buffer, ivec2(p0.x, p1.y), 0).rgb);
+	vec3 c11 = sanitize_color(texelFetch(source_color_buffer, p1, 0).rgb);
+	return mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
+}
+
+vec4 reconstruct_target_material_normal_roughness(ivec2 pos) {
+	vec4 normal = texelFetch(target_normal_buffer, pos, 0);
+	vec4 orm = texelFetch(target_orm_buffer, pos, 0);
+	return vec4(normal.rgb, clamp(orm.g, 0.0, 1.0));
+}
+
+void reconstruct_source_guide_sample(ivec2 source_size, vec2 source_coord, out vec4 normal_roughness, out float depth, out float guide_uncertainty) {
+	ivec2 p0;
+	ivec2 p1;
+	vec2 f;
+	reconstruct_bilinear_points(source_size, source_coord, p0, p1, f);
+	ivec2 nearest_source = clamp(ivec2(round(clamp(source_coord, vec2(0.0), vec2(source_size) - vec2(1.0)))), ivec2(0), source_size - ivec2(1));
+
+	vec4 nr00 = texelFetch(source_normal_roughness_buffer, p0, 0);
+	vec4 nr10 = texelFetch(source_normal_roughness_buffer, ivec2(p1.x, p0.y), 0);
+	vec4 nr01 = texelFetch(source_normal_roughness_buffer, ivec2(p0.x, p1.y), 0);
+	vec4 nr11 = texelFetch(source_normal_roughness_buffer, p1, 0);
+	vec4 nr_nearest = texelFetch(source_normal_roughness_buffer, nearest_source, 0);
+	vec3 n00 = decode_normal(nr00);
+	vec3 n10 = decode_normal(nr10);
+	vec3 n01 = decode_normal(nr01);
+	vec3 n11 = decode_normal(nr11);
+	vec3 n_nearest = decode_normal(nr_nearest);
+	vec3 normal = mix(mix(n00, n10, f.x), mix(n01, n11, f.x), f.y);
+	normal = dot(normal, normal) > 1e-5 ? normalize(normal) : n00;
+	float roughness = mix(mix(nr00.a, nr10.a, f.x), mix(nr01.a, nr11.a, f.x), f.y);
+
+	float d00 = texelFetch(source_depth_buffer, p0, 0).r;
+	float d10 = texelFetch(source_depth_buffer, ivec2(p1.x, p0.y), 0).r;
+	float d01 = texelFetch(source_depth_buffer, ivec2(p0.x, p1.y), 0).r;
+	float d11 = texelFetch(source_depth_buffer, p1, 0).r;
+	float d_nearest = texelFetch(source_depth_buffer, nearest_source, 0).r;
+	depth = mix(mix(d00, d10, f.x), mix(d01, d11, f.x), f.y);
+
+	float min_depth = min(min(d00, d10), min(d01, d11));
+	float max_depth = max(max(d00, d10), max(d01, d11));
+	float depth_window = mix(0.0002, 0.0080, clamp(max_depth, 0.0, 1.0));
+	float depth_edge = smoothstep(depth_window, depth_window * 4.0, max_depth - min_depth);
+	float normal_coherence = min(min(dot(n00, n10), dot(n00, n01)), min(dot(n11, n10), dot(n11, n01)));
+	float normal_edge = smoothstep(0.05, 0.28, 1.0 - clamp(normal_coherence, -1.0, 1.0));
+	float min_roughness = min(min(nr00.a, nr10.a), min(nr01.a, nr11.a));
+	float max_roughness = max(max(nr00.a, nr10.a), max(nr01.a, nr11.a));
+	float roughness_edge = smoothstep(0.18, 0.55, max_roughness - min_roughness);
+	guide_uncertainty = clamp(max(depth_edge, max(normal_edge * 0.85, roughness_edge * 0.45)), 0.0, 1.0);
+
+	vec3 edge_aware_normal = mix(normal, n_nearest, guide_uncertainty);
+	normal = dot(edge_aware_normal, edge_aware_normal) > 1e-5 ? normalize(edge_aware_normal) : n_nearest;
+	roughness = mix(roughness, nr_nearest.a, guide_uncertainty * 0.75);
+	depth = mix(depth, d_nearest, guide_uncertainty);
+	normal_roughness = vec4(normal * 0.5 + 0.5, roughness);
+}
+
+#ifdef MODE_RECONSTRUCT
+
+void main() {
+	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+	if (any(greaterThanEqual(vec2(pos), params.resolution))) {
+		return;
+	}
+
+	ivec2 source_size = textureSize(source_color_buffer, 0);
+	vec2 output_uv = (vec2(pos) + vec2(0.5)) / params.resolution;
+	vec2 source_coord = params.visible_origin + output_uv * params.visible_size - vec2(0.5);
+	ivec2 nearest_source = clamp(ivec2(round(source_coord)), ivec2(0), source_size - ivec2(1));
+
+	vec4 target_normal_roughness;
+	float target_depth;
+	float target_guide_uncertainty = 0.0;
+	if (params.specular_guide_enabled > 0.5) {
+		target_normal_roughness = texelFetch(target_normal_roughness_buffer, pos, 0);
+		target_depth = texelFetch(target_depth_buffer, pos, 0).r;
+	} else {
+		reconstruct_source_guide_sample(source_size, source_coord, target_normal_roughness, target_depth, target_guide_uncertainty);
+	}
+	if (params.target_material_guide_enabled > 0.5) {
+		target_normal_roughness = reconstruct_target_material_normal_roughness(pos);
+	}
+	vec3 target_normal = decode_normal(target_normal_roughness);
+	float target_roughness = clamp(target_normal_roughness.a, 0.0, 1.0);
+	float instability = reconstruct_instability_sample(source_size, source_coord);
+	instability = max(instability, target_guide_uncertainty * 0.55);
+	float stability = 1.0 - instability;
+	float signal_confidence = reconstruct_signal_confidence_sample(source_size, source_coord);
+	float high_confidence_preserve = signal_confidence * stability;
+
+	ivec2 base = ivec2(floor(source_coord));
+	vec3 weighted_sum = vec3(0.0);
+	vec3 local_min = vec3(MAX_RADIANCE);
+	vec3 local_max = vec3(0.0);
+	float weight_sum = 0.0;
+	float spatial_weight_sum = 0.0;
+	float spatial_falloff = mix(0.30, 1.35, stability);
+	float guide_blend = params.specular_guide_enabled > 0.5 ? mix(0.72, 1.0, stability) : mix(0.42, 0.68, stability);
+	float normal_exponent = mix(5.5, mix(10.0, 30.0, 1.0 - target_roughness), stability);
+	float roughness_window = mix(0.80, 0.45, stability);
+
+	for (int y = -2; y <= 3; y++) {
+		for (int x = -2; x <= 3; x++) {
+			ivec2 tap = clamp(base + ivec2(x, y), ivec2(0), source_size - ivec2(1));
+			vec2 tap_delta = vec2(tap) - source_coord;
+			float spatial_weight = exp2(-dot(tap_delta, tap_delta) * spatial_falloff);
+
+			vec4 source_normal_roughness = texelFetch(source_normal_roughness_buffer, tap, 0);
+			vec3 source_normal = decode_normal(source_normal_roughness);
+			float normal_similarity = max(dot(source_normal, target_normal), 0.0);
+			float normal_weight = pow(normal_similarity, normal_exponent);
+
+			float source_depth = texelFetch(source_depth_buffer, tap, 0).r;
+			float depth_weight = reconstruct_depth_weight(source_depth, target_depth, instability);
+			float roughness_weight = 1.0 - smoothstep(0.12, roughness_window, abs(source_normal_roughness.a - target_roughness));
+			float guide_weight = normal_weight * depth_weight * roughness_weight;
+			float tap_stability = 1.0 - reconstruct_instability_at(tap);
+			float diagnostic_weight = mix(0.72, 1.05, tap_stability);
+			float weight = spatial_weight * mix(1.0, guide_weight, guide_blend) * diagnostic_weight;
+
+			vec3 color = sanitize_color(texelFetch(source_color_buffer, tap, 0).rgb);
+			weighted_sum += color * weight;
+			weight_sum += weight;
+			spatial_weight_sum += spatial_weight;
+			if (weight > 1e-5) {
+				local_min = min(local_min, color);
+				local_max = max(local_max, color);
+			}
+		}
+	}
+
+	vec3 nearest_color = sanitize_color(texelFetch(source_color_buffer, nearest_source, 0).rgb);
+	vec3 source_seed = reconstruct_source_bilinear(source_size, source_coord);
+	vec3 reconstructed = weight_sum > 1e-5 ? weighted_sum / weight_sum : nearest_color;
+	local_min = min(local_min, nearest_color);
+	local_min = min(local_min, source_seed);
+	local_max = max(local_max, nearest_color);
+	local_max = max(local_max, source_seed);
+	vec3 clamp_margin = max((local_max - local_min) * mix(0.16, 0.40, instability), vec3(mix(0.010, 0.035, instability)));
+	reconstructed = clamp(reconstructed, max(local_min - clamp_margin, vec3(0.0)), local_max + clamp_margin);
+
+	float support = clamp(weight_sum / max(spatial_weight_sum, 1e-5), 0.0, 1.0);
+	float confidence = smoothstep(0.08, mix(0.36, 0.58, stability), support);
+	float reconstruction_blend = confidence * mix(0.94, 0.72, high_confidence_preserve);
+	vec3 color = mix(source_seed, reconstructed, reconstruction_blend);
+
+	float luma_delta = relative_luma_delta(luminance(nearest_color), luminance(reconstructed));
+	float local_intensity_guard = smoothstep(0.12, 0.75, luma_delta) * high_confidence_preserve;
+	vec3 preserve_color = mix(source_seed, nearest_color, high_confidence_preserve);
+	color = mix(color, preserve_color, local_intensity_guard * 0.45);
+	float support_reactivity = (1.0 - confidence) * smoothstep(0.08, 0.42, instability + (1.0 - support) * 0.5);
+	float guide_reactivity = target_guide_uncertainty * (1.0 - high_confidence_preserve * 0.40);
+	imageStore(reconstruction_out, pos, vec4(sanitize_color(color), 1.0));
+	imageStore(reconstruction_reactivity_out, pos, vec4(clamp(max(max(instability * (1.0 - high_confidence_preserve * 0.35), support_reactivity), guide_reactivity), 0.0, 1.0), 0.0, 0.0, 0.0));
+}
+
+#endif
+
+#ifdef MODE_RECONSTRUCT_REFINE
+
+void main() {
+	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+	if (any(greaterThanEqual(vec2(pos), params.resolution))) {
+		return;
+	}
+
+	ivec2 output_size = textureSize(source_color_buffer, 0);
+	ivec2 source_size = textureSize(source_depth_buffer, 0);
+	vec2 output_uv = (vec2(pos) + vec2(0.5)) / params.resolution;
+	vec2 source_coord = params.visible_origin + output_uv * params.visible_size - vec2(0.5);
+	ivec2 nearest_source = clamp(ivec2(round(source_coord)), ivec2(0), source_size - ivec2(1));
+
+	vec4 target_normal_roughness;
+	float target_depth;
+	float target_guide_uncertainty = 0.0;
+	if (params.specular_guide_enabled > 0.5) {
+		target_normal_roughness = texelFetch(target_normal_roughness_buffer, pos, 0);
+		target_depth = texelFetch(target_depth_buffer, pos, 0).r;
+	} else {
+		reconstruct_source_guide_sample(source_size, source_coord, target_normal_roughness, target_depth, target_guide_uncertainty);
+	}
+	if (params.target_material_guide_enabled > 0.5) {
+		target_normal_roughness = reconstruct_target_material_normal_roughness(pos);
+	}
+	vec3 target_normal = decode_normal(target_normal_roughness);
+	float target_roughness = clamp(target_normal_roughness.a, 0.0, 1.0);
+	float instability = reconstruct_instability_sample(source_size, source_coord);
+	instability = max(instability, target_guide_uncertainty * 0.55);
+	float signal_confidence = reconstruct_signal_confidence_sample(source_size, source_coord);
+	float stable_signal = signal_confidence * (1.0 - instability);
+
+	vec3 center_color = sanitize_color(texelFetch(source_color_buffer, pos, 0).rgb);
+	vec3 weighted_sum = vec3(0.0);
+	vec3 local_min = vec3(MAX_RADIANCE);
+	vec3 local_max = vec3(0.0);
+	float weight_sum = 0.0;
+	float spatial_weight_sum = 0.0;
+	float refine_strength = smoothstep(0.16, 0.82, instability) * (1.0 - stable_signal * 0.55);
+	float spatial_falloff = mix(1.65, 0.42, refine_strength);
+	float guide_blend = params.specular_guide_enabled > 0.5 ? mix(0.90, 0.65, refine_strength) : mix(0.62, 0.35, refine_strength);
+	float normal_exponent = mix(mix(12.0, 34.0, 1.0 - target_roughness), 5.0, refine_strength);
+	float roughness_window = mix(0.42, 0.90, refine_strength);
+
+	for (int y = -2; y <= 2; y++) {
+		for (int x = -2; x <= 2; x++) {
+			ivec2 tap_pos = clamp(pos + ivec2(x, y), ivec2(0), output_size - ivec2(1));
+			vec2 tap_delta = vec2(tap_pos - pos);
+			float spatial_weight = exp2(-dot(tap_delta, tap_delta) * spatial_falloff);
+
+			vec4 tap_normal_roughness;
+			float tap_depth;
+			float tap_guide_uncertainty = 0.0;
+			ivec2 tap_source;
+			vec2 tap_source_coord;
+			if (params.target_material_guide_enabled > 0.5) {
+				tap_normal_roughness = reconstruct_target_material_normal_roughness(tap_pos);
+				tap_depth = texelFetch(target_depth_buffer, tap_pos, 0).r;
+				vec2 tap_output_uv = (vec2(tap_pos) + vec2(0.5)) / params.resolution;
+				tap_source_coord = params.visible_origin + tap_output_uv * params.visible_size - vec2(0.5);
+				tap_source = clamp(ivec2(round(tap_source_coord)), ivec2(0), source_size - ivec2(1));
+			} else if (params.specular_guide_enabled > 0.5) {
+				tap_normal_roughness = texelFetch(target_normal_roughness_buffer, tap_pos, 0);
+				tap_depth = texelFetch(target_depth_buffer, tap_pos, 0).r;
+				vec2 tap_output_uv = (vec2(tap_pos) + vec2(0.5)) / params.resolution;
+				tap_source_coord = params.visible_origin + tap_output_uv * params.visible_size - vec2(0.5);
+				tap_source = clamp(ivec2(round(tap_source_coord)), ivec2(0), source_size - ivec2(1));
+			} else {
+				vec2 tap_output_uv = (vec2(tap_pos) + vec2(0.5)) / params.resolution;
+				tap_source_coord = params.visible_origin + tap_output_uv * params.visible_size - vec2(0.5);
+				tap_source = clamp(ivec2(round(tap_source_coord)), ivec2(0), source_size - ivec2(1));
+				reconstruct_source_guide_sample(source_size, tap_source_coord, tap_normal_roughness, tap_depth, tap_guide_uncertainty);
+			}
+
+			vec3 tap_normal = decode_normal(tap_normal_roughness);
+			float normal_similarity = max(dot(tap_normal, target_normal), 0.0);
+			float normal_weight = pow(normal_similarity, normal_exponent);
+			float depth_weight = reconstruct_depth_weight(tap_depth, target_depth, instability);
+			float roughness_weight = 1.0 - smoothstep(0.10, roughness_window, abs(tap_normal_roughness.a - target_roughness));
+			float guide_weight = normal_weight * depth_weight * roughness_weight;
+			float tap_instability = max(reconstruct_instability_sample(source_size, tap_source_coord), tap_guide_uncertainty * 0.55);
+			float diagnostic_weight = mix(1.08, 0.74, tap_instability);
+			float weight = spatial_weight * mix(1.0, guide_weight, guide_blend) * diagnostic_weight;
+
+			vec3 color = sanitize_color(texelFetch(source_color_buffer, tap_pos, 0).rgb);
+			weighted_sum += color * weight;
+			weight_sum += weight;
+			spatial_weight_sum += spatial_weight;
+			if (weight > 1e-5) {
+				local_min = min(local_min, color);
+				local_max = max(local_max, color);
+			}
+		}
+	}
+
+	vec3 filtered = weight_sum > 1e-5 ? weighted_sum / weight_sum : center_color;
+	local_min = min(local_min, center_color);
+	local_max = max(local_max, center_color);
+	vec3 clamp_margin = max((local_max - local_min) * mix(0.14, 0.36, refine_strength), vec3(mix(0.008, 0.030, refine_strength)));
+	filtered = clamp(filtered, max(local_min - clamp_margin, vec3(0.0)), local_max + clamp_margin);
+
+	float support = clamp(weight_sum / max(spatial_weight_sum, 1e-5), 0.0, 1.0);
+	float blend = refine_strength * smoothstep(0.06, 0.44, support);
+	float luma_delta = relative_luma_delta(luminance(center_color), luminance(filtered));
+	float preserve_local_energy = stable_signal * smoothstep(0.10, 0.58, luma_delta);
+	blend *= 1.0 - preserve_local_energy * 0.50;
+
+	vec3 color = mix(center_color, filtered, blend);
+	imageStore(reconstruction_out, pos, vec4(sanitize_color(color), 1.0));
+	imageStore(reconstruction_reactivity_out, pos, vec4(clamp(max(max(instability * (1.0 - stable_signal * 0.35), blend * 0.70), target_guide_uncertainty * (1.0 - stable_signal * 0.40)), 0.0, 1.0), 0.0, 0.0, 0.0));
+}
+
+#endif
+
+#endif
+
+#ifdef MODE_TAA_REACTIVITY
+
+layout(set = 0, binding = 0) uniform sampler2D velocity_buffer;
+layout(set = 0, binding = 1) uniform sampler2D history_validity_buffer;
+layout(set = 0, binding = 2) uniform sampler2D variance_buffer_0;
+layout(set = 0, binding = 3) uniform sampler2D history_length_buffer_0;
+layout(set = 0, binding = 4) uniform sampler2D rejection_buffer_0;
+layout(set = 0, binding = 5) uniform sampler2D reactivity_buffer_0;
+layout(set = 0, binding = 6) uniform sampler2D variance_buffer_1;
+layout(set = 0, binding = 7) uniform sampler2D history_length_buffer_1;
+layout(set = 0, binding = 8) uniform sampler2D rejection_buffer_1;
+layout(set = 0, binding = 9) uniform sampler2D reactivity_buffer_1;
+layout(set = 0, binding = 10) uniform sampler2D variance_buffer_2;
+layout(set = 0, binding = 11) uniform sampler2D history_length_buffer_2;
+layout(set = 0, binding = 12) uniform sampler2D rejection_buffer_2;
+layout(set = 0, binding = 13) uniform sampler2D reactivity_buffer_2;
+layout(set = 0, binding = 14) uniform sampler2D variance_buffer_3;
+layout(set = 0, binding = 15) uniform sampler2D history_length_buffer_3;
+layout(set = 0, binding = 16) uniform sampler2D rejection_buffer_3;
+layout(set = 0, binding = 17) uniform sampler2D reactivity_buffer_3;
+layout(set = 0, binding = 18) uniform sampler2D variance_buffer_4;
+layout(set = 0, binding = 19) uniform sampler2D history_length_buffer_4;
+layout(set = 0, binding = 20) uniform sampler2D rejection_buffer_4;
+layout(set = 0, binding = 21) uniform sampler2D reactivity_buffer_4;
+layout(set = 0, binding = 22) uniform sampler2D variance_buffer_5;
+layout(set = 0, binding = 23) uniform sampler2D history_length_buffer_5;
+layout(set = 0, binding = 24) uniform sampler2D rejection_buffer_5;
+layout(set = 0, binding = 25) uniform sampler2D reactivity_buffer_5;
+layout(r8, set = 0, binding = 26) uniform restrict writeonly image2D taa_reactivity_out;
+
+float taa_reactivity_from_scope(sampler2D variance_buffer, sampler2D history_length_buffer, sampler2D rejection_buffer, sampler2D reactivity_buffer, ivec2 pos) {
+	float variance = texelFetch(variance_buffer, pos, 0).r;
+	float history_length = texelFetch(history_length_buffer, pos, 0).r;
+	float rejection = texelFetch(rejection_buffer, pos, 0).r;
+	float reactivity = texelFetch(reactivity_buffer, pos, 0).r;
+
+	float mask = reactivity;
+	mask = max(mask, rejection * 0.85);
+	mask = max(mask, (1.0 - smoothstep(0.06, 0.24, history_length)) * 0.45);
+	mask = max(mask, smoothstep(0.006, 0.12, variance) * 0.55);
+	return clamp(mask, 0.0, 1.0);
+}
+
+void main() {
+	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+	if (any(greaterThanEqual(vec2(pos), params.resolution))) {
+		return;
+	}
+
+	float mask = 0.0;
+	if (params.diagnostic_scope_count > 0.5) {
+		mask = max(mask, taa_reactivity_from_scope(variance_buffer_0, history_length_buffer_0, rejection_buffer_0, reactivity_buffer_0, pos));
+	}
+	if (params.diagnostic_scope_count > 1.5) {
+		mask = max(mask, taa_reactivity_from_scope(variance_buffer_1, history_length_buffer_1, rejection_buffer_1, reactivity_buffer_1, pos));
+	}
+	if (params.diagnostic_scope_count > 2.5) {
+		mask = max(mask, taa_reactivity_from_scope(variance_buffer_2, history_length_buffer_2, rejection_buffer_2, reactivity_buffer_2, pos));
+	}
+	if (params.diagnostic_scope_count > 3.5) {
+		mask = max(mask, taa_reactivity_from_scope(variance_buffer_3, history_length_buffer_3, rejection_buffer_3, reactivity_buffer_3, pos));
+	}
+	if (params.diagnostic_scope_count > 4.5) {
+		mask = max(mask, taa_reactivity_from_scope(variance_buffer_4, history_length_buffer_4, rejection_buffer_4, reactivity_buffer_4, pos));
+	}
+	if (params.diagnostic_scope_count > 5.5) {
+		mask = max(mask, taa_reactivity_from_scope(variance_buffer_5, history_length_buffer_5, rejection_buffer_5, reactivity_buffer_5, pos));
+	}
+
+	float history_valid = texelFetch(history_validity_buffer, pos, 0).r;
+	mask = max(mask, 1.0 - history_valid);
+
+	float motion_px = velocity_pixels(texelFetch(velocity_buffer, pos, 0).xy);
+	mask = max(mask, smoothstep(4.0, 24.0, motion_px) * 0.35);
+
+	imageStore(taa_reactivity_out, pos, vec4(clamp(mask, 0.0, 1.0), 0.0, 0.0, 0.0));
+}
+
+#endif
 
 #ifdef MODE_TEMPORAL
 
@@ -923,6 +1420,82 @@ void main() {
 	}
 #endif
 	imageStore(output_image, pos, vec4(output_color, 1.0));
+}
+
+#endif
+
+#ifdef MODE_RECONSTRUCT_COMPOSITE_SPLIT
+
+layout(set = 0, binding = 0) uniform sampler2D diffuse_buffer;
+layout(set = 0, binding = 1) uniform sampler2D specular_buffer;
+layout(set = 0, binding = 2) uniform sampler2D target_albedo_buffer;
+layout(set = 0, binding = 3) uniform sampler2D target_normal_buffer;
+layout(set = 0, binding = 4) uniform sampler2D target_orm_buffer;
+layout(rgba16f, set = 0, binding = 5) uniform restrict writeonly image2D output_image;
+
+void main() {
+	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+	if (any(greaterThanEqual(pos, ivec2(params.resolution)))) {
+		return;
+	}
+
+	vec4 target_albedo = texelFetch(target_albedo_buffer, pos, 0);
+	vec4 target_normal = texelFetch(target_normal_buffer, pos, 0);
+	vec4 target_orm = texelFetch(target_orm_buffer, pos, 0);
+	float roughness = clamp(target_orm.g, 0.0, 1.0);
+	float metalness = clamp(target_orm.b, 0.0, 1.0);
+	vec4 normal_roughness = vec4(target_normal.rgb, roughness);
+	vec4 albedo_metalness = vec4(target_albedo.rgb, metalness);
+	float specular_risk = smoothstep(0.15, 0.85, 1.0 - roughness);
+	vec4 specular_guide = vec4(roughness, 65504.0, specular_risk, 1.0);
+
+	vec3 diffuse = sanitize_color(texelFetch(diffuse_buffer, pos, 0).rgb);
+	vec3 specular = remodulate_specular_radiance(sanitize_color(texelFetch(specular_buffer, pos, 0).rgb), normal_roughness, albedo_metalness, specular_guide);
+	imageStore(output_image, pos, vec4(sanitize_color(diffuse + specular), 1.0));
+}
+
+#endif
+
+#ifdef MODE_RECONSTRUCT_HISTORY
+
+layout(set = 0, binding = 0) uniform sampler2D source_history_validity_buffer;
+layout(set = 0, binding = 1) uniform sampler2D source_history_id_buffer;
+layout(r8, set = 0, binding = 2) uniform restrict writeonly image2D history_validity_out;
+layout(rgba8, set = 0, binding = 3) uniform restrict writeonly image2D history_id_out;
+
+bool history_id_has_value(vec4 id) {
+	return max(max(id.x, id.y), max(id.z, id.w)) > (0.5 / 255.0);
+}
+
+void main() {
+	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+	if (any(greaterThanEqual(pos, ivec2(params.resolution)))) {
+		return;
+	}
+
+	ivec2 source_size = textureSize(source_history_validity_buffer, 0);
+	vec2 output_uv = (vec2(pos) + vec2(0.5)) / params.resolution;
+	vec2 source_coord = params.visible_origin + output_uv * params.visible_size - vec2(0.5);
+	ivec2 nearest_source = clamp(ivec2(round(source_coord)), ivec2(0), source_size - ivec2(1));
+	vec4 center_id = texelFetch(source_history_id_buffer, nearest_source, 0);
+	float validity = texelFetch(source_history_validity_buffer, nearest_source, 0).r;
+
+	ivec2 base = ivec2(floor(clamp(source_coord, vec2(0.0), vec2(source_size) - vec2(1.0))));
+	float support_mismatch = 0.0;
+	for (int y = 0; y <= 1; y++) {
+		for (int x = 0; x <= 1; x++) {
+			ivec2 tap = clamp(base + ivec2(x, y), ivec2(0), source_size - ivec2(1));
+			float tap_validity = texelFetch(source_history_validity_buffer, tap, 0).r;
+			vec4 tap_id = texelFetch(source_history_id_buffer, tap, 0);
+			if (tap_validity < 0.5 || !history_id_matches(center_id, tap_id)) {
+				support_mismatch = 1.0;
+			}
+		}
+	}
+
+	float conservative_validity = history_id_has_value(center_id) ? validity * (1.0 - support_mismatch) : 0.0;
+	imageStore(history_validity_out, pos, vec4(conservative_validity, 0.0, 0.0, 0.0));
+	imageStore(history_id_out, pos, center_id);
 }
 
 #endif

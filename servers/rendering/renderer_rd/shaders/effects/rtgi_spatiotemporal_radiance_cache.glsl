@@ -30,6 +30,12 @@ const float STRC_REJECT_VARIANCE = 3.0;
 const float STRC_REJECT_PROBE_OCCUPIED = 4.0;
 const float STRC_REJECT_STALE = 5.0;
 const float STRC_REJECT_SCROLL = 6.0;
+const float STRC_REJECT_BLACK_RADIANCE = 7.0;
+const float STRC_REJECT_NO_SOURCE = 8.0;
+const uint STRC_SOURCE_MASK_DIRECT = 1u;
+const uint STRC_SOURCE_MASK_EMISSIVE = 2u;
+const uint STRC_SOURCE_MASK_SKY = 4u;
+const uint STRC_SOURCE_MASK_INDIRECT = 8u;
 
 struct ProbeRayResult {
 	vec4 radiance_distance;
@@ -87,12 +93,35 @@ vec4 rejection_debug_color(float reason) {
 	if (reason < 5.5) {
 		return vec4(0.05, 0.30, 1.0, 1.0);
 	}
-	return vec4(1.0, 0.0, 0.0, 1.0);
+	if (reason < 6.5) {
+		return vec4(1.0, 0.0, 0.0, 1.0);
+	}
+	if (reason < 7.5) {
+		return vec4(0.0, 0.0, 0.0, 1.0);
+	}
+	return vec4(0.35, 0.0, 0.85, 1.0);
 }
 
 float variance_ratio(vec4 distance_value) {
 	float mean_distance = max(distance_value.x, 0.25);
 	return clamp(sqrt(max(distance_value.y, 0.0)) / mean_distance, 0.0, 1.0);
+}
+
+float source_mask_quality(uint source_mask) {
+	float quality = 0.0;
+	if ((source_mask & STRC_SOURCE_MASK_DIRECT) != 0u) {
+		quality = max(quality, 1.0);
+	}
+	if ((source_mask & STRC_SOURCE_MASK_EMISSIVE) != 0u) {
+		quality = max(quality, 0.95);
+	}
+	if ((source_mask & STRC_SOURCE_MASK_SKY) != 0u) {
+		quality = max(quality, 0.80);
+	}
+	if ((source_mask & STRC_SOURCE_MASK_INDIRECT) != 0u) {
+		quality = max(quality, 0.60);
+	}
+	return quality;
 }
 
 void store_debug(ivec2 coord, vec4 irradiance, vec4 distance_value, vec4 metadata, float update_signal) {
@@ -234,18 +263,24 @@ void main() {
 	uint grid = max(params.grid_size, 1u);
 	uint probe_count = max(params.cascade_count, 1u) * grid * grid * grid;
 	uint texel_count = probe_count * 64u;
-	uint update_index = texel_count > 0u ? select_update_index(ray_index, max(params.ray_count, 1u), grid, max(params.cascade_count, 1u), params.frame_index) % texel_count : 0u;
+	ProbeRayResult result = probe_results.results[ray_index];
+	uint update_index = texel_count > 0u ? min(uint(max(result.metadata.w, 0.0) + 0.5), texel_count - 1u) : 0u;
 	uint probe_index = update_index >> 6u;
 	uint dir_index = update_index & 63u;
 	ivec2 coord = atlas_coord_from_probe_dir(probe_index, dir_index);
 
-	ProbeRayResult result = probe_results.results[ray_index];
 	vec3 radiance = sanitize_color(result.radiance_distance.rgb);
+	float radiance_luma = dot(radiance, vec3(0.2126, 0.7152, 0.0722));
 	float hit_distance = sanitize_cache_scalar(result.radiance_distance.a, STRC_MAX_DISTANCE);
 	float result_confidence = clamp(result.normal_confidence.a, 0.0, 1.0);
 	float dynamic_hit = clamp(result.metadata.x, 0.0, 1.0);
+	uint source_mask = uint(clamp(result.metadata.z, 0.0, 15.0) + 0.5);
+	float source_quality = source_mask_quality(source_mask);
+	bool radiance_valid = radiance_luma > 0.0005 && result_confidence > 0.001;
+	bool source_valid = source_mask != 0u && source_quality > 0.0;
+	bool probe_occupied = hit_distance < 0.12 && hit_distance < STRC_MAX_DISTANCE - 1.0;
 	float occupied_probe = smoothstep(0.015, 0.12, hit_distance);
-	float new_confidence = result_confidence * mix(occupied_probe, 1.0, step(STRC_MAX_DISTANCE - 1.0, hit_distance));
+	float new_confidence = (radiance_valid && source_valid && !probe_occupied) ? result_confidence * mix(occupied_probe, 1.0, step(STRC_MAX_DISTANCE - 1.0, hit_distance)) : 0.0;
 
 	vec4 previous = imageLoad(irradiance_image, coord);
 	vec4 previous_distance = imageLoad(distance_image, coord);
@@ -253,34 +288,51 @@ void main() {
 	float prev_confidence = clamp(previous.a, 0.0, 1.0);
 	float dynamic_decay = mix(1.0, 0.35, dynamic_hit);
 	float temporal_weight = clamp(params.temporal_weight * dynamic_decay, 0.0, 0.995);
-	float blend_prev = new_confidence > 0.0 ? clamp(temporal_weight * prev_confidence, 0.0, temporal_weight) : clamp(temporal_weight * 0.75 * prev_confidence, 0.0, temporal_weight);
-	float blend_new = 1.0 - blend_prev;
-
-	vec3 blended_radiance = mix(radiance, previous.rgb, blend_prev);
-	float blended_confidence = clamp(max(new_confidence, prev_confidence * temporal_weight), 0.0, 1.0);
 	float previous_mean = sanitize_cache_scalar(previous_distance.x, STRC_MAX_DISTANCE);
 	float previous_variance = max(previous_distance.y, 0.0);
-	float blended_distance = previous_mean * blend_prev + hit_distance * blend_new;
-	float blended_variance = blend_prev * (previous_variance + (previous_mean - blended_distance) * (previous_mean - blended_distance)) + blend_new * ((hit_distance - blended_distance) * (hit_distance - blended_distance));
-	blended_variance = clamp(blended_variance, 0.0, STRC_MAX_DISTANCE);
-	float dynamic_confidence = clamp(max(dynamic_hit, previous_metadata.y * temporal_weight), 0.0, 1.0);
+	vec3 blended_radiance = vec3(0.0);
+	float blended_confidence = 0.0;
+	float blended_distance = previous_mean;
+	float blended_variance = previous_variance;
+	float dynamic_confidence = 0.0;
 
 	float rejection_reason = STRC_REJECT_NONE;
 	if (new_confidence <= 0.001) {
-		rejection_reason = STRC_REJECT_LOW_CONFIDENCE;
-	} else if (dynamic_hit > 0.5) {
-		rejection_reason = STRC_REJECT_DYNAMIC;
-	} else if (hit_distance < 0.12 && hit_distance < STRC_MAX_DISTANCE - 1.0) {
-		rejection_reason = STRC_REJECT_PROBE_OCCUPIED;
-	} else if (variance_ratio(vec4(blended_distance, blended_variance, 0.0, 0.0)) > 0.45) {
-		rejection_reason = STRC_REJECT_VARIANCE;
+		blended_radiance = previous.rgb;
+		blended_confidence = clamp(prev_confidence * temporal_weight, 0.0, 1.0);
+		dynamic_confidence = clamp(max(dynamic_hit, previous_metadata.y * temporal_weight), 0.0, 1.0);
+		source_mask = uint(clamp(previous_metadata.z, 0.0, 15.0) + 0.5);
+		if (!radiance_valid) {
+			rejection_reason = STRC_REJECT_BLACK_RADIANCE;
+		} else if (!source_valid) {
+			rejection_reason = STRC_REJECT_NO_SOURCE;
+		} else if (probe_occupied) {
+			rejection_reason = STRC_REJECT_PROBE_OCCUPIED;
+		} else {
+			rejection_reason = STRC_REJECT_LOW_CONFIDENCE;
+		}
+	} else {
+		float blend_prev = clamp(temporal_weight * prev_confidence, 0.0, temporal_weight);
+		float blend_new = 1.0 - blend_prev;
+		blended_radiance = mix(radiance, previous.rgb, blend_prev);
+		blended_confidence = clamp(max(new_confidence, prev_confidence * temporal_weight), 0.0, 1.0);
+		blended_distance = previous_mean * blend_prev + hit_distance * blend_new;
+		blended_variance = blend_prev * (previous_variance + (previous_mean - blended_distance) * (previous_mean - blended_distance)) + blend_new * ((hit_distance - blended_distance) * (hit_distance - blended_distance));
+		blended_variance = clamp(blended_variance, 0.0, STRC_MAX_DISTANCE);
+		dynamic_confidence = clamp(max(dynamic_hit, previous_metadata.y * temporal_weight), 0.0, 1.0);
+		if (dynamic_hit > 0.5) {
+			rejection_reason = STRC_REJECT_DYNAMIC;
+		} else if (variance_ratio(vec4(blended_distance, blended_variance, 0.0, 0.0)) > 0.45) {
+			rejection_reason = STRC_REJECT_VARIANCE;
+		}
 	}
 
 	vec4 distance_value = vec4(blended_distance, blended_variance, blended_confidence, dynamic_confidence);
-	vec4 metadata = vec4(0.0, dynamic_confidence, float(params.frame_index & 65535u), rejection_reason);
+	float next_age = new_confidence > 0.001 ? 0.0 : min(previous_metadata.x + 1.0, STRC_MAX_AGE);
+	vec4 metadata = vec4(next_age, dynamic_confidence, float(source_mask), rejection_reason);
 
 	imageStore(irradiance_image, coord, vec4(blended_radiance, blended_confidence));
 	imageStore(distance_image, coord, distance_value);
 	imageStore(metadata_image, coord, metadata);
-	store_debug(coord, vec4(blended_radiance, blended_confidence), distance_value, metadata, max(new_confidence, dynamic_hit));
+	store_debug(coord, vec4(blended_radiance, blended_confidence), distance_value, metadata, max(new_confidence, dynamic_hit * 0.5));
 }

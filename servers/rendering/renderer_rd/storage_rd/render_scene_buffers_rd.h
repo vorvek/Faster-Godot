@@ -98,11 +98,11 @@ private:
 	RS::ViewportScreenSpaceAA screen_space_aa = RS::VIEWPORT_SCREEN_SPACE_AA_DISABLED;
 	bool use_taa = false;
 	bool use_debanding = false;
-	float taa_sharpness = 0.10f;
-	float taa_history_weight = 0.93f;
-	float taa_disocclusion_threshold = 2.25f;
+	float taa_sharpness = 0.0f;
+	float taa_history_weight = 0.9375f;
+	float taa_disocclusion_threshold = 2.5f;
 	uint32_t taa_jitter_phase_count = 16;
-	float taa_jitter_scale = 0.85f;
+	float taa_jitter_scale = 1.0f;
 	RD::TextureSamples texture_samples = RD::TEXTURE_SAMPLES_1;
 
 	// Named Textures

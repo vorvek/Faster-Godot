@@ -165,12 +165,13 @@ public:
 		Vector2i rt_visible_origin;
 		Vector2i rt_prev_visible_origin;
 		bool rt_overscan_initialized = false;
+		bool rt_reconstructed_valid = false;
 		uint64_t rt_diffuse_cache_signature = 0;
 		bool rt_diffuse_cache_signature_valid = false;
 		Vector3i rt_strc_probe_origins[4];
 		bool rt_strc_scroll_valid = false;
 
-		bool rt_update_overscan(const Size2i &p_visible_size, float p_horizontal, float p_vertical, const Vector2 &p_motion_pixels);
+		bool rt_update_overscan(const Size2i &p_visible_size, float p_horizontal, float p_vertical, const Vector2 &p_motion_pixels, float p_resolution_scale);
 		void rt_clear_textures();
 		Size2i rt_get_size() const { return rt_size; }
 		Size2i rt_get_visible_size() const { return rt_visible_size; }
@@ -179,13 +180,32 @@ public:
 		void rt_ensure_textures(bool p_external_memory_exportable = false);
 		bool rt_has_texture() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING); }
 		RID rt_get_texture() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING); }
+		RID rt_get_texture(uint32_t p_layer) const { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, p_layer, 0); }
+		RID rt_ensure_reconstructed(const Size2i &p_size);
+		bool rt_has_reconstructed() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED); }
+		RID rt_get_reconstructed() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED); }
+		RID rt_get_reconstructed(uint32_t p_layer) const { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED, p_layer, 0); }
+		RID rt_get_reconstructed_diffuse(uint32_t p_layer) const { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_DIFFUSE, p_layer, 0); }
+		RID rt_get_reconstructed_specular(uint32_t p_layer) const { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_SPECULAR, p_layer, 0); }
+		void rt_set_reconstructed_valid(bool p_valid) { rt_reconstructed_valid = p_valid; }
+		bool rt_is_reconstructed_valid() const { return rt_reconstructed_valid && rt_has_reconstructed(); }
+		RID rt_ensure_material_guide_framebuffer(const Size2i &p_size);
+		bool rt_has_material_guides() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_ALBEDO) && render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_NORMAL) && render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_ORM); }
+		RID rt_get_guide_albedo() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_ALBEDO); }
+		RID rt_get_guide_albedo(uint32_t p_layer) const { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_ALBEDO, p_layer, 0); }
+		RID rt_get_guide_normal() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_NORMAL); }
+		RID rt_get_guide_normal(uint32_t p_layer) const { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_NORMAL, p_layer, 0); }
+		RID rt_get_guide_orm() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_ORM); }
+		RID rt_get_guide_orm(uint32_t p_layer) const { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_ORM, p_layer, 0); }
 		RID rt_get_diffuse_radiance() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DIFFUSE_RADIANCE); }
 		RID rt_get_specular_radiance() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_RADIANCE); }
 		RID rt_get_specular_guide() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_GUIDE); }
 		RID rt_get_specular_reprojection() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_REPROJECTION); }
 		RID rt_get_specular_reflection_direction() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_REFLECTION_DIRECTION); }
+		RID rt_get_primary_diffuse_direction() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_PRIMARY_DIFFUSE_DIRECTION); }
 		bool rt_has_depth_texture() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH); }
 		RID rt_get_depth_texture() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH); }
+		RID rt_get_depth_texture(uint32_t p_layer) const { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH, p_layer, 0); }
 		RID rt_ensure_depth_attachment();
 		bool rt_has_depth_attachment() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH_ATTACHMENT); }
 		RID rt_get_depth_attachment() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH_ATTACHMENT); }
@@ -196,7 +216,22 @@ public:
 		bool rt_has_history_id() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_ID); }
 		RID rt_get_history_id() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_ID); }
 		RID rt_get_prev_history_id() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_ID_PREV); }
+		bool rt_has_receiver_surface_id() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECEIVER_SURFACE_ID); }
+		RID rt_get_receiver_surface_id() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECEIVER_SURFACE_ID); }
+		RID rt_get_prev_receiver_surface_id() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECEIVER_SURFACE_ID_PREV); }
+		bool rt_has_surface_cache_key() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_KEY); }
+		RID rt_get_surface_cache_key() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_KEY); }
+		RID rt_get_surface_cache_diagnostic() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_DIAGNOSTIC); }
+		bool rt_has_taa_history() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_TAA_HISTORY_VALIDITY_PREV) && render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_TAA_HISTORY_ID_PREV); }
+		RID rt_get_taa_prev_history_validity() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_TAA_HISTORY_VALIDITY_PREV); }
+		RID rt_get_taa_prev_history_id() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_TAA_HISTORY_ID_PREV); }
+		bool rt_has_hybrid_taa_history() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HYBRID_TAA_HISTORY_VALIDITY_PREV) && render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HYBRID_TAA_HISTORY_ID_PREV); }
+		RID rt_get_hybrid_taa_prev_history_validity() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HYBRID_TAA_HISTORY_VALIDITY_PREV); }
+		RID rt_get_hybrid_taa_prev_history_id() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HYBRID_TAA_HISTORY_ID_PREV); }
+		bool rt_has_taa_reactivity() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_TAA_REACTIVITY); }
+		RID rt_get_taa_reactivity() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_TAA_REACTIVITY); }
 		RID rt_get_normal_roughness() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_NORMAL_ROUGHNESS); }
+		RID rt_get_normal_roughness(uint32_t p_layer) const { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_NORMAL_ROUGHNESS, p_layer, 0); }
 		RID rt_get_source_normal_roughness_prev() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_NORMAL_ROUGHNESS_PREV); }
 		RID rt_get_albedo_metalness() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_ALBEDO_METALNESS); }
 		RID rt_get_viewz_hitdist() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_VIEWZ_HITDIST); }
@@ -222,6 +257,16 @@ public:
 		RID rt_get_source_history() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_HISTORY); }
 		RID rt_get_source_temporal_delta() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_TEMPORAL_DELTA); }
 		RID rt_get_source_rejection() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_REJECTION); }
+		RID rt_get_secondary_cache_source() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_SOURCE); }
+		RID rt_get_secondary_cache_rejection() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_REJECTION); }
+		RID rt_get_secondary_cache_surface() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_SURFACE); }
+		RID rt_get_surface_cache_feedback_key() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_KEY); }
+		RID rt_get_surface_cache_feedback_radiance() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_RADIANCE); }
+		RID rt_get_surface_cache_feedback_meta() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_META); }
+		RID rt_get_surface_cache_feedback_stats() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_STATS); }
+		RID rt_get_surface_cache_feedback_diagnostic() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_DIAGNOSTIC); }
+		RID rt_get_diffuse_cache_fallback_rgba16f() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA16F); }
+		RID rt_get_diffuse_cache_fallback_rgba8() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA8); }
 
 		// DLSS Ray Reconstruction output buffers
 		void dlss_rr_ensure_buffers();

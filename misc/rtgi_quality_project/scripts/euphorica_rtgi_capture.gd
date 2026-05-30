@@ -10,6 +10,7 @@ const RTGI_KNOB_STAGES = {
 	"rtgi_samples_per_pixel": "RT raygen sampling",
 	"rtgi_max_bounces": "RT raygen path depth",
 	"rtgi_energy": "RTGI composite energy",
+	"rtgi_resolution_scale": "RTGI trace resolution scale and full-resolution reconstruction",
 	"rtgi_denoiser": "RTGI denoise dispatch",
 	"rtgi_denoiser_strength": "RTGI temporal, spatial, composite, blotch stabilization",
 	"rtgi_denoiser_history_weight": "RTGI temporal accumulation",
@@ -35,23 +36,38 @@ var _sparkle_frames = DEFAULT_SPARKLE_FRAMES
 var _capture_debug = false
 var _base_denoise = 0.98
 var _base_history = 0.98
+var _base_rtgi_resolution_scale = 0.5
+var _rtgi_resolution_scales = [0.5]
 var _base_mode = "path_traced"
-var _base_resolution = Vector2i(640, 360)
+var _base_resolution = Vector2i()
 var _window_size = Vector2i(1920, 1080)
+var _camera_motion = "static"
+var _camera_motion_degrees = 8.0
+var _analysis_scale = 1.0
 var _split_signals_mode = "both"
 var _case_filter = ""
 var _list_cases = false
 var _resume = false
+var _include_baseline = true
 var _disable_rf_output_effect = false
 var _diffuse_cache = true
 var _diffuse_cache_max_entries = 262144
+var _strc_override := ""
+var _strc_strength := 0.70
+var _strc_rays_per_frame := 4096
+var _strc_grid_size := 24
+var _strc_base_probe_spacing := 1.5
+var _strc_temporal_weight := 0.97
+var _strc_static_layers := 1
+var _strc_dynamic_layers := 0
 var _profile_timings = false
+var _metrics_mode = "full"
 var _results = []
 var _split_pair_metrics = []
 var _split_pair_images = {}
 var _debug_environments: Array[Environment] = []
-var _all_debug_views = ["noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "variance", "history_length", "rejection", "final"]
-var _debug_views = ["noisy", "specular_noisy", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_rejection", "final"]
+var _all_debug_views = ["noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "secondary_cache_source", "secondary_cache_rejection", "secondary_cache_surface", "surface_feedback", "surface_key", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "strc_visibility", "strc_age", "strc_variance", "strc_rejection", "variance", "history_length", "rejection", "final", "reconstructed", "reconstructed_reactivity"]
+var _debug_views = ["noisy", "specular_noisy", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "secondary_cache_source", "secondary_cache_rejection", "secondary_cache_surface", "surface_feedback", "surface_key", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "final", "reconstructed", "reconstructed_reactivity"]
 
 
 func _initialize() -> void:
@@ -75,12 +91,24 @@ func _parse_args() -> void:
 			_base_denoise = clampf(arg.trim_prefix("--euphorica-denoise=").to_float(), 0.0, 1.0)
 		elif arg.begins_with("--euphorica-history="):
 			_base_history = clampf(arg.trim_prefix("--euphorica-history=").to_float(), 0.0, 0.98)
+		elif arg.begins_with("--euphorica-rtgi-resolution-scale="):
+			_base_rtgi_resolution_scale = clampf(arg.trim_prefix("--euphorica-rtgi-resolution-scale=").to_float(), 0.25, 1.0)
+			_rtgi_resolution_scales = [_base_rtgi_resolution_scale]
+		elif arg.begins_with("--euphorica-rtgi-resolution-scales="):
+			_rtgi_resolution_scales = _parse_scale_list(arg.trim_prefix("--euphorica-rtgi-resolution-scales="), [0.5, 1.0])
+			_base_rtgi_resolution_scale = float(_rtgi_resolution_scales[0])
 		elif arg.begins_with("--euphorica-mode="):
 			_base_mode = arg.trim_prefix("--euphorica-mode=").to_lower()
 		elif arg.begins_with("--euphorica-resolution="):
 			_base_resolution = _parse_resolution(arg.trim_prefix("--euphorica-resolution="), _base_resolution)
 		elif arg.begins_with("--euphorica-window-size="):
 			_window_size = _parse_resolution(arg.trim_prefix("--euphorica-window-size="), _window_size)
+		elif arg.begins_with("--euphorica-camera-motion="):
+			_camera_motion = arg.trim_prefix("--euphorica-camera-motion=").to_lower()
+		elif arg.begins_with("--euphorica-camera-motion-degrees="):
+			_camera_motion_degrees = clampf(arg.trim_prefix("--euphorica-camera-motion-degrees=").to_float(), 0.0, 45.0)
+		elif arg.begins_with("--euphorica-analysis-scale="):
+			_analysis_scale = clampf(arg.trim_prefix("--euphorica-analysis-scale=").to_float(), 0.125, 1.0)
 		elif arg.begins_with("--euphorica-split-signals="):
 			var split_mode = arg.trim_prefix("--euphorica-split-signals=").to_lower()
 			if split_mode in ["on", "off", "both"]:
@@ -91,12 +119,44 @@ func _parse_args() -> void:
 			_list_cases = true
 		elif arg == "--euphorica-resume":
 			_resume = true
+		elif arg == "--euphorica-fast":
+			_warmup_frames = 12
+			_sparkle_frames = 8
+			_include_baseline = false
+			_analysis_scale = min(_analysis_scale, 0.25)
+			_metrics_mode = "smoke"
+		elif arg == "--euphorica-skip-baseline":
+			_include_baseline = false
+		elif arg == "--euphorica-include-baseline":
+			_include_baseline = true
+		elif arg.begins_with("--euphorica-metrics="):
+			var metrics_mode = arg.trim_prefix("--euphorica-metrics=").to_lower()
+			if metrics_mode in ["full", "smoke", "none"]:
+				_metrics_mode = metrics_mode
 		elif arg == "--euphorica-disable-rf-output":
 			_disable_rf_output_effect = true
 		elif arg.begins_with("--euphorica-diffuse-cache="):
 			_diffuse_cache = not (arg.trim_prefix("--euphorica-diffuse-cache=").to_lower() in ["0", "false", "off", "disabled"])
 		elif arg.begins_with("--euphorica-diffuse-cache-max-entries="):
 			_diffuse_cache_max_entries = clampi(arg.trim_prefix("--euphorica-diffuse-cache-max-entries=").to_int(), 4096, 4194304)
+		elif arg.begins_with("--euphorica-strc="):
+			var strc_mode := arg.trim_prefix("--euphorica-strc=").to_lower()
+			if strc_mode in ["on", "off", "default"]:
+				_strc_override = strc_mode
+		elif arg.begins_with("--euphorica-strc-strength="):
+			_strc_strength = clampf(arg.trim_prefix("--euphorica-strc-strength=").to_float(), 0.0, 1.0)
+		elif arg.begins_with("--euphorica-strc-rays-per-frame="):
+			_strc_rays_per_frame = clampi(arg.trim_prefix("--euphorica-strc-rays-per-frame=").to_int(), 0, 32768)
+		elif arg.begins_with("--euphorica-strc-grid-size="):
+			_strc_grid_size = clampi(arg.trim_prefix("--euphorica-strc-grid-size=").to_int(), 12, 32)
+		elif arg.begins_with("--euphorica-strc-base-probe-spacing="):
+			_strc_base_probe_spacing = clampf(arg.trim_prefix("--euphorica-strc-base-probe-spacing=").to_float(), 0.25, 8.0)
+		elif arg.begins_with("--euphorica-strc-temporal-weight="):
+			_strc_temporal_weight = clampf(arg.trim_prefix("--euphorica-strc-temporal-weight=").to_float(), 0.0, 0.995)
+		elif arg.begins_with("--euphorica-strc-static-layers="):
+			_strc_static_layers = clampi(arg.trim_prefix("--euphorica-strc-static-layers=").to_int(), 0, 1048575)
+		elif arg.begins_with("--euphorica-strc-dynamic-layers="):
+			_strc_dynamic_layers = clampi(arg.trim_prefix("--euphorica-strc-dynamic-layers=").to_int(), 0, 1048575)
 		elif arg == "--euphorica-profile-timings":
 			_profile_timings = true
 		elif arg.begins_with("--euphorica-debug-views="):
@@ -110,10 +170,39 @@ func _parse_args() -> void:
 
 func _parse_resolution(text: String, fallback: Vector2i) -> Vector2i:
 	var normalized = text.to_lower().replace(",", "x")
+	if normalized in ["native", "scene", "default"]:
+		return Vector2i()
 	var parts = normalized.split("x")
 	if parts.size() != 2:
 		return fallback
 	return Vector2i(max(1, parts[0].to_int()), max(1, parts[1].to_int()))
+
+
+func _parse_scale_list(text: String, fallback: Array) -> Array:
+	var result := []
+	for part in text.replace(";", ",").split(",", false):
+		var scale := clampf(part.strip_edges().to_float(), 0.25, 1.0)
+		if not result.has(scale):
+			result.append(scale)
+	return result if not result.is_empty() else fallback.duplicate()
+
+
+func _scale_suffix(scale: float) -> String:
+	return ("%.2f" % scale).replace(".", "_")
+
+
+func _camera_motion_enabled(motion: String) -> bool:
+	return not (motion in ["", "static", "none", "off", "disabled"])
+
+
+func _camera_motion_label(motion: String, degrees: float) -> String:
+	if not _camera_motion_enabled(motion):
+		return "static"
+	return "%s_%sdeg" % [motion.replace(".", "_"), _scale_suffix(degrees)]
+
+
+func _resolution_label(resolution: Vector2i) -> String:
+	return "native" if resolution.x <= 0 or resolution.y <= 0 else "%dx%d" % [resolution.x, resolution.y]
 
 
 func _parse_debug_views(text: String) -> Array:
@@ -166,6 +255,8 @@ func _run() -> void:
 		metrics.merge(capture.get("debug_metrics", {}), true)
 		metrics["case"] = test_case.duplicate(true)
 		metrics["rtgi_knobs"] = _collect_knobs(capture["environment"])
+		metrics["resolution_context"] = capture["resolution_context"]
+		metrics.merge(_flat_resolution_metrics(capture["resolution_context"]), true)
 		metrics["rf_output_effect_disabled"] = _disable_rf_output_effect
 		metrics["rf_output_effect_disabled_count"] = capture["rf_output_effect_disabled_count"]
 		metrics["stage_timings_msec"] = capture["stage_timings_msec"]
@@ -175,15 +266,19 @@ func _run() -> void:
 		_record_split_pair(capture["game_image"], capture["final_image"], test_case)
 		_write_summary(cases)
 		print("Euphorica RTGI capture: finished %s in %.2fs" % [test_case["name"], float(Time.get_ticks_msec() - case_start_msec) / 1000.0])
+		_shutdown_capture(capture)
+		await process_frame
+		await RenderingServer.frame_post_draw
 		_unload_scene(capture["scene"])
 		await process_frame
+		await RenderingServer.frame_post_draw
 	_write_summary(cases)
 	quit(0)
 
 
 func _build_cases() -> Array:
 	var cases = []
-	if _profile in ["compare", "matrix", "split_ab"]:
+	if _include_baseline and _profile in ["compare", "matrix", "split_ab"]:
 		cases.append(_case("no_rtgi", false, _base_mode, _base_denoise, _base_history, _base_resolution, {}, true))
 	if _profile == "no_rtgi":
 		return [_case("no_rtgi", false, _base_mode, _base_denoise, _base_history, _base_resolution, {}, true)]
@@ -192,6 +287,14 @@ func _build_cases() -> Array:
 		for split_enabled in _split_values():
 			rtgi_cases.append(_split_case("rtgi_on", true, _base_mode, _base_denoise, _base_history, _base_resolution, {}, false, split_enabled))
 		return rtgi_cases
+	if _profile == "reconstruction":
+		if _include_baseline:
+			cases.append(_case("no_rtgi", false, _base_mode, _base_denoise, _base_history, _base_resolution, {}, true))
+		for mode in ["simple_rt", "path_traced"]:
+			for scale in _rtgi_resolution_scales:
+				for split_enabled in _split_values():
+					cases.append(_split_case("%s_rs%s_d%.2f_h%.2f" % [mode, _scale_suffix(float(scale)), _base_denoise, _base_history], true, mode, _base_denoise, _base_history, _base_resolution, { "rtgi_resolution_scale": float(scale) }, false, split_enabled))
+		return cases
 	if _profile == "split_ab":
 		for resolution in [Vector2i(640, 360), Vector2i(1280, 720)]:
 			for mode in ["simple_rt", "path_traced"]:
@@ -246,16 +349,33 @@ func _split_case(name: String, rtgi_enabled: bool, mode: String, denoise: float,
 
 func _case(name: String, rtgi_enabled: bool, mode: String, denoise: float, history: float, resolution: Vector2i, options: Dictionary, baseline: bool) -> Dictionary:
 	var result = options.duplicate(true)
+	var motion := str(result.get("camera_motion", _camera_motion)).to_lower()
+	var motion_degrees := float(result.get("camera_motion_degrees", _camera_motion_degrees))
 	result["name"] = name.replace(".", "_")
+	if _camera_motion_enabled(motion):
+		result["name"] = "%s_cam_%s" % [result["name"], _camera_motion_label(motion, motion_degrees)]
 	result["rtgi_enabled"] = rtgi_enabled
 	result["mode"] = mode
 	result["denoise"] = denoise
 	result["history"] = history
+	result["camera_motion"] = motion
+	result["camera_motion_degrees"] = motion_degrees
+	result["rtgi_resolution_scale"] = clampf(float(result.get("rtgi_resolution_scale", _base_rtgi_resolution_scale)), 0.25, 1.0)
 	result["resolution"] = resolution
+	result["requested_resolution"] = resolution
+	result["resolution_source"] = "native_scene" if resolution.x <= 0 or resolution.y <= 0 else "override"
 	result["baseline"] = baseline
 	result["split_signals"] = true
 	result["split_pair_key"] = ""
 	result["diffuse_cache_max_entries"] = _diffuse_cache_max_entries
+	result["strc_override"] = _strc_override
+	result["strc_strength"] = _strc_strength
+	result["strc_rays_per_frame"] = _strc_rays_per_frame
+	result["strc_grid_size"] = _strc_grid_size
+	result["strc_base_probe_spacing"] = _strc_base_probe_spacing
+	result["strc_temporal_weight"] = _strc_temporal_weight
+	result["strc_static_layers"] = int(result.get("strc_static_layers", _strc_static_layers))
+	result["strc_dynamic_layers"] = int(result.get("strc_dynamic_layers", _strc_dynamic_layers))
 	return result
 
 
@@ -268,7 +388,7 @@ func _filter_cases(cases: Array) -> Array:
 		if str(test_case["name"]).to_lower().contains(_case_filter):
 			filtered.append(test_case)
 			has_filtered_rtgi_case = has_filtered_rtgi_case or bool(test_case["rtgi_enabled"])
-	if has_filtered_rtgi_case:
+	if _include_baseline and has_filtered_rtgi_case:
 		for test_case in cases:
 			if bool(test_case.get("baseline", false)) and not filtered.has(test_case):
 				filtered.push_front(test_case)
@@ -277,16 +397,16 @@ func _filter_cases(cases: Array) -> Array:
 
 func _split_pair_key(test_case: Dictionary) -> String:
 	var options = []
-	for key in ["no_glow_fog", "no_lantern_emission", "no_omni_shadow", "debug_mode"]:
+	for key in ["no_glow_fog", "no_lantern_emission", "no_omni_shadow", "debug_mode", "camera_motion", "camera_motion_degrees"]:
 		if test_case.has(key):
 			options.append("%s=%s" % [key, str(test_case[key])])
 	options.sort()
-	return "%s|%dx%d|d%.3f|h%.3f|%s" % [
+	return "%s|%s|d%.3f|h%.3f|rs%.3f|%s" % [
 		test_case["mode"],
-		test_case["resolution"].x,
-		test_case["resolution"].y,
+		_resolution_label(test_case["resolution"]),
 		float(test_case["denoise"]),
 		float(test_case["history"]),
+		float(test_case.get("rtgi_resolution_scale", _base_rtgi_resolution_scale)),
 		",".join(options),
 	]
 
@@ -297,10 +417,20 @@ func _write_summary(cases: Array) -> void:
 		"scene": _scene_path,
 		"case_filter": _case_filter,
 		"split_signals": _split_signals_mode,
+		"rtgi_resolution_scales": _rtgi_resolution_scales,
+		"camera_motion": _camera_motion,
+		"camera_motion_degrees": _camera_motion_degrees,
+		"analysis_scale": _analysis_scale,
+		"include_baseline": _include_baseline,
+		"warmup_frames": _warmup_frames,
+		"sparkle_frames": _sparkle_frames,
 		"diffuse_cache_max_entries": _diffuse_cache_max_entries,
+		"strc_static_layers": _strc_static_layers,
+		"strc_dynamic_layers": _strc_dynamic_layers,
 		"resume": _resume,
 		"rf_output_effect_disabled": _disable_rf_output_effect,
 		"profile_timings": _profile_timings,
+		"metrics_mode": _metrics_mode,
 		"debug_views": _debug_views,
 		"planned_cases": cases.map(func(test_case): return test_case["name"]),
 		"completed_cases": _results.size(),
@@ -359,7 +489,15 @@ func _run_case(test_case: Dictionary) -> Dictionary:
 		push_error("Unable to find GameViewport in Euphorica scene.")
 		quit(2)
 		return {}
-	game_viewport.size = test_case["resolution"]
+	var requested_resolution: Vector2i = test_case["resolution"]
+	if requested_resolution.x > 0 and requested_resolution.y > 0:
+		game_viewport.size = requested_resolution
+		test_case["resolution_source"] = "override"
+	else:
+		test_case["resolution_source"] = "native_scene"
+	test_case["resolution"] = game_viewport.size
+	if bool(test_case.get("rtgi_enabled", false)) and test_case.has("split_signals"):
+		test_case["split_pair_key"] = _split_pair_key(test_case)
 	game_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 
 	var world_environment = _find_first_world_environment(game_viewport)
@@ -388,10 +526,12 @@ func _run_case(test_case: Dictionary) -> Dictionary:
 		await RenderingServer.frame_post_draw
 	_record_stage_timing(timings, "warmup_frames", stage_start)
 
+	var camera_motion_state := _prepare_camera_motion(game_viewport, test_case)
 	var frames = []
 	var frame_count = max(1, _sparkle_frames)
 	stage_start = Time.get_ticks_msec()
 	for i in range(frame_count):
+		_apply_camera_motion_frame(camera_motion_state, i, frame_count)
 		await process_frame
 		await RenderingServer.frame_post_draw
 		frames.append(_capture_viewport(game_viewport))
@@ -399,6 +539,7 @@ func _run_case(test_case: Dictionary) -> Dictionary:
 	stage_start = Time.get_ticks_msec()
 	var game_image: Image = frames[frames.size() - 1]
 	var final_image = _capture_viewport(root)
+	var resolution_context := _resolution_context(root, game_viewport, env, test_case, game_image, final_image)
 	game_image.save_png(_output_path("%s_game.png" % test_case["name"]))
 	final_image.save_png(_output_path("%s_final.png" % test_case["name"]))
 	_record_stage_timing(timings, "save_primary_images", stage_start)
@@ -416,6 +557,7 @@ func _run_case(test_case: Dictionary) -> Dictionary:
 		"final_image": final_image,
 		"debug_metrics": debug_metrics,
 		"environment": env,
+		"resolution_context": resolution_context,
 		"normal_textures_flipped": 0,
 		"rf_output_effect_disabled_count": rf_output_effect_disabled_count,
 		"stage_timings_msec": timings,
@@ -429,6 +571,58 @@ func _record_stage_timing(timings: Dictionary, stage: String, start_msec: int) -
 		print("Euphorica RTGI capture timing: %s %.2fs" % [stage, float(elapsed) / 1000.0])
 
 
+func _prepare_camera_motion(game_viewport: Viewport, test_case: Dictionary) -> Dictionary:
+	var motion := str(test_case.get("camera_motion", _camera_motion)).to_lower()
+	if not _camera_motion_enabled(motion):
+		return { "enabled": false }
+
+	var camera := game_viewport.get_camera_3d()
+	if camera == null:
+		for node in _walk(game_viewport):
+			if node is Camera3D and (node as Camera3D).current:
+				camera = node as Camera3D
+				break
+	if camera == null:
+		push_warning("Euphorica RTGI capture: camera motion requested, but GameViewport has no current Camera3D.")
+		return { "enabled": false }
+
+	_disable_camera_motion_controllers(camera)
+	return {
+		"enabled": true,
+		"motion": motion,
+		"degrees": float(test_case.get("camera_motion_degrees", _camera_motion_degrees)),
+		"camera": camera,
+		"base_transform": camera.global_transform,
+	}
+
+
+func _disable_camera_motion_controllers(camera: Camera3D) -> void:
+	var node := camera.get_parent()
+	while node != null and not (node is Viewport):
+		var node_name := String(node.name).to_lower()
+		var node_class_name := node.get_class().to_lower()
+		if node_name.contains("cameraregion") or node_class_name.contains("cameraregion") or node.has_method("set_camera_mode"):
+			node.process_mode = Node.PROCESS_MODE_DISABLED
+		node = node.get_parent()
+
+
+func _apply_camera_motion_frame(state: Dictionary, frame: int, frame_count: int) -> void:
+	if not bool(state.get("enabled", false)):
+		return
+	var camera := state.get("camera") as Camera3D
+	if camera == null:
+		return
+
+	var motion := str(state.get("motion", "yaw")).to_lower()
+	var degrees := float(state.get("degrees", 0.0))
+	var progress := 0.0 if frame_count <= 1 else float(frame) / float(frame_count - 1)
+	var centered := progress * 2.0 - 1.0
+	if motion in ["yaw", "rotate", "rotation", "left_right", "left-to-right", "pan"]:
+		var base_transform: Transform3D = state["base_transform"]
+		var yaw_basis := Basis(Vector3.UP, deg_to_rad(centered * degrees))
+		camera.global_transform = Transform3D(yaw_basis * base_transform.basis, base_transform.origin)
+
+
 func _apply_environment(test_case: Dictionary, env: Environment) -> void:
 	env.rtgi_enabled = test_case["rtgi_enabled"]
 	env.rtgi_disable_in_editor = false
@@ -438,6 +632,7 @@ func _apply_environment(test_case: Dictionary, env: Environment) -> void:
 	env.rtgi_denoiser = int(test_case.get("denoiser", Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL))
 	env.rtgi_denoiser_strength = test_case["denoise"]
 	env.rtgi_denoiser_history_weight = test_case["history"]
+	env.rtgi_resolution_scale = float(test_case.get("rtgi_resolution_scale", _base_rtgi_resolution_scale))
 	env.rtgi_denoiser_firefly_suppression = float(test_case.get("firefly_suppression", 1.0))
 	env.rtgi_denoiser_detail_preservation = float(test_case.get("detail_preservation", 1.0))
 	env.rtgi_denoiser_split_signals = bool(test_case.get("split_signals", true))
@@ -449,6 +644,15 @@ func _apply_environment(test_case: Dictionary, env: Environment) -> void:
 	env.rtgi_explicit_emissive_sampling_enabled = bool(test_case.get("explicit_emissive_sampling", true))
 	env.rtgi_diffuse_radiance_cache_enabled = bool(test_case.get("diffuse_cache", _diffuse_cache))
 	env.rtgi_diffuse_radiance_cache_max_entries = int(test_case.get("diffuse_cache_max_entries", _diffuse_cache_max_entries))
+	env.rtgi_strc_static_visual_layers = int(test_case.get("strc_static_layers", _strc_static_layers))
+	env.rtgi_strc_dynamic_visual_layers = int(test_case.get("strc_dynamic_layers", _strc_dynamic_layers))
+	if _strc_override != "" and _strc_override != "default":
+		env.rtgi_strc_enabled = _strc_override == "on"
+		env.rtgi_strc_strength = _strc_strength
+		env.rtgi_strc_rays_per_frame = _strc_rays_per_frame
+		env.rtgi_strc_grid_size = _strc_grid_size
+		env.rtgi_strc_base_probe_spacing = _strc_base_probe_spacing
+		env.rtgi_strc_temporal_weight = _strc_temporal_weight
 	env.rtgi_debug_mode = int(test_case.get("debug_mode", Environment.RT_DEBUG_DISABLED))
 	if test_case.get("no_glow_fog", false):
 		env.glow_enabled = false
@@ -520,26 +724,37 @@ func _capture_debug_views(test_case: Dictionary, game_viewport: Viewport) -> Dic
 		await RenderingServer.frame_post_draw
 		var image := _capture_viewport(game_viewport)
 		image.save_png(_output_path("%s_%s_game.png" % [test_case["name"], view]))
+		var metric_image := _analysis_scaled_image(image)
 		if view == "specular_final":
-			specular_image = image.duplicate()
+			specular_image = metric_image.duplicate()
 		elif view == "specular_roughness_bucket":
-			normal_roughness_image = image.duplicate()
-		var view_metrics := _image_metrics(image, "rtgi_%s" % view)
-		view_metrics.merge(_image_roi_metrics(image, "rtgi_%s" % view), true)
+			normal_roughness_image = metric_image.duplicate()
+		var view_metrics := _image_metrics(metric_image, "rtgi_%s" % view)
+		view_metrics.merge(_image_roi_metrics(metric_image, "rtgi_%s" % view), true)
 		if view.begins_with("cache_"):
-			view_metrics.merge(_image_channel_means(image, "rtgi_%s" % view), true)
+			view_metrics.merge(_image_channel_means(metric_image, "rtgi_%s" % view), true)
 		if view == "cache_hit_confidence":
-			view_metrics.merge(_image_cache_hit_diagnostic_metrics(image, "rtgi_cache"), true)
+			view_metrics.merge(_image_cache_hit_diagnostic_metrics(metric_image, "rtgi_cache"), true)
 		elif view == "cache_rejection":
-			view_metrics.merge(_image_cache_rejection_diagnostic_metrics(image, "rtgi_cache"), true)
+			view_metrics.merge(_image_cache_rejection_diagnostic_metrics(metric_image, "rtgi_cache"), true)
 		elif view == "source_candidate":
-			view_metrics.merge(_image_source_candidate_diagnostic_metrics(image), true)
+			view_metrics.merge(_image_source_candidate_diagnostic_metrics(metric_image), true)
 		elif view == "source_history":
-			view_metrics.merge(_image_source_history_diagnostic_metrics(image), true)
+			view_metrics.merge(_image_source_history_diagnostic_metrics(metric_image), true)
 		elif view == "source_temporal_delta":
-			view_metrics.merge(_image_source_temporal_delta_diagnostic_metrics(image), true)
+			view_metrics.merge(_image_source_temporal_delta_diagnostic_metrics(metric_image), true)
 		elif view == "source_rejection":
-			view_metrics.merge(_image_source_rejection_diagnostic_metrics(image), true)
+			view_metrics.merge(_image_source_rejection_diagnostic_metrics(metric_image), true)
+		elif view == "secondary_cache_source":
+			view_metrics.merge(_image_secondary_cache_source_metrics(metric_image), true)
+		elif view == "secondary_cache_rejection":
+			view_metrics.merge(_image_secondary_cache_rejection_metrics(metric_image), true)
+		elif view == "secondary_cache_surface":
+			view_metrics.merge(_image_surface_cache_query_metrics(metric_image), true)
+		elif view == "surface_feedback":
+			view_metrics.merge(_image_surface_feedback_metrics(metric_image), true)
+		elif view == "surface_key":
+			view_metrics.merge(_image_surface_key_metrics(metric_image), true)
 		for key in view_metrics.keys():
 			metrics[key] = view_metrics[key]
 	if specular_image != null and normal_roughness_image != null:
@@ -1387,6 +1602,393 @@ func _image_source_rejection_diagnostic_metrics(image: Image) -> Dictionary:
 	}
 
 
+func _image_secondary_cache_source_metrics(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var count: int = max(width * height, 1)
+	var queried := 0
+	var accepted := 0
+	var receiver := 0
+	var strc := 0
+	var base_spg := 0
+	var refined_spg := 0
+	var surface := 0
+	var screen_trace := 0
+	var secondary_hit := 0
+	var screen_trace_accepted := 0
+	var screen_trace_base_spg := 0
+	var screen_trace_refined_spg := 0
+	var screen_trace_surface := 0
+	var secondary_hit_accepted := 0
+	var secondary_hit_base_spg := 0
+	var secondary_hit_refined_spg := 0
+	var secondary_hit_surface := 0
+	var weight_sum := 0.0
+	for y in range(height):
+		for x in range(width):
+			var c := image.get_pixel(x, y)
+			if c.b <= 0.0 and c.r <= 0.0:
+				continue
+			queried += 1
+			if c.b >= 0.5:
+				screen_trace += 1
+			else:
+				secondary_hit += 1
+			var source := clampi(int(round(c.r * 5.0)), 0, 5)
+			if source <= 0:
+				continue
+			accepted += 1
+			if c.b >= 0.5:
+				screen_trace_accepted += 1
+			else:
+				secondary_hit_accepted += 1
+			weight_sum += c.g
+			match source:
+				1:
+					receiver += 1
+				2:
+					strc += 1
+				3:
+					base_spg += 1
+					if c.b >= 0.5:
+						screen_trace_base_spg += 1
+					else:
+						secondary_hit_base_spg += 1
+				4:
+					refined_spg += 1
+					if c.b >= 0.5:
+						screen_trace_refined_spg += 1
+					else:
+						secondary_hit_refined_spg += 1
+				5:
+					surface += 1
+					if c.b >= 0.5:
+						screen_trace_surface += 1
+					else:
+						secondary_hit_surface += 1
+	var queried_denom := maxf(float(queried), 1.0)
+	var accepted_denom := maxf(float(accepted), 1.0)
+	var screen_trace_accepted_denom := maxf(float(screen_trace_accepted), 1.0)
+	var secondary_hit_accepted_denom := maxf(float(secondary_hit_accepted), 1.0)
+	return {
+		"rtgi_secondary_cache_query_rate": float(queried) / float(count),
+		"rtgi_secondary_cache_accept_rate": float(accepted) / queried_denom,
+		"rtgi_secondary_cache_no_source_rate": float(queried - accepted) / queried_denom,
+		"rtgi_secondary_cache_receiver_fraction": float(receiver) / accepted_denom,
+		"rtgi_secondary_cache_strc_fraction": float(strc) / accepted_denom,
+		"rtgi_secondary_cache_base_spg_fraction": float(base_spg) / accepted_denom,
+		"rtgi_secondary_cache_refined_spg_fraction": float(refined_spg) / accepted_denom,
+		"rtgi_secondary_cache_spg_fraction": float(base_spg + refined_spg) / accepted_denom,
+		"rtgi_secondary_cache_surface_fraction": float(surface) / accepted_denom,
+		"rtgi_secondary_cache_screen_trace_query_fraction": float(screen_trace) / queried_denom,
+		"rtgi_secondary_cache_secondary_hit_query_fraction": float(secondary_hit) / queried_denom,
+		"rtgi_secondary_cache_screen_trace_accept_fraction": float(screen_trace_accepted) / accepted_denom,
+		"rtgi_secondary_cache_screen_trace_spg_fraction": float(screen_trace_base_spg + screen_trace_refined_spg) / screen_trace_accepted_denom,
+		"rtgi_secondary_cache_screen_trace_surface_fraction": float(screen_trace_surface) / screen_trace_accepted_denom,
+		"rtgi_secondary_cache_secondary_hit_accept_fraction": float(secondary_hit_accepted) / accepted_denom,
+		"rtgi_secondary_cache_secondary_hit_spg_fraction": float(secondary_hit_base_spg + secondary_hit_refined_spg) / secondary_hit_accepted_denom,
+		"rtgi_secondary_cache_secondary_hit_surface_fraction": float(secondary_hit_surface) / secondary_hit_accepted_denom,
+		"rtgi_secondary_cache_weight_mean": weight_sum / accepted_denom,
+	}
+
+
+func _image_secondary_cache_rejection_metrics(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var count: int = max(width * height, 1)
+	var rejected := 0
+	var screen_trace := 0
+	var secondary_hit := 0
+	var detail_sum := 0.0
+	var buckets := []
+	for i in range(10):
+		buckets.append(0)
+	for y in range(height):
+		for x in range(width):
+			var c := image.get_pixel(x, y)
+			var reason := clampi(int(round(c.r * 9.0)), 0, 9)
+			if reason <= 0:
+				continue
+			rejected += 1
+			buckets[reason] += 1
+			detail_sum += c.b
+			if c.g >= 0.5:
+				screen_trace += 1
+			else:
+				secondary_hit += 1
+	var rejected_denom := maxf(float(rejected), 1.0)
+	return {
+		"rtgi_secondary_cache_rejection_rate": float(rejected) / float(count),
+		"rtgi_secondary_cache_rejection_ineligible_fraction": float(buckets[1]) / rejected_denom,
+		"rtgi_secondary_cache_rejection_no_source_fraction": float(buckets[2]) / rejected_denom,
+		"rtgi_secondary_cache_rejection_receiver_weak_fraction": float(buckets[3]) / rejected_denom,
+		"rtgi_secondary_cache_rejection_refined_spg_weak_fraction": float(buckets[4]) / rejected_denom,
+		"rtgi_secondary_cache_rejection_base_spg_weak_fraction": float(buckets[5]) / rejected_denom,
+		"rtgi_secondary_cache_rejection_strc_weak_fraction": float(buckets[6]) / rejected_denom,
+		"rtgi_secondary_cache_rejection_screen_no_hit_fraction": float(buckets[7]) / rejected_denom,
+		"rtgi_secondary_cache_rejection_screen_low_weight_fraction": float(buckets[8]) / rejected_denom,
+		"rtgi_secondary_cache_rejection_surface_weak_fraction": float(buckets[9]) / rejected_denom,
+		"rtgi_secondary_cache_rejection_screen_trace_fraction": float(screen_trace) / rejected_denom,
+		"rtgi_secondary_cache_rejection_secondary_hit_fraction": float(secondary_hit) / rejected_denom,
+		"rtgi_secondary_cache_rejection_detail_mean": detail_sum / rejected_denom,
+	}
+
+
+func _image_surface_cache_query_metrics(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var count: int = max(width * height, 1)
+	var queried := 0
+	var screen_trace := 0
+	var secondary_hit := 0
+	var detail_sum := 0.0
+	var source_none := 0
+	var source_receiver := 0
+	var source_base_spg := 0
+	var source_refined_spg := 0
+	var source_visible_current := 0
+	var source_direct := 0
+	var source_emissive := 0
+	var source_sky := 0
+	var source_strc := 0
+	var source_mixed := 0
+	var buckets := []
+	for i in range(15):
+		buckets.append(0)
+	for y in range(height):
+		for x in range(width):
+			var c := image.get_pixel(x, y)
+			var reason := clampi(int(round(c.r * 14.0)), 0, 14)
+			if reason <= 0:
+				continue
+			queried += 1
+			buckets[reason] += 1
+			detail_sum += c.a
+			var source := clampi(int(round(c.g * 9.0)), 0, 9)
+			match source:
+				0:
+					source_none += 1
+				1:
+					source_receiver += 1
+				2:
+					source_base_spg += 1
+				3:
+					source_refined_spg += 1
+				4:
+					source_visible_current += 1
+				5:
+					source_direct += 1
+				6:
+					source_emissive += 1
+				7:
+					source_sky += 1
+				8:
+					source_strc += 1
+				9:
+					source_mixed += 1
+			if c.b >= 0.5:
+				screen_trace += 1
+			else:
+				secondary_hit += 1
+	var queried_denom := maxf(float(queried), 1.0)
+	return {
+		"rtgi_surface_cache_query_rate": float(queried) / float(count),
+		"rtgi_surface_cache_query_accept_fraction": float(buckets[1]) / queried_denom,
+		"rtgi_surface_cache_query_early_source_fraction": float(buckets[2]) / queried_denom,
+		"rtgi_surface_cache_query_ineligible_fraction": float(buckets[3]) / queried_denom,
+		"rtgi_surface_cache_query_no_key_fraction": float(buckets[4]) / queried_denom,
+		"rtgi_surface_cache_query_dynamic_ineligible_fraction": float(buckets[5]) / queried_denom,
+		"rtgi_surface_cache_query_no_page_fraction": float(buckets[6]) / queried_denom,
+		"rtgi_surface_cache_query_id_mismatch_fraction": float(buckets[7]) / queried_denom,
+		"rtgi_surface_cache_query_low_confidence_fraction": float(buckets[8]) / queried_denom,
+		"rtgi_surface_cache_query_low_support_fraction": float(buckets[9]) / queried_denom,
+		"rtgi_surface_cache_query_low_variance_fraction": float(buckets[10]) / queried_denom,
+		"rtgi_surface_cache_query_stale_fraction": float(buckets[11]) / queried_denom,
+		"rtgi_surface_cache_query_normal_mismatch_fraction": float(buckets[12]) / queried_denom,
+		"rtgi_surface_cache_query_weak_radiance_fraction": float(buckets[13]) / queried_denom,
+		"rtgi_surface_cache_query_weak_quality_fraction": float(buckets[14]) / queried_denom,
+		"rtgi_surface_cache_query_screen_trace_fraction": float(screen_trace) / queried_denom,
+		"rtgi_surface_cache_query_secondary_hit_fraction": float(secondary_hit) / queried_denom,
+		"rtgi_surface_cache_query_detail_mean": detail_sum / queried_denom,
+		"rtgi_surface_cache_query_source_none_fraction": float(source_none) / queried_denom,
+		"rtgi_surface_cache_query_source_receiver_fraction": float(source_receiver) / queried_denom,
+		"rtgi_surface_cache_query_source_base_spg_fraction": float(source_base_spg) / queried_denom,
+		"rtgi_surface_cache_query_source_refined_spg_fraction": float(source_refined_spg) / queried_denom,
+		"rtgi_surface_cache_query_source_visible_current_fraction": float(source_visible_current) / queried_denom,
+		"rtgi_surface_cache_query_source_direct_fraction": float(source_direct) / queried_denom,
+		"rtgi_surface_cache_query_source_emissive_fraction": float(source_emissive) / queried_denom,
+		"rtgi_surface_cache_query_source_sky_fraction": float(source_sky) / queried_denom,
+		"rtgi_surface_cache_query_source_strc_fraction": float(source_strc) / queried_denom,
+		"rtgi_surface_cache_query_source_mixed_fraction": float(source_mixed) / queried_denom,
+	}
+
+
+func _image_surface_feedback_metrics(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var count: int = max(width * height, 1)
+	var active := 0
+	var selected := 0
+	var invalid := 0
+	var no_radiance := 0
+	var budget_starved := 0
+	var collision := 0
+	var atomic_skipped := 0
+	var low_confidence := 0
+	var low_quality := 0
+	var stale := 0
+	var dynamic := 0
+	var source_none := 0
+	var source_receiver := 0
+	var source_base_spg := 0
+	var source_refined_spg := 0
+	var source_visible_current := 0
+	var source_direct := 0
+	var source_emissive := 0
+	var source_sky := 0
+	var source_strc := 0
+	var source_mixed := 0
+	var selected_source_visible_current := 0
+	var selected_source_direct := 0
+	var selected_source_emissive := 0
+	var selected_source_sky := 0
+	var selected_source_strc := 0
+	var selected_source_mixed := 0
+	var detail_sum := 0.0
+	var quality_sum := 0.0
+	for y in range(height):
+		for x in range(width):
+			var c := image.get_pixel(x, y)
+			var status := clampi(int(round(c.r * 10.0)), 0, 10)
+			if status <= 0:
+				continue
+			active += 1
+			detail_sum += c.a
+			quality_sum += c.b
+			var source := clampi(int(round(c.g * 9.0)), 0, 9)
+			match source:
+				0:
+					source_none += 1
+				1:
+					source_receiver += 1
+				2:
+					source_base_spg += 1
+				3:
+					source_refined_spg += 1
+				4:
+					source_visible_current += 1
+				5:
+					source_direct += 1
+				6:
+					source_emissive += 1
+				7:
+					source_sky += 1
+				8:
+					source_strc += 1
+				9:
+					source_mixed += 1
+			match status:
+				1:
+					selected += 1
+				2:
+					invalid += 1
+				3:
+					no_radiance += 1
+				4:
+					budget_starved += 1
+				5:
+					collision += 1
+				6:
+					atomic_skipped += 1
+				7:
+					low_confidence += 1
+				8:
+					low_quality += 1
+				9:
+					stale += 1
+					selected += 1
+				10:
+					dynamic += 1
+			if status == 1 or status == 9:
+				match source:
+					4:
+						selected_source_visible_current += 1
+					5:
+						selected_source_direct += 1
+					6:
+						selected_source_emissive += 1
+					7:
+						selected_source_sky += 1
+					8:
+						selected_source_strc += 1
+					9:
+						selected_source_mixed += 1
+	var active_denom := maxf(float(active), 1.0)
+	var selected_denom := maxf(float(selected), 1.0)
+	return {
+		"rtgi_surface_feedback_active_rate": float(active) / float(count),
+		"rtgi_surface_feedback_selected_fraction": float(selected) / active_denom,
+		"rtgi_surface_feedback_invalid_fraction": float(invalid) / active_denom,
+		"rtgi_surface_feedback_no_radiance_fraction": float(no_radiance) / active_denom,
+		"rtgi_surface_feedback_budget_starved_fraction": float(budget_starved) / active_denom,
+		"rtgi_surface_feedback_collision_fraction": float(collision) / active_denom,
+		"rtgi_surface_feedback_atomic_skipped_fraction": float(atomic_skipped) / active_denom,
+		"rtgi_surface_feedback_low_confidence_fraction": float(low_confidence) / active_denom,
+		"rtgi_surface_feedback_low_quality_fraction": float(low_quality) / active_denom,
+		"rtgi_surface_feedback_stale_refresh_fraction": float(stale) / active_denom,
+		"rtgi_surface_feedback_dynamic_ineligible_fraction": float(dynamic) / active_denom,
+		"rtgi_surface_feedback_source_none_fraction": float(source_none) / active_denom,
+		"rtgi_surface_feedback_source_receiver_fraction": float(source_receiver) / active_denom,
+		"rtgi_surface_feedback_source_base_spg_fraction": float(source_base_spg) / active_denom,
+		"rtgi_surface_feedback_source_refined_spg_fraction": float(source_refined_spg) / active_denom,
+		"rtgi_surface_feedback_source_visible_current_fraction": float(source_visible_current) / active_denom,
+		"rtgi_surface_feedback_source_direct_fraction": float(source_direct) / active_denom,
+		"rtgi_surface_feedback_source_emissive_fraction": float(source_emissive) / active_denom,
+		"rtgi_surface_feedback_source_sky_fraction": float(source_sky) / active_denom,
+		"rtgi_surface_feedback_source_strc_fraction": float(source_strc) / active_denom,
+		"rtgi_surface_feedback_source_mixed_fraction": float(source_mixed) / active_denom,
+		"rtgi_surface_feedback_selected_source_visible_current_fraction": float(selected_source_visible_current) / selected_denom,
+		"rtgi_surface_feedback_selected_source_direct_fraction": float(selected_source_direct) / selected_denom,
+		"rtgi_surface_feedback_selected_source_emissive_fraction": float(selected_source_emissive) / selected_denom,
+		"rtgi_surface_feedback_selected_source_sky_fraction": float(selected_source_sky) / selected_denom,
+		"rtgi_surface_feedback_selected_source_strc_fraction": float(selected_source_strc) / selected_denom,
+		"rtgi_surface_feedback_selected_source_mixed_fraction": float(selected_source_mixed) / selected_denom,
+		"rtgi_surface_feedback_detail_mean": detail_sum / active_denom,
+		"rtgi_surface_feedback_source_quality_mean": quality_sum / active_denom,
+	}
+
+
+func _image_surface_key_metrics(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var count: int = max(width * height, 1)
+	var covered := 0
+	var static_eligible := 0
+	var buckets := []
+	for i in range(7):
+		buckets.append(0)
+	for y in range(height):
+		for x in range(width):
+			var c := image.get_pixel(x, y)
+			if c.r > 0.5:
+				covered += 1
+			if c.b > 0.5:
+				static_eligible += 1
+			var reason := clampi(int(round(c.g * 6.0)), 0, 6)
+			buckets[reason] += 1
+	return {
+		"rtgi_surface_key_coverage": float(covered) / float(count),
+		"rtgi_surface_key_static_eligible_fraction": float(static_eligible) / float(count),
+		"rtgi_surface_key_reason_valid_fraction": float(buckets[0]) / float(count),
+		"rtgi_surface_key_reason_empty_fraction": float(buckets[1]) / float(count),
+		"rtgi_surface_key_reason_raster_fraction": float(buckets[2]) / float(count),
+		"rtgi_surface_key_reason_history_invalid_fraction": float(buckets[3]) / float(count),
+		"rtgi_surface_key_reason_deformed_fraction": float(buckets[4]) / float(count),
+		"rtgi_surface_key_reason_procedural_fraction": float(buckets[5]) / float(count),
+		"rtgi_surface_key_reason_zero_key_fraction": float(buckets[6]) / float(count),
+	}
+
+
 func _image_cache_rejection_diagnostic_metrics(image: Image, prefix: String) -> Dictionary:
 	var metrics := _image_cache_rejection_region(image, prefix, Rect2i(Vector2i.ZERO, Vector2i(image.get_width(), image.get_height())))
 	for roi_name in _roi_rects(image).keys():
@@ -1483,6 +2085,16 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_TEMPORAL_DELTA
 		"source_rejection":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_REJECTION
+		"secondary_cache_source":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SECONDARY_CACHE_SOURCE
+		"secondary_cache_rejection":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SECONDARY_CACHE_REJECTION
+		"secondary_cache_surface":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SECONDARY_CACHE_SURFACE
+		"surface_feedback":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SURFACE_FEEDBACK
+		"surface_key":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SURFACE_KEY
 		"cache_raw_diffuse":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_RAW_DIFFUSE
 		"cache_filtered_diffuse":
@@ -1493,6 +2105,20 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_AGE
 		"cache_rejection":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_REJECTION
+		"strc_radiance":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_RADIANCE
+		"strc_confidence":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_CONFIDENCE
+		"strc_updates":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_UPDATES
+		"strc_visibility":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_VISIBILITY
+		"strc_age":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_AGE
+		"strc_variance":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_VARIANCE
+		"strc_rejection":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_REJECTION
 		"variance":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_VARIANCE
 		"history_length":
@@ -1501,6 +2127,10 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_REJECTION
 		"final":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_FINAL
+		"reconstructed":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED
+		"reconstructed_reactivity":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED_REACTIVITY
 		_:
 			return 0
 
@@ -1513,6 +2143,8 @@ func _source_attribution_summary(metrics: Dictionary) -> String:
 		"sky/environment": _source_score(metrics, "signal_sky"),
 		"clamp/weight risk": _source_score(metrics, "signal_confidence"),
 		"final/post amplification": _source_score(metrics, "final"),
+		"reconstruction": _source_score(metrics, "reconstructed"),
+		"reconstruction reactivity": _source_score(metrics, "reconstructed_reactivity"),
 	}
 	var best_name := "unknown"
 	var best_score := -1.0
@@ -1556,26 +2188,133 @@ func _capture_viewport(viewport: Viewport) -> Image:
 	return image
 
 
+func _resolution_context(root_viewport: Viewport, game_viewport: SubViewport, env: Environment, test_case: Dictionary, game_image: Image, final_image: Image) -> Dictionary:
+	var game_size: Vector2i = game_viewport.size
+	var requested_size: Vector2i = test_case.get("requested_resolution", game_size)
+	var root_size: Vector2i = root_viewport.size
+	var rtgi_scale := clampf(env.rtgi_resolution_scale, 0.25, 1.0)
+	var scaling_3d_scale := clampf(game_viewport.scaling_3d_scale, 0.1, 2.0)
+	var scaling_3d_mode := int(game_viewport.scaling_3d_mode)
+	var effective_3d_size := Vector2i(maxi(1, int(round(float(game_size.x) * scaling_3d_scale))), maxi(1, int(round(float(game_size.y) * scaling_3d_scale))))
+	var estimated_rtgi_size := Vector2i(maxi(1, int(round(float(effective_3d_size.x) * rtgi_scale))), maxi(1, int(round(float(effective_3d_size.y) * rtgi_scale))))
+	return {
+		"requested_game_viewport_size": _vector2i_dict(requested_size),
+		"requested_resolution_argument": _vector2i_dict(requested_size),
+		"resolution_source": str(test_case.get("resolution_source", "override")),
+		"game_viewport_size": _vector2i_dict(game_size),
+		"scaling_3d_mode": scaling_3d_mode,
+		"scaling_3d_mode_name": _scaling_3d_mode_name(scaling_3d_mode),
+		"scaling_3d_scale": scaling_3d_scale,
+		"estimated_3d_render_size": _vector2i_dict(effective_3d_size),
+		"root_viewport_size": _vector2i_dict(root_size),
+		"game_image_size": _vector2i_dict(Vector2i(game_image.get_width(), game_image.get_height())),
+		"final_image_size": _vector2i_dict(Vector2i(final_image.get_width(), final_image.get_height())),
+		"rtgi_resolution_scale": rtgi_scale,
+		"estimated_rtgi_trace_size": _vector2i_dict(estimated_rtgi_size),
+		"note": "Euphorica captures come from GameViewport; RTGI scale applies after the viewport's 3D scaling, not directly to the final GameViewport size.",
+	}
+
+
+func _scaling_3d_mode_name(mode: int) -> String:
+	match mode:
+		Viewport.SCALING_3D_MODE_BILINEAR:
+			return "bilinear"
+		Viewport.SCALING_3D_MODE_FSR:
+			return "fsr"
+		Viewport.SCALING_3D_MODE_FSR2:
+			return "fsr2"
+		Viewport.SCALING_3D_MODE_METALFX_SPATIAL:
+			return "metalfx_spatial"
+		Viewport.SCALING_3D_MODE_METALFX_TEMPORAL:
+			return "metalfx_temporal"
+		Viewport.SCALING_3D_MODE_NEAREST:
+			return "nearest"
+		Viewport.SCALING_3D_MODE_SHARP_BILINEAR:
+			return "sharp_bilinear"
+		Viewport.SCALING_3D_MODE_BICUBIC:
+			return "bicubic"
+		Viewport.SCALING_3D_MODE_SGSR:
+			return "sgsr"
+		Viewport.SCALING_3D_MODE_DLSS:
+			return "dlss"
+		_:
+			return "unknown_%d" % mode
+
+
+func _vector2i_dict(value: Vector2i) -> Dictionary:
+	return {
+		"x": value.x,
+		"y": value.y,
+	}
+
+
+func _flat_resolution_metrics(context: Dictionary) -> Dictionary:
+	var game_viewport_size: Dictionary = context["game_viewport_size"]
+	var root_viewport_size: Dictionary = context["root_viewport_size"]
+	var game_image_size: Dictionary = context["game_image_size"]
+	var final_image_size: Dictionary = context["final_image_size"]
+	var effective_3d_size: Dictionary = context["estimated_3d_render_size"]
+	var rtgi_trace_size: Dictionary = context["estimated_rtgi_trace_size"]
+	return {
+		"capture_game_viewport_width": int(game_viewport_size["x"]),
+		"capture_game_viewport_height": int(game_viewport_size["y"]),
+		"capture_root_viewport_width": int(root_viewport_size["x"]),
+		"capture_root_viewport_height": int(root_viewport_size["y"]),
+		"capture_game_image_width": int(game_image_size["x"]),
+		"capture_game_image_height": int(game_image_size["y"]),
+		"capture_final_image_width": int(final_image_size["x"]),
+		"capture_final_image_height": int(final_image_size["y"]),
+		"capture_resolution_source": str(context.get("resolution_source", "override")),
+		"capture_scaling_3d_mode": int(context.get("scaling_3d_mode", 0)),
+		"capture_scaling_3d_mode_name": str(context.get("scaling_3d_mode_name", "")),
+		"capture_scaling_3d_scale": float(context.get("scaling_3d_scale", 1.0)),
+		"capture_estimated_3d_render_width": int(effective_3d_size["x"]),
+		"capture_estimated_3d_render_height": int(effective_3d_size["y"]),
+		"capture_rtgi_resolution_scale": float(context["rtgi_resolution_scale"]),
+		"capture_estimated_rtgi_trace_width": int(rtgi_trace_size["x"]),
+		"capture_estimated_rtgi_trace_height": int(rtgi_trace_size["y"]),
+	}
+
+
 func _measure_case(frames: Array, game_image: Image, final_image: Image, baseline_game: Image, baseline_final: Image) -> Dictionary:
-	var final_metric_image := _analysis_size_copy(final_image, game_image.get_width(), game_image.get_height())
-	var baseline_final_metric := _analysis_size_copy(baseline_final, game_image.get_width(), game_image.get_height()) if baseline_final != null else null
-	var metrics = _image_metrics(game_image, "game")
+	if _metrics_mode == "none":
+		return {
+			"metrics_mode": _metrics_mode,
+			"analysis_scale": _analysis_scale,
+			"analysis_width": game_image.get_width(),
+			"analysis_height": game_image.get_height(),
+			"temporal_sparkle_per_megapixel_max": 0.0,
+			"temporal_sparkle_per_megapixel_avg": 0.0,
+			"game_convergence_curve": [],
+		}
+	if _metrics_mode == "smoke":
+		return _measure_case_smoke(frames, game_image, final_image)
+
+	var game_metric_image := _analysis_scaled_image(game_image)
+	var final_metric_image := _analysis_size_copy(final_image, game_metric_image.get_width(), game_metric_image.get_height())
+	var baseline_game_metric := _analysis_size_copy(baseline_game, game_metric_image.get_width(), game_metric_image.get_height()) if baseline_game != null else null
+	var baseline_final_metric := _analysis_size_copy(baseline_final, game_metric_image.get_width(), game_metric_image.get_height()) if baseline_final != null else null
+	var metric_frames := _analysis_scaled_frames(frames)
+	var metrics = _image_metrics(game_metric_image, "game")
 	var final_metrics = _image_metrics(final_metric_image, "final")
 	for key in final_metrics.keys():
 		metrics[key] = final_metrics[key]
-	metrics.merge(_image_roi_metrics(game_image, "game"), true)
+	metrics.merge(_image_roi_metrics(game_metric_image, "game"), true)
 	metrics.merge(_image_roi_metrics(final_metric_image, "final"), true)
-	metrics["temporal_sparkle_per_megapixel_max"] = _temporal_sparkle(frames)
-	metrics["temporal_sparkle_per_megapixel_avg"] = _temporal_sparkle_average(frames)
-	metrics["game_convergence_curve"] = _convergence_curve(frames)
-	metrics["final_to_game_luma_correlation"] = _luma_correlation(game_image, final_metric_image)
+	metrics["analysis_scale"] = _analysis_scale
+	metrics["analysis_width"] = game_metric_image.get_width()
+	metrics["analysis_height"] = game_metric_image.get_height()
+	metrics["temporal_sparkle_per_megapixel_max"] = _temporal_sparkle(metric_frames)
+	metrics["temporal_sparkle_per_megapixel_avg"] = _temporal_sparkle_average(metric_frames)
+	metrics["game_convergence_curve"] = _convergence_curve(metric_frames)
+	metrics["final_to_game_luma_correlation"] = _luma_correlation(game_metric_image, final_metric_image)
 	metrics["final_to_game_visible_speckle_ratio"] = _safe_ratio(metrics["final_visible_speckles_per_megapixel"], metrics["game_visible_speckles_per_megapixel"])
 	metrics["final_to_game_firefly_ratio"] = _safe_ratio(metrics["final_full_frame_fireflies_per_megapixel"], metrics["game_full_frame_fireflies_per_megapixel"])
 	metrics["final_to_game_p99_luma_ratio"] = _safe_ratio(metrics["final_luma_p99"], metrics["game_luma_p99"])
 	metrics["final_to_game_detail_edge_ratio"] = _safe_ratio(metrics["final_detail_edge_energy"], metrics["game_detail_edge_energy"])
 	metrics.merge(_rtgi_diffuse_cache_budget_metrics(Vector2i(game_image.get_width(), game_image.get_height())), true)
-	if baseline_game != null:
-		var diff = _diff_metrics(game_image, baseline_game, "rtgi_vs_no_rtgi")
+	if baseline_game_metric != null:
+		var diff = _diff_metrics(game_metric_image, baseline_game_metric, "rtgi_vs_no_rtgi")
 		for key in diff.keys():
 			metrics[key] = diff[key]
 	if baseline_final != null:
@@ -1585,7 +2324,52 @@ func _measure_case(frames: Array, game_image: Image, final_image: Image, baselin
 	return metrics
 
 
+func _measure_case_smoke(frames: Array, game_image: Image, final_image: Image) -> Dictionary:
+	var game_metric_image := _analysis_scaled_image(game_image)
+	var final_metric_image := _analysis_size_copy(final_image, game_metric_image.get_width(), game_metric_image.get_height())
+	var metrics := {
+		"metrics_mode": _metrics_mode,
+		"analysis_scale": _analysis_scale,
+		"analysis_width": game_metric_image.get_width(),
+		"analysis_height": game_metric_image.get_height(),
+		"game_luma_mean": _luma_mean_sparse(game_metric_image, 4),
+		"final_luma_mean": _luma_mean_sparse(final_metric_image, 4),
+		"game_convergence_curve": [],
+	}
+	if frames.size() >= 2:
+		var prev := _analysis_scaled_image(frames[frames.size() - 2])
+		var curr := _analysis_scaled_image(frames[frames.size() - 1])
+		var sparkle := _frame_delta_speckles(prev, curr)
+		metrics["temporal_sparkle_per_megapixel_max"] = sparkle
+		metrics["temporal_sparkle_per_megapixel_avg"] = sparkle
+	else:
+		metrics["temporal_sparkle_per_megapixel_max"] = 0.0
+		metrics["temporal_sparkle_per_megapixel_avg"] = 0.0
+	metrics.merge(_rtgi_diffuse_cache_budget_metrics(Vector2i(game_image.get_width(), game_image.get_height())), true)
+	return metrics
+
+
+func _luma_mean_sparse(image: Image, step: int) -> float:
+	var source := image
+	if source.get_format() != Image.FORMAT_RGBA8:
+		source = image.duplicate()
+		source.convert(Image.FORMAT_RGBA8)
+	var width := source.get_width()
+	var height := source.get_height()
+	var data := source.get_data()
+	var stride := maxi(1, step)
+	var sum := 0.0
+	var count := 0
+	for y in range(0, height, stride):
+		for x in range(0, width, stride):
+			var offset := (y * width + x) * 4
+			sum += maxf((float(data[offset]) * 0.2126 + float(data[offset + 1]) * 0.7152 + float(data[offset + 2]) * 0.0722) / 255.0, 0.0)
+			count += 1
+	return sum / float(maxi(count, 1))
+
+
 func _rtgi_diffuse_cache_budget_metrics(output_size: Vector2i) -> Dictionary:
+	const CACHE_RECEIVER_SLOT_COUNT := 4
 	var budget := clampi(_diffuse_cache_max_entries, 4096, 4194304)
 	var output_pixels := maxi(output_size.x * output_size.y, 1)
 	var cache_size := output_size
@@ -1600,13 +2384,16 @@ func _rtgi_diffuse_cache_budget_metrics(output_size: Vector2i) -> Dictionary:
 			else:
 				break
 	var cache_pixels := maxi(cache_size.x * cache_size.y, 1)
-	var persistent_history_bytes := cache_pixels * 6 * 8
+	var persistent_cache_entries := cache_pixels * CACHE_RECEIVER_SLOT_COUNT
+	var persistent_history_bytes := persistent_cache_entries * 6 * 8
 	var full_resolution_bytes := output_pixels * ((2 * 8) + 4 + 1 + 1)
 	return {
 		"diffuse_radiance_cache_budget_entries": budget,
 		"diffuse_radiance_cache_width": cache_size.x,
 		"diffuse_radiance_cache_height": cache_size.y,
 		"diffuse_radiance_cache_entries": cache_pixels,
+		"diffuse_radiance_cache_receiver_slots": CACHE_RECEIVER_SLOT_COUNT,
+		"diffuse_radiance_cache_persistent_entries": persistent_cache_entries,
 		"diffuse_radiance_cache_persistent_history_bytes": persistent_history_bytes,
 		"diffuse_radiance_cache_fullres_output_and_diagnostic_bytes": full_resolution_bytes,
 		"diffuse_radiance_cache_total_effect_bytes": persistent_history_bytes + full_resolution_bytes,
@@ -1618,6 +2405,25 @@ func _analysis_size_copy(image: Image, width: int, height: int) -> Image:
 	result.convert(Image.FORMAT_RGBA8)
 	if result.get_width() != width or result.get_height() != height:
 		result.resize(width, height, Image.INTERPOLATE_LANCZOS)
+	return result
+
+
+func _analysis_scaled_image(image: Image) -> Image:
+	var result := image.duplicate()
+	result.convert(Image.FORMAT_RGBA8)
+	if _analysis_scale < 0.999:
+		var width := maxi(1, int(round(float(result.get_width()) * _analysis_scale)))
+		var height := maxi(1, int(round(float(result.get_height()) * _analysis_scale)))
+		result.resize(width, height, Image.INTERPOLATE_LANCZOS)
+	return result
+
+
+func _analysis_scaled_frames(frames: Array) -> Array:
+	if _analysis_scale >= 0.999:
+		return frames
+	var result := []
+	for frame in frames:
+		result.append(_analysis_scaled_image(frame))
 	return result
 
 
@@ -2065,6 +2871,23 @@ func _walk(node: Node) -> Array:
 func _unload_scene(scene: Node) -> void:
 	if scene != null and is_instance_valid(scene):
 		scene.queue_free()
+
+
+func _shutdown_capture(capture: Dictionary) -> void:
+	var environment = capture.get("environment")
+	if environment is Environment:
+		(environment as Environment).rtgi_enabled = false
+		(environment as Environment).rtgi_debug_mode = Environment.RT_DEBUG_DISABLED
+	for debug_environment in _debug_environments:
+		if debug_environment is Environment:
+			(debug_environment as Environment).rtgi_enabled = false
+			(debug_environment as Environment).rtgi_debug_mode = Environment.RT_DEBUG_DISABLED
+
+	var viewport = capture.get("game_viewport")
+	if viewport is SubViewport and is_instance_valid(viewport):
+		var game_viewport := viewport as SubViewport
+		game_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		RenderingServer.viewport_set_active(game_viewport.get_viewport_rid(), false)
 
 
 func _load_resume_results(cases: Array) -> Dictionary:

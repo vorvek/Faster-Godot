@@ -52,6 +52,7 @@ layout(set = 0, binding = 6) uniform sampler2D rt_history_validity_buffer;
 layout(set = 0, binding = 7) uniform sampler2D rt_prev_history_validity_buffer;
 layout(set = 0, binding = 8) uniform sampler2D rt_history_id_buffer;
 layout(set = 0, binding = 9) uniform sampler2D rt_prev_history_id_buffer;
+layout(set = 0, binding = 10) uniform sampler2D rt_taa_reactivity_buffer;
 
 layout(push_constant, std430) uniform Params {
 	vec2 resolution;
@@ -63,6 +64,7 @@ layout(push_constant, std430) uniform Params {
 	float history_weight;
 	float sharpness;
 	float rt_history_filter_strength;
+	float rt_taa_reactivity_enabled;
 }
 params;
 
@@ -576,6 +578,9 @@ vec3 temporal_antialiasing(ivec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_
 		diff = 1.0 - diff;
 		diff = diff * diff;
 		blend_factor = force_current ? 1.0 : mix(0.0, blend_factor, diff);
+		if (params.rt_taa_reactivity_enabled > 0.5) {
+			blend_factor = max(blend_factor, texelFetch(rt_taa_reactivity_buffer, ivec2(pos_screen), 0).r);
+		}
 
 		// Lerp/blend
 		color_resolved = mix(color_history, color_input, blend_factor);

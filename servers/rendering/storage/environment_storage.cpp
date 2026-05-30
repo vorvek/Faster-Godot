@@ -56,6 +56,7 @@ void RendererEnvironmentStorage::environment_initialize(RID p_rid) {
 	environment_owner.initialize_rid(p_rid, Environment());
 	Environment *env = environment_owner.get_or_null(p_rid);
 	ERR_FAIL_NULL(env);
+	env->pathtracing_params[RSE::PT_PARAM_RTGI_RESOLUTION_SCALE] = 0.5f;
 	env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS] = 1048575.0f;
 	env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS] = 1048575.0f;
 	env->pathtracing_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES] = 262144.0f;
@@ -918,6 +919,9 @@ void RendererEnvironmentStorage::environment_set_pathtracing_params(RID p_env, c
 	ERR_FAIL_NULL(env);
 	for (int i = 0; i < RSE::PT_PARAM_MAX && i < p_params.size(); i++) {
 		env->pathtracing_params[i] = p_params[i];
+	}
+	if (p_params.size() <= RSE::PT_PARAM_RTGI_RESOLUTION_SCALE || env->pathtracing_params[RSE::PT_PARAM_RTGI_RESOLUTION_SCALE] <= 0.0f) {
+		env->pathtracing_params[RSE::PT_PARAM_RTGI_RESOLUTION_SCALE] = 0.5f;
 	}
 	if (p_params.size() <= RSE::PT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS) {
 		env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS] = 1048575.0f;

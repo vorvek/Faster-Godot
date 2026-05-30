@@ -223,6 +223,9 @@
 		<member name="rtgi_energy" type="float" setter="set_rtgi_energy" getter="get_rtgi_energy" default="1.0">
 			Multiplier applied to the denoised RTGI contribution before composition.
 		</member>
+		<member name="rtgi_resolution_scale" type="float" setter="set_rtgi_resolution_scale" getter="get_rtgi_resolution_scale" default="0.5">
+			Scales the internal RTGI render resolution before denoising, temporal stabilization, and full-resolution reconstruction. Lower values reduce ray-tracing cost and can improve temporal stability, but rely more heavily on reconstruction; [code]1.0[/code] traces at the viewport's internal 3D resolution.
+		</member>
 		<member name="rtgi_denoiser" type="int" setter="set_rtgi_denoiser" getter="get_rtgi_denoiser" enum="Environment.RTGIDenoiser" default="8">
 			Selects the RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser, [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION] denoises split lighting signals before recomposition, and [constant RTGI_DENOISER_NONE] shows the raw sampled result.
 		</member>

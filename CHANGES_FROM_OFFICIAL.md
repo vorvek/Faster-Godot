@@ -29,16 +29,8 @@ desktop Forward+ profile. The detailed notes are split by change area:
 | Independent fork identity and legal notices | [README.md](README.md), [LICENSE.txt](LICENSE.txt), [COPYRIGHT.txt](COPYRIGHT.txt) |
 | Faster-Godot branding and default project icon | Root, editor, app icon, splash, platform export, default project/document, web editor, engine version banner, emitted binary basename, shell completions, Windows version resource/installer metadata, Linux desktop/AppStream/MIME/X11/Wayland metadata and installable icons, macOS bundle metadata, editor About/support links, GitHub Actions release artifacts/release-page publishing, and source archive naming now use the fork's FG gear mark and independent Faster-Godot identity instead of Godot-derived artwork/official branding. See [README.md](README.md) and [COPYRIGHT.txt](COPYRIGHT.txt). |
 
-## RTGI Denoiser Status
-
-RTGI ships three denoiser choices: `ASVFG (Experimental)`,
-`Internal Signal Decomposition`, and `None`.
-
-The local renderer emits RT radiance, depth, velocity, normal/roughness,
-albedo/metalness, view-Z, hit-distance, and history validity/identity masks for
-RTGI denoising. ASVFG consumes those guides on the GPU and applies an additional
-current-frame guided stabilizer for larger diffuse blotches, while Internal
-Signal Decomposition denoises RTGI's direct-light, emissive, indirect, sky, and
-specular signals before recomposition.
+RTGI denoiser, temporal stability, and TAA tuning details live in
+[docs/path_tracing_gi.md](docs/path_tracing_gi.md) and
+[docs/taa_quality_controls.md](docs/taa_quality_controls.md).
 
 Maintained by Jon Tamayo - https://x.com/vorvek

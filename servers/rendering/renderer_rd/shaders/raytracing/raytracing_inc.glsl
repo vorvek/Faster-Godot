@@ -20,7 +20,7 @@
 #define RT_PARAM_MAX_BOUNCES 2 // rt_params[0].z - Maximum ray bounces
 #define RT_PARAM_DENOISER 3 // rt_params[0].w - Denoiser selection
 #define RT_PARAM_ENERGY 4 // rt_params[1].x - RTGI energy multiplier
-#define RT_PARAM_RESERVED_5 5 // rt_params[1].y - Reserved
+#define RT_PARAM_RTGI_RESOLUTION_SCALE 5 // rt_params[1].y - RTGI internal resolution scale
 #define RT_PARAM_MODE 6 // rt_params[1].z - 0=Reflections RT Only, 1=Full Path Tracing, 2=Hybrid RTGI
 #define RT_PARAM_BACKGROUND_USES_SKY 7 // rt_params[1].w - Miss shader samples sky radiance
 #define RT_PARAM_BACKGROUND_R 8 // rt_params[2].x - Linear fallback background color
@@ -228,6 +228,36 @@ uint set_strc_dynamic_hit(uint packed) {
 }
 bool has_strc_dynamic_hit(uint packed) {
 	return (packed & STRC_DYNAMIC_HIT_FLAG) != 0u;
+}
+
+const uint STRC_DIRECT_SOURCE_FLAG = (1u << 29);
+const uint STRC_EMISSIVE_SOURCE_FLAG = (1u << 30);
+const uint STRC_SKY_SOURCE_FLAG = (1u << 31);
+const uint STRC_SOURCE_MASK_DIRECT = 1u;
+const uint STRC_SOURCE_MASK_EMISSIVE = 2u;
+const uint STRC_SOURCE_MASK_SKY = 4u;
+const uint STRC_SOURCE_MASK_INDIRECT = 8u;
+uint set_strc_direct_source(uint packed) {
+	return packed | STRC_DIRECT_SOURCE_FLAG;
+}
+uint set_strc_emissive_source(uint packed) {
+	return packed | STRC_EMISSIVE_SOURCE_FLAG;
+}
+uint set_strc_sky_source(uint packed) {
+	return packed | STRC_SKY_SOURCE_FLAG;
+}
+uint get_strc_source_mask(uint packed) {
+	uint mask = 0u;
+	if ((packed & STRC_DIRECT_SOURCE_FLAG) != 0u) {
+		mask |= STRC_SOURCE_MASK_DIRECT;
+	}
+	if ((packed & STRC_EMISSIVE_SOURCE_FLAG) != 0u) {
+		mask |= STRC_SOURCE_MASK_EMISSIVE;
+	}
+	if ((packed & STRC_SKY_SOURCE_FLAG) != 0u) {
+		mask |= STRC_SOURCE_MASK_SKY;
+	}
+	return mask;
 }
 
 // Bounce limits
