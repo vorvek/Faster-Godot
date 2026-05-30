@@ -231,7 +231,7 @@ private:
 	float rtgi_energy = 1.0;
 	float rtgi_resolution_scale = 0.5f;
 	bool rtgi_disable_in_editor = true;
-	float rtgi_denoiser_strength = 0.90f;
+	float rtgi_denoiser_strength = 0.50f;
 	float rtgi_denoiser_history_weight = 0.95f;
 	float rtgi_denoiser_firefly_suppression = 1.0f;
 	float rtgi_denoiser_detail_preservation = 1.0f;
@@ -242,9 +242,9 @@ private:
 	float rtgi_ray_max_radiance = 32.0f;
 	bool rtgi_analytic_light_sampling_enabled = true;
 	bool rtgi_explicit_emissive_sampling_enabled = true;
-	bool rtgi_diffuse_radiance_cache_enabled = true;
+	bool rtgi_diffuse_radiance_cache_enabled = false;
 	int rtgi_diffuse_radiance_cache_max_entries = 262144;
-	bool rtgi_strc_enabled = true;
+	bool rtgi_strc_enabled = false;
 	float rtgi_strc_strength = 0.70f;
 	int rtgi_strc_cascade_count = 3;
 	int rtgi_strc_grid_size = 24;
