@@ -174,7 +174,7 @@ private:
 
 		// Pathtracing
 		bool pathtracing_enabled = false;
-		float pathtracing_params[RSE::PT_PARAM_MAX] = { 0 };
+		RSE::PathtracingParams pathtracing_params;
 
 		// Adjustments
 		bool adjustments_enabled = false;
@@ -331,9 +331,9 @@ public:
 	// Pathtracing
 	void environment_set_pathtracing(RID p_env, bool p_enable);
 	bool environment_get_pathtracing_enabled(RID p_env) const;
-	void environment_set_pathtracing_params(RID p_env, const PackedFloat32Array &p_params);
-	PackedFloat32Array environment_get_pathtracing_params(RID p_env) const;
-	const float *environment_get_pathtracing_params_ptr(RID p_env) const;
+	void environment_set_pathtracing_params(RID p_env, const RSE::PathtracingParams &p_params);
+	RSE::PathtracingParams environment_get_pathtracing_params(RID p_env) const;
+	const RSE::PathtracingParams *environment_get_pathtracing_params_ptr(RID p_env) const;
 
 	// Adjustment
 	void environment_set_adjustment(RID p_env, bool p_enable, float p_brightness, float p_contrast, float p_saturation, bool p_use_1d_color_correction, RID p_color_correction);

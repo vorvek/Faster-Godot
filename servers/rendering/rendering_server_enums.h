@@ -890,6 +890,150 @@ enum PathtracingParamIndex {
 	PT_PARAM_MAX = 39,
 };
 
+struct PathtracingParams {
+	static constexpr uint32_t VERSION = 1;
+
+	uint32_t version = VERSION;
+	uint32_t visual_mode = 0;
+	uint32_t sample_count = 1;
+	uint32_t max_bounces = 4;
+	PathtracingDenoiser denoiser = PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+	float energy = 1.0f;
+	float resolution_scale = 0.67f;
+	uint32_t mode = 2;
+	float overscan_horizontal = 0.0f;
+	float overscan_vertical = 0.0f;
+	float denoiser_strength = 0.90f;
+	float denoiser_history_weight = 0.95f;
+	float denoiser_firefly_suppression = 1.0f;
+	float denoiser_detail_preservation = 1.0f;
+	float ray_firefly_suppression = 0.85f;
+	float ray_max_radiance = 48.0f;
+	bool denoiser_split_signals = true;
+	float denoiser_specular_history_weight = 0.92f;
+	float denoiser_specular_spatial_strength = 1.0f;
+	bool analytic_light_sampling = true;
+	bool explicit_emissive_sampling = true;
+	bool diffuse_cache_enabled = true;
+	uint32_t diffuse_cache_max_entries = 524288;
+	bool strc_enabled = true;
+	float strc_strength = 0.75f;
+	uint32_t strc_cascade_count = 3;
+	uint32_t strc_grid_size = 28;
+	float strc_base_probe_spacing = 1.25f;
+	uint32_t strc_rays_per_frame = 8192;
+	float strc_temporal_weight = 0.97f;
+	PathtracingBackend backend = PT_BACKEND_VULKAN_GENERIC;
+	uint32_t strc_static_visual_layers = 0xfffff;
+	uint32_t strc_dynamic_visual_layers = 0xfffff;
+};
+
+inline void pathtracing_params_to_shader_floats(const PathtracingParams &p_params, float *r_params, uint32_t p_count = PT_PARAM_MAX) {
+	if (r_params == nullptr) {
+		return;
+	}
+	for (uint32_t i = 0; i < p_count; i++) {
+		r_params[i] = 0.0f;
+	}
+	if (p_count <= PT_PARAM_VIS_MODE) {
+		return;
+	}
+	r_params[PT_PARAM_VIS_MODE] = (float)p_params.visual_mode;
+	if (p_count > PT_PARAM_SAMPLE_COUNT) {
+		r_params[PT_PARAM_SAMPLE_COUNT] = (float)p_params.sample_count;
+	}
+	if (p_count > PT_PARAM_MAX_BOUNCES) {
+		r_params[PT_PARAM_MAX_BOUNCES] = (float)p_params.max_bounces;
+	}
+	if (p_count > PT_PARAM_DENOISER) {
+		r_params[PT_PARAM_DENOISER] = (float)(uint32_t)p_params.denoiser;
+	}
+	if (p_count > PT_PARAM_ENERGY) {
+		r_params[PT_PARAM_ENERGY] = p_params.energy;
+	}
+	if (p_count > PT_PARAM_RTGI_RESOLUTION_SCALE) {
+		r_params[PT_PARAM_RTGI_RESOLUTION_SCALE] = p_params.resolution_scale;
+	}
+	if (p_count > PT_PARAM_MODE) {
+		r_params[PT_PARAM_MODE] = (float)p_params.mode;
+	}
+	if (p_count > PT_PARAM_OVERSCAN_HORIZONTAL) {
+		r_params[PT_PARAM_OVERSCAN_HORIZONTAL] = p_params.overscan_horizontal;
+	}
+	if (p_count > PT_PARAM_OVERSCAN_VERTICAL) {
+		r_params[PT_PARAM_OVERSCAN_VERTICAL] = p_params.overscan_vertical;
+	}
+	if (p_count > PT_PARAM_DENOISER_STRENGTH) {
+		r_params[PT_PARAM_DENOISER_STRENGTH] = p_params.denoiser_strength;
+	}
+	if (p_count > PT_PARAM_DENOISER_HISTORY_WEIGHT) {
+		r_params[PT_PARAM_DENOISER_HISTORY_WEIGHT] = p_params.denoiser_history_weight;
+	}
+	if (p_count > PT_PARAM_DENOISER_FIREFLY_SUPPRESSION) {
+		r_params[PT_PARAM_DENOISER_FIREFLY_SUPPRESSION] = p_params.denoiser_firefly_suppression;
+	}
+	if (p_count > PT_PARAM_DENOISER_DETAIL_PRESERVATION) {
+		r_params[PT_PARAM_DENOISER_DETAIL_PRESERVATION] = p_params.denoiser_detail_preservation;
+	}
+	if (p_count > PT_PARAM_RAY_FIREFLY_SUPPRESSION) {
+		r_params[PT_PARAM_RAY_FIREFLY_SUPPRESSION] = p_params.ray_firefly_suppression;
+	}
+	if (p_count > PT_PARAM_RAY_MAX_RADIANCE) {
+		r_params[PT_PARAM_RAY_MAX_RADIANCE] = p_params.ray_max_radiance;
+	}
+	if (p_count > PT_PARAM_DENOISER_SPLIT_SIGNALS) {
+		r_params[PT_PARAM_DENOISER_SPLIT_SIGNALS] = p_params.denoiser_split_signals ? 1.0f : 0.0f;
+	}
+	if (p_count > PT_PARAM_DENOISER_SPECULAR_HISTORY_WEIGHT) {
+		r_params[PT_PARAM_DENOISER_SPECULAR_HISTORY_WEIGHT] = p_params.denoiser_specular_history_weight;
+	}
+	if (p_count > PT_PARAM_DENOISER_SPECULAR_SPATIAL_STRENGTH) {
+		r_params[PT_PARAM_DENOISER_SPECULAR_SPATIAL_STRENGTH] = p_params.denoiser_specular_spatial_strength;
+	}
+	if (p_count > PT_PARAM_RTGI_SAMPLING_CONTROLS) {
+		uint32_t sampling_controls = 0;
+		sampling_controls |= p_params.analytic_light_sampling ? 1u : 0u;
+		sampling_controls |= p_params.explicit_emissive_sampling ? 2u : 0u;
+		r_params[PT_PARAM_RTGI_SAMPLING_CONTROLS] = (float)sampling_controls;
+	}
+	if (p_count > PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED) {
+		r_params[PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED] = p_params.diffuse_cache_enabled ? 1.0f : 0.0f;
+	}
+	if (p_count > PT_PARAM_RTGI_STRC_ENABLED) {
+		r_params[PT_PARAM_RTGI_STRC_ENABLED] = p_params.strc_enabled ? 1.0f : 0.0f;
+	}
+	if (p_count > PT_PARAM_RTGI_STRC_STRENGTH) {
+		r_params[PT_PARAM_RTGI_STRC_STRENGTH] = p_params.strc_strength;
+	}
+	if (p_count > PT_PARAM_RTGI_STRC_CASCADE_COUNT) {
+		r_params[PT_PARAM_RTGI_STRC_CASCADE_COUNT] = (float)p_params.strc_cascade_count;
+	}
+	if (p_count > PT_PARAM_RTGI_STRC_GRID_SIZE) {
+		r_params[PT_PARAM_RTGI_STRC_GRID_SIZE] = (float)p_params.strc_grid_size;
+	}
+	if (p_count > PT_PARAM_RTGI_STRC_BASE_PROBE_SPACING) {
+		r_params[PT_PARAM_RTGI_STRC_BASE_PROBE_SPACING] = p_params.strc_base_probe_spacing;
+	}
+	if (p_count > PT_PARAM_RTGI_STRC_RAYS_PER_FRAME) {
+		r_params[PT_PARAM_RTGI_STRC_RAYS_PER_FRAME] = (float)p_params.strc_rays_per_frame;
+	}
+	if (p_count > PT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT) {
+		r_params[PT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT] = p_params.strc_temporal_weight;
+	}
+	if (p_count > PT_PARAM_RTGI_BACKEND) {
+		r_params[PT_PARAM_RTGI_BACKEND] = (float)(uint32_t)p_params.backend;
+	}
+	if (p_count > PT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS) {
+		r_params[PT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS] = (float)p_params.strc_static_visual_layers;
+	}
+	if (p_count > PT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS) {
+		r_params[PT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS] = (float)p_params.strc_dynamic_visual_layers;
+	}
+	if (p_count > PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES) {
+		r_params[PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES] = (float)p_params.diffuse_cache_max_entries;
+	}
+}
+
 enum SubSurfaceScatteringQuality {
 	SUB_SURFACE_SCATTERING_QUALITY_DISABLED,
 	SUB_SURFACE_SCATTERING_QUALITY_LOW,

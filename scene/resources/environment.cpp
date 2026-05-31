@@ -697,7 +697,14 @@ bool Environment::is_rtgi_enabled() const {
 }
 
 void Environment::set_rtgi_backend(RTGIBackend p_backend) {
-	rtgi_backend = RTGI_BACKEND_VULKAN_GENERIC;
+	switch ((int)p_backend) {
+		case RTGI_BACKEND_VULKAN_GENERIC:
+			rtgi_backend = p_backend;
+			break;
+		default:
+			rtgi_backend = RTGI_BACKEND_VULKAN_GENERIC;
+			break;
+	}
 	_update_pathtracing();
 }
 
@@ -710,8 +717,7 @@ void Environment::_mark_rtgi_quality_preset_custom() {
 		return;
 	}
 
-	bool matches_preset = rtgi_mode == RTGI_MODE_FULL_PATH_TRACING &&
-			pathtracing_samples_per_pixel == 1 &&
+	bool matches_preset = pathtracing_samples_per_pixel == 1 &&
 			rtgi_denoiser == RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION &&
 			pathtracing_denoiser == RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION &&
 			rtgi_denoiser_split_signals &&
@@ -790,7 +796,6 @@ void Environment::_apply_rtgi_quality_preset(RTGIQualityPreset p_preset) {
 		return;
 	}
 
-	rtgi_mode = RTGI_MODE_FULL_PATH_TRACING;
 	pathtracing_samples_per_pixel = 1;
 	rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
 	pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
@@ -886,10 +891,9 @@ void Environment::set_rtgi_mode(RTGIMode p_mode) {
 			rtgi_mode = p_mode;
 			break;
 		default:
-			rtgi_mode = RTGI_MODE_REFLECTIONS_RT_ONLY;
+			rtgi_mode = RTGI_MODE_HYBRID;
 			break;
 	}
-	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -1237,43 +1241,39 @@ void Environment::_update_pathtracing() {
 	const bool editor_disabled = Engine::get_singleton()->is_editor_hint() && rtgi_disable_in_editor;
 	RS::get_singleton()->environment_set_pathtracing(environment, pathtracing_enabled && !editor_disabled);
 
-	PackedFloat32Array params;
-	params.resize(RSE::PT_PARAM_MAX);
-	params.write[RSE::PT_PARAM_VIS_MODE] = (float)pathtracing_debug_mode;
-	params.write[RSE::PT_PARAM_SAMPLE_COUNT] = (float)pathtracing_samples_per_pixel;
-	params.write[RSE::PT_PARAM_MAX_BOUNCES] = (float)pathtracing_max_bounces;
-	params.write[RSE::PT_PARAM_DENOISER] = (float)(int)pathtracing_denoiser;
-	params.write[RSE::PT_PARAM_ENERGY] = rtgi_energy;
-	params.write[RSE::PT_PARAM_RTGI_RESOLUTION_SCALE] = rtgi_resolution_scale;
-	params.write[RSE::PT_PARAM_MODE] = (float)(int)rtgi_mode;
-	params.write[RSE::PT_PARAM_RESERVED_11] = 0.0f;
-	params.write[RSE::PT_PARAM_OVERSCAN_HORIZONTAL] = rtgi_overscan_horizontal;
-	params.write[RSE::PT_PARAM_OVERSCAN_VERTICAL] = rtgi_overscan_vertical;
-	params.write[RSE::PT_PARAM_RTGI_BACKEND] = (float)(int)rtgi_backend;
-	params.write[RSE::PT_PARAM_DENOISER_STRENGTH] = rtgi_denoiser_strength;
-	params.write[RSE::PT_PARAM_DENOISER_HISTORY_WEIGHT] = rtgi_denoiser_history_weight;
-	params.write[RSE::PT_PARAM_DENOISER_FIREFLY_SUPPRESSION] = rtgi_denoiser_firefly_suppression;
-	params.write[RSE::PT_PARAM_DENOISER_DETAIL_PRESERVATION] = rtgi_denoiser_detail_preservation;
-	params.write[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED] = rtgi_diffuse_radiance_cache_enabled ? 1.0f : 0.0f;
-	params.write[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES] = (float)rtgi_diffuse_radiance_cache_max_entries;
-	params.write[RSE::PT_PARAM_RAY_FIREFLY_SUPPRESSION] = rtgi_ray_firefly_suppression;
-	params.write[RSE::PT_PARAM_RAY_MAX_RADIANCE] = rtgi_ray_max_radiance;
-	params.write[RSE::PT_PARAM_DENOISER_SPLIT_SIGNALS] = rtgi_denoiser_split_signals ? 1.0f : 0.0f;
-	params.write[RSE::PT_PARAM_DENOISER_SPECULAR_HISTORY_WEIGHT] = rtgi_denoiser_specular_history_weight;
-	params.write[RSE::PT_PARAM_DENOISER_SPECULAR_SPATIAL_STRENGTH] = rtgi_denoiser_specular_spatial_strength;
-	uint32_t rtgi_sampling_controls = 0;
-	rtgi_sampling_controls |= rtgi_analytic_light_sampling_enabled ? 1u : 0u;
-	rtgi_sampling_controls |= rtgi_explicit_emissive_sampling_enabled ? 2u : 0u;
-	params.write[RSE::PT_PARAM_RTGI_SAMPLING_CONTROLS] = (float)rtgi_sampling_controls;
-	params.write[RSE::PT_PARAM_RTGI_STRC_ENABLED] = rtgi_strc_enabled ? 1.0f : 0.0f;
-	params.write[RSE::PT_PARAM_RTGI_STRC_STRENGTH] = rtgi_strc_strength;
-	params.write[RSE::PT_PARAM_RTGI_STRC_CASCADE_COUNT] = (float)rtgi_strc_cascade_count;
-	params.write[RSE::PT_PARAM_RTGI_STRC_GRID_SIZE] = (float)rtgi_strc_grid_size;
-	params.write[RSE::PT_PARAM_RTGI_STRC_BASE_PROBE_SPACING] = rtgi_strc_base_probe_spacing;
-	params.write[RSE::PT_PARAM_RTGI_STRC_RAYS_PER_FRAME] = (float)rtgi_strc_rays_per_frame;
-	params.write[RSE::PT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT] = rtgi_strc_temporal_weight;
-	params.write[RSE::PT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS] = (float)rtgi_strc_static_visual_layers;
-	params.write[RSE::PT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS] = (float)rtgi_strc_dynamic_visual_layers;
+	RSE::PathtracingParams params;
+	params.visual_mode = (uint32_t)pathtracing_debug_mode;
+	params.sample_count = (uint32_t)pathtracing_samples_per_pixel;
+	params.max_bounces = (uint32_t)pathtracing_max_bounces;
+	params.denoiser = pathtracing_denoiser;
+	params.energy = rtgi_energy;
+	params.resolution_scale = rtgi_resolution_scale;
+	params.mode = (uint32_t)rtgi_mode;
+	params.overscan_horizontal = rtgi_overscan_horizontal;
+	params.overscan_vertical = rtgi_overscan_vertical;
+	params.backend = (RSE::PathtracingBackend)rtgi_backend;
+	params.denoiser_strength = rtgi_denoiser_strength;
+	params.denoiser_history_weight = rtgi_denoiser_history_weight;
+	params.denoiser_firefly_suppression = rtgi_denoiser_firefly_suppression;
+	params.denoiser_detail_preservation = rtgi_denoiser_detail_preservation;
+	params.diffuse_cache_enabled = rtgi_diffuse_radiance_cache_enabled;
+	params.diffuse_cache_max_entries = (uint32_t)rtgi_diffuse_radiance_cache_max_entries;
+	params.ray_firefly_suppression = rtgi_ray_firefly_suppression;
+	params.ray_max_radiance = rtgi_ray_max_radiance;
+	params.denoiser_split_signals = rtgi_denoiser_split_signals;
+	params.denoiser_specular_history_weight = rtgi_denoiser_specular_history_weight;
+	params.denoiser_specular_spatial_strength = rtgi_denoiser_specular_spatial_strength;
+	params.analytic_light_sampling = rtgi_analytic_light_sampling_enabled;
+	params.explicit_emissive_sampling = rtgi_explicit_emissive_sampling_enabled;
+	params.strc_enabled = rtgi_strc_enabled;
+	params.strc_strength = rtgi_strc_strength;
+	params.strc_cascade_count = (uint32_t)rtgi_strc_cascade_count;
+	params.strc_grid_size = (uint32_t)rtgi_strc_grid_size;
+	params.strc_base_probe_spacing = rtgi_strc_base_probe_spacing;
+	params.strc_rays_per_frame = (uint32_t)rtgi_strc_rays_per_frame;
+	params.strc_temporal_weight = rtgi_strc_temporal_weight;
+	params.strc_static_visual_layers = rtgi_strc_static_visual_layers;
+	params.strc_dynamic_visual_layers = rtgi_strc_dynamic_visual_layers;
 	RS::get_singleton()->environment_set_pathtracing_params(environment, params);
 }
 
@@ -2192,7 +2192,7 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_enabled", PROPERTY_HINT_GROUP_ENABLE), "set_rtgi_enabled", "is_rtgi_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_backend", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR), "set_rtgi_backend", "get_rtgi_backend");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_quality_preset", PROPERTY_HINT_ENUM, "Custom,Performance,Balanced,Production"), "set_rtgi_quality_preset", "get_rtgi_quality_preset");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_mode", PROPERTY_HINT_ENUM, "Reflections RT Only,Full Path Tracing,Hybrid RTGI"), "set_rtgi_mode", "get_rtgi_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_mode", PROPERTY_HINT_ENUM, "Reflections RT Only,Full Scene Path-Traced GI,Hybrid RTGI"), "set_rtgi_mode", "get_rtgi_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_samples_per_pixel", PROPERTY_HINT_RANGE, "1,16,1"), "set_rtgi_samples_per_pixel", "get_rtgi_samples_per_pixel");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_max_bounces", PROPERTY_HINT_RANGE, "1,8,1"), "set_rtgi_max_bounces", "get_rtgi_max_bounces");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_energy", PROPERTY_HINT_RANGE, "0,16,0.01,or_greater"), "set_rtgi_energy", "get_rtgi_energy");
@@ -2422,9 +2422,6 @@ void Environment::_bind_methods() {
 	BIND_ENUM_CONSTANT(GLOW_BLEND_MODE_MIX);
 
 	BIND_ENUM_CONSTANT(RTGI_BACKEND_VULKAN_GENERIC);
-	BIND_ENUM_CONSTANT(RTGI_BACKEND_NVIDIA_RTXPT);
-	BIND_ENUM_CONSTANT(RTGI_BACKEND_AMD_HIP_RT);
-	BIND_ENUM_CONSTANT(RTGI_BACKEND_INTEL_EMBREE);
 
 	BIND_ENUM_CONSTANT(RTGI_MODE_REFLECTIONS_RT_ONLY);
 	BIND_ENUM_CONSTANT(RTGI_MODE_FULL_PATH_TRACING);
