@@ -614,17 +614,8 @@
 		<constant name="RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION" value="14" enum="RTGIDenoiser">
 			Use the internal multi-signal RTGI denoiser. Direct light, emissive, indirect, sky, diffuse, and specular signals are denoised separately before internal recomposition.
 		</constant>
-		<constant name="RTGI_DENOISER_FIDELITYFX" value="10" enum="RTGIDenoiser">
-			Deprecated compatibility value. It is normalized to [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION].
-		</constant>
 		<constant name="RTGI_DENOISER_NVIDIA" value="11" enum="RTGIDenoiser">
-			Request the NVIDIA RTGI denoiser. Falls back to ASVFG until NRD or DLSS Ray Reconstruction support is available.
-		</constant>
-		<constant name="RTGI_DENOISER_AMD" value="12" enum="RTGIDenoiser">
-			Deprecated compatibility value. It is normalized to [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION].
-		</constant>
-		<constant name="RTGI_DENOISER_INTEL" value="13" enum="RTGIDenoiser">
-			Deprecated compatibility value. It is normalized to [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION].
+			Request the NVIDIA RTGI denoiser. Falls back to ASVFG until NRD support is available.
 		</constant>
 	</constants>
 </class>

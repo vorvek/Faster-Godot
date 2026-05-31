@@ -2868,12 +2868,6 @@ func _rtgi_denoiser_path_name(denoiser: int) -> String:
 			return "None"
 		Environment.RTGI_DENOISER_NVIDIA:
 			return "NVIDIA requested; active fallback ASVFG"
-		Environment.RTGI_DENOISER_FIDELITYFX:
-			return "Legacy FidelityFX request; active fallback Internal Signal Decomposition"
-		Environment.RTGI_DENOISER_AMD:
-			return "Legacy AMD request; active fallback Internal Signal Decomposition"
-		Environment.RTGI_DENOISER_INTEL:
-			return "Legacy Intel request; active fallback Internal Signal Decomposition"
 		_:
 			return "Unknown"
 

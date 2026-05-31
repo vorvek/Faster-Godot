@@ -210,22 +210,11 @@ static void check_backend_capability_dictionary_semantics(const Dictionary &p_ca
 		CHECK_FALSE(bool(p_capability["denoiser_available"]));
 #endif
 	} else if (backend == int(RSE::PT_BACKEND_AMD_HIP_RT)) {
-#if !defined(RTGI_FIDELITYFX_DENOISER_HANDOFF_ENABLED)
 		CHECK_FALSE(bool(p_capability["denoiser_handoff"]));
 		CHECK_FALSE(bool(p_capability["denoiser_available"]));
-#endif
 	} else if (backend == int(RSE::PT_BACKEND_INTEL_EMBREE)) {
-		if (bool(p_capability["denoiser_available"])) {
-			CHECK(String(p_capability["denoiser_name"]).contains("FidelityFX"));
-		} else {
-			CHECK(String(p_capability["denoiser_name"]).contains("Internal Signal Decomposition"));
-		}
-		CHECK_FALSE(String(p_capability["denoiser_name"]).contains("Open Image Denoise"));
-		CHECK_FALSE(String(p_capability["denoiser_name"]).contains("OIDN"));
-#if !defined(RTGI_FIDELITYFX_DENOISER_HANDOFF_ENABLED)
 		CHECK_FALSE(bool(p_capability["denoiser_handoff"]));
 		CHECK_FALSE(bool(p_capability["denoiser_available"]));
-#endif
 	}
 	const bool explicit_exchange = bool(exchange["rendering_device"]) || (bool(exchange["external_memory"]) && bool(exchange["external_semaphore"])) || bool(exchange["timeline_semaphore"]) || bool(exchange["staged_copy"]);
 	if (bool(p_capability["available"])) {
