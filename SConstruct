@@ -198,11 +198,7 @@ opts.Add(BoolVariable("vulkan", "Enable the Vulkan rendering driver", True))
 opts.Add(BoolVariable("opengl3", "Enable the OpenGL/GLES3 rendering driver", True))
 opts.Add(BoolVariable("metal", "Enable the Metal rendering driver on supported platforms (Apple arm64 only)", False))
 opts.Add(BoolVariable("use_volk", "Use the volk library to load the Vulkan loader dynamically", True))
-opts.Add(BoolVariable("enable_dlss", "Enable NVIDIA DLSS/DLSS-G integration scaffolding through Streamline", False))
-opts.Add(BoolVariable("enable_fsr31", "Enable AMD FSR 3.1 integration scaffolding", False))
 opts.Add(BoolVariable("enable_xess", "Enable Intel XeSS/XeSS-FG integration scaffolding", False))
-opts.Add(("streamline_sdk_path", "Path to a local NVIDIA Streamline SDK checkout", ""))
-opts.Add(("fidelityfx_sdk_path", "Path to a local AMD FidelityFX SDK checkout", ""))
 opts.Add(("xess_sdk_path", "Path to a local Intel XeSS SDK checkout", ""))
 opts.Add(BoolVariable("accesskit", "Use AccessKit C SDK", True))
 opts.Add(("accesskit_sdk_path", "Path to the AccessKit C SDK", ""))
@@ -519,148 +515,8 @@ def collect_vendor_upscaler_runtime_libs(sdk_path, runtime_names):
     return runtime_libs
 
 
-if env["enable_dlss"]:
-    env.AppendUnique(CPPDEFINES=["STREAMLINE_ENABLED", "VENDOR_UPSCALER_DLSS_REQUESTED"])
-    streamline_path = env.get("streamline_sdk_path", "")
-    if streamline_path and os.path.isdir(streamline_path):
-        streamline_include_path = os.path.join(streamline_path, "include")
-        if os.path.isdir(streamline_include_path):
-            env.Prepend(CPPPATH=[streamline_include_path])
-            env.AppendUnique(CPPDEFINES=["STREAMLINE_SDK_HEADERS_PRESENT"])
-        elif os.path.isfile(os.path.join(streamline_path, "sl.h")):
-            env.Prepend(CPPPATH=[streamline_path])
-            env.AppendUnique(CPPDEFINES=["STREAMLINE_SDK_HEADERS_PRESENT"])
-        streamline_runtime_lib_names = {
-            "sl.interposer.dll",
-            "sl.common.dll",
-            "sl.dlss.dll",
-            "sl.dlss_g.dll",
-            "sl.pcl.dll",
-            "sl.reflex.dll",
-            "nvngx_dlss.dll",
-            "nvngx_dlssg.dll",
-            "nvlowlatencyvk.dll",
-            "libsl.interposer.so",
-            "sl.interposer.so",
-            "libsl.common.so",
-            "libsl.dlss.so",
-            "libsl.dlss_g.so",
-            "libsl.pcl.so",
-            "libsl.reflex.so",
-            "libnvngx_dlss.so",
-            "libnvngx_dlssg.so",
-            "libnvlowlatencyvk.so",
-            "nvlowlatencyvk.so",
-        }
-        streamline_runtime_libs = collect_vendor_upscaler_runtime_libs(streamline_path, streamline_runtime_lib_names)
-        if streamline_runtime_libs:
-            env["vendor_upscaler_runtime_libs"] += streamline_runtime_libs
-        streamline_runtime_base_names = {os.path.basename(lib).lower() for lib in streamline_runtime_libs}
-        if not ({"sl.interposer.dll", "libsl.interposer.so", "sl.interposer.so"} & streamline_runtime_base_names):
-            print_warning("DLSS was enabled, but the Streamline interposer runtime was not found in streamline_sdk_path. Copy NVIDIA's signed Streamline interposer and required plugin libraries next to the executable/export template for runtime dispatch.")
-    if "STREAMLINE_SDK_HEADERS_PRESENT" not in env.get("CPPDEFINES", []):
-        print_warning("DLSS was enabled, but Streamline SDK headers were not found in streamline_sdk_path.")
-if env["enable_fsr31"]:
-    env.AppendUnique(CPPDEFINES=["VENDOR_UPSCALER_FSR31_REQUESTED"])
 if env["enable_xess"]:
     env.AppendUnique(CPPDEFINES=["VENDOR_UPSCALER_XESS_REQUESTED"])
-
-if env["enable_fsr31"]:
-    fidelityfx_path = env.get("fidelityfx_sdk_path", "")
-    if fidelityfx_path and os.path.isdir(fidelityfx_path):
-        fidelityfx_include_paths = []
-        for include_path in [
-            os.path.join(fidelityfx_path, "ffx-api", "include"),
-            os.path.join(fidelityfx_path, "sdk", "include"),
-            os.path.join(fidelityfx_path, "Kits", "FidelityFX", "api", "include"),
-            os.path.join(fidelityfx_path, "Kits", "FidelityFX", "upscalers", "fsr3", "include"),
-            os.path.join(fidelityfx_path, "Kits", "FidelityFX", "framegeneration", "fsr3", "include"),
-            os.path.join(fidelityfx_path, "Kits", "FidelityFX", "backend", "vk"),
-        ]:
-            if os.path.isdir(include_path):
-                fidelityfx_include_paths.append(include_path)
-
-        if fidelityfx_include_paths:
-            env.Prepend(CPPPATH=fidelityfx_include_paths)
-            env.AppendUnique(CPPDEFINES=["FIDELITYFX_SDK_HEADERS_PRESENT"])
-
-        fidelityfx_api_include_path = os.path.join(fidelityfx_path, "ffx-api", "include", "ffx_api")
-        fidelityfx_api_headers_present = (
-            os.path.isfile(os.path.join(fidelityfx_api_include_path, "ffx_api.h"))
-            and os.path.isfile(os.path.join(fidelityfx_api_include_path, "ffx_api_types.h"))
-            and os.path.isfile(os.path.join(fidelityfx_api_include_path, "ffx_upscale.h"))
-        )
-        fidelityfx_api_vk_headers_present = fidelityfx_api_headers_present and os.path.isfile(os.path.join(fidelityfx_api_include_path, "vk", "ffx_api_vk.h"))
-        if fidelityfx_api_headers_present:
-            env.AppendUnique(CPPDEFINES=["FIDELITYFX_FSR31_API_HEADERS_PRESENT"])
-        if fidelityfx_api_vk_headers_present:
-            env.Prepend(CPPPATH=["#thirdparty/vulkan/include"])
-            env.AppendUnique(CPPDEFINES=["FIDELITYFX_FSR31_API_VK_HEADERS_PRESENT"])
-        elif fidelityfx_api_headers_present:
-            print_warning("FSR 3.1 was enabled, but FidelityFX API Vulkan headers were not found in fidelityfx_sdk_path.")
-
-        fidelityfx_vk_runtime_libs = collect_vendor_upscaler_runtime_libs(
-            fidelityfx_path,
-            [
-                "amd_fidelityfx_vk.dll",
-                "libamd_fidelityfx_vk.so",
-                "amd_fidelityfx_vk.so",
-            ],
-        )
-        if fidelityfx_vk_runtime_libs:
-            env["vendor_upscaler_runtime_libs"] += fidelityfx_vk_runtime_libs
-            env.AppendUnique(CPPDEFINES=["FIDELITYFX_FSR31_API_VK_RUNTIME_PRESENT"])
-        elif fidelityfx_api_vk_headers_present:
-            print_warning("FSR 3.1 was enabled, but the FidelityFX Vulkan runtime library was not found. Copy AMD's signed Vulkan runtime next to the executable/export template for runtime dispatch.")
-
-        if fidelityfx_api_vk_headers_present:
-            env.AppendUnique(CPPDEFINES=["FIDELITYFX_FSR3_HEADERS_PRESENT", "FIDELITYFX_FSR3_VK_BACKEND_HEADERS_PRESENT"])
-        elif os.path.isfile(os.path.join(fidelityfx_path, "sdk", "include", "FidelityFX", "host", "ffx_fsr3.h")) or os.path.isfile(os.path.join(fidelityfx_path, "Kits", "FidelityFX", "upscalers", "fsr3", "include", "ffx_fsr3upscaler.h")):
-            env.AppendUnique(CPPDEFINES=["FIDELITYFX_FSR3_HEADERS_PRESENT"])
-
-        if os.path.isfile(os.path.join(fidelityfx_path, "sdk", "include", "FidelityFX", "host", "backends", "vk", "ffx_vk.h")):
-            env.AppendUnique(CPPDEFINES=["FIDELITYFX_FSR3_VK_BACKEND_HEADERS_PRESENT"])
-        elif not fidelityfx_api_vk_headers_present and os.path.isdir(fidelityfx_path):
-            print_warning("FSR 3.1 was enabled, but no FidelityFX Vulkan backend headers were found in fidelityfx_sdk_path.")
-
-        if not fidelityfx_api_vk_headers_present:
-            fsr3_shader_pass_names = [
-                "ffx_fsr3upscaler_autogen_reactive_pass",
-                "ffx_fsr3upscaler_accumulate_pass",
-                "ffx_fsr3upscaler_compute_luminance_pyramid_pass",
-                "ffx_fsr3upscaler_depth_clip_pass",
-                "ffx_fsr3upscaler_lock_pass",
-                "ffx_fsr3upscaler_reconstruct_previous_depth_pass",
-                "ffx_fsr3upscaler_rcas_pass",
-            ]
-            fsr3_shader_header_suffixes = [
-                "_permutations.h",
-                "_wave64_permutations.h",
-                "_16bit_permutations.h",
-                "_wave64_16bit_permutations.h",
-            ]
-            required_fsr3_shader_blob_headers = [
-                pass_name + suffix
-                for pass_name in fsr3_shader_pass_names
-                for suffix in fsr3_shader_header_suffixes
-            ]
-            fidelityfx_file_names = set()
-            for root, _dirs, files in os.walk(fidelityfx_path):
-                fidelityfx_file_names.update(files)
-            if all(header in fidelityfx_file_names for header in required_fsr3_shader_blob_headers):
-                env.AppendUnique(CPPDEFINES=["FIDELITYFX_FSR3_GENERATED_SHADER_BLOBS_PRESENT"])
-            else:
-                print_warning(
-                    "FSR 3.1 was enabled, but neither the FidelityFX SDK 1.1.x Vulkan API headers nor all generated FSR3 upscaler shader permutation headers were found. "
-                    "Use a FidelityFX SDK 1.1.x package with ffx-api/include and the FidelityFX Vulkan runtime library for Vulkan FSR 3.1 dispatch."
-                )
-        if not fidelityfx_api_vk_headers_present and os.path.isfile(os.path.join(fidelityfx_path, "readme.md")) and os.path.isfile(os.path.join(fidelityfx_path, "sdk", "src", "backends", "dx12", "CMakeShadersFSR3Upscaler.txt")) and not os.path.isfile(os.path.join(fidelityfx_path, "sdk", "src", "backends", "vk", "CMakeShadersFSR3Upscaler.txt")):
-            print_warning(
-                "The configured FidelityFX SDK appears to be the older FSR3 3.0.x source package, where FSR3 is DX12-native and Vulkan FSR3 support is not exposed. "
-                "Use FidelityFX SDK 1.1.x for FSR 3.1 Vulkan."
-            )
-    else:
-        print_warning("FSR 3.1 was enabled, but fidelityfx_sdk_path is empty or invalid.")
 
 if env["enable_xess"]:
     xess_path = env.get("xess_sdk_path", "")
