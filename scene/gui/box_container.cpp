@@ -60,7 +60,7 @@ void BoxContainer::_resort() {
 			continue;
 		}
 
-		Size2i size = c->get_combined_minimum_size();
+		Size2i size = c->get_combined_minimum_size().ceil();
 		_MinSizeCache msc;
 
 		if (vertical) { /* VERTICAL */

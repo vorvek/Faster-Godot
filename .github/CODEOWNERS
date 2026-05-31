@@ -112,7 +112,6 @@
 /modules/hdr/                                 @godotengine/asset-pipeline
 /modules/jpg/                                 @godotengine/asset-pipeline
 /modules/ktx/                                 @godotengine/asset-pipeline
-/modules/squish/                              @godotengine/asset-pipeline
 /modules/svg/                                 @godotengine/asset-pipeline
 /modules/tga/                                 @godotengine/asset-pipeline
 /modules/tinyexr/                             @godotengine/asset-pipeline
@@ -156,7 +155,7 @@
 /modules/jsonrpc/tests/                       @godotengine/gdscript @godotengine/network @godotengine/tests
 /modules/mono/                                @godotengine/dotnet
 /modules/mono/doc_classes/                    @godotengine/dotnet @godotengine/documentation
-/modules/mono/editor/                         @godotengine/dotnet @godotengine/script-editor
+/modules/mono/editor/                         @godotengine/dotnet @godotengine/editor
 
 ## Text
 /modules/freetype/                            @godotengine/buildsystem

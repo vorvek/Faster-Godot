@@ -2018,6 +2018,7 @@ RID MaterialStorage::shader_allocate() {
 
 void MaterialStorage::shader_initialize(RID p_rid, bool p_embedded) {
 	Shader shader;
+	shader.mutex = memnew(Mutex);
 	shader.data = nullptr;
 	shader.type = SHADER_TYPE_MAX;
 	shader.embedded = p_embedded;
@@ -2035,14 +2036,18 @@ void MaterialStorage::shader_free(RID p_rid) {
 	Shader *shader = shader_owner.get_or_null(p_rid);
 	ERR_FAIL_NULL(shader);
 
-	//make material unreference this
-	while (shader->owners.size()) {
-		material_set_shader((*shader->owners.begin())->self, RID());
-	}
+	{
+		MutexLock lock(*shader->mutex);
 
-	//clear data if exists
-	if (shader->data) {
-		memdelete(shader->data);
+		//make material unreference this
+		while (shader->owners.size()) {
+			material_set_shader((*shader->owners.begin())->self, RID());
+		}
+
+		//clear data if exists
+		if (shader->data) {
+			memdelete(shader->data);
+		}
 	}
 
 	if (shader->embedded) {
@@ -2051,12 +2056,16 @@ void MaterialStorage::shader_free(RID p_rid) {
 		embedded_set.erase(p_rid);
 	}
 
+	memdelete(shader->mutex);
+
 	shader_owner.free(p_rid);
 }
 
 void MaterialStorage::shader_set_code(RID p_shader, const String &p_code) {
 	Shader *shader = shader_owner.get_or_null(p_shader);
 	ERR_FAIL_NULL(shader);
+
+	MutexLock lock(*shader->mutex);
 
 	const bool changed = shader->code != p_code;
 	shader->code = p_code;
@@ -2140,6 +2149,8 @@ void MaterialStorage::shader_set_code_rt(RID p_shader, const String &p_code_rt) 
 	Shader *shader = shader_owner.get_or_null(p_shader);
 	ERR_FAIL_NULL(shader);
 
+	MutexLock lock(*shader->mutex);
+
 	const bool changed = shader->code_rt != p_code_rt;
 	shader->code_rt = p_code_rt;
 	if (p_code_rt.is_empty()) {
@@ -2219,12 +2230,17 @@ void MaterialStorage::shader_set_default_texture_parameter(RID p_shader, const S
 		shader->data->set_default_texture_parameter(p_name, p_texture, p_index);
 	}
 	const bool changed = previous_texture != new_texture;
-	for (Material *E : shader->owners) {
-		Material *material = E;
-		if (changed) {
-			material->rt_invalidation_counter++;
+
+	{
+		MutexLock lock(*shader->mutex);
+
+		for (Material *E : shader->owners) {
+			Material *material = E;
+			if (changed) {
+				material->rt_invalidation_counter++;
+			}
+			_material_queue_update(material, false, true);
 		}
-		_material_queue_update(material, false, true);
 	}
 }
 
@@ -2376,7 +2392,11 @@ void MaterialStorage::material_set_shader(RID p_material, RID p_shader) {
 	}
 
 	if (material->shader) {
-		material->shader->owners.erase(material);
+		{
+			MutexLock lock(*material->shader->mutex);
+			material->shader->owners.erase(material);
+		}
+
 		material->shader = nullptr;
 		material->shader_type = SHADER_TYPE_MAX;
 	}
@@ -2389,6 +2409,9 @@ void MaterialStorage::material_set_shader(RID p_material, RID p_shader) {
 
 	Shader *shader = get_shader(p_shader);
 	ERR_FAIL_NULL(shader);
+
+	MutexLock lock(*shader->mutex);
+
 	material->shader = shader;
 	material->shader_type = shader->type;
 	material->shader_id = p_shader.get_local_index();
