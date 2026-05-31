@@ -39,8 +39,73 @@
 #include "scene/resources/sky.h"
 #include "servers/rendering/rendering_server.h"
 
+// Serialized Environment.rtgi_denoiser "None" value from older RTGI builds.
+// This is not an RSE::PathtracingDenoiser value; RSE::PT_DENOISER_NVIDIA also uses integer 5.
+static constexpr int RTGI_DENOISER_LEGACY_NONE_VALUE = 5;
+
 static void _warn_rtgi_legacy_denoiser_fallback(const char *p_requested_name) {
 	WARN_PRINT_ONCE(vformat("RTGI denoiser '%s' is a legacy external/vendor selection. No external denoiser backend is invoked; using Internal Signal Decomposition instead.", p_requested_name));
+}
+
+static Environment::RTGIDenoiser _rtgi_denoiser_from_pathtracing_denoiser(RSE::PathtracingDenoiser p_denoiser, RSE::PathtracingDenoiser &r_normalized_denoiser) {
+	r_normalized_denoiser = p_denoiser;
+
+	switch ((int)p_denoiser) {
+		case RSE::PT_DENOISER_NONE:
+			return Environment::RTGI_DENOISER_NONE;
+		case RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION:
+			return Environment::RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+		case RSE::PT_DENOISER_NVIDIA:
+			return Environment::RTGI_DENOISER_NVIDIA;
+		case RSE::PT_DENOISER_AMD:
+			_warn_rtgi_legacy_denoiser_fallback("AMD");
+			r_normalized_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+			return Environment::RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+		case RSE::PT_DENOISER_INTEL:
+			_warn_rtgi_legacy_denoiser_fallback("Intel");
+			r_normalized_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+			return Environment::RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+		case RSE::PT_DENOISER_FIDELITYFX:
+			_warn_rtgi_legacy_denoiser_fallback("FidelityFX");
+			r_normalized_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+			return Environment::RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+		case RSE::PT_DENOISER_INTERNAL:
+		default:
+			r_normalized_denoiser = RSE::PT_DENOISER_INTERNAL;
+			return Environment::RTGI_DENOISER_ASVFG_EXPERIMENTAL;
+	}
+}
+
+static RSE::PathtracingDenoiser _pathtracing_denoiser_from_rtgi_denoiser(Environment::RTGIDenoiser p_denoiser, Environment::RTGIDenoiser &r_normalized_denoiser) {
+	r_normalized_denoiser = p_denoiser;
+
+	switch ((int)p_denoiser) {
+		case Environment::RTGI_DENOISER_NONE:
+		case RTGI_DENOISER_LEGACY_NONE_VALUE:
+			r_normalized_denoiser = Environment::RTGI_DENOISER_NONE;
+			return RSE::PT_DENOISER_NONE;
+		case Environment::RTGI_DENOISER_NVIDIA:
+			return RSE::PT_DENOISER_NVIDIA;
+		case Environment::RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION:
+			return RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+		case Environment::RTGI_DENOISER_AMD:
+			_warn_rtgi_legacy_denoiser_fallback("AMD");
+			r_normalized_denoiser = Environment::RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+			return RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+		case Environment::RTGI_DENOISER_INTEL:
+			_warn_rtgi_legacy_denoiser_fallback("Intel");
+			r_normalized_denoiser = Environment::RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+			return RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+		case Environment::RTGI_DENOISER_FIDELITYFX:
+			_warn_rtgi_legacy_denoiser_fallback("FidelityFX");
+			r_normalized_denoiser = Environment::RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+			return RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+		case Environment::RTGI_DENOISER_ASVFG_EXPERIMENTAL:
+		default:
+			// Public ASVFG value 8 maps to the internal single-signal denoiser, not to RSE value 8.
+			r_normalized_denoiser = Environment::RTGI_DENOISER_ASVFG_EXPERIMENTAL;
+			return RSE::PT_DENOISER_INTERNAL;
+	}
 }
 
 RID Environment::get_rid() const {
@@ -649,37 +714,7 @@ int Environment::get_pathtracing_max_bounces() const {
 
 void Environment::set_pathtracing_denoiser(RSE::PathtracingDenoiser p_denoiser) {
 	pathtracing_denoiser = p_denoiser;
-	switch ((int)p_denoiser) {
-		case RSE::PT_DENOISER_NONE:
-			rtgi_denoiser = RTGI_DENOISER_NONE;
-			break;
-		case RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION:
-			rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-			break;
-		case RSE::PT_DENOISER_NVIDIA:
-			rtgi_denoiser = RTGI_DENOISER_NVIDIA;
-			break;
-		case RSE::PT_DENOISER_AMD:
-			_warn_rtgi_legacy_denoiser_fallback("AMD");
-			rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-			break;
-		case RSE::PT_DENOISER_INTEL:
-			_warn_rtgi_legacy_denoiser_fallback("Intel");
-			rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-			break;
-		case RSE::PT_DENOISER_FIDELITYFX:
-			_warn_rtgi_legacy_denoiser_fallback("FidelityFX");
-			rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-			break;
-		case RSE::PT_DENOISER_INTERNAL:
-		default:
-			rtgi_denoiser = RTGI_DENOISER_ASVFG_EXPERIMENTAL;
-			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL;
-			break;
-	}
+	rtgi_denoiser = _rtgi_denoiser_from_pathtracing_denoiser(p_denoiser, pathtracing_denoiser);
 	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
@@ -1186,41 +1221,7 @@ uint32_t Environment::get_rtgi_strc_dynamic_visual_layers() const {
 }
 
 void Environment::set_rtgi_denoiser(RTGIDenoiser p_denoiser) {
-	switch ((int)p_denoiser) {
-		case RTGI_DENOISER_NONE:
-		case 5:
-			rtgi_denoiser = RTGI_DENOISER_NONE;
-			pathtracing_denoiser = RSE::PT_DENOISER_NONE;
-			break;
-		case RTGI_DENOISER_NVIDIA:
-			rtgi_denoiser = RTGI_DENOISER_NVIDIA;
-			pathtracing_denoiser = RSE::PT_DENOISER_NVIDIA;
-			break;
-		case RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION:
-			rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-			break;
-		case RTGI_DENOISER_AMD:
-			_warn_rtgi_legacy_denoiser_fallback("AMD");
-			rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-			break;
-		case RTGI_DENOISER_INTEL:
-			_warn_rtgi_legacy_denoiser_fallback("Intel");
-			rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-			break;
-		case RTGI_DENOISER_FIDELITYFX:
-			_warn_rtgi_legacy_denoiser_fallback("FidelityFX");
-			rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-			break;
-		case RTGI_DENOISER_ASVFG_EXPERIMENTAL:
-		default:
-			rtgi_denoiser = RTGI_DENOISER_ASVFG_EXPERIMENTAL;
-			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL;
-			break;
-	}
+	pathtracing_denoiser = _pathtracing_denoiser_from_rtgi_denoiser(p_denoiser, rtgi_denoiser);
 	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }

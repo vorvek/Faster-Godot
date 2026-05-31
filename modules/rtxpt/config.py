@@ -13,7 +13,6 @@ def get_opts(platform):
     return [
         ("rtxpt_sdk_path", "Path to a local NVIDIA RTXPT SDK checkout used by the experimental RTGI backend", ""),
         ("nrd_sdk_path", "Path to a local NVIDIA NRD SDK checkout used by the experimental RTGI denoiser", ""),
-        ("streamline_sdk_path", "Path to a local NVIDIA Streamline SDK checkout used by optional DLSS Ray Reconstruction handoff", ""),
     ]
 
 

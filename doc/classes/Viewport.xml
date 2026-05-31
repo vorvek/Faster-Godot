@@ -344,6 +344,15 @@
 		<member name="disable_3d" type="bool" setter="set_disable_3d" getter="is_3d_disabled" default="false">
 			Disable 3D rendering (but keep 2D rendering).
 		</member>
+		<member name="frame_generation_mode" type="int" setter="set_frame_generation_mode" getter="get_frame_generation_mode" enum="Viewport.FrameGenerationMode" default="0">
+			Sets the 3D frame generation mode. [constant FRAME_GENERATION_INTERPOLATED] uses Godot's internal motion-vector interpolation path and works for offscreen viewports. Vendor frame generation modes are exposed per viewport, but only activate for viewports that contribute to a presented window backbuffer; unsupported configurations fall back to [constant FRAME_GENERATION_INTERPOLATED].
+		</member>
+		<member name="frame_generation_target_fps" type="int" setter="set_frame_generation_target_fps" getter="get_frame_generation_target_fps" default="0">
+			When greater than [code]0[/code], throttles Godot's internal interpolated frame generation input rate to this target FPS. Vendor frame generation providers may use their own present pacing.
+		</member>
+		<member name="frame_generation_warp_scale" type="float" setter="set_frame_generation_warp_scale" getter="get_frame_generation_warp_scale" default="1.0">
+			Controls the motion-vector warp strength used by [constant FRAME_GENERATION_INTERPOLATED].
+		</member>
 		<member name="fsr_sharpness" type="float" setter="set_fsr_sharpness" getter="get_fsr_sharpness" default="0.2">
 			Determines how sharp the upscaled image will be when using the FSR upscaling mode. Sharpness halves with every whole number. Values go from 0.0 (sharpest) to 2.0. Values above 2.0 won't make a visible difference.
 			To control this property on the root viewport, set the [member ProjectSettings.rendering/scaling_3d/fsr_sharpness] project setting.
@@ -577,6 +586,9 @@
 		<constant name="SCALING_3D_MODE_FSR2" value="2" enum="Scaling3DMode">
 			Use AMD FidelityFX Super Resolution 2.2 upscaling for the viewport's 3D buffer. The amount of scaling can be set using [member Viewport.scaling_3d_scale]. Values less than [code]1.0[/code] will result in the viewport being upscaled using FSR2. Values greater than [code]1.0[/code] are not supported and bilinear downsampling will be used instead. A value of [code]1.0[/code] will use FSR2 at native resolution as a TAA solution.
 		</constant>
+		<constant name="SCALING_3D_MODE_FSR31" value="10" enum="Scaling3DMode">
+			Use AMD FidelityFX Super Resolution 3.1 temporal upscaling for the viewport's 3D buffer when the native Vulkan backend is available. Falls back to [constant SCALING_3D_MODE_FSR2] if unavailable or disabled for driver/runtime safety.
+		</constant>
 		<constant name="SCALING_3D_MODE_METALFX_SPATIAL" value="3" enum="Scaling3DMode">
 			Use the [url=https://developer.apple.com/documentation/metalfx/mtlfxspatialscaler#overview]MetalFX spatial upscaler[/url] for the viewport's 3D buffer.
 			The amount of scaling can be set using [member scaling_3d_scale].
@@ -591,8 +603,47 @@
 			More information: [url=https://developer.apple.com/documentation/metalfx]MetalFX[/url].
 			[b]Note:[/b] Only supported when the Metal rendering driver is in use, which limits this scaling mode to macOS and iOS.
 		</constant>
-		<constant name="SCALING_3D_MODE_MAX" value="5" enum="Scaling3DMode">
+		<constant name="SCALING_3D_MODE_NEAREST" value="5" enum="Scaling3DMode">
+			Use nearest-neighbor scaling for the viewport's 3D buffer.
+		</constant>
+		<constant name="SCALING_3D_MODE_SHARP_BILINEAR" value="6" enum="Scaling3DMode">
+			Use sharp bilinear scaling for the viewport's 3D buffer.
+		</constant>
+		<constant name="SCALING_3D_MODE_BICUBIC" value="7" enum="Scaling3DMode">
+			Use bicubic scaling for the viewport's 3D buffer.
+		</constant>
+		<constant name="SCALING_3D_MODE_SGSR" value="8" enum="Scaling3DMode">
+			Use SGSR spatial upscaling for the viewport's 3D buffer.
+		</constant>
+		<constant name="SCALING_3D_MODE_DLSS" value="9" enum="Scaling3DMode">
+			Use NVIDIA DLSS temporal upscaling for the viewport's 3D buffer when Streamline and DLSS are available. Falls back to [constant SCALING_3D_MODE_FSR2] if unavailable.
+		</constant>
+		<constant name="SCALING_3D_MODE_XESS" value="11" enum="Scaling3DMode">
+			Use Intel XeSS temporal upscaling for the viewport's 3D buffer when the native backend is available. Falls back to [constant SCALING_3D_MODE_FSR2] if unavailable or disabled for driver/runtime safety.
+		</constant>
+		<constant name="SCALING_3D_MODE_MAX" value="12" enum="Scaling3DMode">
 			Represents the size of the [enum Scaling3DMode] enum.
+		</constant>
+		<constant name="FRAME_GENERATION_DISABLED" value="0" enum="FrameGenerationMode">
+			Disable frame generation.
+		</constant>
+		<constant name="FRAME_GENERATION_INTERPOLATED" value="1" enum="FrameGenerationMode">
+			Use Godot's internal motion-vector interpolation path.
+		</constant>
+		<constant name="FRAME_GENERATION_VENDOR_AUTO" value="2" enum="FrameGenerationMode">
+			Use the first available vendor frame generation backend for presented window backbuffers, falling back to [constant FRAME_GENERATION_INTERPOLATED] otherwise.
+		</constant>
+		<constant name="FRAME_GENERATION_DLSS" value="3" enum="FrameGenerationMode">
+			Request NVIDIA DLSS Frame Generation for presented window backbuffers when Streamline and DLSS-G are available.
+		</constant>
+		<constant name="FRAME_GENERATION_FSR3" value="4" enum="FrameGenerationMode">
+			Request AMD FSR 3 frame generation for presented Vulkan window backbuffers when the FidelityFX SDK backend is available.
+		</constant>
+		<constant name="FRAME_GENERATION_XESS" value="5" enum="FrameGenerationMode">
+			Request Intel XeSS Frame Generation for presented window backbuffers when the SDK backend supports the active graphics API.
+		</constant>
+		<constant name="FRAME_GENERATION_MAX" value="6" enum="FrameGenerationMode">
+			Represents the size of the [enum FrameGenerationMode] enum.
 		</constant>
 		<constant name="MSAA_DISABLED" value="0" enum="MSAA">
 			Multisample antialiasing mode disabled. This is the default value, and is also the fastest setting.

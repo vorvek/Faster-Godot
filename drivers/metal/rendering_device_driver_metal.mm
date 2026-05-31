@@ -2380,6 +2380,15 @@ uint64_t RenderingDeviceDriverMetal::get_resource_native_handle(DriverResource p
 		case DRIVER_RESOURCE_COMMAND_QUEUE: {
 			return (uint64_t)(uintptr_t)(__bridge void *)device_queue;
 		}
+		case DRIVER_RESOURCE_COMMAND_BUFFER: {
+			return p_driver_id.id;
+		}
+		case DRIVER_RESOURCE_SEMAPHORE:
+		case DRIVER_RESOURCE_SWAP_CHAIN:
+		case DRIVER_RESOURCE_FRAMEBUFFER:
+		case DRIVER_RESOURCE_SWAP_CHAIN_DATA_FORMAT: {
+			return 0;
+		}
 		case DRIVER_RESOURCE_QUEUE_FAMILY: {
 			return 0;
 		}

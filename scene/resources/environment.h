@@ -96,6 +96,7 @@ public:
 	};
 
 	enum RTGIDenoiser {
+		// User-facing serialized values. Keep independent from RSE::PathtracingDenoiser.
 		RTGI_DENOISER_ASVFG_EXPERIMENTAL = 8,
 		RTGI_DENOISER_NONE = 9,
 		// Legacy values kept for old scenes and scripts.

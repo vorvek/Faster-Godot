@@ -782,6 +782,16 @@
 				[b]Note:[/b] Only the main [RenderingDevice] returned by [method RenderingServer.get_rendering_device] has a format. If called on a local [RenderingDevice], this method prints an error and returns [constant INVALID_ID].
 			</description>
 		</method>
+		<method name="screen_get_driver_resource">
+			<return type="int" />
+			<param index="0" name="resource" type="int" enum="RenderingDevice.DriverResource" />
+			<param index="1" name="screen" type="int" default="0" />
+			<param index="2" name="index" type="int" default="0" />
+			<description>
+				Returns the native driver [param resource] for the given screen or window. This is intended for internal integrations that need swapchain, framebuffer, queue, or queue-family handles for the presented backbuffer.
+				[b]Note:[/b] Only the main [RenderingDevice] returned by [method RenderingServer.get_rendering_device] has screen resources.
+			</description>
+		</method>
 		<method name="screen_get_height" qualifiers="const">
 			<return type="int" />
 			<param index="0" name="screen" type="int" default="0" />
@@ -1217,6 +1227,36 @@
 			- Vulkan: [code]VkPipeline[/code].
 			- Metal: [code]MTLRenderPipelineState[/code].
 		</constant>
+		<constant name="DRIVER_RESOURCE_TEXTURE_DEVICE_MEMORY" value="13" enum="DriverResource">
+			- Vulkan: [code]VkDeviceMemory[/code] for the texture allocation.
+		</constant>
+		<constant name="DRIVER_RESOURCE_TEXTURE_USAGE_FLAGS" value="14" enum="DriverResource">
+			- Vulkan: [code]VkImageUsageFlags[/code] for the texture.
+		</constant>
+		<constant name="DRIVER_RESOURCE_COMMAND_BUFFER" value="15" enum="DriverResource">
+			Native command buffer handle. This is primarily intended for internal driver callbacks that already have a command buffer id.
+			- Vulkan: [code]VkCommandBuffer[/code].
+		</constant>
+		<constant name="DRIVER_RESOURCE_SEMAPHORE" value="16" enum="DriverResource">
+			Native semaphore handle. This is primarily intended for internal driver callbacks that already have a semaphore id.
+			- Vulkan: [code]VkSemaphore[/code].
+		</constant>
+		<constant name="DRIVER_RESOURCE_SWAP_CHAIN" value="17" enum="DriverResource">
+			Native swapchain handle. This is primarily intended for internal driver callbacks that already have a swapchain id.
+			- Vulkan: [code]VkSwapchainKHR[/code].
+		</constant>
+		<constant name="DRIVER_RESOURCE_FRAMEBUFFER" value="18" enum="DriverResource">
+			Native framebuffer handle. This is primarily intended for internal driver callbacks that already have a framebuffer id.
+			- Vulkan: [code]VkFramebuffer[/code].
+		</constant>
+		<constant name="DRIVER_RESOURCE_SWAP_CHAIN_DATA_FORMAT" value="19" enum="DriverResource">
+			Native swapchain color format.
+			- Vulkan: [code]VkFormat[/code] for the swapchain images.
+		</constant>
+		<constant name="DRIVER_RESOURCE_DEVICE_PROC_ADDR" value="20" enum="DriverResource">
+			Native device-function lookup entry point.
+			- Vulkan: [code]vkGetDeviceProcAddr[/code] as initialized by the active rendering context.
+		</constant>
 		<constant name="DRIVER_RESOURCE_VULKAN_DEVICE" value="0" enum="DriverResource" deprecated="Use [constant DRIVER_RESOURCE_LOGICAL_DEVICE] instead.">
 		</constant>
 		<constant name="DRIVER_RESOURCE_VULKAN_PHYSICAL_DEVICE" value="1" enum="DriverResource" deprecated="Use [constant DRIVER_RESOURCE_PHYSICAL_DEVICE] instead.">
@@ -1242,6 +1282,18 @@
 		<constant name="DRIVER_RESOURCE_VULKAN_COMPUTE_PIPELINE" value="11" enum="DriverResource" deprecated="Use [constant DRIVER_RESOURCE_COMPUTE_PIPELINE] instead.">
 		</constant>
 		<constant name="DRIVER_RESOURCE_VULKAN_RENDER_PIPELINE" value="12" enum="DriverResource" deprecated="Use [constant DRIVER_RESOURCE_RENDER_PIPELINE] instead.">
+		</constant>
+		<constant name="DRIVER_RESOURCE_VULKAN_COMMAND_BUFFER" value="15" enum="DriverResource" deprecated="Use [constant DRIVER_RESOURCE_COMMAND_BUFFER] instead.">
+		</constant>
+		<constant name="DRIVER_RESOURCE_VULKAN_SEMAPHORE" value="16" enum="DriverResource" deprecated="Use [constant DRIVER_RESOURCE_SEMAPHORE] instead.">
+		</constant>
+		<constant name="DRIVER_RESOURCE_VULKAN_SWAP_CHAIN" value="17" enum="DriverResource" deprecated="Use [constant DRIVER_RESOURCE_SWAP_CHAIN] instead.">
+		</constant>
+		<constant name="DRIVER_RESOURCE_VULKAN_FRAMEBUFFER" value="18" enum="DriverResource" deprecated="Use [constant DRIVER_RESOURCE_FRAMEBUFFER] instead.">
+		</constant>
+		<constant name="DRIVER_RESOURCE_VULKAN_SWAP_CHAIN_NATIVE_TEXTURE_FORMAT" value="19" enum="DriverResource" deprecated="Use [constant DRIVER_RESOURCE_SWAP_CHAIN_DATA_FORMAT] instead.">
+		</constant>
+		<constant name="DRIVER_RESOURCE_VULKAN_DEVICE_PROC_ADDR" value="20" enum="DriverResource" deprecated="Use [constant DRIVER_RESOURCE_DEVICE_PROC_ADDR] instead.">
 		</constant>
 		<constant name="DATA_FORMAT_R4G4_UNORM_PACK8" value="0" enum="DataFormat">
 			4-bit-per-channel red/green channel data format, packed into 8 bits. Values are in the [code][0.0, 1.0][/code] range.

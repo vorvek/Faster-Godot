@@ -47,7 +47,6 @@ def can_build(env, platform):
 def get_opts(platform):
     return [
         ("hiprt_sdk_path", "Path to a local AMD HIP RT SDK checkout used by the experimental RTGI backend", ""),
-        ("fidelityfx_sdk_path", "Path to a local AMD FidelityFX SDK checkout used by the experimental RTGI denoiser", ""),
     ]
 
 

@@ -609,7 +609,7 @@
 			Deprecated compatibility alias for [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL].
 		</constant>
 		<constant name="RTGI_DENOISER_NONE" value="9" enum="RTGIDenoiser">
-			Disable RTGI denoising.
+			Disable RTGI denoising. The legacy serialized value [code]5[/code] is accepted as a migration shim and normalized to this value.
 		</constant>
 		<constant name="RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION" value="14" enum="RTGIDenoiser">
 			Use the internal multi-signal RTGI denoiser. Direct light, emissive, indirect, sky, diffuse, and specular signals are denoised separately before internal recomposition.

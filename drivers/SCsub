@@ -43,6 +43,8 @@ if env["platform"] in ["macos"]:
 SConscript("winmidi/SCsub")
 
 # Graphics drivers
+if env["enable_dlss"]:
+    SConscript("streamline/SCsub")
 if env["vulkan"]:
     SConscript("vulkan/SCsub")
 if env["opengl3"]:

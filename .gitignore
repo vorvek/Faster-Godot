@@ -395,3 +395,10 @@ $RECYCLE.BIN/
 *.msp
 *.lnk
 *.generated.props
+
+# AI-investigation / test artifacts (do not commit)
+/_fsr_test_project/
+/fsr_ctrl_*.log
+/codex_*.log
+/codex_scons_tests.log
+/build_rebuild_rapier*.log

@@ -5631,6 +5631,36 @@ int RenderingDevice::screen_get_pre_rotation_degrees(DisplayServerEnums::WindowI
 	return driver->swap_chain_get_pre_rotation_degrees(it->value);
 }
 
+uint64_t RenderingDevice::screen_get_driver_resource(DriverResource p_resource, DisplayServerEnums::WindowID p_screen, uint64_t p_index) {
+	_THREAD_SAFE_METHOD_
+
+	uint64_t driver_id = 0;
+	switch (p_resource) {
+		case DRIVER_RESOURCE_SWAP_CHAIN:
+		case DRIVER_RESOURCE_SWAP_CHAIN_DATA_FORMAT: {
+			HashMap<DisplayServerEnums::WindowID, RDD::SwapChainID>::ConstIterator it = screen_swap_chains.find(p_screen);
+			ERR_FAIL_COND_V_MSG(it == screen_swap_chains.end(), 0, "A swap chain was not created for the screen.");
+			driver_id = it->value.id;
+		} break;
+		case DRIVER_RESOURCE_FRAMEBUFFER: {
+			HashMap<DisplayServerEnums::WindowID, RDD::FramebufferID>::ConstIterator it = screen_framebuffers.find(p_screen);
+			ERR_FAIL_COND_V_MSG(it == screen_framebuffers.end(), 0, "Framebuffer was never prepared.");
+			driver_id = it->value.id;
+		} break;
+		case DRIVER_RESOURCE_COMMAND_QUEUE: {
+			driver_id = main_queue.id;
+		} break;
+		case DRIVER_RESOURCE_QUEUE_FAMILY: {
+			driver_id = main_queue_family.id;
+		} break;
+		default: {
+			driver_id = p_index;
+		} break;
+	}
+
+	return driver->get_resource_native_handle(p_resource, driver_id);
+}
+
 RenderingDevice::FramebufferFormatID RenderingDevice::screen_get_framebuffer_format(DisplayServerEnums::WindowID p_screen) const {
 	_THREAD_SAFE_METHOD_
 
@@ -8929,9 +8959,17 @@ uint64_t RenderingDevice::get_driver_resource(DriverResource p_resource, RID p_r
 		case DRIVER_RESOURCE_LOGICAL_DEVICE:
 		case DRIVER_RESOURCE_PHYSICAL_DEVICE:
 		case DRIVER_RESOURCE_TOPMOST_OBJECT:
+		case DRIVER_RESOURCE_DEVICE_PROC_ADDR:
 			break;
 		case DRIVER_RESOURCE_COMMAND_QUEUE:
 			driver_id = main_queue.id;
+			break;
+		case DRIVER_RESOURCE_COMMAND_BUFFER:
+		case DRIVER_RESOURCE_SEMAPHORE:
+		case DRIVER_RESOURCE_SWAP_CHAIN:
+		case DRIVER_RESOURCE_FRAMEBUFFER:
+		case DRIVER_RESOURCE_SWAP_CHAIN_DATA_FORMAT:
+			driver_id = p_index;
 			break;
 		case DRIVER_RESOURCE_QUEUE_FAMILY:
 			driver_id = main_queue_family.id;
@@ -9353,6 +9391,7 @@ void RenderingDevice::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("screen_get_width", "screen"), &RenderingDevice::screen_get_width, DEFVAL(DisplayServerEnums::MAIN_WINDOW_ID));
 	ClassDB::bind_method(D_METHOD("screen_get_height", "screen"), &RenderingDevice::screen_get_height, DEFVAL(DisplayServerEnums::MAIN_WINDOW_ID));
+	ClassDB::bind_method(D_METHOD("screen_get_driver_resource", "resource", "screen", "index"), &RenderingDevice::screen_get_driver_resource, DEFVAL(DisplayServerEnums::MAIN_WINDOW_ID), DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("screen_get_framebuffer_format", "screen"), &RenderingDevice::screen_get_framebuffer_format, DEFVAL(DisplayServerEnums::MAIN_WINDOW_ID));
 
 	ClassDB::bind_method(D_METHOD("draw_list_begin_for_screen", "screen", "clear_color"), &RenderingDevice::draw_list_begin_for_screen, DEFVAL(DisplayServerEnums::MAIN_WINDOW_ID), DEFVAL(Color()));
@@ -9473,6 +9512,12 @@ void RenderingDevice::_bind_methods() {
 	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_BUFFER);
 	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_COMPUTE_PIPELINE);
 	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_RENDER_PIPELINE);
+	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_COMMAND_BUFFER);
+	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_SEMAPHORE);
+	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_SWAP_CHAIN);
+	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_FRAMEBUFFER);
+	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_SWAP_CHAIN_DATA_FORMAT);
+	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_DEVICE_PROC_ADDR);
 #ifndef DISABLE_DEPRECATED
 	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_VULKAN_DEVICE);
 	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_VULKAN_PHYSICAL_DEVICE);
@@ -9487,6 +9532,12 @@ void RenderingDevice::_bind_methods() {
 	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_VULKAN_BUFFER);
 	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_VULKAN_COMPUTE_PIPELINE);
 	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_VULKAN_RENDER_PIPELINE);
+	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_VULKAN_COMMAND_BUFFER);
+	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_VULKAN_SEMAPHORE);
+	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_VULKAN_SWAP_CHAIN);
+	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_VULKAN_FRAMEBUFFER);
+	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_VULKAN_SWAP_CHAIN_NATIVE_TEXTURE_FORMAT);
+	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_VULKAN_DEVICE_PROC_ADDR);
 #endif
 
 	BIND_ENUM_CONSTANT(DATA_FORMAT_R4G4_UNORM_PACK8);

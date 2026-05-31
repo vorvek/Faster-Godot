@@ -76,6 +76,11 @@ private:
 	RendererRD::VRS *vrs = nullptr;
 	uint64_t auto_exposure_version = 1;
 	RS::ViewportVRSMode vrs_mode = RS::VIEWPORT_VRS_DISABLED;
+	RS::ViewportFrameGenerationMode vendor_frame_generation_mode = RS::VIEWPORT_FRAME_GENERATION_DISABLED;
+	uint64_t vendor_frame_generation_viewport_id = 0;
+	int vendor_frame_generation_screen = -1;
+	Rect2i vendor_frame_generation_rect;
+	bool vendor_frame_generation_presented = false;
 
 	// Our render target represents our final destination that we display on screen.
 	RID render_target;
@@ -330,6 +335,18 @@ public:
 	}
 	_FORCE_INLINE_ bool get_depth_reconstruct_requested() const { return depth_reconstruct_requested; }
 	_FORCE_INLINE_ void set_depth_reconstruct_requested(bool p_requested) { depth_reconstruct_requested = p_requested; }
+	_FORCE_INLINE_ void set_vendor_frame_generation_request(RS::ViewportFrameGenerationMode p_mode, uint64_t p_viewport_id, int p_screen, const Rect2i &p_rect, bool p_presented) {
+		vendor_frame_generation_mode = p_mode;
+		vendor_frame_generation_viewport_id = p_viewport_id;
+		vendor_frame_generation_screen = p_screen;
+		vendor_frame_generation_rect = p_rect;
+		vendor_frame_generation_presented = p_presented;
+	}
+	_FORCE_INLINE_ RS::ViewportFrameGenerationMode get_vendor_frame_generation_mode() const { return vendor_frame_generation_mode; }
+	_FORCE_INLINE_ uint64_t get_vendor_frame_generation_viewport_id() const { return vendor_frame_generation_viewport_id; }
+	_FORCE_INLINE_ int get_vendor_frame_generation_screen() const { return vendor_frame_generation_screen; }
+	_FORCE_INLINE_ const Rect2i &get_vendor_frame_generation_rect() const { return vendor_frame_generation_rect; }
+	_FORCE_INLINE_ bool is_vendor_frame_generation_presented() const { return vendor_frame_generation_presented; }
 
 	// Velocity, currently only used by TAA (Clustered) but we'll be using this in other places soon too.
 
