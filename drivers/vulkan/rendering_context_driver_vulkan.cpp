@@ -34,19 +34,8 @@
 
 #include "core/config/engine.h"
 
-#if defined(USE_VOLK) && defined(STREAMLINE_ENABLED)
-#if defined(_WIN32)
-#include <windows.h>
-#elif defined(LINUXBSD_ENABLED)
-#include <dlfcn.h>
-#endif
-#endif
-
 #include "core/config/project_settings.h"
 #include "core/version.h"
-#if defined(STREAMLINE_ENABLED)
-#include "drivers/streamline/streamline.h"
-#endif
 #include "drivers/vulkan/rendering_device_driver_vulkan.h"
 #include "drivers/vulkan/vulkan_hooks.h"
 
@@ -952,42 +941,7 @@ Error RenderingContextDriverVulkan::_create_vulkan_instance(const VkInstanceCrea
 Error RenderingContextDriverVulkan::initialize() {
 	Error err;
 
-#if defined(USE_VOLK) && defined(STREAMLINE_ENABLED) && (defined(_WIN32) || defined(LINUXBSD_ENABLED))
-	PFN_vkGetInstanceProcAddr streamline_vk_get_instance_proc_addr = nullptr;
-	const bool streamline_allowed = Streamline::get_singleton() != nullptr && Streamline::get_singleton()->is_enabled_for_current_process();
-	if (streamline_allowed) {
-#if defined(_WIN32)
-		HMODULE module = LoadLibraryA("sl.interposer.dll");
-		if (module != nullptr) {
-			// note: function pointer is cast through void function pointer to silence cast-function-type warning on gcc8
-			streamline_vk_get_instance_proc_addr = (PFN_vkGetInstanceProcAddr)(void (*)(void))GetProcAddress(module, "vkGetInstanceProcAddr");
-		}
-#elif defined(LINUXBSD_ENABLED)
-		const char *const streamline_libraries[] = {
-			"libsl.interposer.so",
-			"sl.interposer.so",
-		};
-		for (uint32_t i = 0; i < sizeof(streamline_libraries) / sizeof(streamline_libraries[0]); i++) {
-			void *module = dlopen(streamline_libraries[i], RTLD_NOW | RTLD_LOCAL);
-			if (module == nullptr) {
-				continue;
-			}
-			// note: function pointer is cast through void function pointer to silence cast-function-type warning on gcc8
-			streamline_vk_get_instance_proc_addr = (PFN_vkGetInstanceProcAddr)(void (*)(void))dlsym(module, "vkGetInstanceProcAddr");
-			if (streamline_vk_get_instance_proc_addr != nullptr) {
-				break;
-			}
-		}
-#endif
-	}
-	if (streamline_allowed && streamline_vk_get_instance_proc_addr != nullptr) {
-		streamline_interposer_enabled = true;
-		volkInitializeCustom(streamline_vk_get_instance_proc_addr);
-		Streamline::get_singleton()->initialize_pre_device();
-	} else if (volkInitialize() != VK_SUCCESS) {
-		return FAILED;
-	}
-#elif defined(USE_VOLK)
+#if defined(USE_VOLK)
 	if (volkInitialize() != VK_SUCCESS) {
 		return FAILED;
 	}
@@ -1175,11 +1129,5 @@ bool RenderingContextDriverVulkan::queue_family_supports_present(VkPhysicalDevic
 const RenderingContextDriverVulkan::Functions &RenderingContextDriverVulkan::functions_get() const {
 	return functions;
 }
-
-#ifdef STREAMLINE_ENABLED
-bool RenderingContextDriverVulkan::is_streamline_interposer_enabled() const {
-	return streamline_interposer_enabled;
-}
-#endif
 
 #endif // VULKAN_ENABLED

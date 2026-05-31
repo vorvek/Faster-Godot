@@ -38,10 +38,6 @@
 
 #include <thirdparty/misc/smolv.h>
 
-#if defined(STREAMLINE_ENABLED)
-#include "drivers/streamline/streamline.h"
-#endif
-
 #if defined(VENDOR_UPSCALER_FSR31_REQUESTED) && defined(FIDELITYFX_FSR31_API_VK_HEADERS_PRESENT)
 #if !defined(_MSC_VER) && !defined(__declspec)
 #define FFX_API_GCC_DECLSPEC_COMPAT
@@ -1510,14 +1506,6 @@ Error RenderingDeviceDriverVulkan::_add_queue_create_info(LocalVector<VkDeviceQu
 	const uint32_t max_queue_count_per_family = 1;
 	static const float queue_priorities[max_queue_count_per_family] = {};
 	for (uint32_t i = 0; i < queue_family_count; i++) {
-#ifdef STREAMLINE_ENABLED
-		if (queue_family_properties[i].queueCount == 1 &&
-				(queue_family_properties[i].queueFlags & VK_QUEUE_OPTICAL_FLOW_BIT_NV) != 0 &&
-				(queue_family_properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0) {
-			// This queue is required by Streamline. Don't allocate it or Streamline 2.4.10 will fail in combination with DLSS-FG.
-			continue;
-		}
-#endif
 		if ((queue_family_properties[i].queueFlags & queue_flags_mask) == 0) {
 			// We ignore creating queues in families that don't support any of the operations we require.
 			continue;
@@ -2146,55 +2134,12 @@ Error RenderingDeviceDriverVulkan::initialize(uint32_t p_device_index, uint32_t 
 	err = _check_device_capabilities();
 	ERR_FAIL_COND_V_MSG(err != OK, err, "Couldn't initialize Vulkan device capabilities. This may be caused by an incompatible or outdated graphics driver.");
 
-#ifdef STREAMLINE_ENABLED
-	if (Streamline::get_singleton()) {
-		Streamline::get_singleton()->set_internal_parameter("vulkan_physical_device", (void *)physical_device);
-	}
-#endif
-
 	LocalVector<VkDeviceQueueCreateInfo> queue_create_info;
 	err = _add_queue_create_info(queue_create_info);
 	ERR_FAIL_COND_V_MSG(err != OK, err, "Couldn't initialize Vulkan device queue. This may be caused by an incompatible or outdated graphics driver.");
 
 	err = _initialize_device(queue_create_info);
 	ERR_FAIL_COND_V_MSG(err != OK, err, "Couldn't initialize Vulkan device. This may be caused by an incompatible or outdated graphics driver.");
-
-#ifdef STREAMLINE_ENABLED
-	if (Streamline::get_singleton()) {
-		StreamlineVulkanDeviceContext streamline_context;
-		streamline_context.instance = (void *)context_driver->instance_get();
-		streamline_context.physical_device = (void *)physical_device;
-		streamline_context.device = (void *)vk_device;
-		streamline_context.device_created_by_interposer = context_driver->is_streamline_interposer_enabled();
-
-		bool graphics_queue_found = false;
-		bool compute_queue_found = false;
-		bool optical_flow_queue_found = false;
-		for (uint32_t i = 0; i < queue_create_info.size(); i++) {
-			const uint32_t family_index = queue_create_info[i].queueFamilyIndex;
-			const VkQueueFlags queue_flags = queue_family_properties[family_index].queueFlags;
-			if (!graphics_queue_found && (queue_flags & VK_QUEUE_GRAPHICS_BIT) != 0) {
-				streamline_context.graphics_queue_family = family_index;
-				streamline_context.graphics_queue_index = 0;
-				graphics_queue_found = true;
-			}
-			if (!compute_queue_found && (queue_flags & VK_QUEUE_COMPUTE_BIT) != 0) {
-				streamline_context.compute_queue_family = family_index;
-				streamline_context.compute_queue_index = 0;
-				compute_queue_found = true;
-			}
-#ifdef VK_NV_optical_flow
-			if (!optical_flow_queue_found && (queue_flags & VK_QUEUE_OPTICAL_FLOW_BIT_NV) != 0) {
-				streamline_context.optical_flow_queue_family = family_index;
-				streamline_context.optical_flow_queue_index = 0;
-				optical_flow_queue_found = true;
-			}
-#endif
-		}
-
-		Streamline::get_singleton()->initialize_vulkan_device(streamline_context);
-	}
-#endif
 
 	err = _initialize_allocator();
 	ERR_FAIL_COND_V_MSG(err != OK, err, "Couldn't initialize Vulkan memory allocator. This may be caused by an incompatible or outdated graphics driver.");
@@ -2228,12 +2173,6 @@ Error RenderingDeviceDriverVulkan::initialize(uint32_t p_device_index, uint32_t 
 
 	pipeline_statistics.file_access->store_csv_line({ "name", "hash", "stage", "spec", "glslang", "re-spirv", "time" });
 	pipeline_statistics.file_access->flush();
-#endif
-
-#if defined(STREAMLINE_ENABLED)
-	if (Streamline::get_singleton()) {
-		Streamline::get_singleton()->emit_marker(STREAMLINE_MARKER_AFTER_DEVICE_CREATION);
-	}
 #endif
 
 	return OK;
@@ -3855,21 +3794,6 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 		present_info.pImageIndices = image_indices.ptr();
 		present_info.pResults = results.ptr();
 
-#ifdef STREAMLINE_ENABLED
-		if (Streamline::get_singleton()) {
-			StreamlinePresentContext present_context;
-			present_context.queue = (void *)device_queue.queue;
-			present_context.present_info = &present_info;
-			present_context.swapchains = swapchains.ptr();
-			present_context.image_indices = image_indices.ptr();
-			present_context.swapchain_count = swapchains.size();
-			present_context.wait_semaphores = wait_semaphores.ptr();
-			present_context.wait_semaphore_count = wait_semaphores.size();
-			Streamline::get_singleton()->begin_present(present_context);
-			Streamline::get_singleton()->emit_marker(STREAMLINE_MARKER_BEGIN_PRESENT);
-		}
-#endif
-
 		PFN_vkQueuePresentKHR queue_present = device_functions.QueuePresentKHR;
 #if defined(VENDOR_UPSCALER_FSR31_REQUESTED) && defined(FIDELITYFX_FSR31_API_VK_HEADERS_PRESENT)
 		if (p_swap_chains.size() == 1) {
@@ -3892,13 +3816,6 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 #endif
 
 		device_queue.submit_mutex.unlock();
-
-#ifdef STREAMLINE_ENABLED
-		if (Streamline::get_singleton()) {
-			Streamline::get_singleton()->emit_marker(STREAMLINE_MARKER_END_PRESENT);
-			Streamline::get_singleton()->end_present();
-		}
-#endif
 
 		// Set the index to an invalid value. If any of the swap chains returned out of date, indicate it should be resized the next time it's acquired.
 		bool any_result_is_out_of_date = false;
@@ -4295,11 +4212,6 @@ Error RenderingDeviceDriverVulkan::swap_chain_resize(CommandQueueID p_cmd_queue,
 	CommandQueue *command_queue = (CommandQueue *)(p_cmd_queue.id);
 	SwapChain *swap_chain = (SwapChain *)(p_swap_chain.id);
 
-#ifdef STREAMLINE_ENABLED
-	// Emit streamline event
-	Streamline::get_singleton()->emit_marker(STREAMLINE_MARKER_MODIFY_SWAPCHAIN);
-#endif
-
 	// Release all current contents of the swap chain.
 	_swap_chain_release(swap_chain);
 
@@ -4677,19 +4589,6 @@ Error RenderingDeviceDriverVulkan::swap_chain_resize(CommandQueueID p_cmd_queue,
 		swap_chain->present_semaphores.push_back(vk_semaphore);
 	}
 
-#ifdef STREAMLINE_ENABLED
-	if (Streamline::get_singleton()) {
-		StreamlineSwapchainContext streamline_swapchain;
-		streamline_swapchain.swapchain = (void *)swap_chain->vk_swapchain;
-		streamline_swapchain.width = surface->width;
-		streamline_swapchain.height = surface->height;
-		streamline_swapchain.images = swap_chain->images.ptr();
-		streamline_swapchain.image_views = swap_chain->image_views.ptr();
-		streamline_swapchain.image_count = image_count;
-		Streamline::get_singleton()->notify_swapchain_resized(streamline_swapchain);
-	}
-#endif
-
 	// Once everything's been created correctly, indicate the surface no longer needs to be resized.
 	context_driver->surface_set_needs_resize(swap_chain->surface, false);
 
@@ -4735,29 +4634,12 @@ RDD::FramebufferID RenderingDeviceDriverVulkan::swap_chain_acquire_framebuffer(C
 	swap_chain->command_queues_acquired_semaphores.push_back(semaphore_index);
 
 	const uint64_t acquire_timeout = UINT64_MAX;
-#ifdef STREAMLINE_ENABLED
-	if (Streamline::get_singleton()) {
-		StreamlineAcquireContext acquire_context;
-		acquire_context.device = (void *)vk_device;
-		acquire_context.swapchain = (void *)swap_chain->vk_swapchain;
-		acquire_context.timeout = acquire_timeout;
-		acquire_context.semaphore = (void *)semaphore;
-		acquire_context.fence = VK_NULL_HANDLE;
-		acquire_context.image_index = &swap_chain->image_index;
-		Streamline::get_singleton()->begin_acquire_next_image(acquire_context);
-	}
-#endif
 #if defined(VENDOR_UPSCALER_FSR31_REQUESTED) && defined(FIDELITYFX_FSR31_API_VK_HEADERS_PRESENT)
 	PFN_vkAcquireNextImageKHR acquire_next_image = swap_chain->fsr3_acquire_next_image != nullptr ? swap_chain->fsr3_acquire_next_image : device_functions.AcquireNextImageKHR;
 #else
 	PFN_vkAcquireNextImageKHR acquire_next_image = device_functions.AcquireNextImageKHR;
 #endif
 	err = acquire_next_image(vk_device, swap_chain->vk_swapchain, acquire_timeout, semaphore, VK_NULL_HANDLE, &swap_chain->image_index);
-#ifdef STREAMLINE_ENABLED
-	if (Streamline::get_singleton()) {
-		Streamline::get_singleton()->end_acquire_next_image((int32_t)err, swap_chain->image_index);
-	}
-#endif
 	if (err == VK_ERROR_OUT_OF_DATE_KHR) {
 		// Out of date leaves the semaphore in a signaled state that will never finish, so it's necessary to recreate it.
 		bool semaphore_recreated = _recreate_image_semaphore(command_queue, semaphore_index, true);
@@ -8589,15 +8471,6 @@ RenderingDeviceDriverVulkan::RenderingDeviceDriverVulkan(RenderingContextDriverV
 }
 
 RenderingDeviceDriverVulkan::~RenderingDeviceDriverVulkan() {
-#if defined(STREAMLINE_ENABLED)
-	if (Streamline::get_singleton()) {
-		Streamline::get_singleton()->emit_marker(STREAMLINE_MARKER_BEFORE_DEVICE_DESTROY);
-		if (vk_device != VK_NULL_HANDLE) {
-			vkDeviceWaitIdle(vk_device);
-		}
-		Streamline::get_singleton()->shutdown();
-	}
-#endif
 	Aftermath::get_singleton()->emit_marker(AFTERMATH_MARKER_BEFORE_DEVICE_DESTROY);
 
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
