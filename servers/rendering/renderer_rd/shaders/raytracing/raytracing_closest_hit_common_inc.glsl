@@ -6,8 +6,7 @@
 //
 // Required bindings (before this file):
 //   tlas, payload, scene_data_block, geometries[], motion_indices[], materials[], motion_transforms[], bindless_textures[],
-//   SAMPLER_* (12 material samplers), rt_params, rt_depth_image,
-//   DLSS-RR images (ifdef DLSS_RR_ENABLED)
+//   SAMPLER_* (12 material samplers), rt_params, rt_depth_image
 
 // ============================================================================
 // HIT DATA
@@ -823,27 +822,6 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 
 	vec3 specularF0 = baseColorToSpecularF0(brdf_mat.baseColor, brdf_mat.metalness, brdf_mat.dielectricF0);
 	vec3 diffuseReflectance = baseColorToDiffuseReflectance(brdf_mat.baseColor, brdf_mat.metalness);
-
-	// =================================================================
-	// DLSS Ray Reconstruction output (primary ray, sample 0 only)
-	// =================================================================
-#ifdef DLSS_RR_ENABLED
-	if (!rt_strc_probe_update_mode() && total_bounces == 0u && is_sample_zero(ps.packed_bounces_flags)) {
-		ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
-
-		vec3 diffuse_albedo = DLSSRR_computeDiffuseAlbedo(m.albedo, m.metalness);
-		imageStore(dlss_rr_diffuse_albedo, pixel, vec4(diffuse_albedo, 1.0));
-
-		vec3 specular_albedo = DLSSRR_computeSpecularAlbedo(m.albedo, m.metalness, brdf_mat.dielectricF0, material_roughness, NdotV);
-		imageStore(dlss_rr_specular_albedo, pixel, vec4(clamp(specular_albedo, vec3(0.0), vec3(1.0)), 1.0)); // match UNORM8 like before - fixes some issues with garbling..
-
-		imageStore(dlss_rr_normal_roughness, pixel, vec4(N, material_roughness));
-
-		// Specular hit distance deferred to RayGen
-		float spec_hit_dist = -1.0;
-		imageStore(dlss_rr_specular_hit_dist, pixel, vec4(spec_hit_dist));
-	}
-#endif
 
 	// =================================================================
 	// NEE: Next Event Estimation (direct light sampling)

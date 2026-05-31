@@ -9941,46 +9941,6 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		uniforms.push_back(u);
 	}
 
-	// Bindings 9-12: DLSS Ray Reconstruction output buffers (only in DLSS RR shader variant).
-	bool dlss_rr_enabled = rb_data->dlss_rr_has_buffers();
-	if (dlss_rr_enabled) {
-		// Binding 9: DLSS RR Diffuse Albedo
-		{
-			RD::Uniform u;
-			u.binding = 9;
-			u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-			add_uniform_id(u, rb_data->dlss_rr_get_diffuse_albedo());
-			uniforms.push_back(u);
-		}
-
-		// Binding 10: DLSS RR Specular Albedo
-		{
-			RD::Uniform u;
-			u.binding = 10;
-			u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-			add_uniform_id(u, rb_data->dlss_rr_get_specular_albedo());
-			uniforms.push_back(u);
-		}
-
-		// Binding 11: DLSS RR Normal + Roughness
-		{
-			RD::Uniform u;
-			u.binding = 11;
-			u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-			add_uniform_id(u, rb_data->dlss_rr_get_normal_roughness());
-			uniforms.push_back(u);
-		}
-
-		// Binding 12: DLSS RR Specular Hit Distance
-		{
-			RD::Uniform u;
-			u.binding = 12;
-			u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-			add_uniform_id(u, rb_data->dlss_rr_get_specular_hit_dist());
-			uniforms.push_back(u);
-		}
-	}
-
 	// Binding 13: Light buffer (SSBO).
 	{
 		RD::Uniform u;

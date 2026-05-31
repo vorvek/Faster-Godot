@@ -1317,55 +1317,6 @@ RID RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_material
 			render_buffers->get_depth_texture());
 }
 
-void RenderForwardClustered::RenderBufferDataForwardClustered::dlss_rr_ensure_buffers() {
-	ERR_FAIL_NULL(render_buffers);
-
-	if (render_buffers->has_texture(RB_SCOPE_DLSS_RR, RB_TEX_DLSS_RR_DIFFUSE_ALBEDO)) {
-		return;
-	}
-
-	uint32_t usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT |
-			RD::TEXTURE_USAGE_SAMPLING_BIT |
-			RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
-
-	// Diffuse Albedo: RGB surface color for non-metals (RGBA8; fixes warbling on some surfaces).
-	render_buffers->create_texture(
-			RB_SCOPE_DLSS_RR,
-			RB_TEX_DLSS_RR_DIFFUSE_ALBEDO,
-			RD::DATA_FORMAT_R8G8B8A8_UNORM,
-			usage_bits,
-			RD::TEXTURE_SAMPLES_1);
-
-	// Specular Albedo: RGB specular reflection color (RGBA16F; needs the accuracy, fixes banding artifacts).
-	render_buffers->create_texture(
-			RB_SCOPE_DLSS_RR,
-			RB_TEX_DLSS_RR_SPECULAR_ALBEDO,
-			RD::DATA_FORMAT_R16G16B16A16_SFLOAT,
-			usage_bits,
-			RD::TEXTURE_SAMPLES_1);
-
-	// Normal + Roughness: World space normals (RGB) + roughness (A)
-	render_buffers->create_texture(
-			RB_SCOPE_DLSS_RR,
-			RB_TEX_DLSS_RR_NORMAL_ROUGHNESS,
-			RD::DATA_FORMAT_R8G8B8A8_SNORM,
-			usage_bits,
-			RD::TEXTURE_SAMPLES_1);
-
-	// Specular Hit Distance: Single channel distance (R16F is sufficient)
-	render_buffers->create_texture(
-			RB_SCOPE_DLSS_RR,
-			RB_TEX_DLSS_RR_SPECULAR_HIT_DIST,
-			RD::DATA_FORMAT_R16_SFLOAT,
-			usage_bits,
-			RD::TEXTURE_SAMPLES_1);
-}
-
-void RenderForwardClustered::RenderBufferDataForwardClustered::dlss_rr_free_buffers() {
-	ERR_FAIL_NULL(render_buffers);
-	render_buffers->clear_context(RB_SCOPE_DLSS_RR);
-}
-
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_fsr2(RendererRD::FSR2Effect *effect) {
 	if (fsr2_context == nullptr) {
 		fsr2_context = effect->create_context(render_buffers->get_internal_size(), render_buffers->get_target_size());
@@ -1400,7 +1351,6 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::free_data() {
 		}
 
 		render_buffers->clear_context(RB_SCOPE_FORWARD_CLUSTERED);
-		render_buffers->clear_context(RB_SCOPE_DLSS_RR);
 		render_buffers->clear_context(RB_SCOPE_SSDS);
 		render_buffers->clear_context(RB_SCOPE_SSIL);
 		render_buffers->clear_context(RB_SCOPE_SSAO);
@@ -3535,18 +3485,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			}
 		}
 
-		const bool dlss_rr_enabled = (rt_flags & SceneShaderRaytracing::RT_FLAG_DLSS_RR_ENABLED) != 0;
-		if (dlss_rr_enabled) {
-			rb_data->dlss_rr_ensure_buffers();
-			scene_features.set(SCENE_FEATURE_DEPTH_RECONSTRUCT);
-		} else if (rb_data->dlss_rr_has_buffers()) {
-			rb_data->dlss_rr_free_buffers();
-		}
-
 		float rt_overscan_horizontal = 0.0f;
 		float rt_overscan_vertical = 0.0f;
 		const float rt_resolution_scale = _rtgi_resolution_scale_from_params(env_params);
-		if (rt_replaces_opaque && (using_rt_denoise || using_viewport_taa) && !dlss_rr_enabled && env_params) {
+		if (rt_replaces_opaque && (using_rt_denoise || using_viewport_taa) && env_params) {
 			rt_overscan_horizontal = env_params[RSE::PT_PARAM_OVERSCAN_HORIZONTAL];
 			rt_overscan_vertical = env_params[RSE::PT_PARAM_OVERSCAN_VERTICAL];
 		}
@@ -3613,10 +3555,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	if (!rt_setup_deferred && scene_features.rt) {
 		rt_setup_ready = setup_rt_state();
 	} else if (!scene_features.rt) {
-		if (rb_data.is_valid() && rb_data->dlss_rr_has_buffers()) {
-			// RT disabled: free DLSS RR buffers so DLSS falls back to SR.
-			rb_data->dlss_rr_free_buffers();
-		}
 		invalidate_rt_temporal_history();
 	}
 	if (!rt_setup_deferred && rt_requested && !rt_setup_ready) {
@@ -3638,9 +3576,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 		if (!is_reflection_probe && rb_data.is_valid()) {
 			color_framebuffer = rb_data->get_color_pass_fb(color_pass_flags);
-		}
-		if (rb_data.is_valid() && rb_data->dlss_rr_has_buffers()) {
-			rb_data->dlss_rr_free_buffers();
 		}
 		invalidate_rt_temporal_history();
 		using_sdfgi = scene_features.has(SCENE_FEATURE_SDFGI);
@@ -4064,9 +3999,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			using_rt_denoise = false;
 			using_rt_internal_taa = false;
 			using_taa = using_viewport_taa;
-			if (rb_data.is_valid() && rb_data->dlss_rr_has_buffers()) {
-				rb_data->dlss_rr_free_buffers();
-			}
 			invalidate_rt_temporal_history();
 		}
 	}
@@ -5105,28 +5037,6 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 		RID ambient_texture = rb->get_texture(RB_SCOPE_GI, RB_TEX_AMBIENT);
 		RID reflection_texture = rb->get_texture(RB_SCOPE_GI, RB_TEX_REFLECTION);
 		copy_effects->copy_to_fb_rect(ambient_texture, texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize), false, false, false, true, reflection_texture, rb->get_view_count() > 1);
-	}
-
-	// DLSS Ray Reconstruction debug views
-	if (rb_data->dlss_rr_has_buffers()) {
-		Size2i rtsize = texture_storage->render_target_get_size(render_target);
-		RID fb = texture_storage->render_target_get_rd_framebuffer(render_target);
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_DLSS_RR_DIFFUSE_ALBEDO) {
-			copy_effects->copy_to_fb_rect(rb_data->dlss_rr_get_diffuse_albedo(), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_DLSS_RR_SPECULAR_ALBEDO) {
-			copy_effects->copy_to_fb_rect(rb_data->dlss_rr_get_specular_albedo(), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_DLSS_RR_NORMAL_ROUGHNESS) {
-			copy_effects->copy_to_fb_rect(rb_data->dlss_rr_get_normal_roughness(), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_DLSS_RR_SPECULAR_HIT_DIST) {
-			copy_effects->copy_to_fb_rect(rb_data->dlss_rr_get_specular_hit_dist(), fb, Rect2(Vector2(), rtsize), false, true);
-		}
 	}
 
 	// RTGI denoiser debug views.

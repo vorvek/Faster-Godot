@@ -665,61 +665,6 @@ void main() {
 				}
 			}
 
-#ifdef DLSS_RR_ENABLED
-			float material_roughness = guide_roughness;
-			float spec_hit_dist = -1.0;
-			if (material_roughness < MAX_DENOISER_SPECULAR_HIT_THRESHOLD) {
-				vec3 V = normalize(-sample0_ray_dir);
-				vec3 spec_dir = reflect(-V, normal);
-				bool spec_dir_valid = true;
-				if (dot(spec_dir, sample0_geometry_normal) < 0.0) {
-					vec3 recovered_spec_dir;
-					if (recoverBelowHemisphereSample(spec_dir, sample0_geometry_normal, recovered_spec_dir)) {
-						spec_dir = recovered_spec_dir;
-					} else {
-						spec_dir_valid = false;
-					}
-				}
-				if (spec_dir_valid) {
-					vec3 spec_origin = offset_ray_origin(sample0_hit_pos, sample0_geometry_normal);
-
-					rayQueryEXT spec_rq;
-					rayQueryInitializeEXT(spec_rq, tlas, RT_RAY_FLAGS | gl_RayFlagsTerminateOnFirstHitEXT,
-							RT_INSTANCE_MASK_VISIBLE, spec_origin, 0.001, spec_dir, 10000.0);
-					float spec_unsupported_t = 1e20;
-					while (rayQueryProceedEXT(spec_rq)) {
-						uint candidate_type = rayQueryGetIntersectionTypeEXT(spec_rq, false);
-						if (candidate_type == gl_RayQueryCandidateIntersectionTriangleEXT) {
-							uint candidate_geometry_idx = rayQueryGetIntersectionInstanceCustomIndexEXT(spec_rq, false);
-							MaterialData candidate_mat = materials[candidate_geometry_idx];
-							if ((candidate_mat.flags & (RT_MAT_FLAG_ALPHA_TEST | RT_MAT_FLAG_CUSTOM_SHADER)) ==
-									(RT_MAT_FLAG_ALPHA_TEST | RT_MAT_FLAG_CUSTOM_SHADER)) {
-								spec_unsupported_t = min(spec_unsupported_t, rayQueryGetIntersectionTEXT(spec_rq, false));
-								continue;
-							}
-							if (ray_query_alpha_test(
-										candidate_geometry_idx,
-										rayQueryGetIntersectionPrimitiveIndexEXT(spec_rq, false),
-										rayQueryGetIntersectionBarycentricsEXT(spec_rq, false),
-										rayQueryGetIntersectionObjectRayOriginEXT(spec_rq, false) +
-												rayQueryGetIntersectionObjectRayDirectionEXT(spec_rq, false) *
-														rayQueryGetIntersectionTEXT(spec_rq, false))) {
-								rayQueryConfirmIntersectionEXT(spec_rq);
-							}
-						} else if (candidate_type == gl_RayQueryCandidateIntersectionAABBEXT) {
-							spec_unsupported_t = min(spec_unsupported_t, rayQueryGetIntersectionTEXT(spec_rq, false));
-						}
-					}
-					if (rayQueryGetIntersectionTypeEXT(spec_rq, true) != gl_RayQueryCommittedIntersectionNoneEXT) {
-						float committed_t = rayQueryGetIntersectionTEXT(spec_rq, true);
-						if (spec_unsupported_t >= committed_t) {
-							spec_hit_dist = committed_t;
-						}
-					}
-				}
-			}
-			imageStore(dlss_rr_specular_hit_dist, pixel_i, vec4(spec_hit_dist));
-#endif
 		}
 	}
 
@@ -879,19 +824,6 @@ void main() {
 
 		sky_color = mix(sky_color, fog_color, scene_data_block.data.fog_sky_affect);
 	}
-
-#ifdef DLSS_RR_ENABLED
-	{
-		uint total_bounces = get_total_bounces(ps.packed_bounces_flags);
-		if (!rt_strc_probe_update_mode() && total_bounces == 0u && is_sample_zero(ps.packed_bounces_flags)) {
-			ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
-			imageStore(dlss_rr_diffuse_albedo, pixel, vec4(sky_color, 1.0));
-			imageStore(dlss_rr_specular_albedo, pixel, vec4(0.0));
-			imageStore(dlss_rr_normal_roughness, pixel, vec4(-gl_WorldRayDirectionEXT, 0.0));
-			imageStore(dlss_rr_specular_hit_dist, pixel, vec4(-1.0));
-		}
-	}
-#endif
 
 #ifdef RT_DEBUG_ENABLED
 	{

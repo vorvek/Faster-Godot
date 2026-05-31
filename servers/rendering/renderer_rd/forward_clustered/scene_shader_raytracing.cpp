@@ -62,7 +62,6 @@ struct RaygenShaderOption {
 // Variant index is a uint32 bitmask: bit i selects RAYGEN_SHADER_OPTIONS[i].
 // Add entries here to grow the raygen permutation set (2^N variants).
 static constexpr RaygenShaderOption RAYGEN_SHADER_OPTIONS[] = {
-	{ SceneShaderRaytracing::RT_FLAG_DLSS_RR_ENABLED, "#define DLSS_RR_ENABLED\n" },
 	{ SceneShaderRaytracing::RT_FLAG_SER_ENABLED, "#define USE_SER\n" },
 };
 

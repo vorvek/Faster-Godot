@@ -5,7 +5,6 @@
 // Specialization constant (bits 0-20: flags, 21-28: samples, 29-31: bounces).
 layout(constant_id = 0) const uint RT_FLAGS = 0u;
 
-#define RT_FLAG_DLSS_RR_ENABLED (1u << 1)
 #define RT_FLAG_FOG_ENABLED (1u << 2)
 #define RT_FLAG_STRC_ENABLED (1u << 4)
 #define RT_FLAG_STRC_PROBE_UPDATE (1u << 5)
@@ -161,13 +160,6 @@ vec2 rt_current_visible_uv(ivec2 pixel) {
 vec2 rt_visible_to_texture_uv(vec2 visible_uv, vec2 origin) {
 	return (visible_uv * rt_visible_size() + origin) / rt_extent();
 }
-
-#ifdef DLSS_RR_ENABLED
-layout(set = 0, binding = 9, rgba8) uniform image2D dlss_rr_diffuse_albedo;
-layout(set = 0, binding = 10, rgba16f) uniform image2D dlss_rr_specular_albedo;
-layout(set = 0, binding = 11, rgba8_snorm) uniform image2D dlss_rr_normal_roughness;
-layout(set = 0, binding = 12, r16f) uniform image2D dlss_rr_specular_hit_dist;
-#endif
 
 // Binding 14 is reserved for GlobalShaderUniformData (declared above).
 // Samplers occupy 16-27 (see raytracing_samplers_inc.glsl). Motion transforms

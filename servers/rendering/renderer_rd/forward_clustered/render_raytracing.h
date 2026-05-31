@@ -123,12 +123,6 @@
 #define RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA16F SNAME("rtgi_diffuse_cache_fallback_rgba16f")
 #define RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA8 SNAME("rtgi_diffuse_cache_fallback_rgba8")
 
-#define RB_SCOPE_DLSS_RR SNAME("dlss_rr")
-#define RB_TEX_DLSS_RR_DIFFUSE_ALBEDO SNAME("diffuse_albedo")
-#define RB_TEX_DLSS_RR_SPECULAR_ALBEDO SNAME("specular_albedo")
-#define RB_TEX_DLSS_RR_NORMAL_ROUGHNESS SNAME("normal_roughness")
-#define RB_TEX_DLSS_RR_SPECULAR_HIT_DIST SNAME("specular_hit_dist")
-
 class RenderDataRD;
 class RenderSceneBuffersRD;
 
