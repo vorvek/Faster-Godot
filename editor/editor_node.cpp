@@ -36,6 +36,7 @@
 #include "core/io/config_file.h"
 #include "core/io/file_access.h"
 #include "core/io/image.h"
+#include "core/io/missing_resource.h"
 #include "core/io/resource_loader.h"
 #include "core/io/resource_saver.h"
 #include "core/object/class_db.h"
@@ -4650,6 +4651,29 @@ void EditorNode::_nav_to_selected_scene() {
 	if (!scene_path.is_empty()) {
 		FileSystemDock::get_singleton()->navigate_to_path(scene_path);
 	}
+}
+
+void EditorNode::setup_built_in_resource(const Ref<Resource> &p_resource, const String &p_owner_path) {
+	String resource_class;
+	const Ref<MissingResource> &missing_resource = p_resource;
+	if (missing_resource.is_valid()) {
+		resource_class = missing_resource->get_original_class();
+	} else {
+		resource_class = p_resource->get_class();
+	}
+
+	String unique_id;
+	String final_path;
+	while (true) {
+		unique_id = resource_class + "_" + Resource::generate_scene_unique_id();
+		final_path = p_owner_path + "::" + unique_id;
+
+		if (!ResourceCache::has(final_path)) {
+			break;
+		}
+	}
+	p_resource->set_scene_unique_id(unique_id);
+	p_resource->set_path(final_path);
 }
 
 void EditorNode::setup_color_picker(ColorPicker *p_picker) {

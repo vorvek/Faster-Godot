@@ -945,6 +945,7 @@ public:
 	bool is_scene_open(const String &p_path);
 	bool is_multi_window_enabled() const;
 
+	static void setup_built_in_resource(const Ref<Resource> &p_resource, const String &p_owner_path);
 	void setup_color_picker(ColorPicker *p_picker);
 
 	void request_instantiate_scene(const String &p_path);
