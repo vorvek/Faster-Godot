@@ -5333,12 +5333,12 @@ void Viewport::_bind_methods() {
 
 #ifndef _3D_DISABLED
 	ADD_GROUP("Frame Generation", "frame_generation_");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "frame_generation_mode", PROPERTY_HINT_ENUM, "Disabled,Interpolated (3D Motion Vectors),Vendor Auto,DLSS Frame Generation,FSR 3 Frame Generation,XeSS Frame Generation"), "set_frame_generation_mode", "get_frame_generation_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "frame_generation_mode", PROPERTY_HINT_ENUM, "Disabled,Interpolated (3D Motion Vectors),Vendor Auto,XeSS Frame Generation"), "set_frame_generation_mode", "get_frame_generation_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "frame_generation_warp_scale", PROPERTY_HINT_RANGE, "0.1,2.0,0.05"), "set_frame_generation_warp_scale", "get_frame_generation_warp_scale");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "frame_generation_target_fps", PROPERTY_HINT_RANGE, "0,240,1"), "set_frame_generation_target_fps", "get_frame_generation_target_fps");
 
 	ADD_GROUP("Scaling 3D", "");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "scaling_3d_mode", PROPERTY_HINT_ENUM, "Bilinear (Fastest):0,FSR 1.0 (Fast):1,FSR 2.2 (Slow):2,FSR 3.1:10,MetalFX (Spatial):3,MetalFX (Temporal):4,Nearest:5,Sharp Bilinear:6,Bicubic (Catmull-Rom):7,SGSR:8,DLSS:9,XeSS:11"), "set_scaling_3d_mode", "get_scaling_3d_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "scaling_3d_mode", PROPERTY_HINT_ENUM, "Bilinear (Fastest):0,FSR 1.0 (Fast):1,FSR 2.2 (Slow):2,MetalFX (Spatial):3,MetalFX (Temporal):4,Nearest:5,Sharp Bilinear:6,Bicubic (Catmull-Rom):7,SGSR:8,XeSS:11"), "set_scaling_3d_mode", "get_scaling_3d_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "scaling_3d_scale", PROPERTY_HINT_RANGE, "0.1,2.0,0.01"), "set_scaling_3d_scale", "get_scaling_3d_scale");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "texture_mipmap_bias", PROPERTY_HINT_RANGE, "-2,2,0.001"), "set_texture_mipmap_bias", "get_texture_mipmap_bias");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "anisotropic_filtering_level", PROPERTY_HINT_ENUM, String::utf8("Disabled (Fastest),2× (Faster),4× (Fast),8× (Average),16x (Slow)")), "set_anisotropic_filtering_level", "get_anisotropic_filtering_level");
@@ -5399,22 +5399,18 @@ void Viewport::_bind_methods() {
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_BILINEAR);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_FSR);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_FSR2);
-	BIND_ENUM_CONSTANT(SCALING_3D_MODE_FSR31);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_METALFX_SPATIAL);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_METALFX_TEMPORAL);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_NEAREST);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_SHARP_BILINEAR);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_BICUBIC);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_SGSR);
-	BIND_ENUM_CONSTANT(SCALING_3D_MODE_DLSS);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_XESS);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_MAX);
 
 	BIND_ENUM_CONSTANT(FRAME_GENERATION_DISABLED);
 	BIND_ENUM_CONSTANT(FRAME_GENERATION_INTERPOLATED);
 	BIND_ENUM_CONSTANT(FRAME_GENERATION_VENDOR_AUTO);
-	BIND_ENUM_CONSTANT(FRAME_GENERATION_DLSS);
-	BIND_ENUM_CONSTANT(FRAME_GENERATION_FSR3);
 	BIND_ENUM_CONSTANT(FRAME_GENERATION_XESS);
 	BIND_ENUM_CONSTANT(FRAME_GENERATION_MAX);
 

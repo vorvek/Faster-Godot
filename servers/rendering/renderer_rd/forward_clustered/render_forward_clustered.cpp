@@ -3199,8 +3199,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			scale_type = SCALE_NONE;
 #endif
 			break;
-		case RSE::VIEWPORT_SCALING_3D_MODE_DLSS:
-		case RSE::VIEWPORT_SCALING_3D_MODE_FSR31:
 		case RSE::VIEWPORT_SCALING_3D_MODE_XESS:
 			if (RendererRD::VendorUpscaler::is_super_resolution_available(rb->get_scaling_3d_mode())) {
 				scale_type = SCALE_VENDOR;

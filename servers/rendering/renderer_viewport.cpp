@@ -257,8 +257,6 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 				case RS::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL:
 				case RS::VIEWPORT_SCALING_3D_MODE_FSR:
 				case RS::VIEWPORT_SCALING_3D_MODE_FSR2:
-				case RS::VIEWPORT_SCALING_3D_MODE_DLSS:
-				case RS::VIEWPORT_SCALING_3D_MODE_FSR31:
 				case RS::VIEWPORT_SCALING_3D_MODE_XESS:
 					target_width = p_viewport->size.width;
 					target_height = p_viewport->size.height;
