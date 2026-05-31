@@ -262,6 +262,7 @@ void ProjectExportDialog::_edit_preset(int p_index) {
 		delete_preset->set_disabled(true);
 		patches->clear();
 		export_error->hide();
+		export_warning->hide();
 		export_templates_error->hide();
 		export_texture_format_error->hide();
 		return;
@@ -793,11 +794,14 @@ void ProjectExportDialog::_delete_preset() {
 
 void ProjectExportDialog::_delete_preset_confirm() {
 	int idx = presets->get_current();
-	_edit_preset(idx - 1);
-	export_button->set_disabled(true);
-	get_ok_button()->set_disabled(true);
 	EditorExport::get_singleton()->remove_export_preset(idx);
+	_edit_preset(idx > 0 || presets->get_item_count() == 1 ? idx - 1 : 0);
 	_update_presets();
+
+	if (presets->get_item_count() == 0) {
+		export_button->set_disabled(true);
+		get_ok_button()->set_disabled(true);
+	}
 
 	// The Export All button might become enabled (if all other presets have an export path defined),
 	// or it could be disabled (if there are no presets anymore).
@@ -1732,14 +1736,14 @@ ProjectExportDialog::ProjectExportDialog() {
 	include_filters = memnew(LineEdit);
 	include_filters->set_accessibility_name(TTRC("Include Filters"));
 	resources_vb->add_margin_child(
-			TTR("Filters to export non-resource files/folders\n(comma-separated, e.g: *.json, *.txt, docs/*)"),
+			TTRC("Filters to export non-resource files/folders\n(comma-separated, e.g: *.cfg, *.txt, docs/*)"),
 			include_filters);
 	include_filters->connect(SceneStringName(text_changed), callable_mp(this, &ProjectExportDialog::_filter_changed));
 
 	exclude_filters = memnew(LineEdit);
 	exclude_filters->set_accessibility_name(TTRC("Exclude Filters"));
 	resources_vb->add_margin_child(
-			TTR("Filters to exclude files/folders from project\n(comma-separated, e.g: *.json, *.txt, docs/*)"),
+			TTRC("Filters to exclude files/folders from project\n(comma-separated, e.g: *.cfg, *.txt, docs/*)"),
 			exclude_filters);
 	exclude_filters->connect(SceneStringName(text_changed), callable_mp(this, &ProjectExportDialog::_filter_changed));
 

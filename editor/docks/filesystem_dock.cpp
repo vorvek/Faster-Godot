@@ -391,7 +391,7 @@ void FileSystemDock::_update_tree(const Vector<String> &p_uncollapsed_paths, boo
 	// Handles the favorites.
 	favorites_item = tree->create_item(root);
 	favorites_item->set_icon(0, get_editor_theme_icon(SNAME("Favorites")));
-	favorites_item->set_text(0, TTRC("Favorites:"));
+	favorites_item->set_text(0, TTRC("Favorites"));
 	favorites_item->set_auto_translate_mode(0, AUTO_TRANSLATE_MODE_ALWAYS);
 	favorites_item->set_metadata(0, "Favorites");
 	favorites_item->set_collapsed(!p_uncollapsed_paths.has("Favorites"));
@@ -2584,7 +2584,7 @@ void FileSystemDock::_file_option(int p_option, const Vector<String> &p_selected
 		} break;
 
 		case FILE_MENU_DUPLICATE: {
-			if (p_selected.size() != 1) {
+			if (p_selected.size() != 1 || p_selected[0] == "res://") {
 				return;
 			}
 
@@ -3005,6 +3005,11 @@ Variant FileSystemDock::get_drag_data_fw(const Point2 &p_point, Control *p_from)
 			paths = _tree_get_selected();
 		}
 	} else if (p_from == files) {
+		// Don't allow dragging from empty space in the file list.
+		int item = files->get_item_at_position(p_point, true);
+		if (item == -1 || !files->is_selected(item)) {
+			return Variant();
+		}
 		for (int i = 0; i < files->get_item_count(); i++) {
 			if (files->is_selected(i)) {
 				paths.push_back(files->get_item_metadata(i));
@@ -4223,9 +4228,64 @@ void FileSystemDock::load_layout_from_config(const Ref<ConfigFile> &p_layout, co
 
 	if (p_layout->has_section_key(p_section, "selected_paths")) {
 		PackedStringArray dock_filesystem_selected_paths = p_layout->get_value(p_section, "selected_paths");
-		for (int i = 0; i < dock_filesystem_selected_paths.size(); i++) {
-			select_file(dock_filesystem_selected_paths[i]);
+
+		if (dock_filesystem_selected_paths.size() > 1) {
+			get_tree_control()->deselect_all();
+
+			Ref<DirAccess> da = DirAccess::create(DirAccess::ACCESS_RESOURCES);
+			HashSet<String> paths_to_select;
+			for (const String &path : dock_filesystem_selected_paths) {
+				if (da->file_exists(path) || da->dir_exists(path)) {
+					paths_to_select.insert(path);
+				}
+			}
+
+			if (paths_to_select.is_empty()) {
+				select_file("res://"); // No valid file to select, default to base folder.
+			} else {
+				// Simple BFS from "res://" node to prevent default selection in "Favorite".
+				TreeItem *res_ti = get_tree_control()->get_item_with_metadata("res://", 0);
+				LocalVector<TreeItem *> ti_visit;
+				ti_visit.push_back(res_ti);
+				while (!ti_visit.is_empty()) {
+					TreeItem *curr_ti = ti_visit[0];
+
+					const String &path = curr_ti->get_metadata(0);
+					if (paths_to_select.has(path)) {
+						curr_ti->select(0);
+						current_path = path;
+
+						paths_to_select.erase(path);
+
+						if (paths_to_select.is_empty()) {
+							break;
+						}
+					}
+
+					TreeItem *child_ti = curr_ti->get_first_child();
+					while (child_ti) {
+						ti_visit.push_back(child_ti);
+						child_ti = child_ti->get_next();
+					}
+
+					ti_visit.remove_at(0);
+				}
+			}
+		} else if (dock_filesystem_selected_paths.size() == 1) {
+			Ref<DirAccess> da = DirAccess::create(DirAccess::ACCESS_RESOURCES);
+			const String &path = dock_filesystem_selected_paths[0];
+
+			if (da->file_exists(path) || da->dir_exists(path)) {
+				select_file(path);
+			} else {
+				select_file("res://"); // For single-selection, default to base folder.
+			}
+		} else {
+			get_tree_control()->deselect_all();
+			current_path = "";
 		}
+
+		current_path_line_edit->set_text(current_path);
 	}
 
 	// Restore collapsed state.

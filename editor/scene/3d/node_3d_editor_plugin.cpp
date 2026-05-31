@@ -1836,8 +1836,9 @@ void Node3DEditorViewport::_sinput(const Ref<InputEvent> &p_event) {
 	EditorPlugin::AfterGUIInput after = EditorPlugin::AFTER_GUI_INPUT_PASS;
 	{
 		EditorNode *en = EditorNode::get_singleton();
+		Camera3D *input_camera = previewing ? previewing : camera;
 
-		switch (en->get_editor_plugins_force_input_forwarding()->forward_3d_gui_input(camera, p_event, true)) {
+		switch (en->get_editor_plugins_force_input_forwarding()->forward_3d_gui_input(input_camera, p_event, true)) {
 			case EditorPlugin::AFTER_GUI_INPUT_PASS: {
 				// Continue processing.
 			} break;
@@ -1851,7 +1852,7 @@ void Node3DEditorViewport::_sinput(const Ref<InputEvent> &p_event) {
 			} break;
 		}
 
-		switch (en->get_editor_plugins_over()->forward_3d_gui_input(camera, p_event, false)) {
+		switch (en->get_editor_plugins_over()->forward_3d_gui_input(input_camera, p_event, false)) {
 			case EditorPlugin::AFTER_GUI_INPUT_PASS: {
 				// Continue processing.
 			} break;
@@ -2245,6 +2246,7 @@ void Node3DEditorViewport::_sinput(const Ref<InputEvent> &p_event) {
 							}
 
 							se->gizmo->commit_subgizmos(ids, restore, false);
+							finish_transform();
 						} else {
 							if (_edit.original_mouse_pos != _edit.mouse_pos) {
 								commit_transform();
@@ -9032,6 +9034,9 @@ void Node3DEditor::_notification(int p_what) {
 				}
 				update_gizmo_opacity();
 			}
+			if (EditorSettings::get_singleton()->check_changed_settings_in_group("interface/inspector")) {
+				snap_translate->set_step(EDITOR_GET("interface/inspector/default_float_step"));
+			}
 		} break;
 
 		case NOTIFICATION_PHYSICS_PROCESS: {
@@ -10073,7 +10078,7 @@ Node3DEditor::Node3DEditor() {
 
 	snap_translate = memnew(EditorSpinSlider);
 	snap_translate->set_min(0.0);
-	snap_translate->set_step(0.001);
+	snap_translate->set_step(EDITOR_GET("interface/inspector/default_float_step"));
 	snap_translate->set_max(10.0);
 	snap_translate->set_suffix("m");
 	snap_translate->set_allow_greater(true);

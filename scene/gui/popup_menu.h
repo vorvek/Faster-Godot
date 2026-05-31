@@ -70,6 +70,7 @@ class PopupMenu : public Popup {
 		int state = 0;
 		bool separator = false;
 		bool disabled = false;
+		bool visible = true;
 		bool dirty = true;
 		int id = 0;
 		Variant metadata;

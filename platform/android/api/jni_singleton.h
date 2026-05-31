@@ -52,6 +52,15 @@ protected:
 		ClassDB::bind_method(D_METHOD("has_java_method", "method"), &JNISingleton::has_java_method);
 	}
 
+	bool _get(const StringName &p_name, Variant &r_property) const {
+		if (has_signal(p_name)) {
+			r_property = Signal(this, p_name);
+			return true;
+		}
+
+		return false;
+	}
+
 public:
 	virtual Variant callp(const StringName &p_method, const Variant **p_args, int p_argcount, Callable::CallError &r_error) override {
 		// Godot methods take precedence.
@@ -98,7 +107,7 @@ public:
 		for (int i = 0; i < p_args.size(); i++) {
 			mi.arguments.push_back(PropertyInfo(p_args[i], "arg" + itos(i + 1)));
 		}
-		ADD_SIGNAL(mi);
+		add_user_signal(mi);
 	}
 
 	JNISingleton() {}

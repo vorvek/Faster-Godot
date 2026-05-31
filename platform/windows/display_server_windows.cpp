@@ -3008,6 +3008,12 @@ void DisplayServerWindows::window_set_ime_position(const Point2i &p_pos, WindowI
 	cps.ptCurrentPos.x = wd.im_position.x;
 	cps.ptCurrentPos.y = wd.im_position.y;
 	ImmSetCompositionWindow(himc, &cps);
+
+	LOGFONT log_font = {};
+	log_font.lfHeight = 1; // em height.
+	log_font.lfQuality = CLEARTYPE_QUALITY;
+	ImmSetCompositionFontA(himc, &log_font);
+
 	ImmReleaseContext(wd.hWnd, himc);
 }
 

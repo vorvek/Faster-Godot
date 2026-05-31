@@ -10725,8 +10725,8 @@ void RenderRaytracing::copy_output_texture(const RenderDataRD *p_render_data) {
 		p_render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_VISIBLE][use_reconstructed ? RSE::VIEWPORT_RENDER_INFO_RTGI_RECONSTRUCTED_COPY_COUNT : RSE::VIEWPORT_RENDER_INFO_RTGI_RAW_FALLBACK_COPY_COUNT]++;
 	}
 	if (!use_reconstructed && rb_data->rt_get_visible_size() != dst_size && p_render_data->environment.is_valid()) {
-		const float *rt_env_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
-		const bool scaled_full_path_tracing = rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING;
+		const RSE::PathtracingParams *rt_env_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
+		const bool scaled_full_path_tracing = rt_env_params && rt_env_params->mode == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING;
 		if (scaled_full_path_tracing) {
 			WARN_PRINT_ONCE("Scaled Full Path Tracing RTGI copied raw ray tracing output because reconstructed output was unavailable. This is a quality-path fallback and should be investigated.");
 		}

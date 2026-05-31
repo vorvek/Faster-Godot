@@ -376,28 +376,32 @@ void PopupMenu::_activate_submenu(int p_over, bool p_by_keyboard) {
 
 	panel_offset_start = Point2(panel->get_offset(SIDE_LEFT), panel->get_offset(SIDE_TOP)) * win_scale;
 	const Point2 panel_offset_end = Point2(-panel->get_offset(SIDE_RIGHT), -panel->get_offset(SIDE_BOTTOM)) * win_scale;
-	const Vector2 scaled_this_size = this_rect.size * win_scale;
-	const float scaled_theme_v_separation = theme_cache.v_separation * win_scale;
-	const float scroll_offset = control->get_position().y;
-	const float scaled_ofs_cache = items[p_over]._ofs_cache * win_scale;
-	const float scaled_height_cache = items[p_over]._height_cache * win_scale;
+	const Vector2 this_size = this_rect.size * win_scale;
+	const float theme_v_separation = theme_cache.v_separation * win_scale;
+	const float scroll_offset = control->get_position().y * win_scale;
+	const float scroll_container_offset = scroll_container->get_global_position().y * win_scale;
+	const float ofs_cache = items[p_over]._ofs_cache * win_scale;
+	const float height_cache = items[p_over]._height_cache * win_scale;
+	const float item_top_y = ofs_cache + scroll_offset + scroll_container_offset - int(theme_v_separation * 0.5);
 
 	if (is_layout_rtl()) {
 		is_active_submenu_left = true;
-		submenu_pos += this_pos + Point2(-submenu_size.width + panel_offset_end.x, scaled_ofs_cache + scroll_offset - int(scaled_theme_v_separation * 0.5) + panel_offset_start.y);
+		submenu_pos.x = this_pos.x - submenu_size.width + panel_offset_end.x;
 		if (submenu_pos.x < screen_rect.position.x) {
 			submenu_pos.x = this_pos.x + this_rect.size.width - panel_offset_start.x;
 			is_active_submenu_left = false;
 		}
-
 	} else {
 		is_active_submenu_left = false;
-		submenu_pos += this_pos + Point2(scaled_this_size.x + panel_offset_start.x, scaled_ofs_cache + scroll_offset - int(scaled_theme_v_separation * 0.5) + panel_offset_start.y);
+		submenu_pos.x = this_pos.x + this_size.x + panel_offset_start.x;
 		if (submenu_pos.x + submenu_size.width > screen_rect.position.x + screen_rect.size.width) {
 			submenu_pos.x = this_pos.x - submenu_size.width + panel_offset_end.x;
 			is_active_submenu_left = true;
 		}
 	}
+
+	submenu_pos.y = this_pos.y + item_top_y - submenu_popup->theme_cache.panel_style->get_margin(SIDE_TOP) * win_scale;
+
 	submenu_popup->set_position(submenu_pos);
 	submenu_popup->activated_by_keyboard = p_by_keyboard;
 	// If not triggered by the mouse, start the popup with its first enabled item focused.
@@ -432,15 +436,15 @@ void PopupMenu::_activate_submenu(int p_over, bool p_by_keyboard) {
 	submenu_popup->clear_autohide_areas();
 	// Add an autohide area above the submenu item unless it's the top item.
 	// This avoids a narrow strip of area that can trigger the submenu to reload when reentering the parent item from the top.
-	const int y_to_item_top = scaled_ofs_cache + scroll_offset - int(scaled_theme_v_separation * 0.5) + theme_cache.panel_style->get_margin(SIDE_TOP) * win_scale;
-	Rect2 top_rect = Rect2(this_rect.position.x, this_rect.position.y, scaled_this_size.width, y_to_item_top);
+	const int y_to_item_top = item_top_y - panel_offset_start.y;
+	Rect2 top_rect = Rect2(this_rect.position.x, this_rect.position.y, this_size.width, y_to_item_top);
 	if (active_submenu_index != 0) {
 		submenu_popup->add_autohide_area(top_rect);
 	}
 	// If there is an area below the submenu item, add an autohide area there unless it's the last item.
 	if (active_submenu_index != items.size() - 1) {
-		const int y_to_item_bottom = y_to_item_top + scaled_height_cache + scaled_theme_v_separation;
-		submenu_popup->add_autohide_area(Rect2(this_rect.position.x, this_rect.position.y + y_to_item_bottom, scaled_this_size.x, scaled_this_size.y - y_to_item_bottom));
+		const int y_to_item_bottom = y_to_item_top + height_cache + theme_v_separation;
+		submenu_popup->add_autohide_area(Rect2(this_rect.position.x, this_rect.position.y + y_to_item_bottom, this_size.x, this_size.y - y_to_item_bottom));
 	}
 	queue_accessibility_update();
 	control->queue_redraw();
@@ -1420,7 +1424,7 @@ void PopupMenu::_notification(int p_what) {
 						if (!match_found) {
 							// If the last item is not selectable, try re-searching from the start.
 							for (int i = 0; i < search_from; i++) {
-								if (!items[i].separator && !items[i].disabled) {
+								if (!items[i].separator && !items[i].disabled && items[i].visible) {
 									mouse_over = i;
 									emit_signal(SNAME("id_focused"), items[i].id);
 									scroll_to_item(i);
@@ -1440,7 +1444,7 @@ void PopupMenu::_notification(int p_what) {
 
 						bool match_found = false;
 						for (int i = search_from; i >= 0; i--) {
-							if (!items[i].separator && !items[i].disabled) {
+							if (!items[i].separator && !items[i].disabled && items[i].visible) {
 								mouse_over = i;
 								emit_signal(SNAME("id_focused"), items[i].id);
 								scroll_to_item(i);
@@ -1453,7 +1457,7 @@ void PopupMenu::_notification(int p_what) {
 						if (!match_found) {
 							// If the first item is not selectable, try re-searching from the end.
 							for (int i = items.size() - 1; i >= search_from; i--) {
-								if (!items[i].separator && !items[i].disabled) {
+								if (!items[i].separator && !items[i].disabled && items[i].visible) {
 									mouse_over = i;
 									emit_signal(SNAME("id_focused"), items[i].id);
 									scroll_to_item(i);
@@ -3058,10 +3062,15 @@ bool PopupMenu::get_allow_search() const {
 }
 
 String PopupMenu::get_tooltip(const Point2 &p_pos) const {
-	int over = _get_mouse_over(p_pos);
+	Point2 pos = p_pos;
+	// Adjust for the top style margin and search bar.
+	pos.y += scroll_container->get_global_position().y;
+
+	int over = _get_mouse_over(pos);
 	if (over < 0 || over >= items.size()) {
 		return "";
 	}
+
 	return items[over].tooltip;
 }
 
