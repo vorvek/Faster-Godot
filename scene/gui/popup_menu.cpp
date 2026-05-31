@@ -401,9 +401,6 @@ void PopupMenu::_activate_submenu(int p_over, bool p_by_keyboard) {
 	}
 
 	submenu_pos.y = this_pos.y + item_top_y - submenu_popup->theme_cache.panel_style->get_margin(SIDE_TOP) * win_scale;
-	if (submenu_popup->search_bar->is_visible()) {
-		submenu_pos.y -= (submenu_popup->search_bar->get_minimum_size().y + submenu_popup->theme_cache.search_bar_separation) * win_scale;
-	}
 
 	submenu_popup->set_position(submenu_pos);
 	submenu_popup->activated_by_keyboard = p_by_keyboard;
