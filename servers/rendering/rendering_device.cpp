@@ -49,10 +49,6 @@
 #include "modules/glslang/shader_compile.h"
 #endif
 
-#ifdef STREAMLINE_ENABLED
-#include "drivers/streamline/streamline_context.h"
-#endif
-
 #define FORCE_SEPARATE_PRESENT_QUEUE 0
 #define PRINT_FRAMEBUFFER_FORMAT 0
 
@@ -8621,11 +8617,7 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 		}
 
 		// Output our device version.
-		String streamline_enabled = "";
-#ifdef STREAMLINE_ENABLED
-		streamline_enabled = (StreamlineContext::get().slInit != nullptr ? " - Streamline" : "");
-#endif
-		Engine::get_singleton()->print_header(vformat("%s %s - %s%s - Using Device #%d: %s - %s", get_device_api_name(), get_device_api_version(), rendering_method, streamline_enabled, device_index, _get_device_vendor_name(device), device.name));
+		Engine::get_singleton()->print_header(vformat("%s %s - %s - Using Device #%d: %s - %s", get_device_api_name(), get_device_api_version(), rendering_method, device_index, _get_device_vendor_name(device), device.name));
 	}
 
 	// Pick the main queue family. It is worth noting we explicitly do not request the transfer bit, as apparently the specification defines

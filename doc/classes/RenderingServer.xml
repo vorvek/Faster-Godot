@@ -5133,9 +5133,6 @@
 		<constant name="VIEWPORT_SCALING_3D_MODE_FSR2" value="2" enum="ViewportScaling3DMode">
 			Use AMD FidelityFX Super Resolution 2.2 upscaling for the viewport's 3D buffer. The amount of scaling can be set using [member Viewport.scaling_3d_scale]. Values less than [code]1.0[/code] will result in the viewport being upscaled using FSR2. Values greater than [code]1.0[/code] are not supported and bilinear downsampling will be used instead. A value of [code]1.0[/code] will use FSR2 at native resolution as a TAA solution.
 		</constant>
-		<constant name="VIEWPORT_SCALING_3D_MODE_FSR31" value="10" enum="ViewportScaling3DMode">
-			Use AMD FidelityFX Super Resolution 3.1 temporal upscaling for the viewport's 3D buffer when the native Vulkan backend is available. Falls back to [constant VIEWPORT_SCALING_3D_MODE_FSR2] if unavailable or disabled for driver/runtime safety.
-		</constant>
 		<constant name="VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL" value="3" enum="ViewportScaling3DMode">
 			Use MetalFX spatial upscaling for the viewport's 3D buffer. The amount of scaling can be set using [member Viewport.scaling_3d_scale]. Values less than [code]1.0[/code] will result in the viewport being upscaled using MetalFX. Values greater than [code]1.0[/code] are not supported and bilinear downsampling will be used instead. A value of [code]1.0[/code] disables scaling.
 			[b]Note:[/b] Only supported when the Metal rendering driver is in use, which limits this scaling mode to macOS and iOS.
@@ -5156,9 +5153,6 @@
 		<constant name="VIEWPORT_SCALING_3D_MODE_SGSR" value="8" enum="ViewportScaling3DMode">
 			Use SGSR spatial upscaling for the viewport's 3D buffer.
 		</constant>
-		<constant name="VIEWPORT_SCALING_3D_MODE_DLSS" value="9" enum="ViewportScaling3DMode">
-			Use NVIDIA DLSS temporal upscaling for the viewport's 3D buffer when Streamline and DLSS are available. Falls back to [constant VIEWPORT_SCALING_3D_MODE_FSR2] if unavailable.
-		</constant>
 		<constant name="VIEWPORT_SCALING_3D_MODE_XESS" value="11" enum="ViewportScaling3DMode">
 			Use Intel XeSS temporal upscaling for the viewport's 3D buffer when the native backend is available. Falls back to [constant VIEWPORT_SCALING_3D_MODE_FSR2] if unavailable or disabled for driver/runtime safety.
 		</constant>
@@ -5173,12 +5167,6 @@
 		</constant>
 		<constant name="VIEWPORT_FRAME_GENERATION_VENDOR_AUTO" value="2" enum="ViewportFrameGenerationMode">
 			Use the first available vendor frame generation backend for presented window backbuffers, falling back to [constant VIEWPORT_FRAME_GENERATION_INTERPOLATED] otherwise.
-		</constant>
-		<constant name="VIEWPORT_FRAME_GENERATION_DLSS" value="3" enum="ViewportFrameGenerationMode">
-			Request NVIDIA DLSS Frame Generation for presented window backbuffers when Streamline and DLSS-G are available.
-		</constant>
-		<constant name="VIEWPORT_FRAME_GENERATION_FSR3" value="4" enum="ViewportFrameGenerationMode">
-			Request AMD FSR 3 frame generation for presented Vulkan window backbuffers when the FidelityFX SDK backend is available.
 		</constant>
 		<constant name="VIEWPORT_FRAME_GENERATION_XESS" value="5" enum="ViewportFrameGenerationMode">
 			Request Intel XeSS Frame Generation for presented window backbuffers when the SDK backend supports the active graphics API.

@@ -24,9 +24,9 @@ We have integrated three new high-performance, GPU-powered spatial upscaling mod
 * **Mechanism**: Re-implements the industry-standard Qualcomm SGSR spatial upscaler natively on the GPU. It evaluates 12 surrounding texels to detect pixel directionality, blends diagonally to reconstruct clean, non-aliased geometric edges, and applies high-quality edge-aware sharpening in a single high-performance pass.
 
 ### Vendor Temporal Upscalers
-* **Identifiers**: `SCALING_3D_MODE_FSR31`, `SCALING_3D_MODE_DLSS`, `SCALING_3D_MODE_XESS`.
-* **Purpose**: Public per-Viewport entry points for AMD FSR 3.1, NVIDIA DLSS, and Intel XeSS temporal super resolution.
-* **Current behavior**: These modes are exposed through Project Settings and Viewport properties. DLSS dispatches through Streamline, FSR 3.1 dispatches through the FidelityFX SDK 1.1.x Vulkan API path, and XeSS dispatches through Intel's native Vulkan SDK path when the matching SDK is enabled and available at runtime. Unavailable backends fall back to FSR 2.2 and print a one-time warning. The current Vulkan integration disables FSR 3.1 SR on NVIDIA by default after the signed FidelityFX Vulkan runtime crashed during context creation on the test RTX system; set `GODOT_FORCE_FSR31_VULKAN_ON_NVIDIA=1` only for debugging. XeSS Vulkan SR is Intel-only by default for the same safety reason on non-Intel GPUs; set `GODOT_FORCE_XESS_VULKAN_ON_NON_INTEL=1` for debug runs.
+* **Identifier**: `SCALING_3D_MODE_XESS`.
+* **Purpose**: Public per-Viewport entry point for Intel XeSS temporal super resolution.
+* **Current behavior**: XeSS dispatches through Intel's native Vulkan SDK path when the SDK is enabled and available at runtime. Unavailable backends fall back to FSR 2.2 and print a one-time warning. XeSS Vulkan SR is Intel-only by default for safety on non-Intel GPUs; set `GODOT_FORCE_XESS_VULKAN_ON_NON_INTEL=1` for debug runs.
 
 ---
 
@@ -70,8 +70,7 @@ A quick summary of files changed to support this feature:
 
 Vendor upscaler modes are appended after the existing scaling modes so previously serialized mode values remain stable:
 
-* **Viewport Property Inspector**: FSR 3.1 appears after the built-in FSR modes; DLSS and XeSS are also visible in the Viewport `scaling_3d_mode` dropdown.
-* **Project Settings Dropdown**: FSR 3.1 appears after the built-in FSR modes; DLSS and XeSS are also visible in `rendering/scaling_3d/mode`.
-* **Fallback Safety**: If a vendor SDK backend is unavailable or unsafe on the current GPU/driver, the renderer prints a one-time warning and falls back to FSR 2.2 (`SCALING_3D_MODE_FSR2`) inside `servers/rendering/renderer_viewport.cpp`.
-* **Build and Runtime Libraries**: `enable_fsr31=yes` expects a FidelityFX SDK 1.1.x layout with `ffx-api/include` and AMD's Vulkan runtime library (`amd_fidelityfx_vk.dll` on Windows, `libamd_fidelityfx_vk.so` when AMD ships a Linux package). The older FSR3 3.0.x source package is DX12-native for FSR3 and does not expose the Vulkan FSR 3.1 API path used here. Windows and Linux executable builds stage available vendor SDK runtime libraries next to the binary. Streamline uses `sl.interposer.dll` on Windows and tries `libsl.interposer.so`/`sl.interposer.so` on Linux; the Vulkan bootstrap routes through the Streamline interposer on both platforms when it is present. Signed Streamline interposer/plugin binaries still need to come from a packaged Streamline runtime.
-* **Frame Generation**: `frame_generation_mode` now includes vendor Auto/DLSS/FSR3/XeSS modes. These keep the same per-Viewport API. Vendor frame generation only activates for viewports that contribute to a presented window backbuffer; arbitrary offscreen subviewports continue to fall back to the existing interpolated 3D motion-vector path. FSR3 is wired through the FidelityFX Vulkan swapchain replacement path. DLSS-G is wired through Streamline with Reflex/PCL present markers, per-frame constants, resource tags, and post-tonemap HUD-less color tagging before Canvas/UI is rendered. XeSS-FG remains gated because the SDK path available here exposes a D3D12/proxy-swapchain frame generation API, not a Vulkan FG API.
+* **Viewport Property Inspector**: XeSS is visible in the Viewport `scaling_3d_mode` dropdown.
+* **Project Settings Dropdown**: XeSS is visible in `rendering/scaling_3d/mode`.
+* **Fallback Safety**: If the XeSS SDK backend is unavailable or unsafe on the current GPU/driver, the renderer prints a one-time warning and falls back to FSR 2.2 (`SCALING_3D_MODE_FSR2`) inside `servers/rendering/renderer_viewport.cpp`.
+* **Frame Generation**: `frame_generation_mode` includes vendor Auto/XeSS modes. These keep the same per-Viewport API. Vendor frame generation only activates for viewports that contribute to a presented window backbuffer; arbitrary offscreen subviewports continue to fall back to the existing interpolated 3D motion-vector path. XeSS-FG remains gated because the SDK path available here exposes a D3D12/proxy-swapchain frame generation API, not a Vulkan FG API.
