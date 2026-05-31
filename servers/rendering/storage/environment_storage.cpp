@@ -56,10 +56,34 @@ void RendererEnvironmentStorage::environment_initialize(RID p_rid) {
 	environment_owner.initialize_rid(p_rid, Environment());
 	Environment *env = environment_owner.get_or_null(p_rid);
 	ERR_FAIL_NULL(env);
-	env->pathtracing_params[RSE::PT_PARAM_RTGI_RESOLUTION_SCALE] = 0.5f;
+	env->pathtracing_params[RSE::PT_PARAM_SAMPLE_COUNT] = 1.0f;
+	env->pathtracing_params[RSE::PT_PARAM_MAX_BOUNCES] = 4.0f;
+	env->pathtracing_params[RSE::PT_PARAM_DENOISER] = (float)RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+	env->pathtracing_params[RSE::PT_PARAM_ENERGY] = 1.0f;
+	env->pathtracing_params[RSE::PT_PARAM_RTGI_RESOLUTION_SCALE] = 0.67f;
+	env->pathtracing_params[RSE::PT_PARAM_MODE] = 1.0f;
+	env->pathtracing_params[RSE::PT_PARAM_DENOISER_STRENGTH] = 0.90f;
+	env->pathtracing_params[RSE::PT_PARAM_DENOISER_HISTORY_WEIGHT] = 0.95f;
+	env->pathtracing_params[RSE::PT_PARAM_DENOISER_FIREFLY_SUPPRESSION] = 1.0f;
+	env->pathtracing_params[RSE::PT_PARAM_DENOISER_DETAIL_PRESERVATION] = 1.0f;
+	env->pathtracing_params[RSE::PT_PARAM_RAY_FIREFLY_SUPPRESSION] = 0.85f;
+	env->pathtracing_params[RSE::PT_PARAM_RAY_MAX_RADIANCE] = 48.0f;
+	env->pathtracing_params[RSE::PT_PARAM_DENOISER_SPLIT_SIGNALS] = 1.0f;
+	env->pathtracing_params[RSE::PT_PARAM_DENOISER_SPECULAR_HISTORY_WEIGHT] = 0.92f;
+	env->pathtracing_params[RSE::PT_PARAM_DENOISER_SPECULAR_SPATIAL_STRENGTH] = 1.0f;
+	env->pathtracing_params[RSE::PT_PARAM_RTGI_SAMPLING_CONTROLS] = 3.0f;
+	env->pathtracing_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED] = 1.0f;
+	env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_ENABLED] = 1.0f;
+	env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_STRENGTH] = 0.75f;
+	env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_CASCADE_COUNT] = 3.0f;
+	env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_GRID_SIZE] = 28.0f;
+	env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_BASE_PROBE_SPACING] = 1.25f;
+	env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_RAYS_PER_FRAME] = 8192.0f;
+	env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT] = 0.97f;
+	env->pathtracing_params[RSE::PT_PARAM_RTGI_BACKEND] = (float)RSE::PT_BACKEND_VULKAN_GENERIC;
 	env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS] = 1048575.0f;
 	env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS] = 1048575.0f;
-	env->pathtracing_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES] = 262144.0f;
+	env->pathtracing_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES] = 524288.0f;
 }
 
 void RendererEnvironmentStorage::environment_free(RID p_rid) {
@@ -920,8 +944,80 @@ void RendererEnvironmentStorage::environment_set_pathtracing_params(RID p_env, c
 	for (int i = 0; i < RSE::PT_PARAM_MAX && i < p_params.size(); i++) {
 		env->pathtracing_params[i] = p_params[i];
 	}
+	if (p_params.size() <= RSE::PT_PARAM_SAMPLE_COUNT) {
+		env->pathtracing_params[RSE::PT_PARAM_SAMPLE_COUNT] = 1.0f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_MAX_BOUNCES) {
+		env->pathtracing_params[RSE::PT_PARAM_MAX_BOUNCES] = 4.0f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_DENOISER) {
+		env->pathtracing_params[RSE::PT_PARAM_DENOISER] = (float)RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_ENERGY) {
+		env->pathtracing_params[RSE::PT_PARAM_ENERGY] = 1.0f;
+	}
 	if (p_params.size() <= RSE::PT_PARAM_RTGI_RESOLUTION_SCALE || env->pathtracing_params[RSE::PT_PARAM_RTGI_RESOLUTION_SCALE] <= 0.0f) {
-		env->pathtracing_params[RSE::PT_PARAM_RTGI_RESOLUTION_SCALE] = 0.5f;
+		env->pathtracing_params[RSE::PT_PARAM_RTGI_RESOLUTION_SCALE] = 0.67f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_MODE) {
+		env->pathtracing_params[RSE::PT_PARAM_MODE] = 1.0f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_DENOISER_STRENGTH) {
+		env->pathtracing_params[RSE::PT_PARAM_DENOISER_STRENGTH] = 0.90f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_DENOISER_HISTORY_WEIGHT) {
+		env->pathtracing_params[RSE::PT_PARAM_DENOISER_HISTORY_WEIGHT] = 0.95f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_DENOISER_FIREFLY_SUPPRESSION) {
+		env->pathtracing_params[RSE::PT_PARAM_DENOISER_FIREFLY_SUPPRESSION] = 1.0f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_DENOISER_DETAIL_PRESERVATION) {
+		env->pathtracing_params[RSE::PT_PARAM_DENOISER_DETAIL_PRESERVATION] = 1.0f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_RAY_FIREFLY_SUPPRESSION) {
+		env->pathtracing_params[RSE::PT_PARAM_RAY_FIREFLY_SUPPRESSION] = 0.85f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_RAY_MAX_RADIANCE) {
+		env->pathtracing_params[RSE::PT_PARAM_RAY_MAX_RADIANCE] = 48.0f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_DENOISER_SPLIT_SIGNALS) {
+		env->pathtracing_params[RSE::PT_PARAM_DENOISER_SPLIT_SIGNALS] = 1.0f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_DENOISER_SPECULAR_HISTORY_WEIGHT) {
+		env->pathtracing_params[RSE::PT_PARAM_DENOISER_SPECULAR_HISTORY_WEIGHT] = 0.92f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_DENOISER_SPECULAR_SPATIAL_STRENGTH) {
+		env->pathtracing_params[RSE::PT_PARAM_DENOISER_SPECULAR_SPATIAL_STRENGTH] = 1.0f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_RTGI_SAMPLING_CONTROLS) {
+		env->pathtracing_params[RSE::PT_PARAM_RTGI_SAMPLING_CONTROLS] = 3.0f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED) {
+		env->pathtracing_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED] = 1.0f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_RTGI_STRC_ENABLED) {
+		env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_ENABLED] = 1.0f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_RTGI_STRC_STRENGTH) {
+		env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_STRENGTH] = 0.75f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_RTGI_STRC_CASCADE_COUNT) {
+		env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_CASCADE_COUNT] = 3.0f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_RTGI_STRC_GRID_SIZE) {
+		env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_GRID_SIZE] = 28.0f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_RTGI_STRC_BASE_PROBE_SPACING) {
+		env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_BASE_PROBE_SPACING] = 1.25f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_RTGI_STRC_RAYS_PER_FRAME) {
+		env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_RAYS_PER_FRAME] = 8192.0f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT) {
+		env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT] = 0.97f;
+	}
+	if (p_params.size() <= RSE::PT_PARAM_RTGI_BACKEND) {
+		env->pathtracing_params[RSE::PT_PARAM_RTGI_BACKEND] = (float)RSE::PT_BACKEND_VULKAN_GENERIC;
 	}
 	if (p_params.size() <= RSE::PT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS) {
 		env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS] = 1048575.0f;
@@ -930,7 +1026,7 @@ void RendererEnvironmentStorage::environment_set_pathtracing_params(RID p_env, c
 		env->pathtracing_params[RSE::PT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS] = 1048575.0f;
 	}
 	if (p_params.size() <= RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES) {
-		env->pathtracing_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES] = 262144.0f;
+		env->pathtracing_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES] = 524288.0f;
 	}
 }
 

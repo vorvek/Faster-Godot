@@ -205,28 +205,31 @@
 		<member name="rtgi_backend" type="int" setter="set_rtgi_backend" getter="get_rtgi_backend" enum="Environment.RTGIBackend" default="0">
 			Selects the RTGI backend. [constant RTGI_BACKEND_VULKAN_GENERIC] is the built-in Vulkan ray tracing path and the only active backend. Legacy vendor backend values fall back to [constant RTGI_BACKEND_VULKAN_GENERIC].
 		</member>
+		<member name="rtgi_quality_preset" type="int" setter="set_rtgi_quality_preset" getter="get_rtgi_quality_preset" enum="Environment.RTGIQualityPreset" default="3">
+			Applies a named RTGI quality bundle to the low-level RTGI controls. The controls remain editable; changing a covered control switches this property to [constant RTGI_QUALITY_PRESET_CUSTOM].
+		</member>
 		<member name="rtgi_disable_in_editor" type="bool" setter="set_rtgi_disable_in_editor" getter="is_rtgi_disabled_in_editor" default="true">
 			If [code]true[/code], disables RTGI only while this environment is previewed in the editor. Running projects and exported builds still use [member rtgi_enabled].
 		</member>
 		<member name="rtgi_enabled" type="bool" setter="set_rtgi_enabled" getter="is_rtgi_enabled" default="false">
 			If [code]true[/code], enables hardware ray-traced global illumination for this environment when the active renderer and GPU support Vulkan ray tracing.
 		</member>
-		<member name="rtgi_mode" type="int" setter="set_rtgi_mode" getter="get_rtgi_mode" enum="Environment.RTGIMode" default="0">
+		<member name="rtgi_mode" type="int" setter="set_rtgi_mode" getter="get_rtgi_mode" enum="Environment.RTGIMode" default="1">
 			Selects how RTGI contributes to the scene: specular/reflection paths only, full path-traced diffuse and specular lighting, or hybrid secondary lighting traced from the raster G-buffer.
 		</member>
 		<member name="rtgi_samples_per_pixel" type="int" setter="set_rtgi_samples_per_pixel" getter="get_rtgi_samples_per_pixel" default="1">
 			Sets the RTGI ray samples per pixel. Higher values reduce noise, but increase GPU cost.
 		</member>
-		<member name="rtgi_max_bounces" type="int" setter="set_rtgi_max_bounces" getter="get_rtgi_max_bounces" default="3">
+		<member name="rtgi_max_bounces" type="int" setter="set_rtgi_max_bounces" getter="get_rtgi_max_bounces" default="4">
 			Sets the maximum RTGI ray bounce count. Higher values can add secondary light, but increase cost and noise.
 		</member>
 		<member name="rtgi_energy" type="float" setter="set_rtgi_energy" getter="get_rtgi_energy" default="1.0">
 			Multiplier applied to the denoised RTGI contribution before composition.
 		</member>
-		<member name="rtgi_resolution_scale" type="float" setter="set_rtgi_resolution_scale" getter="get_rtgi_resolution_scale" default="0.5">
+		<member name="rtgi_resolution_scale" type="float" setter="set_rtgi_resolution_scale" getter="get_rtgi_resolution_scale" default="0.67">
 			Scales the internal RTGI render resolution before denoising, temporal stabilization, and full-resolution reconstruction. Lower values reduce ray-tracing cost and can improve temporal stability, but rely more heavily on reconstruction; [code]1.0[/code] traces at the viewport's internal 3D resolution.
 		</member>
-		<member name="rtgi_denoiser" type="int" setter="set_rtgi_denoiser" getter="get_rtgi_denoiser" enum="Environment.RTGIDenoiser" default="8">
+		<member name="rtgi_denoiser" type="int" setter="set_rtgi_denoiser" getter="get_rtgi_denoiser" enum="Environment.RTGIDenoiser" default="14">
 			Selects the RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser, [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION] denoises split lighting signals before recomposition, and [constant RTGI_DENOISER_NONE] shows the raw sampled result.
 		</member>
 		<member name="rtgi_debug_mode" type="int" setter="set_rtgi_debug_mode" getter="get_rtgi_debug_mode" default="0">
@@ -247,7 +250,7 @@
 		<member name="rtgi_denoiser_split_signals" type="bool" setter="set_rtgi_denoiser_split_signals" getter="is_rtgi_denoiser_split_signals_enabled" default="true">
 			If [code]true[/code], keeps diffuse, direct light, emissive, sky, and specular RTGI signals separated for denoising when supported by the selected denoiser.
 		</member>
-		<member name="rtgi_denoiser_specular_history_weight" type="float" setter="set_rtgi_denoiser_specular_history_weight" getter="get_rtgi_denoiser_specular_history_weight" default="0.9">
+		<member name="rtgi_denoiser_specular_history_weight" type="float" setter="set_rtgi_denoiser_specular_history_weight" getter="get_rtgi_denoiser_specular_history_weight" default="0.92">
 			Controls previous-frame reuse for specular RTGI. Higher values stabilize glossy reflections, but can increase ghosting.
 		</member>
 		<member name="rtgi_denoiser_specular_spatial_strength" type="float" setter="set_rtgi_denoiser_specular_spatial_strength" getter="get_rtgi_denoiser_specular_spatial_strength" default="1.0">
@@ -256,7 +259,7 @@
 		<member name="rtgi_ray_firefly_suppression" type="float" setter="set_rtgi_ray_firefly_suppression" getter="get_rtgi_ray_firefly_suppression" default="0.85">
 			Applies a pre-denoiser clamp to extreme ray or path contributions. Higher values suppress fireflies before they enter temporal history, but can dim tiny highlights.
 		</member>
-		<member name="rtgi_ray_max_radiance" type="float" setter="set_rtgi_ray_max_radiance" getter="get_rtgi_ray_max_radiance" default="32.0">
+		<member name="rtgi_ray_max_radiance" type="float" setter="set_rtgi_ray_max_radiance" getter="get_rtgi_ray_max_radiance" default="48.0">
 			Sets the linear HDR luminance limit used by [member rtgi_ray_firefly_suppression]. A value of [code]0.0[/code] disables the pre-denoiser contribution clamp.
 		</member>
 		<member name="rtgi_analytic_light_sampling_enabled" type="bool" setter="set_rtgi_analytic_light_sampling_enabled" getter="is_rtgi_analytic_light_sampling_enabled" default="true">
@@ -268,7 +271,7 @@
 		<member name="rtgi_diffuse_radiance_cache_enabled" type="bool" setter="set_rtgi_diffuse_radiance_cache_enabled" getter="is_rtgi_diffuse_radiance_cache_enabled" default="true">
 			If [code]true[/code], enables the screen-space diffuse radiance cache before ASVFG denoising. The cache reuses valid diffuse history and rejects it when guides or radiance change.
 		</member>
-		<member name="rtgi_diffuse_radiance_cache_max_entries" type="int" setter="set_rtgi_diffuse_radiance_cache_max_entries" getter="get_rtgi_diffuse_radiance_cache_max_entries" default="262144">
+		<member name="rtgi_diffuse_radiance_cache_max_entries" type="int" setter="set_rtgi_diffuse_radiance_cache_max_entries" getter="get_rtgi_diffuse_radiance_cache_max_entries" default="524288">
 			Sets the maximum number of persistent diffuse radiance cache entries. Lower values reduce GPU memory and bandwidth, but use coarser cache reconstruction.
 		</member>
 		<member name="rtgi_overscan_horizontal" type="float" setter="set_rtgi_overscan_horizontal" getter="get_rtgi_overscan_horizontal" default="0.0">
@@ -286,19 +289,19 @@
 		<member name="rtgi_strc_dynamic_visual_layers" type="int" setter="set_rtgi_strc_dynamic_visual_layers" getter="get_rtgi_strc_dynamic_visual_layers" default="1048575">
 			Visual layers treated as dynamic by STRC. Dynamic hits use lower temporal confidence so they refresh more aggressively.
 		</member>
-		<member name="rtgi_strc_strength" type="float" setter="set_rtgi_strc_strength" getter="get_rtgi_strc_strength" default="0.7">
+		<member name="rtgi_strc_strength" type="float" setter="set_rtgi_strc_strength" getter="get_rtgi_strc_strength" default="0.75">
 			Controls how strongly valid STRC samples contribute to RTGI. Lower values rely more on freshly traced rays.
 		</member>
 		<member name="rtgi_strc_cascade_count" type="int" setter="set_rtgi_strc_cascade_count" getter="get_rtgi_strc_cascade_count" default="3">
 			Sets the number of camera-centered STRC cascades. More cascades extend cache coverage.
 		</member>
-		<member name="rtgi_strc_grid_size" type="int" setter="set_rtgi_strc_grid_size" getter="get_rtgi_strc_grid_size" default="24">
+		<member name="rtgi_strc_grid_size" type="int" setter="set_rtgi_strc_grid_size" getter="get_rtgi_strc_grid_size" default="28">
 			Sets the probe count per axis for each STRC cascade. Higher values add detail, memory use, and update cost.
 		</member>
-		<member name="rtgi_strc_base_probe_spacing" type="float" setter="set_rtgi_strc_base_probe_spacing" getter="get_rtgi_strc_base_probe_spacing" default="1.5">
+		<member name="rtgi_strc_base_probe_spacing" type="float" setter="set_rtgi_strc_base_probe_spacing" getter="get_rtgi_strc_base_probe_spacing" default="1.25">
 			Sets the world-space probe spacing for STRC cascade 0. Each farther cascade doubles this spacing.
 		</member>
-		<member name="rtgi_strc_rays_per_frame" type="int" setter="set_rtgi_strc_rays_per_frame" getter="get_rtgi_strc_rays_per_frame" default="4096">
+		<member name="rtgi_strc_rays_per_frame" type="int" setter="set_rtgi_strc_rays_per_frame" getter="get_rtgi_strc_rays_per_frame" default="8192">
 			Sets the per-frame ray budget for refreshing STRC probes. Higher values update the cache faster, but cost more GPU time.
 		</member>
 		<member name="rtgi_strc_temporal_weight" type="float" setter="set_rtgi_strc_temporal_weight" getter="get_rtgi_strc_temporal_weight" default="0.97">
@@ -595,6 +598,18 @@
 		</constant>
 		<constant name="RTGI_MODE_PATH_TRACED" value="1" enum="RTGIMode">
 			Deprecated compatibility alias for [constant RTGI_MODE_FULL_PATH_TRACING].
+		</constant>
+		<constant name="RTGI_QUALITY_PRESET_CUSTOM" value="0" enum="RTGIQualityPreset">
+			Custom RTGI settings. Selecting this preset does not modify existing low-level RTGI controls.
+		</constant>
+		<constant name="RTGI_QUALITY_PRESET_PERFORMANCE" value="1" enum="RTGIQualityPreset">
+			Lower-cost RTGI quality bundle using split internal denoising, diffuse cache, STRC, and temporal reconstruction at a lower internal resolution.
+		</constant>
+		<constant name="RTGI_QUALITY_PRESET_BALANCED" value="2" enum="RTGIQualityPreset">
+			Balanced RTGI quality bundle using split internal denoising, diffuse cache, STRC, and temporal reconstruction.
+		</constant>
+		<constant name="RTGI_QUALITY_PRESET_PRODUCTION" value="3" enum="RTGIQualityPreset">
+			Production RTGI quality bundle with stronger cache budgets while keeping full-resolution reconstruction active.
 		</constant>
 		<constant name="RTGI_DENOISER_ASVFG_EXPERIMENTAL" value="8" enum="RTGIDenoiser">
 			Use the built-in experimental ASVFG RTGI denoiser.

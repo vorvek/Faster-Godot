@@ -629,6 +629,7 @@ Environment::PathtracingDebugMode Environment::get_pathtracing_debug_mode() cons
 
 void Environment::set_pathtracing_samples_per_pixel(int p_samples) {
 	pathtracing_samples_per_pixel = CLAMP(p_samples, 1, 255);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -638,6 +639,7 @@ int Environment::get_pathtracing_samples_per_pixel() const {
 
 void Environment::set_pathtracing_max_bounces(int p_bounces) {
 	pathtracing_max_bounces = CLAMP(p_bounces, 1, 8);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -678,6 +680,7 @@ void Environment::set_pathtracing_denoiser(RSE::PathtracingDenoiser p_denoiser) 
 			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL;
 			break;
 	}
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -702,6 +705,179 @@ Environment::RTGIBackend Environment::get_rtgi_backend() const {
 	return rtgi_backend;
 }
 
+void Environment::_mark_rtgi_quality_preset_custom() {
+	if (rtgi_applying_quality_preset || rtgi_quality_preset == RTGI_QUALITY_PRESET_CUSTOM) {
+		return;
+	}
+
+	bool matches_preset = rtgi_mode == RTGI_MODE_FULL_PATH_TRACING &&
+			pathtracing_samples_per_pixel == 1 &&
+			rtgi_denoiser == RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION &&
+			pathtracing_denoiser == RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION &&
+			rtgi_denoiser_split_signals &&
+			rtgi_analytic_light_sampling_enabled &&
+			rtgi_explicit_emissive_sampling_enabled &&
+			rtgi_diffuse_radiance_cache_enabled &&
+			rtgi_strc_enabled &&
+			Math::is_equal_approx(rtgi_denoiser_firefly_suppression, 1.0f) &&
+			Math::is_equal_approx(rtgi_denoiser_detail_preservation, 1.0f) &&
+			Math::is_equal_approx(rtgi_denoiser_specular_spatial_strength, 1.0f) &&
+			Math::is_equal_approx(rtgi_ray_firefly_suppression, 0.85f) &&
+			rtgi_strc_cascade_count == 3 &&
+			Math::is_equal_approx(rtgi_strc_temporal_weight, 0.97f) &&
+			Math::is_equal_approx(rtgi_overscan_horizontal, 0.0f) &&
+			Math::is_equal_approx(rtgi_overscan_vertical, 0.0f) &&
+			rtgi_strc_static_visual_layers == 0xfffff &&
+			rtgi_strc_dynamic_visual_layers == 0xfffff;
+
+	switch (rtgi_quality_preset) {
+		case RTGI_QUALITY_PRESET_PERFORMANCE:
+			matches_preset = matches_preset &&
+					pathtracing_max_bounces == 3 &&
+					Math::is_equal_approx(rtgi_resolution_scale, 0.5f) &&
+					Math::is_equal_approx(rtgi_denoiser_strength, 0.85f) &&
+					Math::is_equal_approx(rtgi_denoiser_history_weight, 0.94f) &&
+					Math::is_equal_approx(rtgi_denoiser_specular_history_weight, 0.90f) &&
+					Math::is_equal_approx(rtgi_ray_max_radiance, 32.0f) &&
+					rtgi_diffuse_radiance_cache_max_entries == 131072 &&
+					Math::is_equal_approx(rtgi_strc_strength, 0.65f) &&
+					rtgi_strc_grid_size == 20 &&
+					Math::is_equal_approx(rtgi_strc_base_probe_spacing, 1.75f) &&
+					rtgi_strc_rays_per_frame == 2048;
+			break;
+		case RTGI_QUALITY_PRESET_BALANCED:
+			matches_preset = matches_preset &&
+					pathtracing_max_bounces == 3 &&
+					Math::is_equal_approx(rtgi_resolution_scale, 0.67f) &&
+					Math::is_equal_approx(rtgi_denoiser_strength, 0.90f) &&
+					Math::is_equal_approx(rtgi_denoiser_history_weight, 0.95f) &&
+					Math::is_equal_approx(rtgi_denoiser_specular_history_weight, 0.90f) &&
+					Math::is_equal_approx(rtgi_ray_max_radiance, 32.0f) &&
+					rtgi_diffuse_radiance_cache_max_entries == 262144 &&
+					Math::is_equal_approx(rtgi_strc_strength, 0.70f) &&
+					rtgi_strc_grid_size == 24 &&
+					Math::is_equal_approx(rtgi_strc_base_probe_spacing, 1.5f) &&
+					rtgi_strc_rays_per_frame == 4096;
+			break;
+		case RTGI_QUALITY_PRESET_PRODUCTION:
+			matches_preset = matches_preset &&
+					pathtracing_max_bounces == 4 &&
+					Math::is_equal_approx(rtgi_resolution_scale, 0.67f) &&
+					Math::is_equal_approx(rtgi_denoiser_strength, 0.90f) &&
+					Math::is_equal_approx(rtgi_denoiser_history_weight, 0.95f) &&
+					Math::is_equal_approx(rtgi_denoiser_specular_history_weight, 0.92f) &&
+					Math::is_equal_approx(rtgi_ray_max_radiance, 48.0f) &&
+					rtgi_diffuse_radiance_cache_max_entries == 524288 &&
+					Math::is_equal_approx(rtgi_strc_strength, 0.75f) &&
+					rtgi_strc_grid_size == 28 &&
+					Math::is_equal_approx(rtgi_strc_base_probe_spacing, 1.25f) &&
+					rtgi_strc_rays_per_frame == 8192;
+			break;
+		case RTGI_QUALITY_PRESET_CUSTOM:
+		default:
+			matches_preset = true;
+			break;
+	}
+
+	if (!matches_preset) {
+		rtgi_quality_preset = RTGI_QUALITY_PRESET_CUSTOM;
+		notify_property_list_changed();
+	}
+}
+
+void Environment::_apply_rtgi_quality_preset(RTGIQualityPreset p_preset) {
+	if (p_preset == RTGI_QUALITY_PRESET_CUSTOM) {
+		return;
+	}
+
+	rtgi_mode = RTGI_MODE_FULL_PATH_TRACING;
+	pathtracing_samples_per_pixel = 1;
+	rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+	pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+	rtgi_denoiser_split_signals = true;
+	rtgi_analytic_light_sampling_enabled = true;
+	rtgi_explicit_emissive_sampling_enabled = true;
+	rtgi_diffuse_radiance_cache_enabled = true;
+	rtgi_strc_enabled = true;
+	rtgi_denoiser_firefly_suppression = 1.0f;
+	rtgi_denoiser_detail_preservation = 1.0f;
+	rtgi_denoiser_specular_spatial_strength = 1.0f;
+	rtgi_ray_firefly_suppression = 0.85f;
+	rtgi_strc_cascade_count = 3;
+	rtgi_strc_temporal_weight = 0.97f;
+	rtgi_overscan_horizontal = 0.0f;
+	rtgi_overscan_vertical = 0.0f;
+	rtgi_strc_static_visual_layers = 0xfffff;
+	rtgi_strc_dynamic_visual_layers = 0xfffff;
+
+	switch (p_preset) {
+		case RTGI_QUALITY_PRESET_PERFORMANCE:
+			pathtracing_max_bounces = 3;
+			rtgi_resolution_scale = 0.5f;
+			rtgi_denoiser_strength = 0.85f;
+			rtgi_denoiser_history_weight = 0.94f;
+			rtgi_denoiser_specular_history_weight = 0.90f;
+			rtgi_ray_max_radiance = 32.0f;
+			rtgi_diffuse_radiance_cache_max_entries = 131072;
+			rtgi_strc_strength = 0.65f;
+			rtgi_strc_grid_size = 20;
+			rtgi_strc_base_probe_spacing = 1.75f;
+			rtgi_strc_rays_per_frame = 2048;
+			break;
+		case RTGI_QUALITY_PRESET_BALANCED:
+			pathtracing_max_bounces = 3;
+			rtgi_resolution_scale = 0.67f;
+			rtgi_denoiser_strength = 0.90f;
+			rtgi_denoiser_history_weight = 0.95f;
+			rtgi_denoiser_specular_history_weight = 0.90f;
+			rtgi_ray_max_radiance = 32.0f;
+			rtgi_diffuse_radiance_cache_max_entries = 262144;
+			rtgi_strc_strength = 0.70f;
+			rtgi_strc_grid_size = 24;
+			rtgi_strc_base_probe_spacing = 1.5f;
+			rtgi_strc_rays_per_frame = 4096;
+			break;
+		case RTGI_QUALITY_PRESET_PRODUCTION:
+		default:
+			pathtracing_max_bounces = 4;
+			rtgi_resolution_scale = 0.67f;
+			rtgi_denoiser_strength = 0.90f;
+			rtgi_denoiser_history_weight = 0.95f;
+			rtgi_denoiser_specular_history_weight = 0.92f;
+			rtgi_ray_max_radiance = 48.0f;
+			rtgi_diffuse_radiance_cache_max_entries = 524288;
+			rtgi_strc_strength = 0.75f;
+			rtgi_strc_grid_size = 28;
+			rtgi_strc_base_probe_spacing = 1.25f;
+			rtgi_strc_rays_per_frame = 8192;
+			break;
+	}
+}
+
+void Environment::set_rtgi_quality_preset(RTGIQualityPreset p_preset) {
+	switch ((int)p_preset) {
+		case RTGI_QUALITY_PRESET_CUSTOM:
+		case RTGI_QUALITY_PRESET_PERFORMANCE:
+		case RTGI_QUALITY_PRESET_BALANCED:
+		case RTGI_QUALITY_PRESET_PRODUCTION:
+			rtgi_quality_preset = p_preset;
+			break;
+		default:
+			rtgi_quality_preset = RTGI_QUALITY_PRESET_CUSTOM;
+			break;
+	}
+
+	rtgi_applying_quality_preset = true;
+	_apply_rtgi_quality_preset(rtgi_quality_preset);
+	rtgi_applying_quality_preset = false;
+	_update_pathtracing();
+	notify_property_list_changed();
+}
+
+Environment::RTGIQualityPreset Environment::get_rtgi_quality_preset() const {
+	return rtgi_quality_preset;
+}
+
 void Environment::set_rtgi_mode(RTGIMode p_mode) {
 	switch ((int)p_mode) {
 		case RTGI_MODE_REFLECTIONS_RT_ONLY:
@@ -713,6 +889,7 @@ void Environment::set_rtgi_mode(RTGIMode p_mode) {
 			rtgi_mode = RTGI_MODE_REFLECTIONS_RT_ONLY;
 			break;
 	}
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -747,6 +924,7 @@ float Environment::get_rtgi_energy() const {
 
 void Environment::set_rtgi_resolution_scale(float p_scale) {
 	rtgi_resolution_scale = CLAMP(p_scale, 0.25f, 1.0f);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -765,6 +943,7 @@ bool Environment::is_rtgi_disabled_in_editor() const {
 
 void Environment::set_rtgi_denoiser_strength(float p_strength) {
 	rtgi_denoiser_strength = CLAMP(p_strength, 0.0f, 1.0f);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -774,6 +953,7 @@ float Environment::get_rtgi_denoiser_strength() const {
 
 void Environment::set_rtgi_denoiser_history_weight(float p_weight) {
 	rtgi_denoiser_history_weight = CLAMP(p_weight, 0.0f, 0.98f);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -783,6 +963,7 @@ float Environment::get_rtgi_denoiser_history_weight() const {
 
 void Environment::set_rtgi_denoiser_firefly_suppression(float p_suppression) {
 	rtgi_denoiser_firefly_suppression = CLAMP(p_suppression, 0.0f, 1.0f);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -792,6 +973,7 @@ float Environment::get_rtgi_denoiser_firefly_suppression() const {
 
 void Environment::set_rtgi_denoiser_detail_preservation(float p_preservation) {
 	rtgi_denoiser_detail_preservation = CLAMP(p_preservation, 0.0f, 1.0f);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -801,6 +983,7 @@ float Environment::get_rtgi_denoiser_detail_preservation() const {
 
 void Environment::set_rtgi_denoiser_split_signals(bool p_enabled) {
 	rtgi_denoiser_split_signals = p_enabled;
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -810,6 +993,7 @@ bool Environment::is_rtgi_denoiser_split_signals_enabled() const {
 
 void Environment::set_rtgi_denoiser_specular_history_weight(float p_weight) {
 	rtgi_denoiser_specular_history_weight = CLAMP(p_weight, 0.0f, 0.98f);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -819,6 +1003,7 @@ float Environment::get_rtgi_denoiser_specular_history_weight() const {
 
 void Environment::set_rtgi_denoiser_specular_spatial_strength(float p_strength) {
 	rtgi_denoiser_specular_spatial_strength = CLAMP(p_strength, 0.0f, 1.0f);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -828,6 +1013,7 @@ float Environment::get_rtgi_denoiser_specular_spatial_strength() const {
 
 void Environment::set_rtgi_ray_firefly_suppression(float p_suppression) {
 	rtgi_ray_firefly_suppression = CLAMP(p_suppression, 0.0f, 1.0f);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -837,6 +1023,7 @@ float Environment::get_rtgi_ray_firefly_suppression() const {
 
 void Environment::set_rtgi_ray_max_radiance(float p_radiance) {
 	rtgi_ray_max_radiance = MAX(p_radiance, 0.0f);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -846,6 +1033,7 @@ float Environment::get_rtgi_ray_max_radiance() const {
 
 void Environment::set_rtgi_analytic_light_sampling_enabled(bool p_enabled) {
 	rtgi_analytic_light_sampling_enabled = p_enabled;
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -855,6 +1043,7 @@ bool Environment::is_rtgi_analytic_light_sampling_enabled() const {
 
 void Environment::set_rtgi_explicit_emissive_sampling_enabled(bool p_enabled) {
 	rtgi_explicit_emissive_sampling_enabled = p_enabled;
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -864,6 +1053,7 @@ bool Environment::is_rtgi_explicit_emissive_sampling_enabled() const {
 
 void Environment::set_rtgi_diffuse_radiance_cache_enabled(bool p_enabled) {
 	rtgi_diffuse_radiance_cache_enabled = p_enabled;
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -873,6 +1063,7 @@ bool Environment::is_rtgi_diffuse_radiance_cache_enabled() const {
 
 void Environment::set_rtgi_diffuse_radiance_cache_max_entries(int p_entries) {
 	rtgi_diffuse_radiance_cache_max_entries = CLAMP(p_entries, 4096, 4194304);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -882,6 +1073,7 @@ int Environment::get_rtgi_diffuse_radiance_cache_max_entries() const {
 
 void Environment::set_rtgi_strc_enabled(bool p_enabled) {
 	rtgi_strc_enabled = p_enabled;
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -891,6 +1083,7 @@ bool Environment::is_rtgi_strc_enabled() const {
 
 void Environment::set_rtgi_strc_strength(float p_strength) {
 	rtgi_strc_strength = CLAMP(p_strength, 0.0f, 1.0f);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -900,6 +1093,7 @@ float Environment::get_rtgi_strc_strength() const {
 
 void Environment::set_rtgi_strc_cascade_count(int p_count) {
 	rtgi_strc_cascade_count = CLAMP(p_count, 1, 4);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -909,6 +1103,7 @@ int Environment::get_rtgi_strc_cascade_count() const {
 
 void Environment::set_rtgi_strc_grid_size(int p_size) {
 	rtgi_strc_grid_size = CLAMP(p_size, 12, 32);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -918,6 +1113,7 @@ int Environment::get_rtgi_strc_grid_size() const {
 
 void Environment::set_rtgi_strc_base_probe_spacing(float p_spacing) {
 	rtgi_strc_base_probe_spacing = CLAMP(p_spacing, 0.25f, 8.0f);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -927,6 +1123,7 @@ float Environment::get_rtgi_strc_base_probe_spacing() const {
 
 void Environment::set_rtgi_strc_rays_per_frame(int p_rays) {
 	rtgi_strc_rays_per_frame = CLAMP(p_rays, 0, 32768);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -936,6 +1133,7 @@ int Environment::get_rtgi_strc_rays_per_frame() const {
 
 void Environment::set_rtgi_strc_temporal_weight(float p_weight) {
 	rtgi_strc_temporal_weight = CLAMP(p_weight, 0.0f, 0.995f);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -945,6 +1143,7 @@ float Environment::get_rtgi_strc_temporal_weight() const {
 
 void Environment::set_rtgi_overscan_horizontal(float p_overscan) {
 	rtgi_overscan_horizontal = CLAMP(p_overscan, 0.0f, 0.25f);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -954,6 +1153,7 @@ float Environment::get_rtgi_overscan_horizontal() const {
 
 void Environment::set_rtgi_overscan_vertical(float p_overscan) {
 	rtgi_overscan_vertical = CLAMP(p_overscan, 0.0f, 0.25f);
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -963,6 +1163,7 @@ float Environment::get_rtgi_overscan_vertical() const {
 
 void Environment::set_rtgi_strc_static_visual_layers(uint32_t p_layers) {
 	rtgi_strc_static_visual_layers = p_layers & 0xfffff;
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -972,6 +1173,7 @@ uint32_t Environment::get_rtgi_strc_static_visual_layers() const {
 
 void Environment::set_rtgi_strc_dynamic_visual_layers(uint32_t p_layers) {
 	rtgi_strc_dynamic_visual_layers = p_layers & 0xfffff;
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -1015,6 +1217,7 @@ void Environment::set_rtgi_denoiser(RTGIDenoiser p_denoiser) {
 			pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL;
 			break;
 	}
+	_mark_rtgi_quality_preset_custom();
 	_update_pathtracing();
 }
 
@@ -1918,6 +2121,8 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_rtgi_enabled"), &Environment::is_rtgi_enabled);
 	ClassDB::bind_method(D_METHOD("set_rtgi_backend", "backend"), &Environment::set_rtgi_backend);
 	ClassDB::bind_method(D_METHOD("get_rtgi_backend"), &Environment::get_rtgi_backend);
+	ClassDB::bind_method(D_METHOD("set_rtgi_quality_preset", "preset"), &Environment::set_rtgi_quality_preset);
+	ClassDB::bind_method(D_METHOD("get_rtgi_quality_preset"), &Environment::get_rtgi_quality_preset);
 	ClassDB::bind_method(D_METHOD("set_rtgi_mode", "mode"), &Environment::set_rtgi_mode);
 	ClassDB::bind_method(D_METHOD("get_rtgi_mode"), &Environment::get_rtgi_mode);
 	ClassDB::bind_method(D_METHOD("set_rtgi_samples_per_pixel", "samples"), &Environment::set_rtgi_samples_per_pixel);
@@ -1986,6 +2191,7 @@ void Environment::_bind_methods() {
 	ADD_GROUP("RTGI", "rtgi_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_enabled", PROPERTY_HINT_GROUP_ENABLE), "set_rtgi_enabled", "is_rtgi_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_backend", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR), "set_rtgi_backend", "get_rtgi_backend");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_quality_preset", PROPERTY_HINT_ENUM, "Custom,Performance,Balanced,Production"), "set_rtgi_quality_preset", "get_rtgi_quality_preset");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_mode", PROPERTY_HINT_ENUM, "Reflections RT Only,Full Path Tracing,Hybrid RTGI"), "set_rtgi_mode", "get_rtgi_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_samples_per_pixel", PROPERTY_HINT_RANGE, "1,16,1"), "set_rtgi_samples_per_pixel", "get_rtgi_samples_per_pixel");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_max_bounces", PROPERTY_HINT_RANGE, "1,8,1"), "set_rtgi_max_bounces", "get_rtgi_max_bounces");
@@ -2224,6 +2430,11 @@ void Environment::_bind_methods() {
 	BIND_ENUM_CONSTANT(RTGI_MODE_FULL_PATH_TRACING);
 	BIND_ENUM_CONSTANT(RTGI_MODE_HYBRID);
 	BIND_ENUM_CONSTANT(RTGI_MODE_PATH_TRACED);
+
+	BIND_ENUM_CONSTANT(RTGI_QUALITY_PRESET_CUSTOM);
+	BIND_ENUM_CONSTANT(RTGI_QUALITY_PRESET_PERFORMANCE);
+	BIND_ENUM_CONSTANT(RTGI_QUALITY_PRESET_BALANCED);
+	BIND_ENUM_CONSTANT(RTGI_QUALITY_PRESET_PRODUCTION);
 
 	BIND_ENUM_CONSTANT(RTGI_DENOISER_ASVFG_EXPERIMENTAL);
 	BIND_ENUM_CONSTANT(RTGI_DENOISER_SVGF);

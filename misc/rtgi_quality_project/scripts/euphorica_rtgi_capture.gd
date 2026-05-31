@@ -66,8 +66,8 @@ var _results = []
 var _split_pair_metrics = []
 var _split_pair_images = {}
 var _debug_environments: Array[Environment] = []
-var _all_debug_views = ["noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "secondary_cache_source", "secondary_cache_rejection", "secondary_cache_surface", "surface_feedback", "surface_key", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "strc_visibility", "strc_age", "strc_variance", "strc_rejection", "variance", "history_length", "rejection", "final", "reconstructed", "reconstructed_reactivity"]
-var _debug_views = ["noisy", "specular_noisy", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "secondary_cache_source", "secondary_cache_rejection", "secondary_cache_surface", "surface_feedback", "surface_key", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "final", "reconstructed", "reconstructed_reactivity"]
+var _all_debug_views = ["noisy", "raw_radiance", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "secondary_cache_source", "secondary_cache_rejection", "secondary_cache_surface", "surface_feedback", "surface_key", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "strc_visibility", "strc_age", "strc_variance", "strc_rejection", "variance", "history_length", "rejection", "final", "denoised_radiance", "reconstructed", "reconstructed_radiance", "reconstructed_reactivity", "reconstruction_reactivity", "reconstruction_signal_confidence", "reconstruction_guide_mismatch", "reconstruction_fill_source"]
+var _debug_views = ["noisy", "raw_radiance", "specular_noisy", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "secondary_cache_source", "secondary_cache_rejection", "secondary_cache_surface", "surface_feedback", "surface_key", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "final", "denoised_radiance", "reconstructed", "reconstructed_radiance", "reconstructed_reactivity", "reconstruction_reactivity", "reconstruction_signal_confidence", "reconstruction_guide_mismatch", "reconstruction_fill_source"]
 
 
 func _initialize() -> void:
@@ -256,6 +256,9 @@ func _run() -> void:
 		metrics["case"] = test_case.duplicate(true)
 		metrics["rtgi_knobs"] = _collect_knobs(capture["environment"])
 		metrics["resolution_context"] = capture["resolution_context"]
+		var render_diagnostics: Dictionary = capture["render_diagnostics"]
+		metrics["render_diagnostics"] = render_diagnostics
+		metrics.merge(render_diagnostics, true)
 		metrics.merge(_flat_resolution_metrics(capture["resolution_context"]), true)
 		metrics["rf_output_effect_disabled"] = _disable_rf_output_effect
 		metrics["rf_output_effect_disabled_count"] = capture["rf_output_effect_disabled_count"]
@@ -540,6 +543,7 @@ func _run_case(test_case: Dictionary) -> Dictionary:
 	var game_image: Image = frames[frames.size() - 1]
 	var final_image = _capture_viewport(root)
 	var resolution_context := _resolution_context(root, game_viewport, env, test_case, game_image, final_image)
+	var render_diagnostics := _collect_rtgi_render_diagnostics(game_viewport)
 	game_image.save_png(_output_path("%s_game.png" % test_case["name"]))
 	final_image.save_png(_output_path("%s_final.png" % test_case["name"]))
 	_record_stage_timing(timings, "save_primary_images", stage_start)
@@ -558,6 +562,7 @@ func _run_case(test_case: Dictionary) -> Dictionary:
 		"debug_metrics": debug_metrics,
 		"environment": env,
 		"resolution_context": resolution_context,
+		"render_diagnostics": render_diagnostics,
 		"normal_textures_flipped": 0,
 		"rf_output_effect_disabled_count": rf_output_effect_disabled_count,
 		"stage_timings_msec": timings,
@@ -569,6 +574,31 @@ func _record_stage_timing(timings: Dictionary, stage: String, start_msec: int) -
 	timings[stage] = elapsed
 	if _profile_timings:
 		print("Euphorica RTGI capture timing: %s %.2fs" % [stage, float(elapsed) / 1000.0])
+
+
+func _collect_rtgi_render_diagnostics(viewport: Viewport) -> Dictionary:
+	var rid := viewport.get_viewport_rid()
+	var guide_quality := RenderingServer.viewport_get_render_info(rid, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_RTGI_RECONSTRUCTION_GUIDE_QUALITY)
+	return {
+		"rtgi_reconstructed_copy_count": RenderingServer.viewport_get_render_info(rid, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_RTGI_RECONSTRUCTED_COPY_COUNT),
+		"rtgi_raw_fallback_copy_count": RenderingServer.viewport_get_render_info(rid, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_RTGI_RAW_FALLBACK_COPY_COUNT),
+		"rtgi_reconstruction_guide_quality": guide_quality,
+		"rtgi_reconstruction_guide_quality_label": _rtgi_reconstruction_guide_quality_label(guide_quality),
+	}
+
+
+func _rtgi_reconstruction_guide_quality_label(quality: int) -> String:
+	match quality:
+		0:
+			return "none"
+		1:
+			return "depth"
+		2:
+			return "depth + normal/roughness"
+		3:
+			return "depth + normal/roughness + material guides"
+		_:
+			return "unknown"
 
 
 func _prepare_camera_motion(game_viewport: Viewport, test_case: Dictionary) -> Dictionary:
@@ -2037,6 +2067,8 @@ func _debug_draw_value(view: String) -> int:
 	match view:
 		"beauty", "disabled":
 			return 0
+		"raw_radiance":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RAW_RADIANCE
 		"diffuse_noisy":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_DIFFUSE_NOISY
 		"specular_noisy":
@@ -2127,10 +2159,22 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_REJECTION
 		"final":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_FINAL
+		"denoised_radiance":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_DENOISED_RADIANCE
 		"reconstructed":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED
+		"reconstructed_radiance":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED_RADIANCE
 		"reconstructed_reactivity":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED_REACTIVITY
+		"reconstruction_reactivity":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_REACTIVITY
+		"reconstruction_signal_confidence":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_SIGNAL_CONFIDENCE
+		"reconstruction_guide_mismatch":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_GUIDE_MISMATCH
+		"reconstruction_fill_source":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_FILL_SOURCE
 		_:
 			return 0
 
@@ -2145,6 +2189,8 @@ func _source_attribution_summary(metrics: Dictionary) -> String:
 		"final/post amplification": _source_score(metrics, "final"),
 		"reconstruction": _source_score(metrics, "reconstructed"),
 		"reconstruction reactivity": _source_score(metrics, "reconstructed_reactivity"),
+		"reconstruction guide mismatch": _source_score(metrics, "reconstruction_guide_mismatch"),
+		"reconstruction disocclusion fill": _source_score(metrics, "reconstruction_fill_source"),
 	}
 	var best_name := "unknown"
 	var best_score := -1.0

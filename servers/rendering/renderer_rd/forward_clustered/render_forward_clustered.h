@@ -164,8 +164,17 @@ public:
 		Size2i rt_visible_size;
 		Vector2i rt_visible_origin;
 		Vector2i rt_prev_visible_origin;
+		Vector2 rt_source_sample_jitter;
 		bool rt_overscan_initialized = false;
 		bool rt_reconstructed_valid = false;
+		enum RTGIReconstructionGuideQuality {
+			RTGI_RECONSTRUCTION_GUIDE_QUALITY_NONE = 0,
+			RTGI_RECONSTRUCTION_GUIDE_QUALITY_DEPTH = 1,
+			RTGI_RECONSTRUCTION_GUIDE_QUALITY_DEPTH_NORMAL_ROUGHNESS = 2,
+			RTGI_RECONSTRUCTION_GUIDE_QUALITY_DEPTH_NORMAL_ROUGHNESS_MATERIAL = 3,
+			RTGI_RECONSTRUCTION_GUIDE_QUALITY_UNSET = 0xffffffffu,
+		};
+		uint32_t rt_reconstruction_guide_quality = RTGI_RECONSTRUCTION_GUIDE_QUALITY_UNSET;
 		uint64_t rt_diffuse_cache_signature = 0;
 		bool rt_diffuse_cache_signature_valid = false;
 		Vector3i rt_strc_probe_origins[4];
@@ -177,6 +186,8 @@ public:
 		Size2i rt_get_visible_size() const { return rt_visible_size; }
 		Vector2i rt_get_visible_origin() const { return rt_visible_origin; }
 		Vector2i rt_get_prev_visible_origin() const { return rt_prev_visible_origin; }
+		void rt_set_source_sample_jitter(const Vector2 &p_jitter) { rt_source_sample_jitter = p_jitter; }
+		Vector2 rt_get_source_sample_jitter() const { return rt_source_sample_jitter; }
 		bool rt_ensure_textures(bool p_external_memory_exportable = false);
 		bool rt_has_texture() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING); }
 		RID rt_get_texture() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING); }
@@ -187,8 +198,18 @@ public:
 		RID rt_get_reconstructed(uint32_t p_layer) const { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED, p_layer, 0); }
 		RID rt_get_reconstructed_diffuse(uint32_t p_layer) const { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_DIFFUSE, p_layer, 0); }
 		RID rt_get_reconstructed_specular(uint32_t p_layer) const { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_SPECULAR, p_layer, 0); }
+		RID rt_get_reconstructed_signal_confidence() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_SIGNAL_CONFIDENCE); }
+		RID rt_get_reconstructed_guide_mismatch() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_GUIDE_MISMATCH); }
+		RID rt_get_reconstructed_fill_source() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_FILL_SOURCE); }
+		RID rt_get_reconstructed_moments() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_MOMENTS); }
+		RID rt_get_reconstructed_prev_moments() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_MOMENTS_PREV); }
+		RID rt_get_reconstructed_history_meta() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_HISTORY_META); }
+		RID rt_get_reconstructed_prev_history_meta() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_HISTORY_META_PREV); }
 		void rt_set_reconstructed_valid(bool p_valid) { rt_reconstructed_valid = p_valid; }
 		bool rt_is_reconstructed_valid() const { return rt_reconstructed_valid && rt_has_reconstructed(); }
+		void rt_reset_reconstruction_guide_quality() { rt_reconstruction_guide_quality = RTGI_RECONSTRUCTION_GUIDE_QUALITY_UNSET; }
+		void rt_record_reconstruction_guide_quality(uint32_t p_quality) { rt_reconstruction_guide_quality = rt_reconstruction_guide_quality == RTGI_RECONSTRUCTION_GUIDE_QUALITY_UNSET || p_quality < rt_reconstruction_guide_quality ? p_quality : rt_reconstruction_guide_quality; }
+		uint32_t rt_get_reconstruction_guide_quality() const { return rt_reconstruction_guide_quality == RTGI_RECONSTRUCTION_GUIDE_QUALITY_UNSET ? RTGI_RECONSTRUCTION_GUIDE_QUALITY_NONE : rt_reconstruction_guide_quality; }
 		RID rt_ensure_material_guide_framebuffer(const Size2i &p_size);
 		bool rt_has_material_guides() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_ALBEDO) && render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_NORMAL) && render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_ORM); }
 		RID rt_get_guide_albedo() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_ALBEDO); }

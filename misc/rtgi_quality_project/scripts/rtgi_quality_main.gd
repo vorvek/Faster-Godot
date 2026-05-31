@@ -890,6 +890,9 @@ func _run_capture() -> void:
 	metrics["analytic_light_sampling_enabled"] = _analytic_light_sampling
 	metrics["explicit_emissive_sampling_enabled"] = _explicit_emissive_sampling
 	metrics["diffuse_radiance_cache_enabled"] = _diffuse_cache
+	var render_diagnostics := _collect_rtgi_render_diagnostics(get_viewport())
+	metrics["render_diagnostics"] = render_diagnostics
+	metrics.merge(render_diagnostics, true)
 	metrics.merge(_rtgi_diffuse_cache_budget_metrics(Vector2i(final_image.get_width(), final_image.get_height())), true)
 	if _sparkle_frames > 1 and DisplayServer.get_name().to_lower() != "headless":
 		metrics.merge(await _measure_temporal_sparkle(base_name), true)
@@ -955,7 +958,7 @@ func _animate_specular_objects(frame: int) -> void:
 
 
 func _capture_debug_views(base_name: String) -> void:
-	var views := ["beauty", "noisy", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "secondary_cache_source", "secondary_cache_rejection", "secondary_cache_surface", "surface_feedback", "surface_key", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "strc_visibility", "strc_age", "strc_variance", "strc_rejection", "variance", "history_length", "rejection", "final"]
+	var views := ["beauty", "noisy", "raw_radiance", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "secondary_cache_source", "secondary_cache_rejection", "secondary_cache_surface", "surface_feedback", "surface_key", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "strc_visibility", "strc_age", "strc_variance", "strc_rejection", "variance", "history_length", "rejection", "final", "denoised_radiance", "reconstructed_radiance", "reconstruction_reactivity", "reconstruction_signal_confidence", "reconstruction_guide_mismatch", "reconstruction_fill_source"]
 	for view in views:
 		if view.begins_with("cache_") and not _cache_debug_available():
 			continue
@@ -967,10 +970,35 @@ func _capture_debug_views(base_name: String) -> void:
 	_apply_debug_view(_debug_view)
 
 
+func _collect_rtgi_render_diagnostics(viewport: Viewport) -> Dictionary:
+	var rid := viewport.get_viewport_rid()
+	var guide_quality := RenderingServer.viewport_get_render_info(rid, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_RTGI_RECONSTRUCTION_GUIDE_QUALITY)
+	return {
+		"rtgi_reconstructed_copy_count": RenderingServer.viewport_get_render_info(rid, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_RTGI_RECONSTRUCTED_COPY_COUNT),
+		"rtgi_raw_fallback_copy_count": RenderingServer.viewport_get_render_info(rid, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_RTGI_RAW_FALLBACK_COPY_COUNT),
+		"rtgi_reconstruction_guide_quality": guide_quality,
+		"rtgi_reconstruction_guide_quality_label": _rtgi_reconstruction_guide_quality_label(guide_quality),
+	}
+
+
+func _rtgi_reconstruction_guide_quality_label(quality: int) -> String:
+	match quality:
+		0:
+			return "none"
+		1:
+			return "depth"
+		2:
+			return "depth + normal/roughness"
+		3:
+			return "depth + normal/roughness + material guides"
+		_:
+			return "unknown"
+
+
 func _measure_signal_debug_views() -> Dictionary:
 	var result := {}
 	var previous_view := _debug_view
-	var signal_views := ["signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "secondary_cache_source", "secondary_cache_rejection", "secondary_cache_surface", "surface_feedback", "surface_key", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "strc_visibility", "strc_age", "strc_variance", "strc_rejection", "noisy", "final"]
+	var signal_views := ["signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "secondary_cache_source", "secondary_cache_rejection", "secondary_cache_surface", "surface_feedback", "surface_key", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "strc_visibility", "strc_age", "strc_variance", "strc_rejection", "noisy", "raw_radiance", "final", "denoised_radiance", "reconstructed_radiance", "reconstruction_reactivity", "reconstruction_signal_confidence", "reconstruction_guide_mismatch", "reconstruction_fill_source"]
 	for view in signal_views:
 		if view.begins_with("cache_") and not _cache_debug_available():
 			continue
@@ -1807,6 +1835,8 @@ func _source_attribution_summary(metrics: Dictionary) -> String:
 		"sky/environment": _source_score(metrics, "signal_sky"),
 		"clamp/weight risk": _source_score(metrics, "signal_confidence"),
 		"final/post amplification": float(metrics.get("rtgi_final_visible_speckles_per_megapixel", 0.0)) + float(metrics.get("rtgi_final_luma_p99", 0.0)) * 120.0,
+		"reconstruction guide mismatch": _source_score(metrics, "reconstruction_guide_mismatch"),
+		"reconstruction disocclusion fill": _source_score(metrics, "reconstruction_fill_source"),
 	}
 	var best_name := "unknown"
 	var best_score := -1.0
@@ -2118,6 +2148,8 @@ func _debug_draw_value(view: String) -> int:
 	match view:
 		"beauty", "disabled":
 			return 0
+		"raw_radiance":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RAW_RADIANCE
 		"noisy":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_NOISY
 		"diffuse_noisy":
@@ -2208,6 +2240,18 @@ func _debug_draw_value(view: String) -> int:
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_REJECTION
 		"final":
 			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_FINAL
+		"denoised_radiance":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_DENOISED_RADIANCE
+		"reconstructed_radiance":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED_RADIANCE
+		"reconstruction_reactivity":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_REACTIVITY
+		"reconstruction_signal_confidence":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_SIGNAL_CONFIDENCE
+		"reconstruction_guide_mismatch":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_GUIDE_MISMATCH
+		"reconstruction_fill_source":
+			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_FILL_SOURCE
 		_:
 			return 0
 

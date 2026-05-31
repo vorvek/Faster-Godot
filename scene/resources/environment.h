@@ -91,6 +91,13 @@ public:
 		RTGI_MODE_PATH_TRACED = RTGI_MODE_FULL_PATH_TRACING,
 	};
 
+	enum RTGIQualityPreset {
+		RTGI_QUALITY_PRESET_CUSTOM,
+		RTGI_QUALITY_PRESET_PERFORMANCE,
+		RTGI_QUALITY_PRESET_BALANCED,
+		RTGI_QUALITY_PRESET_PRODUCTION,
+	};
+
 	enum RTGIDenoiser {
 		RTGI_DENOISER_ASVFG_EXPERIMENTAL = 8,
 		RTGI_DENOISER_NONE = 9,
@@ -224,38 +231,42 @@ private:
 	bool pathtracing_enabled = false;
 	PathtracingDebugMode pathtracing_debug_mode = RT_DEBUG_DISABLED;
 	int pathtracing_samples_per_pixel = 1;
-	int pathtracing_max_bounces = 3;
-	RSE::PathtracingDenoiser pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL;
+	int pathtracing_max_bounces = 4;
+	RSE::PathtracingDenoiser pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
 	RTGIBackend rtgi_backend = RTGI_BACKEND_VULKAN_GENERIC;
-	RTGIMode rtgi_mode = RTGI_MODE_REFLECTIONS_RT_ONLY;
+	RTGIQualityPreset rtgi_quality_preset = RTGI_QUALITY_PRESET_PRODUCTION;
+	RTGIMode rtgi_mode = RTGI_MODE_FULL_PATH_TRACING;
 	float rtgi_energy = 1.0;
-	float rtgi_resolution_scale = 0.5f;
+	float rtgi_resolution_scale = 0.67f;
 	bool rtgi_disable_in_editor = true;
-	float rtgi_denoiser_strength = 0.50f;
+	float rtgi_denoiser_strength = 0.90f;
 	float rtgi_denoiser_history_weight = 0.95f;
 	float rtgi_denoiser_firefly_suppression = 1.0f;
 	float rtgi_denoiser_detail_preservation = 1.0f;
 	bool rtgi_denoiser_split_signals = true;
-	float rtgi_denoiser_specular_history_weight = 0.90f;
+	float rtgi_denoiser_specular_history_weight = 0.92f;
 	float rtgi_denoiser_specular_spatial_strength = 1.0f;
 	float rtgi_ray_firefly_suppression = 0.85f;
-	float rtgi_ray_max_radiance = 32.0f;
+	float rtgi_ray_max_radiance = 48.0f;
 	bool rtgi_analytic_light_sampling_enabled = true;
 	bool rtgi_explicit_emissive_sampling_enabled = true;
-	bool rtgi_diffuse_radiance_cache_enabled = false;
-	int rtgi_diffuse_radiance_cache_max_entries = 262144;
-	bool rtgi_strc_enabled = false;
-	float rtgi_strc_strength = 0.70f;
+	bool rtgi_diffuse_radiance_cache_enabled = true;
+	int rtgi_diffuse_radiance_cache_max_entries = 524288;
+	bool rtgi_strc_enabled = true;
+	float rtgi_strc_strength = 0.75f;
 	int rtgi_strc_cascade_count = 3;
-	int rtgi_strc_grid_size = 24;
-	float rtgi_strc_base_probe_spacing = 1.5f;
-	int rtgi_strc_rays_per_frame = 4096;
+	int rtgi_strc_grid_size = 28;
+	float rtgi_strc_base_probe_spacing = 1.25f;
+	int rtgi_strc_rays_per_frame = 8192;
 	float rtgi_strc_temporal_weight = 0.97f;
 	float rtgi_overscan_horizontal = 0.0f;
 	float rtgi_overscan_vertical = 0.0f;
 	uint32_t rtgi_strc_static_visual_layers = 0xfffff;
 	uint32_t rtgi_strc_dynamic_visual_layers = 0xfffff;
-	RTGIDenoiser rtgi_denoiser = RTGI_DENOISER_ASVFG_EXPERIMENTAL;
+	RTGIDenoiser rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+	bool rtgi_applying_quality_preset = false;
+	void _apply_rtgi_quality_preset(RTGIQualityPreset p_preset);
+	void _mark_rtgi_quality_preset_custom();
 	void _update_pathtracing();
 
 	// Glow
@@ -461,6 +472,8 @@ public:
 	bool is_rtgi_enabled() const;
 	void set_rtgi_backend(RTGIBackend p_backend);
 	RTGIBackend get_rtgi_backend() const;
+	void set_rtgi_quality_preset(RTGIQualityPreset p_preset);
+	RTGIQualityPreset get_rtgi_quality_preset() const;
 	void set_rtgi_mode(RTGIMode p_mode);
 	RTGIMode get_rtgi_mode() const;
 	void set_rtgi_samples_per_pixel(int p_samples);
@@ -637,6 +650,7 @@ VARIANT_ENUM_CAST(Environment::ToneMapper)
 VARIANT_ENUM_CAST(Environment::SDFGIYScale)
 VARIANT_ENUM_CAST(Environment::RTGIBackend)
 VARIANT_ENUM_CAST(Environment::RTGIMode)
+VARIANT_ENUM_CAST(Environment::RTGIQualityPreset)
 VARIANT_ENUM_CAST(Environment::RTGIDenoiser)
 VARIANT_ENUM_CAST(Environment::GlowBlendMode)
 VARIANT_ENUM_CAST(Environment::PathtracingDebugMode)

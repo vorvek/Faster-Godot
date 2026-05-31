@@ -5269,7 +5269,31 @@
 		<constant name="VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME" value="2" enum="ViewportRenderInfo">
 			Number of draw calls during this frame.
 		</constant>
-		<constant name="VIEWPORT_RENDER_INFO_MAX" value="3" enum="ViewportRenderInfo">
+		<constant name="VIEWPORT_RENDER_INFO_RT_TLAS_INSTANCES" value="3" enum="ViewportRenderInfo">
+			Number of ray tracing TLAS instances submitted during this frame.
+		</constant>
+		<constant name="VIEWPORT_RENDER_INFO_RT_BLAS_BUILDS" value="4" enum="ViewportRenderInfo">
+			Number of ray tracing BLAS builds submitted during this frame.
+		</constant>
+		<constant name="VIEWPORT_RENDER_INFO_RT_BLAS_REFITS" value="5" enum="ViewportRenderInfo">
+			Number of ray tracing BLAS refits submitted during this frame.
+		</constant>
+		<constant name="VIEWPORT_RENDER_INFO_RT_TRIANGLES_BUILT" value="6" enum="ViewportRenderInfo">
+			Number of triangles included in ray tracing BLAS builds during this frame.
+		</constant>
+		<constant name="VIEWPORT_RENDER_INFO_RT_TRIANGLES_REFIT" value="7" enum="ViewportRenderInfo">
+			Number of triangles included in ray tracing BLAS refits during this frame.
+		</constant>
+		<constant name="VIEWPORT_RENDER_INFO_RTGI_RECONSTRUCTED_COPY_COUNT" value="8" enum="ViewportRenderInfo">
+			Number of RTGI output copies that used reconstructed full-resolution radiance during this frame.
+		</constant>
+		<constant name="VIEWPORT_RENDER_INFO_RTGI_RAW_FALLBACK_COPY_COUNT" value="9" enum="ViewportRenderInfo">
+			Number of RTGI output copies that fell back to raw ray tracing texture copy or scaling during this frame.
+		</constant>
+		<constant name="VIEWPORT_RENDER_INFO_RTGI_RECONSTRUCTION_GUIDE_QUALITY" value="10" enum="ViewportRenderInfo">
+			RTGI reconstruction guide quality for this frame: 0 for none, 1 for depth, 2 for depth plus normal/roughness, 3 for depth plus normal/roughness plus material guides.
+		</constant>
+		<constant name="VIEWPORT_RENDER_INFO_MAX" value="11" enum="ViewportRenderInfo">
 			Represents the size of the [enum ViewportRenderInfo] enum.
 		</constant>
 		<constant name="VIEWPORT_RENDER_INFO_TYPE_VISIBLE" value="0" enum="ViewportRenderInfoType">

@@ -170,19 +170,32 @@ public:
 			const StringName &p_intermediate_texture,
 			const StringName &p_reactivity_context,
 			const StringName &p_reactivity_texture,
+			const StringName &p_signal_confidence_context,
+			const StringName &p_signal_confidence_texture,
+			const StringName &p_guide_mismatch_context,
+			const StringName &p_guide_mismatch_texture,
+			const StringName &p_fill_source_context,
+			const StringName &p_fill_source_texture,
 			const Vector<StringName> &p_denoise_scopes,
 			RID p_taa_reactivity,
 			RID p_signal_confidence,
+			RID p_cache_fill_radiance,
+			RID p_cache_fill_signal_confidence,
 			RID p_source_depth,
 			RID p_source_normal_roughness,
+			RID p_source_albedo_metalness,
+			RID p_source_viewz_hitdist,
 			RID p_target_depth,
 			RID p_target_normal_roughness,
+			RID p_target_albedo,
 			RID p_target_normal,
 			RID p_target_orm,
 			const Vector2i &p_source_visible_origin,
 			const Size2i &p_source_visible_size,
+			const Vector2 &p_source_jitter,
 			const Size2i &p_output_size,
 			bool p_use_target_guides,
+			bool p_diffuse_irradiance_reconstruction,
 			uint32_t p_view = 0);
 
 	void reconstruct_history(Ref<RenderSceneBuffersRD> p_render_buffers,
@@ -192,6 +205,7 @@ public:
 			const StringName &p_output_history_id_texture,
 			const Vector2i &p_source_visible_origin,
 			const Size2i &p_source_visible_size,
+			const Vector2 &p_source_jitter,
 			const Size2i &p_output_size,
 			uint32_t p_view = 0);
 
@@ -240,10 +254,10 @@ private:
 		float history_clip_sigma;
 		float diagnostic_scope_count;
 		float target_material_guide_enabled;
-		float pad0;
-		float pad1;
-		float pad2;
-		float pad3;
+		float source_jitter_x;
+		float source_jitter_y;
+		float diffuse_irradiance_reconstruction;
+		float cache_fill_enabled;
 		float pad4;
 		float pad5;
 	};
@@ -263,7 +277,7 @@ private:
 	void _dispatch_signal_decomposition_composite(const PushConstant &p_push_constant, RID p_direct, RID p_emissive, RID p_indirect, RID p_sky, RID p_specular, RID p_diffuse, RID p_velocity, RID p_normal_roughness, RID p_albedo_metalness, RID p_specular_guide, RID p_output);
 	void _dispatch_volumetric_fog(const PushConstant &p_push_constant, RID p_color, RID p_viewz_hitdist, RID p_fog_map);
 	void _dispatch_taa_reactivity(const PushConstant &p_push_constant, RID p_velocity, RID p_history_validity, const RID *p_variance, const RID *p_history_length, const RID *p_rejection, const RID *p_reactivity, RID p_output);
-	void _dispatch_reconstruct(Mode p_mode, const PushConstant &p_push_constant, RID p_source, RID p_source_depth, RID p_source_normal_roughness, RID p_target_depth, RID p_target_normal_roughness, RID p_target_normal, RID p_target_orm, RID p_taa_reactivity, RID p_signal_confidence, const RID *p_variance, const RID *p_history_length, const RID *p_rejection, const RID *p_reactivity, RID p_output, RID p_reactivity_output);
+	void _dispatch_reconstruct(Mode p_mode, const PushConstant &p_push_constant, RID p_source, RID p_source_depth, RID p_source_normal_roughness, RID p_source_albedo_metalness, RID p_source_viewz_hitdist, RID p_target_depth, RID p_target_normal_roughness, RID p_target_albedo, RID p_target_normal, RID p_target_orm, RID p_taa_reactivity, RID p_signal_confidence, RID p_cache_fill_radiance, RID p_cache_fill_signal_confidence, const RID *p_variance, const RID *p_history_length, const RID *p_rejection, const RID *p_reactivity, RID p_output, RID p_reactivity_output, RID p_signal_confidence_output, RID p_guide_mismatch_output, RID p_fill_source_output);
 	void _dispatch_reconstruct_history(const PushConstant &p_push_constant, RID p_source_history_validity, RID p_source_history_id, RID p_output_history_validity, RID p_output_history_id);
 };
 

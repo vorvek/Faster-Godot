@@ -36,10 +36,11 @@ global_shader_uniforms;
 layout(set = 0, binding = 6, std140) uniform RaytracingParams {
 	vec4 rt_params[10];
 	mat4 prev_vp_unjittered;
-	mat4 curr_vp_unjittered;
-	mat4 inv_projection_unjittered;
-	vec4 rt_view_rect;
-	vec4 rt_prev_view_rect;
+mat4 curr_vp_unjittered;
+mat4 inv_projection_unjittered;
+vec4 rt_view_rect;
+vec4 rt_prev_view_rect;
+vec4 rt_jitter;
 };
 
 float get_rt_param(uint idx) {
@@ -145,8 +146,16 @@ vec2 rt_previous_origin() {
 	return rt_prev_view_rect.xy;
 }
 
+vec2 rt_reconstruction_jitter_pixels() {
+	return rt_jitter.xy;
+}
+
+vec2 rt_raygen_jitter_pixels() {
+	return rt_jitter.zw;
+}
+
 vec2 rt_current_visible_uv(ivec2 pixel) {
-	return (vec2(pixel) + vec2(0.5) - rt_current_origin()) / rt_visible_size();
+	return (vec2(pixel) + vec2(0.5) - rt_current_origin() + rt_raygen_jitter_pixels()) / rt_visible_size();
 }
 
 vec2 rt_visible_to_texture_uv(vec2 visible_uv, vec2 origin) {
