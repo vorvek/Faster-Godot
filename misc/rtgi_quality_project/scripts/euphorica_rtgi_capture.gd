@@ -2281,8 +2281,6 @@ func _scaling_3d_mode_name(mode: int) -> String:
 			return "bicubic"
 		Viewport.SCALING_3D_MODE_SGSR:
 			return "sgsr"
-		Viewport.SCALING_3D_MODE_DLSS:
-			return "dlss"
 		_:
 			return "unknown_%d" % mode
 
