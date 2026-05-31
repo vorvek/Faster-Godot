@@ -81,9 +81,6 @@ bool EditorSettings::_set(const StringName &p_name, const Variant &p_value) {
 		}
 		emit_signal(SNAME("settings_changed"));
 
-		if (p_name == SNAME("interface/editor/editor_language")) {
-			setup_language(false);
-		}
 	}
 	return true;
 }
@@ -1906,8 +1903,8 @@ float EditorSettings::get_auto_display_scale() {
 }
 
 String EditorSettings::get_language() const {
-	const String language = has_setting("interface/editor/editor_language") ? get("interface/editor/editor_language") : "auto";
-	if (language != "auto") {
+	const String language = has_setting("interface/editor/editor_language") ? get_setting("interface/editor/editor_language") : "auto";
+	if (language != "auto" && !language.is_empty()) {
 		return language;
 	}
 
@@ -2237,6 +2234,10 @@ void EditorSettings::notify_changes() {
 		return;
 	}
 	root->propagate_notification(NOTIFICATION_EDITOR_SETTINGS_CHANGED);
+
+	if (check_changed_settings_in_group("interface/editor/editor_language")) {
+		setup_language(false);
+	}
 }
 
 void EditorSettings::get_argument_options(const StringName &p_function, int p_idx, List<String> *r_options) const {

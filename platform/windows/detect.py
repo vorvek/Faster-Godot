@@ -172,7 +172,7 @@ def check_mssdk_version(env, version, msvc_ver):
         print_error(f"Specified Windows SDK version {mssdk} is not installed, installed versions are: {mssdk_list}.")
         sys.exit(255)
 
-    if env["winrt"]:
+    if env.get("winrt", False):
         if msvc_ver == "14.2":  # Visual Studio 2019, force supported SDK.
             if "10.0.22621.0" in mssdk_list:
                 mssdk = "10.0.22621.0"
