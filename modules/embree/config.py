@@ -29,7 +29,3 @@ def configure(env):
         env.Append(CPPPATH=["thirdparty/embree/include"])
         env.Append(CPPDEFINES=["RTGI_EMBREE_OSPRAY_SDK_HEADERS_PRESENT"])
 
-    fidelityfx_path = env.get("fidelityfx_sdk_path", "")
-    if fidelityfx_path and os.path.isdir(fidelityfx_path):
-        env.Append(CPPPATH=[os.path.join(fidelityfx_path, "include")])
-        env.Append(CPPDEFINES=["RTGI_FIDELITYFX_SDK_HEADERS_PRESENT"])

@@ -170,14 +170,8 @@ static const char *_rtgi_denoiser_name(uint32_t p_denoiser) {
 			return "ASVFG";
 		case RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION:
 			return "Internal Signal Decomposition";
-		case RSE::PT_DENOISER_FIDELITYFX:
-			return "FidelityFX";
 		case RSE::PT_DENOISER_NVIDIA:
 			return "NVIDIA";
-		case RSE::PT_DENOISER_AMD:
-			return "AMD";
-		case RSE::PT_DENOISER_INTEL:
-			return "Intel";
 		default:
 			return "Unknown";
 	}
@@ -209,10 +203,6 @@ static uint32_t _rtgi_classify_reconstruction_guide_quality(bool p_has_depth, bo
 		return RenderForwardClustered::RenderBufferDataForwardClustered::RTGI_RECONSTRUCTION_GUIDE_QUALITY_DEPTH_NORMAL_ROUGHNESS;
 	}
 	return RenderForwardClustered::RenderBufferDataForwardClustered::RTGI_RECONSTRUCTION_GUIDE_QUALITY_DEPTH;
-}
-
-static bool _rtgi_denoiser_is_legacy_signal_decomposition_request(uint32_t p_denoiser) {
-	return p_denoiser == RSE::PT_DENOISER_FIDELITYFX || p_denoiser == RSE::PT_DENOISER_AMD || p_denoiser == RSE::PT_DENOISER_INTEL;
 }
 
 static bool _rt_camera_history_cut_detected(const RenderDataRD *p_render_data) {
@@ -3052,11 +3042,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	bool rt_path_tracing_fullres_guides = rt_replaces_opaque && rb_data.is_valid() && rt_resolution_scale_requested < 0.999f && !is_reflection_probe;
 	if (scene_features.rt && rt_denoiser == RSE::PT_DENOISER_NVIDIA) {
 		WARN_PRINT_ONCE(vformat("RTGI denoiser '%s' is not available in the Vulkan renderer yet. Falling back to ASVFG for this viewport without changing the Environment resource.", _rtgi_denoiser_name(rt_denoiser)));
-	} else if (scene_features.rt && _rtgi_denoiser_is_legacy_signal_decomposition_request(rt_denoiser)) {
-		WARN_PRINT_ONCE(vformat("RTGI denoiser '%s' is a legacy external/vendor selection. No external denoiser backend is invoked; using Internal Signal Decomposition for this viewport.", _rtgi_denoiser_name(rt_denoiser)));
 	}
 	const bool rt_asvfg_denoiser = rt_denoiser == RSE::PT_DENOISER_INTERNAL || rt_denoiser == RSE::PT_DENOISER_NVIDIA;
-	const bool rt_signal_decomposition_denoiser = rt_denoiser == RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION || _rtgi_denoiser_is_legacy_signal_decomposition_request(rt_denoiser);
+	const bool rt_signal_decomposition_denoiser = rt_denoiser == RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
 	const bool rt_temporal_denoiser = rt_asvfg_denoiser || rt_signal_decomposition_denoiser;
 
 	static const int texture_multisamples[RSE::VIEWPORT_MSAA_MAX] = { 1, 2, 4, 8 };

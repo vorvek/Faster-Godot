@@ -836,12 +836,11 @@ enum PathtracingDenoiser {
 	PT_DENOISER_NONE = 0,
 	PT_DENOISER_RESERVED_1 = 1,
 	PT_DENOISER_INTERNAL = 2,
-	// Legacy external/vendor request values kept for old scenes and scripts.
-	PT_DENOISER_FIDELITYFX = 3,
+	PT_DENOISER_RESERVED_3 = 3,
 	PT_DENOISER_RESERVED_4 = 4,
 	PT_DENOISER_NVIDIA = 5,
-	PT_DENOISER_AMD = 6,
-	PT_DENOISER_INTEL = 7,
+	PT_DENOISER_RESERVED_6 = 6,
+	PT_DENOISER_RESERVED_7 = 7,
 	// Internal multi-signal denoise and recomposition path.
 	PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION = 8,
 };

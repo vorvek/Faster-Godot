@@ -361,14 +361,6 @@ static bool _rtgi_hiprt_sdk_headers_present() {
 #endif
 }
 
-static bool _rtgi_fidelityfx_sdk_headers_present() {
-#if defined(RTGI_FIDELITYFX_SDK_HEADERS_PRESENT)
-	return true;
-#else
-	return false;
-#endif
-}
-
 static bool _rtgi_embree_sdk_headers_present() {
 #if (defined(MODULE_EMBREE_ENABLED) || defined(MODULE_OSPRAY_ENABLED) || defined(MODULE_RAYCAST_ENABLED)) && defined(RTGI_EMBREE_OSPRAY_SDK_HEADERS_PRESENT)
 	return true;
@@ -905,10 +897,10 @@ static bool _rtgi_probe_vendor_denoiser_runtime(RSE::PathtracingBackend p_backen
 				*r_denoiser_name = "NVIDIA NRD";
 				break;
 			case RSE::PT_BACKEND_AMD_HIP_RT:
-				*r_denoiser_name = "AMD FidelityFX Denoiser";
+				*r_denoiser_name = "AMD HIP RT Denoiser";
 				break;
 			case RSE::PT_BACKEND_INTEL_EMBREE:
-				*r_denoiser_name = "AMD FidelityFX Denoiser (cross-vendor)";
+				*r_denoiser_name = "Intel Embree Denoiser";
 				break;
 			case RSE::PT_BACKEND_VULKAN_GENERIC:
 			default:
@@ -949,24 +941,23 @@ static bool _rtgi_probe_vendor_denoiser_runtime(RSE::PathtracingBackend p_backen
 		}
 		case RSE::PT_BACKEND_AMD_HIP_RT: {
 #ifdef MODULE_HIPRT_ENABLED
-			const bool detected = _rtgi_fidelityfx_sdk_headers_present();
-			if (!detected && r_failure_reason != nullptr) {
-				*r_failure_reason = "AMD denoiser support requires FidelityFX SDK headers to be configured for this build.";
-			}
-			return detected;
+			return true;
 #else
 			if (r_failure_reason != nullptr) {
-				*r_failure_reason = "AMD denoiser support is not compiled in because the HIP RT module is disabled.";
+				*r_failure_reason = "AMD HIP RT denoiser support is not compiled in because the HIP RT module is disabled.";
 			}
 			return false;
 #endif
 		}
 		case RSE::PT_BACKEND_INTEL_EMBREE: {
-			const bool detected = _rtgi_fidelityfx_sdk_headers_present();
-			if (!detected && r_failure_reason != nullptr) {
-				*r_failure_reason = "Intel denoiser support uses the cross-vendor FidelityFX Denoiser path and requires FidelityFX SDK headers to be configured for this build.";
+#if defined(MODULE_EMBREE_ENABLED) || defined(MODULE_OSPRAY_ENABLED) || defined(MODULE_RAYCAST_ENABLED)
+			return true;
+#else
+			if (r_failure_reason != nullptr) {
+				*r_failure_reason = "Intel Embree denoiser support is not compiled in because the Embree module is disabled.";
 			}
-			return detected;
+			return false;
+#endif
 		}
 		case RSE::PT_BACKEND_VULKAN_GENERIC:
 		default:
@@ -983,17 +974,9 @@ static bool _rtgi_vendor_denoiser_handoff_ready(RSE::PathtracingBackend p_backen
 			return false;
 #endif
 		case RSE::PT_BACKEND_AMD_HIP_RT:
-#if defined(RTGI_FIDELITYFX_DENOISER_HANDOFF_ENABLED)
-			return true;
-#else
 			return false;
-#endif
 		case RSE::PT_BACKEND_INTEL_EMBREE:
-#if defined(RTGI_FIDELITYFX_DENOISER_HANDOFF_ENABLED)
-			return true;
-#else
 			return false;
-#endif
 		case RSE::PT_BACKEND_VULKAN_GENERIC:
 		default:
 			return true;

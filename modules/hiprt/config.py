@@ -83,7 +83,3 @@ def configure(env):
                 defines.append("RTGI_HIPRT_BACKEND_IMPLEMENTED")
         env.Append(CPPDEFINES=defines)
 
-    fidelityfx_path = env.get("fidelityfx_sdk_path", "")
-    if fidelityfx_path and os.path.isdir(fidelityfx_path):
-        env.Append(CPPPATH=[os.path.join(fidelityfx_path, "include")])
-        env.Append(CPPDEFINES=["RTGI_FIDELITYFX_SDK_HEADERS_PRESENT"])

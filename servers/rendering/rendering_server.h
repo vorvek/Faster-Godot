@@ -780,11 +780,8 @@ public:
 	static constexpr PathtracingDenoiser PT_DENOISER_NONE = RSE::PT_DENOISER_NONE;
 	static constexpr PathtracingDenoiser PT_DENOISER_RESERVED_1 = RSE::PT_DENOISER_RESERVED_1;
 	static constexpr PathtracingDenoiser PT_DENOISER_INTERNAL = RSE::PT_DENOISER_INTERNAL;
-	static constexpr PathtracingDenoiser PT_DENOISER_FIDELITYFX = RSE::PT_DENOISER_FIDELITYFX;
 	static constexpr PathtracingDenoiser PT_DENOISER_RESERVED_4 = RSE::PT_DENOISER_RESERVED_4;
 	static constexpr PathtracingDenoiser PT_DENOISER_NVIDIA = RSE::PT_DENOISER_NVIDIA;
-	static constexpr PathtracingDenoiser PT_DENOISER_AMD = RSE::PT_DENOISER_AMD;
-	static constexpr PathtracingDenoiser PT_DENOISER_INTEL = RSE::PT_DENOISER_INTEL;
 	static constexpr PathtracingDenoiser PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
 
 	using PathtracingBackend = RSE::PathtracingBackend;
