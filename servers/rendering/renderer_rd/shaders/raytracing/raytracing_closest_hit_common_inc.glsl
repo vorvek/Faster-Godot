@@ -274,9 +274,7 @@ void write_primary_hit_velocity(vec3 hit_pos) {
 // RTGI GUIDE WRITES (primary ray only)
 // ============================================================================
 
-#ifdef RT_STAGE_CLOSEST_HIT
 // rtgi_trace_specular_reflected_hit removed (deferred to raygen)
-#endif
 
 uint rtgi_surface_cache_key(HitData h, MaterialResult m, out uint zero_reason) {
 	zero_reason = RTGI_SURFACE_KEY_REASON_VALID;
@@ -376,7 +374,6 @@ void write_primary_hit_guides(HitData h, MaterialResult m) {
 	}
 	rt_signal_set_primary_confidence(pixel, specular_risk, float(geom_idx & 1023u) / 1023.0, 1.0);
 }
-#endif
 
 uint rtgi_primary_surface_rng_seed(HitData h, MaterialResult m, uint frame_index) {
 	GeometryData geom = geometries[h.geometry_idx];
