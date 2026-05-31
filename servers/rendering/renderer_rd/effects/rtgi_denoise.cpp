@@ -20,6 +20,14 @@ static constexpr uint32_t RTGI_RECONSTRUCT_DIAGNOSTIC_BINDING = 8;
 static constexpr uint32_t RTGI_RECONSTRUCT_OUTPUT_BINDING = 7;
 static constexpr uint32_t RTGI_RECONSTRUCT_REACTIVITY_OUTPUT_BINDING = RTGI_RECONSTRUCT_DIAGNOSTIC_BINDING + RTGI_RECONSTRUCT_SCOPE_COUNT * 4;
 static constexpr uint32_t RTGI_RECONSTRUCT_MATERIAL_BINDING = RTGI_RECONSTRUCT_REACTIVITY_OUTPUT_BINDING + 1;
+static constexpr uint32_t RTGI_RECONSTRUCT_SIGNAL_CONFIDENCE_OUTPUT_BINDING = RTGI_RECONSTRUCT_MATERIAL_BINDING + 2;
+static constexpr uint32_t RTGI_RECONSTRUCT_GUIDE_MISMATCH_OUTPUT_BINDING = RTGI_RECONSTRUCT_SIGNAL_CONFIDENCE_OUTPUT_BINDING + 1;
+static constexpr uint32_t RTGI_RECONSTRUCT_FILL_SOURCE_OUTPUT_BINDING = RTGI_RECONSTRUCT_GUIDE_MISMATCH_OUTPUT_BINDING + 1;
+static constexpr uint32_t RTGI_RECONSTRUCT_TARGET_ALBEDO_BINDING = RTGI_RECONSTRUCT_FILL_SOURCE_OUTPUT_BINDING + 1;
+static constexpr uint32_t RTGI_RECONSTRUCT_SOURCE_ALBEDO_BINDING = RTGI_RECONSTRUCT_TARGET_ALBEDO_BINDING + 1;
+static constexpr uint32_t RTGI_RECONSTRUCT_SOURCE_VIEWZ_BINDING = RTGI_RECONSTRUCT_SOURCE_ALBEDO_BINDING + 1;
+static constexpr uint32_t RTGI_RECONSTRUCT_CACHE_RADIANCE_BINDING = RTGI_RECONSTRUCT_SOURCE_VIEWZ_BINDING + 1;
+static constexpr uint32_t RTGI_RECONSTRUCT_CACHE_SIGNAL_CONFIDENCE_BINDING = RTGI_RECONSTRUCT_CACHE_RADIANCE_BINDING + 1;
 
 RTGIDenoise::RTGIDenoise() {
 	Vector<String> modes;
@@ -104,7 +112,7 @@ bool RTGIDenoise::_ensure_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, co
 	return true;
 }
 
-void RTGIDenoise::_dispatch_reconstruct(Mode p_mode, const PushConstant &p_push_constant, RID p_source, RID p_source_depth, RID p_source_normal_roughness, RID p_target_depth, RID p_target_normal_roughness, RID p_target_normal, RID p_target_orm, RID p_taa_reactivity, RID p_signal_confidence, const RID *p_variance, const RID *p_history_length, const RID *p_rejection, const RID *p_reactivity, RID p_output, RID p_reactivity_output) {
+void RTGIDenoise::_dispatch_reconstruct(Mode p_mode, const PushConstant &p_push_constant, RID p_source, RID p_source_depth, RID p_source_normal_roughness, RID p_source_albedo_metalness, RID p_source_viewz_hitdist, RID p_target_depth, RID p_target_normal_roughness, RID p_target_albedo, RID p_target_normal, RID p_target_orm, RID p_taa_reactivity, RID p_signal_confidence, RID p_cache_fill_radiance, RID p_cache_fill_signal_confidence, const RID *p_variance, const RID *p_history_length, const RID *p_rejection, const RID *p_reactivity, RID p_output, RID p_reactivity_output, RID p_signal_confidence_output, RID p_guide_mismatch_output, RID p_fill_source_output) {
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
@@ -132,6 +140,14 @@ void RTGIDenoise::_dispatch_reconstruct(Mode p_mode, const PushConstant &p_push_
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, RTGI_RECONSTRUCT_REACTIVITY_OUTPUT_BINDING, p_reactivity_output));
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, RTGI_RECONSTRUCT_MATERIAL_BINDING + 0, Vector<RID>({ nearest_sampler, p_target_normal })));
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, RTGI_RECONSTRUCT_MATERIAL_BINDING + 1, Vector<RID>({ nearest_sampler, p_target_orm })));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, RTGI_RECONSTRUCT_SIGNAL_CONFIDENCE_OUTPUT_BINDING, p_signal_confidence_output));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, RTGI_RECONSTRUCT_GUIDE_MISMATCH_OUTPUT_BINDING, p_guide_mismatch_output));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, RTGI_RECONSTRUCT_FILL_SOURCE_OUTPUT_BINDING, p_fill_source_output));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, RTGI_RECONSTRUCT_TARGET_ALBEDO_BINDING, Vector<RID>({ nearest_sampler, p_target_albedo })));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, RTGI_RECONSTRUCT_SOURCE_ALBEDO_BINDING, Vector<RID>({ nearest_sampler, p_source_albedo_metalness })));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, RTGI_RECONSTRUCT_SOURCE_VIEWZ_BINDING, Vector<RID>({ nearest_sampler, p_source_viewz_hitdist })));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, RTGI_RECONSTRUCT_CACHE_RADIANCE_BINDING, Vector<RID>({ nearest_sampler, p_cache_fill_radiance })));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, RTGI_RECONSTRUCT_CACHE_SIGNAL_CONFIDENCE_BINDING, Vector<RID>({ nearest_sampler, p_cache_fill_signal_confidence })));
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[p_mode]);
@@ -666,19 +682,32 @@ void RTGIDenoise::reconstruct(Ref<RenderSceneBuffersRD> p_render_buffers,
 		const StringName &p_intermediate_texture,
 		const StringName &p_reactivity_context,
 		const StringName &p_reactivity_texture,
+		const StringName &p_signal_confidence_context,
+		const StringName &p_signal_confidence_texture,
+		const StringName &p_guide_mismatch_context,
+		const StringName &p_guide_mismatch_texture,
+		const StringName &p_fill_source_context,
+		const StringName &p_fill_source_texture,
 		const Vector<StringName> &p_denoise_scopes,
 		RID p_taa_reactivity,
 		RID p_signal_confidence,
+		RID p_cache_fill_radiance,
+		RID p_cache_fill_signal_confidence,
 		RID p_source_depth,
 		RID p_source_normal_roughness,
+		RID p_source_albedo_metalness,
+		RID p_source_viewz_hitdist,
 		RID p_target_depth,
 		RID p_target_normal_roughness,
+		RID p_target_albedo,
 		RID p_target_normal,
 		RID p_target_orm,
 		const Vector2i &p_source_visible_origin,
 		const Size2i &p_source_visible_size,
+		const Vector2 &p_source_jitter,
 		const Size2i &p_output_size,
 		bool p_use_target_guides,
+		bool p_diffuse_irradiance_reconstruction,
 		uint32_t p_view) {
 	ERR_FAIL_COND(p_render_buffers.is_null());
 	ERR_FAIL_COND(p_source_visible_size.x <= 0 || p_source_visible_size.y <= 0);
@@ -687,15 +716,21 @@ void RTGIDenoise::reconstruct(Ref<RenderSceneBuffersRD> p_render_buffers,
 	ERR_FAIL_COND(!p_render_buffers->has_texture(p_output_context, p_output_texture));
 	ERR_FAIL_COND(!p_render_buffers->has_texture(p_intermediate_context, p_intermediate_texture));
 	ERR_FAIL_COND(!p_render_buffers->has_texture(p_reactivity_context, p_reactivity_texture));
-	ERR_FAIL_COND(!p_source_depth.is_valid() || !p_source_normal_roughness.is_valid());
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_signal_confidence_context, p_signal_confidence_texture));
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_guide_mismatch_context, p_guide_mismatch_texture));
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_fill_source_context, p_fill_source_texture));
+	ERR_FAIL_COND(!p_source_depth.is_valid() || !p_source_normal_roughness.is_valid() || !p_source_albedo_metalness.is_valid() || !p_source_viewz_hitdist.is_valid());
 	ERR_FAIL_UNSIGNED_INDEX(p_view, p_render_buffers->get_view_count());
 
-	const bool use_target_material_guides = p_target_normal.is_valid() && p_target_orm.is_valid();
+	const bool use_target_material_guides = p_target_albedo.is_valid() && p_target_normal.is_valid() && p_target_orm.is_valid();
 	const bool use_target_guides = p_use_target_guides && p_target_depth.is_valid() && (p_target_normal_roughness.is_valid() || use_target_material_guides);
 	RID source = p_render_buffers->get_texture_slice(p_source_context, p_source_texture, p_view, 0);
 	RID output = p_render_buffers->get_texture_slice(p_output_context, p_output_texture, p_view, 0);
 	RID intermediate = p_render_buffers->get_texture_slice(p_intermediate_context, p_intermediate_texture, p_view, 0);
 	RID reactivity_output = p_render_buffers->get_texture_slice(p_reactivity_context, p_reactivity_texture, p_view, 0);
+	RID signal_confidence_output = p_render_buffers->get_texture_slice(p_signal_confidence_context, p_signal_confidence_texture, p_view, 0);
+	RID guide_mismatch_output = p_render_buffers->get_texture_slice(p_guide_mismatch_context, p_guide_mismatch_texture, p_view, 0);
+	RID fill_source_output = p_render_buffers->get_texture_slice(p_fill_source_context, p_fill_source_texture, p_view, 0);
 
 	TextureStorage *texture_storage = TextureStorage::get_singleton();
 	ERR_FAIL_NULL(texture_storage);
@@ -735,8 +770,12 @@ void RTGIDenoise::reconstruct(Ref<RenderSceneBuffersRD> p_render_buffers,
 
 	RID taa_reactivity = p_taa_reactivity.is_valid() ? p_taa_reactivity : black;
 	RID signal_confidence = p_signal_confidence.is_valid() ? p_signal_confidence : black;
+	const bool use_cache_fill = p_cache_fill_radiance.is_valid() && p_cache_fill_signal_confidence.is_valid();
+	RID cache_fill_radiance = use_cache_fill ? p_cache_fill_radiance : black;
+	RID cache_fill_signal_confidence = use_cache_fill ? p_cache_fill_signal_confidence : black;
 	RID target_depth = use_target_guides ? p_target_depth : p_source_depth;
 	RID target_normal_roughness = use_target_guides && p_target_normal_roughness.is_valid() ? p_target_normal_roughness : p_source_normal_roughness;
+	RID target_albedo = use_target_material_guides ? p_target_albedo : white;
 	RID target_normal = use_target_material_guides ? p_target_normal : texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_NORMAL);
 	RID target_orm = use_target_material_guides ? p_target_orm : white;
 
@@ -751,9 +790,13 @@ void RTGIDenoise::reconstruct(Ref<RenderSceneBuffersRD> p_render_buffers,
 	push_constant.specular_guide_enabled = use_target_guides ? 1.0f : 0.0f;
 	push_constant.diagnostic_scope_count = (float)valid_scope_count;
 	push_constant.target_material_guide_enabled = use_target_material_guides ? 1.0f : 0.0f;
+	push_constant.source_jitter_x = p_source_jitter.x;
+	push_constant.source_jitter_y = p_source_jitter.y;
+	push_constant.diffuse_irradiance_reconstruction = p_diffuse_irradiance_reconstruction ? 1.0f : 0.0f;
+	push_constant.cache_fill_enabled = use_cache_fill ? 1.0f : 0.0f;
 
-	_dispatch_reconstruct(MODE_RECONSTRUCT, push_constant, source, p_source_depth, p_source_normal_roughness, target_depth, target_normal_roughness, target_normal, target_orm, taa_reactivity, signal_confidence, variance, history_length, rejection, reactivity, intermediate, reactivity_output);
-	_dispatch_reconstruct(MODE_RECONSTRUCT_REFINE, push_constant, intermediate, p_source_depth, p_source_normal_roughness, target_depth, target_normal_roughness, target_normal, target_orm, taa_reactivity, signal_confidence, variance, history_length, rejection, reactivity, output, reactivity_output);
+	_dispatch_reconstruct(MODE_RECONSTRUCT, push_constant, source, p_source_depth, p_source_normal_roughness, p_source_albedo_metalness, p_source_viewz_hitdist, target_depth, target_normal_roughness, target_albedo, target_normal, target_orm, taa_reactivity, signal_confidence, cache_fill_radiance, cache_fill_signal_confidence, variance, history_length, rejection, reactivity, intermediate, reactivity_output, signal_confidence_output, guide_mismatch_output, fill_source_output);
+	_dispatch_reconstruct(MODE_RECONSTRUCT_REFINE, push_constant, intermediate, p_source_depth, p_source_normal_roughness, p_source_albedo_metalness, p_source_viewz_hitdist, target_depth, target_normal_roughness, target_albedo, target_normal, target_orm, taa_reactivity, signal_confidence, cache_fill_radiance, cache_fill_signal_confidence, variance, history_length, rejection, reactivity, output, reactivity_output, signal_confidence_output, guide_mismatch_output, fill_source_output);
 }
 
 void RTGIDenoise::reconstruct_history(Ref<RenderSceneBuffersRD> p_render_buffers,
@@ -763,6 +806,7 @@ void RTGIDenoise::reconstruct_history(Ref<RenderSceneBuffersRD> p_render_buffers
 		const StringName &p_output_history_id_texture,
 		const Vector2i &p_source_visible_origin,
 		const Size2i &p_source_visible_size,
+		const Vector2 &p_source_jitter,
 		const Size2i &p_output_size,
 		uint32_t p_view) {
 	ERR_FAIL_COND(p_render_buffers.is_null());
@@ -785,6 +829,8 @@ void RTGIDenoise::reconstruct_history(Ref<RenderSceneBuffersRD> p_render_buffers
 	push_constant.visible_origin_height = (float)p_source_visible_origin.y;
 	push_constant.visible_size_width = (float)p_source_visible_size.x;
 	push_constant.visible_size_height = (float)p_source_visible_size.y;
+	push_constant.source_jitter_x = p_source_jitter.x;
+	push_constant.source_jitter_y = p_source_jitter.y;
 
 	_dispatch_reconstruct_history(push_constant, p_source_history_validity, p_source_history_id, output_history_validity, output_history_id);
 }

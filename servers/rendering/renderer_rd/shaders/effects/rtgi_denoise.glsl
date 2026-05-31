@@ -34,10 +34,10 @@ layout(push_constant, std430) uniform Params {
 	float history_clip_sigma;
 	float diagnostic_scope_count;
 	float target_material_guide_enabled;
-	float pad0;
-	float pad1;
-	float pad2;
-	float pad3;
+	float source_jitter_x;
+	float source_jitter_y;
+	float diffuse_irradiance_reconstruction;
+	float cache_fill_enabled;
 	float pad4;
 	float pad5;
 }
@@ -110,6 +110,14 @@ float guide_active(vec4 guide) {
 float guide_specular_risk(vec4 guide, vec4 normal_roughness, vec4 albedo_metalness) {
 	float material_risk = max(1.0 - clamp(normal_roughness.a, 0.0, 1.0), clamp(albedo_metalness.a, 0.0, 1.0));
 	return max(material_risk, guide_active(guide) * clamp(guide.z, 0.0, 1.0));
+}
+
+vec2 reconstruction_source_coord(vec2 output_uv) {
+	return params.visible_origin + output_uv * params.visible_size - vec2(0.5) - vec2(params.source_jitter_x, params.source_jitter_y);
+}
+
+bool reconstruct_diffuse_irradiance() {
+	return params.diffuse_irradiance_reconstruction > 0.5;
 }
 
 float diffuse_demodulation_weight(vec4 normal_roughness, vec4 albedo_metalness, float view_z) {
@@ -202,6 +210,14 @@ layout(set = 0, binding = 31) uniform sampler2D reconstruct_reactivity_buffer_5;
 layout(r8, set = 0, binding = 32) uniform restrict writeonly image2D reconstruction_reactivity_out;
 layout(set = 0, binding = 33) uniform sampler2D target_normal_buffer;
 layout(set = 0, binding = 34) uniform sampler2D target_orm_buffer;
+layout(r8, set = 0, binding = 35) uniform restrict writeonly image2D reconstruction_signal_confidence_out;
+layout(r8, set = 0, binding = 36) uniform restrict writeonly image2D reconstruction_guide_mismatch_out;
+layout(rgba8, set = 0, binding = 37) uniform restrict writeonly image2D reconstruction_fill_source_out;
+layout(set = 0, binding = 38) uniform sampler2D target_albedo_buffer;
+layout(set = 0, binding = 39) uniform sampler2D source_albedo_metalness_buffer;
+layout(set = 0, binding = 40) uniform sampler2D source_viewz_hitdist_buffer;
+layout(set = 0, binding = 41) uniform sampler2D reconstruct_cache_radiance_buffer;
+layout(set = 0, binding = 42) uniform sampler2D reconstruct_cache_signal_confidence_buffer;
 
 float reconstruct_depth_weight(float source_depth, float target_depth, float instability) {
 	if (source_depth <= 0.000001 || target_depth <= 0.000001) {
@@ -291,23 +307,108 @@ float reconstruct_signal_confidence_sample(ivec2 source_size, vec2 source_coord)
 	return mix(mix(v00, v10, f.x), mix(v01, v11, f.x), f.y);
 }
 
+vec3 reconstruct_source_color_at(ivec2 pos) {
+	vec3 color = sanitize_color(texelFetch(source_color_buffer, pos, 0).rgb);
+	if (!reconstruct_diffuse_irradiance()) {
+		return color;
+	}
+	vec4 normal_roughness = texelFetch(source_normal_roughness_buffer, pos, 0);
+	vec4 albedo_metalness = texelFetch(source_albedo_metalness_buffer, pos, 0);
+	float view_z = texelFetch(source_viewz_hitdist_buffer, pos, 0).x;
+	return demodulate_radiance(color, normal_roughness, albedo_metalness, view_z);
+}
+
 vec3 reconstruct_source_bilinear(ivec2 source_size, vec2 source_coord) {
 	ivec2 p0;
 	ivec2 p1;
 	vec2 f;
 	reconstruct_bilinear_points(source_size, source_coord, p0, p1, f);
 
-	vec3 c00 = sanitize_color(texelFetch(source_color_buffer, p0, 0).rgb);
-	vec3 c10 = sanitize_color(texelFetch(source_color_buffer, ivec2(p1.x, p0.y), 0).rgb);
-	vec3 c01 = sanitize_color(texelFetch(source_color_buffer, ivec2(p0.x, p1.y), 0).rgb);
-	vec3 c11 = sanitize_color(texelFetch(source_color_buffer, p1, 0).rgb);
+	vec3 c00 = reconstruct_source_color_at(p0);
+	vec3 c10 = reconstruct_source_color_at(ivec2(p1.x, p0.y));
+	vec3 c01 = reconstruct_source_color_at(ivec2(p0.x, p1.y));
+	vec3 c11 = reconstruct_source_color_at(p1);
 	return mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
+}
+
+vec2 reconstruct_cache_coord(ivec2 source_size, ivec2 cache_size, vec2 source_coord) {
+	return (source_coord + vec2(0.5)) * vec2(cache_size) / vec2(max(source_size, ivec2(1))) - vec2(0.5);
+}
+
+ivec2 reconstruct_cache_source_pos(ivec2 cache_pos, ivec2 source_size, ivec2 cache_size) {
+	vec2 source_coord = (vec2(cache_pos) + vec2(0.5)) * vec2(source_size) / vec2(max(cache_size, ivec2(1))) - vec2(0.5);
+	return clamp(ivec2(round(source_coord)), ivec2(0), source_size - ivec2(1));
+}
+
+vec3 reconstruct_cache_color_at(ivec2 cache_pos, ivec2 source_size, ivec2 cache_size) {
+	vec3 color = sanitize_color(texelFetch(reconstruct_cache_radiance_buffer, cache_pos, 0).rgb);
+	if (!reconstruct_diffuse_irradiance()) {
+		return color;
+	}
+	ivec2 source_pos = reconstruct_cache_source_pos(cache_pos, source_size, cache_size);
+	vec4 normal_roughness = texelFetch(source_normal_roughness_buffer, source_pos, 0);
+	vec4 albedo_metalness = texelFetch(source_albedo_metalness_buffer, source_pos, 0);
+	float view_z = texelFetch(source_viewz_hitdist_buffer, source_pos, 0).x;
+	return demodulate_radiance(color, normal_roughness, albedo_metalness, view_z);
+}
+
+vec3 reconstruct_cache_bilinear(ivec2 source_size, vec2 source_coord) {
+	ivec2 cache_size = textureSize(reconstruct_cache_radiance_buffer, 0);
+	vec2 cache_coord = reconstruct_cache_coord(source_size, cache_size, source_coord);
+	ivec2 p0;
+	ivec2 p1;
+	vec2 f;
+	reconstruct_bilinear_points(cache_size, cache_coord, p0, p1, f);
+
+	vec3 c00 = reconstruct_cache_color_at(p0, source_size, cache_size);
+	vec3 c10 = reconstruct_cache_color_at(ivec2(p1.x, p0.y), source_size, cache_size);
+	vec3 c01 = reconstruct_cache_color_at(ivec2(p0.x, p1.y), source_size, cache_size);
+	vec3 c11 = reconstruct_cache_color_at(p1, source_size, cache_size);
+	return mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
+}
+
+float reconstruct_cache_signal_confidence_at(ivec2 pos) {
+	vec4 signal_confidence = texelFetch(reconstruct_cache_signal_confidence_buffer, pos, 0);
+	float signal_risk = max(signal_confidence.r, signal_confidence.g);
+	return clamp(signal_confidence.a * (1.0 - smoothstep(0.08, 0.65, signal_risk)), 0.0, 1.0);
+}
+
+float reconstruct_cache_signal_confidence_sample(ivec2 source_size, vec2 source_coord) {
+	ivec2 cache_size = textureSize(reconstruct_cache_signal_confidence_buffer, 0);
+	vec2 cache_coord = reconstruct_cache_coord(source_size, cache_size, source_coord);
+	ivec2 p0;
+	ivec2 p1;
+	vec2 f;
+	reconstruct_bilinear_points(cache_size, cache_coord, p0, p1, f);
+
+	float v00 = reconstruct_cache_signal_confidence_at(p0);
+	float v10 = reconstruct_cache_signal_confidence_at(ivec2(p1.x, p0.y));
+	float v01 = reconstruct_cache_signal_confidence_at(ivec2(p0.x, p1.y));
+	float v11 = reconstruct_cache_signal_confidence_at(p1);
+	return mix(mix(v00, v10, f.x), mix(v01, v11, f.x), f.y);
 }
 
 vec4 reconstruct_target_material_normal_roughness(ivec2 pos) {
 	vec4 normal = texelFetch(target_normal_buffer, pos, 0);
 	vec4 orm = texelFetch(target_orm_buffer, pos, 0);
 	return vec4(normal.rgb, clamp(orm.g, 0.0, 1.0));
+}
+
+vec4 reconstruct_target_material_albedo_metalness(ivec2 pos) {
+	vec4 albedo = texelFetch(target_albedo_buffer, pos, 0);
+	vec4 orm = texelFetch(target_orm_buffer, pos, 0);
+	return vec4(albedo.rgb, clamp(orm.b, 0.0, 1.0));
+}
+
+float reconstruct_target_material_mismatch(ivec2 source_size, vec2 source_coord, vec4 target_albedo_metalness) {
+	if (params.target_material_guide_enabled <= 0.5) {
+		return 0.0;
+	}
+	ivec2 nearest_source = clamp(ivec2(round(clamp(source_coord, vec2(0.0), vec2(source_size) - vec2(1.0)))), ivec2(0), source_size - ivec2(1));
+	vec4 source_albedo_metalness = texelFetch(source_albedo_metalness_buffer, nearest_source, 0);
+	float albedo_delta = length(source_albedo_metalness.rgb - target_albedo_metalness.rgb) / max(max(luminance(source_albedo_metalness.rgb), luminance(target_albedo_metalness.rgb)), 0.08);
+	float metalness_delta = abs(source_albedo_metalness.a - target_albedo_metalness.a);
+	return clamp(max(smoothstep(0.18, 0.65, albedo_delta), smoothstep(0.05, 0.22, metalness_delta)), 0.0, 1.0);
 }
 
 void reconstruct_source_guide_sample(ivec2 source_size, vec2 source_coord, out vec4 normal_roughness, out float depth, out float guide_uncertainty) {
@@ -356,6 +457,18 @@ void reconstruct_source_guide_sample(ivec2 source_size, vec2 source_coord, out v
 	normal_roughness = vec4(normal * 0.5 + 0.5, roughness);
 }
 
+float reconstruct_target_guide_mismatch(ivec2 source_size, vec2 source_coord, float target_depth, vec4 target_normal_roughness) {
+	ivec2 nearest_source = clamp(ivec2(round(clamp(source_coord, vec2(0.0), vec2(source_size) - vec2(1.0)))), ivec2(0), source_size - ivec2(1));
+	float source_depth = texelFetch(source_depth_buffer, nearest_source, 0).r;
+	vec4 source_normal_roughness = texelFetch(source_normal_roughness_buffer, nearest_source, 0);
+
+	float depth_window = mix(0.00020, 0.0080, clamp(max(source_depth, target_depth), 0.0, 1.0));
+	float depth_mismatch = smoothstep(depth_window, depth_window * 5.0, abs(source_depth - target_depth));
+	float normal_mismatch = smoothstep(0.04, 0.30, 1.0 - clamp(dot(decode_normal(source_normal_roughness), decode_normal(target_normal_roughness)), -1.0, 1.0));
+	float roughness_mismatch = smoothstep(0.10, 0.48, abs(source_normal_roughness.a - target_normal_roughness.a));
+	return clamp(max(depth_mismatch, max(normal_mismatch, roughness_mismatch * 0.65)), 0.0, 1.0);
+}
+
 #ifdef MODE_RECONSTRUCT
 
 void main() {
@@ -366,7 +479,7 @@ void main() {
 
 	ivec2 source_size = textureSize(source_color_buffer, 0);
 	vec2 output_uv = (vec2(pos) + vec2(0.5)) / params.resolution;
-	vec2 source_coord = params.visible_origin + output_uv * params.visible_size - vec2(0.5);
+	vec2 source_coord = reconstruction_source_coord(output_uv);
 	ivec2 nearest_source = clamp(ivec2(round(source_coord)), ivec2(0), source_size - ivec2(1));
 
 	vec4 target_normal_roughness;
@@ -381,10 +494,12 @@ void main() {
 	if (params.target_material_guide_enabled > 0.5) {
 		target_normal_roughness = reconstruct_target_material_normal_roughness(pos);
 	}
+	vec4 target_albedo_metalness = params.target_material_guide_enabled > 0.5 ? reconstruct_target_material_albedo_metalness(pos) : texelFetch(source_albedo_metalness_buffer, nearest_source, 0);
 	vec3 target_normal = decode_normal(target_normal_roughness);
 	float target_roughness = clamp(target_normal_roughness.a, 0.0, 1.0);
+	float target_guide_mismatch = reconstruct_target_guide_mismatch(source_size, source_coord, target_depth, target_normal_roughness);
 	float instability = reconstruct_instability_sample(source_size, source_coord);
-	instability = max(instability, target_guide_uncertainty * 0.55);
+	instability = max(instability, max(target_guide_uncertainty, target_guide_mismatch) * 0.55);
 	float stability = 1.0 - instability;
 	float signal_confidence = reconstruct_signal_confidence_sample(source_size, source_coord);
 	float high_confidence_preserve = signal_confidence * stability;
@@ -419,7 +534,7 @@ void main() {
 			float diagnostic_weight = mix(0.72, 1.05, tap_stability);
 			float weight = spatial_weight * mix(1.0, guide_weight, guide_blend) * diagnostic_weight;
 
-			vec3 color = sanitize_color(texelFetch(source_color_buffer, tap, 0).rgb);
+			vec3 color = reconstruct_source_color_at(tap);
 			weighted_sum += color * weight;
 			weight_sum += weight;
 			spatial_weight_sum += spatial_weight;
@@ -430,7 +545,7 @@ void main() {
 		}
 	}
 
-	vec3 nearest_color = sanitize_color(texelFetch(source_color_buffer, nearest_source, 0).rgb);
+	vec3 nearest_color = reconstruct_source_color_at(nearest_source);
 	vec3 source_seed = reconstruct_source_bilinear(source_size, source_coord);
 	vec3 reconstructed = weight_sum > 1e-5 ? weighted_sum / weight_sum : nearest_color;
 	local_min = min(local_min, nearest_color);
@@ -450,9 +565,34 @@ void main() {
 	vec3 preserve_color = mix(source_seed, nearest_color, high_confidence_preserve);
 	color = mix(color, preserve_color, local_intensity_guard * 0.45);
 	float support_reactivity = (1.0 - confidence) * smoothstep(0.08, 0.42, instability + (1.0 - support) * 0.5);
-	float guide_reactivity = target_guide_uncertainty * (1.0 - high_confidence_preserve * 0.40);
+	float guide_reactivity = max(target_guide_uncertainty, target_guide_mismatch) * (1.0 - high_confidence_preserve * 0.40);
+	float raw_source_fill = clamp(1.0 - reconstruction_blend, 0.0, 1.0);
+	float spatial_reconstruction_fill = clamp(reconstruction_blend * confidence, 0.0, 1.0);
+	float disocclusion_fill_risk = clamp(max(instability, 1.0 - confidence) * (1.0 - signal_confidence), 0.0, 1.0);
+	float preserve_fill = clamp(local_intensity_guard * 0.45 + high_confidence_preserve * 0.20, 0.0, 1.0);
+	float cache_fill = 0.0;
+	if (params.cache_fill_enabled > 0.5) {
+		float material_mismatch = reconstruct_target_material_mismatch(source_size, source_coord, target_albedo_metalness);
+		float cache_rejection = max(max(target_guide_uncertainty, target_guide_mismatch), material_mismatch);
+		float cache_acceptance = 1.0 - smoothstep(0.28, 0.72, cache_rejection);
+		float cache_confidence = reconstruct_cache_signal_confidence_sample(source_size, source_coord);
+		vec3 cache_color = reconstruct_cache_bilinear(source_size, source_coord);
+		float cache_energy = smoothstep(0.0005, 0.012, luminance(cache_color));
+		float current_trace_confidence = clamp(signal_confidence * max(confidence, support), 0.0, 1.0);
+		float cache_need = smoothstep(0.10, 0.82, disocclusion_fill_risk * (1.0 - current_trace_confidence));
+		cache_fill = clamp(cache_need * cache_confidence * cache_acceptance * cache_energy, 0.0, 0.68);
+		if (cache_fill > 0.001) {
+			float current_luma = max(max(luminance(color), luminance(source_seed)), luminance(reconstructed));
+			vec3 clamped_cache = clamp_luminance(cache_color, current_luma * 3.5 + 0.12);
+			color = mix(color, clamped_cache, cache_fill);
+			signal_confidence = clamp(max(signal_confidence, cache_confidence * cache_fill), 0.0, 1.0);
+		}
+	}
 	imageStore(reconstruction_out, pos, vec4(sanitize_color(color), 1.0));
 	imageStore(reconstruction_reactivity_out, pos, vec4(clamp(max(max(instability * (1.0 - high_confidence_preserve * 0.35), support_reactivity), guide_reactivity), 0.0, 1.0), 0.0, 0.0, 0.0));
+	imageStore(reconstruction_signal_confidence_out, pos, vec4(clamp(signal_confidence, 0.0, 1.0), 0.0, 0.0, 0.0));
+	imageStore(reconstruction_guide_mismatch_out, pos, vec4(clamp(max(target_guide_uncertainty, target_guide_mismatch), 0.0, 1.0), 0.0, 0.0, 0.0));
+	imageStore(reconstruction_fill_source_out, pos, vec4(raw_source_fill, spatial_reconstruction_fill, cache_fill, preserve_fill));
 }
 
 #endif
@@ -468,7 +608,7 @@ void main() {
 	ivec2 output_size = textureSize(source_color_buffer, 0);
 	ivec2 source_size = textureSize(source_depth_buffer, 0);
 	vec2 output_uv = (vec2(pos) + vec2(0.5)) / params.resolution;
-	vec2 source_coord = params.visible_origin + output_uv * params.visible_size - vec2(0.5);
+	vec2 source_coord = reconstruction_source_coord(output_uv);
 	ivec2 nearest_source = clamp(ivec2(round(source_coord)), ivec2(0), source_size - ivec2(1));
 
 	vec4 target_normal_roughness;
@@ -483,10 +623,12 @@ void main() {
 	if (params.target_material_guide_enabled > 0.5) {
 		target_normal_roughness = reconstruct_target_material_normal_roughness(pos);
 	}
+	vec4 target_albedo_metalness = params.target_material_guide_enabled > 0.5 ? reconstruct_target_material_albedo_metalness(pos) : texelFetch(source_albedo_metalness_buffer, nearest_source, 0);
 	vec3 target_normal = decode_normal(target_normal_roughness);
 	float target_roughness = clamp(target_normal_roughness.a, 0.0, 1.0);
+	float target_guide_mismatch = reconstruct_target_guide_mismatch(source_size, source_coord, target_depth, target_normal_roughness);
 	float instability = reconstruct_instability_sample(source_size, source_coord);
-	instability = max(instability, target_guide_uncertainty * 0.55);
+	instability = max(instability, max(target_guide_uncertainty, target_guide_mismatch) * 0.55);
 	float signal_confidence = reconstruct_signal_confidence_sample(source_size, source_coord);
 	float stable_signal = signal_confidence * (1.0 - instability);
 
@@ -517,17 +659,17 @@ void main() {
 				tap_normal_roughness = reconstruct_target_material_normal_roughness(tap_pos);
 				tap_depth = texelFetch(target_depth_buffer, tap_pos, 0).r;
 				vec2 tap_output_uv = (vec2(tap_pos) + vec2(0.5)) / params.resolution;
-				tap_source_coord = params.visible_origin + tap_output_uv * params.visible_size - vec2(0.5);
+				tap_source_coord = reconstruction_source_coord(tap_output_uv);
 				tap_source = clamp(ivec2(round(tap_source_coord)), ivec2(0), source_size - ivec2(1));
 			} else if (params.specular_guide_enabled > 0.5) {
 				tap_normal_roughness = texelFetch(target_normal_roughness_buffer, tap_pos, 0);
 				tap_depth = texelFetch(target_depth_buffer, tap_pos, 0).r;
 				vec2 tap_output_uv = (vec2(tap_pos) + vec2(0.5)) / params.resolution;
-				tap_source_coord = params.visible_origin + tap_output_uv * params.visible_size - vec2(0.5);
+				tap_source_coord = reconstruction_source_coord(tap_output_uv);
 				tap_source = clamp(ivec2(round(tap_source_coord)), ivec2(0), source_size - ivec2(1));
 			} else {
 				vec2 tap_output_uv = (vec2(tap_pos) + vec2(0.5)) / params.resolution;
-				tap_source_coord = params.visible_origin + tap_output_uv * params.visible_size - vec2(0.5);
+				tap_source_coord = reconstruction_source_coord(tap_output_uv);
 				tap_source = clamp(ivec2(round(tap_source_coord)), ivec2(0), source_size - ivec2(1));
 				reconstruct_source_guide_sample(source_size, tap_source_coord, tap_normal_roughness, tap_depth, tap_guide_uncertainty);
 			}
@@ -566,8 +708,14 @@ void main() {
 	blend *= 1.0 - preserve_local_energy * 0.50;
 
 	vec3 color = mix(center_color, filtered, blend);
+	if (reconstruct_diffuse_irradiance()) {
+		float remodulate_view_z = target_depth <= 0.000001 ? 65504.0 : 1.0;
+		color = remodulate_radiance(color, target_normal_roughness, target_albedo_metalness, remodulate_view_z);
+	}
 	imageStore(reconstruction_out, pos, vec4(sanitize_color(color), 1.0));
-	imageStore(reconstruction_reactivity_out, pos, vec4(clamp(max(max(instability * (1.0 - stable_signal * 0.35), blend * 0.70), target_guide_uncertainty * (1.0 - stable_signal * 0.40)), 0.0, 1.0), 0.0, 0.0, 0.0));
+	imageStore(reconstruction_reactivity_out, pos, vec4(clamp(max(max(instability * (1.0 - stable_signal * 0.35), blend * 0.70), max(target_guide_uncertainty, target_guide_mismatch) * (1.0 - stable_signal * 0.40)), 0.0, 1.0), 0.0, 0.0, 0.0));
+	imageStore(reconstruction_signal_confidence_out, pos, vec4(clamp(signal_confidence, 0.0, 1.0), 0.0, 0.0, 0.0));
+	imageStore(reconstruction_guide_mismatch_out, pos, vec4(clamp(max(target_guide_uncertainty, target_guide_mismatch), 0.0, 1.0), 0.0, 0.0, 0.0));
 }
 
 #endif
@@ -1475,7 +1623,7 @@ void main() {
 
 	ivec2 source_size = textureSize(source_history_validity_buffer, 0);
 	vec2 output_uv = (vec2(pos) + vec2(0.5)) / params.resolution;
-	vec2 source_coord = params.visible_origin + output_uv * params.visible_size - vec2(0.5);
+	vec2 source_coord = reconstruction_source_coord(output_uv);
 	ivec2 nearest_source = clamp(ivec2(round(source_coord)), ivec2(0), source_size - ivec2(1));
 	vec4 center_id = texelFetch(source_history_id_buffer, nearest_source, 0);
 	float validity = texelFetch(source_history_validity_buffer, nearest_source, 0).r;

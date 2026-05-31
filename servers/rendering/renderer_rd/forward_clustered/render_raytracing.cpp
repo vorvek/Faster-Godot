@@ -1205,6 +1205,17 @@ static uint64_t _rt_history_mix(uint64_t p_hash, uint64_t p_value) {
 	return p_hash ^ (p_value + 0x9e3779b97f4a7c15ULL + (p_hash << 6) + (p_hash >> 2));
 }
 
+static float _rt_halton_value(uint32_t p_index, uint32_t p_base) {
+	float f = 1.0f;
+	float r = 0.0f;
+	while (p_index > 0) {
+		f /= (float)p_base;
+		r += f * (float)(p_index % p_base);
+		p_index /= p_base;
+	}
+	return r * 2.0f - 1.0f;
+}
+
 static uint64_t _rt_history_mix_rid(uint64_t p_hash, RID p_rid) {
 	return _rt_history_mix(p_hash, p_rid.is_valid() ? p_rid.get_id() : 0);
 }
@@ -9717,8 +9728,9 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			float inv_projection_unjittered[16];
 			float rt_view_rect[4];
 			float rt_prev_view_rect[4];
+			float rt_jitter[4];
 		} rt_ubo = {};
-		static_assert(sizeof(rt_ubo) == 96 * sizeof(float));
+		static_assert(sizeof(rt_ubo) == 100 * sizeof(float));
 
 		if (p_render_data && p_render_data->environment.is_valid()) {
 			const float *env_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
@@ -9742,7 +9754,8 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		// [14] = LIGHT_COUNT, [15] = FRAME_INDEX,
 		// [16-19] = RTGI denoiser controls, [20] = RAY_FIREFLY_SUPPRESSION,
 		// [21] = RAY_MAX_RADIANCE, [22-24] = split-signal denoiser controls.
-		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_FRAME_INDEX] = float(p_state->frame_counter++);
+		const uint32_t rt_frame_index = p_state->frame_counter++;
+		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_FRAME_INDEX] = float(rt_frame_index);
 
 		bool background_uses_sky = false;
 		Color background_color = RSG::texture_storage->get_default_clear_color();
@@ -9812,6 +9825,28 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		rt_ubo.rt_prev_view_rect[1] = (float)rt_prev_visible_origin.y;
 		rt_ubo.rt_prev_view_rect[2] = (float)rt_size.x;
 		rt_ubo.rt_prev_view_rect[3] = (float)rt_size.y;
+
+		Size2i internal_size = p_render_data && p_render_data->render_buffers.is_valid() ? p_render_data->render_buffers->get_internal_size() : rt_visible_size;
+		internal_size.x = MAX(internal_size.x, 1);
+		internal_size.y = MAX(internal_size.y, 1);
+		const Vector2 source_from_internal_scale(
+				(float)MAX(rt_visible_size.x, 1) / (float)internal_size.x,
+				(float)MAX(rt_visible_size.y, 1) / (float)internal_size.y);
+		const Vector2 taa_jitter_pixels = p_render_data ? p_render_data->scene_data->taa_jitter * Vector2(internal_size) * 0.5f : Vector2();
+		const bool has_camera_taa_jitter = Math::abs(taa_jitter_pixels.x) > 0.00001f || Math::abs(taa_jitter_pixels.y) > 0.00001f;
+		const bool low_resolution_rtgi = rt_visible_size != internal_size;
+		// Projection jitter shifts the rendered sample in the opposite unjittered screen direction.
+		Vector2 source_sample_jitter = taa_jitter_pixels * source_from_internal_scale * -1.0f;
+		Vector2 explicit_raygen_jitter;
+		if (!has_camera_taa_jitter && low_resolution_rtgi) {
+			source_sample_jitter = Vector2(_rt_halton_value(rt_frame_index & 15u, 2u), _rt_halton_value(rt_frame_index & 15u, 3u)) * 0.5f * source_from_internal_scale;
+			explicit_raygen_jitter = source_sample_jitter;
+		}
+		rb_data->rt_set_source_sample_jitter(source_sample_jitter);
+		rt_ubo.rt_jitter[0] = source_sample_jitter.x;
+		rt_ubo.rt_jitter[1] = source_sample_jitter.y;
+		rt_ubo.rt_jitter[2] = explicit_raygen_jitter.x;
+		rt_ubo.rt_jitter[3] = explicit_raygen_jitter.y;
 
 		// --- Light gathering ---
 		uint32_t rt_light_count = 0;
@@ -10686,6 +10721,16 @@ void RenderRaytracing::copy_output_texture(const RenderDataRD *p_render_data) {
 	const Rect2i src_rect = use_reconstructed ? Rect2i(Vector2i(), dst_size) : Rect2i(rb_data->rt_get_visible_origin(), rb_data->rt_get_visible_size());
 	const Size2i rt_size = use_reconstructed ? dst_size : rb_data->rt_get_size();
 	const bool direct_copy = src_rect.size == dst_size;
+	if (p_render_data->render_info) {
+		p_render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_VISIBLE][use_reconstructed ? RSE::VIEWPORT_RENDER_INFO_RTGI_RECONSTRUCTED_COPY_COUNT : RSE::VIEWPORT_RENDER_INFO_RTGI_RAW_FALLBACK_COPY_COUNT]++;
+	}
+	if (!use_reconstructed && rb_data->rt_get_visible_size() != dst_size && p_render_data->environment.is_valid()) {
+		const float *rt_env_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
+		const bool scaled_full_path_tracing = rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING;
+		if (scaled_full_path_tracing) {
+			WARN_PRINT_ONCE("Scaled Full Path Tracing RTGI copied raw ray tracing output because reconstructed output was unavailable. This is a quality-path fallback and should be investigated.");
+		}
+	}
 	for (uint32_t v = 0; v < rb->get_view_count(); v++) {
 		RID src = use_reconstructed ? rb_data->rt_get_reconstructed(v) : rb_data->rt_get_texture(v);
 		RID dst = rb->get_internal_texture(v);

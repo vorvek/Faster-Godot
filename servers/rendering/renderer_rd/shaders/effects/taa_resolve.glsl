@@ -53,6 +53,13 @@ layout(set = 0, binding = 7) uniform sampler2D rt_prev_history_validity_buffer;
 layout(set = 0, binding = 8) uniform sampler2D rt_history_id_buffer;
 layout(set = 0, binding = 9) uniform sampler2D rt_prev_history_id_buffer;
 layout(set = 0, binding = 10) uniform sampler2D rt_taa_reactivity_buffer;
+#ifdef RT_HISTORY_METADATA_ENABLED
+layout(set = 0, binding = 11) uniform sampler2D rt_signal_confidence_buffer;
+layout(set = 0, binding = 12) uniform sampler2D rt_prev_history_moments_buffer;
+layout(set = 0, binding = 13) uniform sampler2D rt_prev_history_metadata_buffer;
+layout(rgba16f, set = 0, binding = 14) uniform restrict writeonly image2D rt_history_moments_out;
+layout(rgba16f, set = 0, binding = 15) uniform restrict writeonly image2D rt_history_metadata_out;
+#endif
 
 layout(push_constant, std430) uniform Params {
 	vec2 resolution;
@@ -65,6 +72,11 @@ layout(push_constant, std430) uniform Params {
 	float sharpness;
 	float rt_history_filter_strength;
 	float rt_taa_reactivity_enabled;
+	float rt_history_metadata_enabled;
+	float rt_signal_confidence_enabled;
+	float _pad0;
+	float _pad1;
+	float _pad2;
 }
 params;
 
@@ -448,6 +460,17 @@ bool rt_previous_history_tap_matches(ivec2 previous_pos, vec4 current_id) {
 	return true;
 }
 
+bool rt_current_history_tap_matches(uvec2 pos_screen, ivec2 previous_pos) {
+	if (any(lessThan(previous_pos, ivec2(0))) || any(greaterThanEqual(previous_pos, ivec2(params.resolution)))) {
+		return false;
+	}
+	if (rt_current_history_is_invalid(pos_screen)) {
+		return false;
+	}
+	vec4 current_id = params.rt_history_id_enabled > 0.5 ? texelFetch(rt_history_id_buffer, ivec2(pos_screen), 0) : vec4(0.0);
+	return rt_previous_history_tap_matches(previous_pos, current_id);
+}
+
 void rt_accumulate_history_tap(sampler2D tex_history, ivec2 previous_pos, vec4 current_id, float tap_weight, inout vec3 color_sum, inout float weight_sum) {
 	if (tap_weight <= 0.0 || !rt_previous_history_tap_matches(previous_pos, current_id)) {
 		return;
@@ -596,6 +619,44 @@ vec3 temporal_antialiasing(ivec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_
 	return color_resolved;
 }
 
+#ifdef RT_HISTORY_METADATA_ENABLED
+void store_rt_history_metadata(uvec2 pos_screen, vec2 uv, vec3 resolved_color) {
+	if (params.rt_history_metadata_enabled < 0.5) {
+		return;
+	}
+
+	ivec2 pos = ivec2(pos_screen);
+	vec2 velocity = imageLoad(velocity_buffer, pos).xy;
+	vec2 uv_reprojected = uv + velocity;
+	bool reprojected_in_screen = all(greaterThanEqual(uv_reprojected, vec2(0.0))) && all(lessThanEqual(uv_reprojected, vec2(1.0)));
+	ivec2 previous_pos = clamp(ivec2(uv_reprojected * params.resolution), ivec2(0), ivec2(params.resolution) - ivec2(1));
+	bool history_matches = reprojected_in_screen && rt_current_history_tap_matches(pos_screen, previous_pos);
+
+	float luma = luminance(resolved_color);
+	float confidence = params.rt_signal_confidence_enabled > 0.5 ? texelFetch(rt_signal_confidence_buffer, pos, 0).r : 1.0;
+	float reactivity = params.rt_taa_reactivity_enabled > 0.5 ? texelFetch(rt_taa_reactivity_buffer, pos, 0).r : 0.0;
+	float disocclusion = reprojected_in_screen ? get_factor_disocclusion(uv_reprojected, velocity) : 1.0;
+	float history_keep = history_matches ? (1.0 - clamp(max(reactivity, disocclusion), 0.0, 1.0)) : 0.0;
+
+	vec4 prev_moments = history_matches ? texelFetch(rt_prev_history_moments_buffer, previous_pos, 0) : vec4(0.0);
+	vec4 prev_metadata = history_matches ? texelFetch(rt_prev_history_metadata_buffer, previous_pos, 0) : vec4(0.0);
+	float prev_history_length = prev_metadata.x * 255.0;
+	float history_length = history_keep > 0.0 ? min(prev_history_length + 1.0, 255.0) : 1.0;
+	float alpha = history_keep > 0.0 ? clamp(1.0 / max(history_length, 1.0), 0.02, 1.0) : 1.0;
+	vec2 current_moments = vec2(luma, luma * luma);
+	vec2 moments = mix(prev_moments.xy, current_moments, alpha);
+	float variance = max(moments.y - moments.x * moments.x, 0.0);
+
+	float history_lock = history_keep > 0.0 ? min(prev_metadata.y + confidence * (1.0 - reactivity) * 0.08, 1.0) : confidence * 0.08;
+	history_lock *= smoothstep(0.02, 0.16, history_length / 255.0);
+	float disocclusion_age = history_keep > 0.0 ? min(prev_metadata.z + 1.0 / 255.0, 1.0) : 0.0;
+	float confidence_history = history_keep > 0.0 ? mix(prev_metadata.w, confidence, max(alpha, reactivity)) : confidence;
+
+	imageStore(rt_history_moments_out, pos, vec4(moments, variance, history_keep));
+	imageStore(rt_history_metadata_out, pos, vec4(history_length / 255.0, history_lock, disocclusion_age, confidence_history));
+}
+#endif
+
 void main() {
 	populate_group_shared_memory(gl_WorkGroupID.xy, gl_LocalInvocationIndex);
 
@@ -611,4 +672,7 @@ void main() {
 
 	vec3 result = temporal_antialiasing(pos_group_top_left, pos_group, pos_screen, uv, history_buffer);
 	imageStore(output_buffer, ivec2(gl_GlobalInvocationID.xy), vec4(result, 1.0));
+#ifdef RT_HISTORY_METADATA_ENABLED
+	store_rt_history_metadata(pos_screen, uv, result);
+#endif
 }
