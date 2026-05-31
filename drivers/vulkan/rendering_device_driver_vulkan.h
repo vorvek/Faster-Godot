@@ -441,10 +441,6 @@ public:
 
 private:
 	struct SwapChain {
-		using Fsr3CreateSwapchainFunc = VkResult (*)(VkDevice, const VkSwapchainCreateInfoKHR *, const VkAllocationCallbacks *, VkSwapchainKHR *, void *);
-		using Fsr3DestroySwapchainFunc = void (*)(VkDevice, VkSwapchainKHR, const VkAllocationCallbacks *, void *);
-		using Fsr3GetLastPresentCountFunc = uint64_t (*)(VkSwapchainKHR);
-
 		VkSwapchainKHR vk_swapchain = VK_NULL_HANDLE;
 		RenderingContextDriver::SurfaceID surface = RenderingContextDriver::SurfaceID();
 		VkFormat format = VK_FORMAT_UNDEFINED;
@@ -459,17 +455,6 @@ private:
 		RenderPassID render_pass;
 		int pre_transform_rotation_degrees = 0;
 		uint32_t image_index = 0;
-#if defined(VENDOR_UPSCALER_FSR31_REQUESTED) && defined(FIDELITYFX_FSR31_API_VK_HEADERS_PRESENT)
-		void *fsr3_swapchain_context = nullptr;
-		Fsr3CreateSwapchainFunc fsr3_create_swapchain = nullptr;
-		Fsr3DestroySwapchainFunc fsr3_destroy_swapchain = nullptr;
-		PFN_vkGetSwapchainImagesKHR fsr3_get_swapchain_images = nullptr;
-		PFN_vkAcquireNextImageKHR fsr3_acquire_next_image = nullptr;
-		PFN_vkQueuePresentKHR fsr3_queue_present = nullptr;
-		PFN_vkSetHdrMetadataEXT fsr3_set_hdr_metadata = nullptr;
-		Fsr3GetLastPresentCountFunc fsr3_get_last_present_count = nullptr;
-		bool fsr3_frame_generation_swapchain = false;
-#endif
 #ifdef ANDROID_ENABLED
 		uint64_t refresh_duration = 0;
 #endif

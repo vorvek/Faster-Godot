@@ -38,19 +38,6 @@
 
 #include <thirdparty/misc/smolv.h>
 
-#if defined(VENDOR_UPSCALER_FSR31_REQUESTED) && defined(FIDELITYFX_FSR31_API_VK_HEADERS_PRESENT)
-#if !defined(_MSC_VER) && !defined(__declspec)
-#define FFX_API_GCC_DECLSPEC_COMPAT
-#define __declspec(p_attribute)
-#endif
-#include "ffx_api/ffx_api.h"
-#include "ffx_api/vk/ffx_api_vk.h"
-#if defined(FFX_API_GCC_DECLSPEC_COMPAT)
-#undef __declspec
-#undef FFX_API_GCC_DECLSPEC_COMPAT
-#endif
-#endif
-
 #if defined(AFTERMATH_ENABLED)
 #include "drivers/aftermath/aftermath.h"
 #include "drivers/aftermath/aftermath_context.h"
@@ -91,146 +78,6 @@ public:
 #endif
 
 #define ARRAY_SIZE(a) std_size(a)
-
-#if defined(VENDOR_UPSCALER_FSR31_REQUESTED) && defined(FIDELITYFX_FSR31_API_VK_HEADERS_PRESENT)
-namespace {
-
-static const char *_fsr3_fg_result_to_string(ffxReturnCode_t p_result) {
-	switch (p_result) {
-		case FFX_API_RETURN_OK:
-			return "ok";
-		case FFX_API_RETURN_ERROR:
-			return "error";
-		case FFX_API_RETURN_ERROR_UNKNOWN_DESCTYPE:
-			return "unknown descriptor type";
-		case FFX_API_RETURN_ERROR_RUNTIME_ERROR:
-			return "runtime error";
-		case FFX_API_RETURN_NO_PROVIDER:
-			return "no provider";
-		case FFX_API_RETURN_ERROR_MEMORY:
-			return "memory allocation failed";
-		case FFX_API_RETURN_ERROR_PARAMETER:
-			return "invalid parameter";
-		default:
-			return "unrecognized FidelityFX API result";
-	}
-}
-
-static bool _fsr3_fg_resolve_symbol(void *p_library_handle, const String &p_symbol, void *&r_symbol) {
-	r_symbol = nullptr;
-	return OS::get_singleton()->get_dynamic_library_symbol_handle(p_library_handle, p_symbol, r_symbol, true) == OK && r_symbol != nullptr;
-}
-
-static bool _fsr3_fg_open_runtime_library(void *&r_library_handle, String &r_resolved_library_name) {
-	OS *os = OS::get_singleton();
-	ERR_FAIL_NULL_V(os, false);
-
-	const char *const library_names[] = {
-#if defined(WINDOWS_ENABLED)
-		"amd_fidelityfx_vk.dll",
-#elif defined(LINUXBSD_ENABLED)
-		"libamd_fidelityfx_vk.so",
-		"amd_fidelityfx_vk.so",
-#else
-		"amd_fidelityfx_vk.dll",
-		"libamd_fidelityfx_vk.so",
-#endif
-	};
-
-	for (uint32_t i = 0; i < ARRAY_SIZE(library_names); i++) {
-		const char *library_name = library_names[i];
-		if (library_name == nullptr) {
-			continue;
-		}
-
-		if (os->open_dynamic_library(library_name, r_library_handle) == OK && r_library_handle != nullptr) {
-			r_resolved_library_name = library_name;
-			return true;
-		}
-	}
-
-	r_library_handle = nullptr;
-	r_resolved_library_name = String();
-	return false;
-}
-
-class Fsr3FrameGenerationSwapchainRuntime {
-	void *library_handle = nullptr;
-	bool attempted_load = false;
-	bool loaded = false;
-	String unavailable_reason = "FidelityFX FSR 3 frame generation Vulkan runtime has not been loaded.";
-
-public:
-	PfnFfxCreateContext ffx_create_context = nullptr;
-	PfnFfxDestroyContext ffx_destroy_context = nullptr;
-	PfnFfxQuery ffx_query = nullptr;
-
-	~Fsr3FrameGenerationSwapchainRuntime() {
-		unload();
-	}
-
-	bool load() {
-		if (attempted_load) {
-			return loaded;
-		}
-
-		attempted_load = true;
-
-		OS *os = OS::get_singleton();
-		ERR_FAIL_NULL_V(os, false);
-
-		String resolved_library_name;
-		if (!_fsr3_fg_open_runtime_library(library_handle, resolved_library_name)) {
-			library_handle = nullptr;
-			unavailable_reason = "The FidelityFX Vulkan runtime library could not be loaded.";
-			return false;
-		}
-
-		bool resolved = true;
-		void *symbol = nullptr;
-		resolved = _fsr3_fg_resolve_symbol(library_handle, "ffxCreateContext", symbol) && resolved;
-		ffx_create_context = reinterpret_cast<PfnFfxCreateContext>(symbol);
-		resolved = _fsr3_fg_resolve_symbol(library_handle, "ffxDestroyContext", symbol) && resolved;
-		ffx_destroy_context = reinterpret_cast<PfnFfxDestroyContext>(symbol);
-		resolved = _fsr3_fg_resolve_symbol(library_handle, "ffxQuery", symbol) && resolved;
-		ffx_query = reinterpret_cast<PfnFfxQuery>(symbol);
-
-		if (!resolved) {
-			unload();
-			attempted_load = true;
-			unavailable_reason = vformat("%s is missing one or more required frame-generation swapchain exports.", resolved_library_name);
-			return false;
-		}
-
-		loaded = true;
-		unavailable_reason = "FidelityFX FSR 3 frame generation Vulkan runtime is loaded.";
-		return true;
-	}
-
-	void unload() {
-		if (library_handle != nullptr && OS::get_singleton() != nullptr) {
-			OS::get_singleton()->close_dynamic_library(library_handle);
-		}
-		library_handle = nullptr;
-		loaded = false;
-		ffx_create_context = nullptr;
-		ffx_destroy_context = nullptr;
-		ffx_query = nullptr;
-		unavailable_reason = "FidelityFX FSR 3 frame generation Vulkan runtime is not loaded.";
-	}
-
-	const String &get_unavailable_reason() const {
-		return unavailable_reason;
-	}
-};
-
-static Fsr3FrameGenerationSwapchainRuntime &fsr3_fg_swapchain_runtime() {
-	static Fsr3FrameGenerationSwapchainRuntime runtime;
-	return runtime;
-}
-
-} // namespace
-#endif
 
 // Disable raytracing support on macOS and iOS due to MoltenVK limitations.
 #if !(defined(MACOS_ENABLED) || defined(IOS_ENABLED))
@@ -3795,14 +3642,6 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 		present_info.pResults = results.ptr();
 
 		PFN_vkQueuePresentKHR queue_present = device_functions.QueuePresentKHR;
-#if defined(VENDOR_UPSCALER_FSR31_REQUESTED) && defined(FIDELITYFX_FSR31_API_VK_HEADERS_PRESENT)
-		if (p_swap_chains.size() == 1) {
-			SwapChain *swap_chain = (SwapChain *)(p_swap_chains[0].id);
-			if (swap_chain->fsr3_queue_present != nullptr) {
-				queue_present = swap_chain->fsr3_queue_present;
-			}
-		}
-#endif
 
 		device_queue.submit_mutex.lock();
 #if defined(SWAPPY_FRAME_PACING_ENABLED)
@@ -4131,36 +3970,9 @@ void RenderingDeviceDriverVulkan::_swap_chain_release(SwapChain *swap_chain) {
 			SwappyVk_destroySwapchain(vk_device, swap_chain->vk_swapchain);
 		}
 #endif
-#if defined(VENDOR_UPSCALER_FSR31_REQUESTED) && defined(FIDELITYFX_FSR31_API_VK_HEADERS_PRESENT)
-		if (swap_chain->fsr3_frame_generation_swapchain && swap_chain->fsr3_swapchain_context != nullptr && fsr3_fg_swapchain_runtime().ffx_destroy_context != nullptr) {
-			ffxContext ffx_context = static_cast<ffxContext>(swap_chain->fsr3_swapchain_context);
-			fsr3_fg_swapchain_runtime().ffx_destroy_context(&ffx_context, nullptr);
-			swap_chain->fsr3_swapchain_context = nullptr;
-		} else if (swap_chain->fsr3_frame_generation_swapchain && swap_chain->fsr3_destroy_swapchain != nullptr) {
-			swap_chain->fsr3_destroy_swapchain(vk_device, swap_chain->vk_swapchain, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SWAPCHAIN_KHR), swap_chain->fsr3_swapchain_context);
-		} else
-#endif
-		{
-			device_functions.DestroySwapchainKHR(vk_device, swap_chain->vk_swapchain, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SWAPCHAIN_KHR));
-		}
+		device_functions.DestroySwapchainKHR(vk_device, swap_chain->vk_swapchain, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SWAPCHAIN_KHR));
 		swap_chain->vk_swapchain = VK_NULL_HANDLE;
 	}
-
-#if defined(VENDOR_UPSCALER_FSR31_REQUESTED) && defined(FIDELITYFX_FSR31_API_VK_HEADERS_PRESENT)
-	if (swap_chain->fsr3_swapchain_context != nullptr && fsr3_fg_swapchain_runtime().ffx_destroy_context != nullptr) {
-		ffxContext ffx_context = static_cast<ffxContext>(swap_chain->fsr3_swapchain_context);
-		fsr3_fg_swapchain_runtime().ffx_destroy_context(&ffx_context, nullptr);
-	}
-	swap_chain->fsr3_swapchain_context = nullptr;
-	swap_chain->fsr3_create_swapchain = nullptr;
-	swap_chain->fsr3_destroy_swapchain = nullptr;
-	swap_chain->fsr3_get_swapchain_images = nullptr;
-	swap_chain->fsr3_acquire_next_image = nullptr;
-	swap_chain->fsr3_queue_present = nullptr;
-	swap_chain->fsr3_set_hdr_metadata = nullptr;
-	swap_chain->fsr3_get_last_present_count = nullptr;
-	swap_chain->fsr3_frame_generation_swapchain = false;
-#endif
 
 	if (swap_chain->render_pass.id != 0) {
 		render_pass_free(swap_chain->render_pass);
@@ -4382,74 +4194,6 @@ Error RenderingDeviceDriverVulkan::swap_chain_resize(CommandQueueID p_cmd_queue,
 	err = device_functions.CreateSwapchainKHR(vk_device, &swap_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SWAPCHAIN_KHR), &swap_chain->vk_swapchain);
 	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, ERR_CANT_CREATE, vformat("Couldn't create Vulkan swapchain (VkResult error %d).", err));
 
-#if defined(VENDOR_UPSCALER_FSR31_REQUESTED) && defined(FIDELITYFX_FSR31_API_VK_HEADERS_PRESENT)
-	const bool force_fsr3_fg_swapchain = OS::get_singleton()->get_environment("GODOT_FORCE_FSR3_FRAME_GENERATION_SWAPCHAIN") == "1";
-	const bool skip_fsr3_fg_swapchain_for_nvidia = physical_device_properties.vendorID == RenderingContextDriver::Vendor::VENDOR_NVIDIA && !force_fsr3_fg_swapchain;
-	if (skip_fsr3_fg_swapchain_for_nvidia) {
-		print_verbose("FidelityFX FSR 3 frame generation swapchain was not enabled on NVIDIA by default. Set GODOT_FORCE_FSR3_FRAME_GENERATION_SWAPCHAIN=1 to force it for debugging.");
-	} else if (fsr3_fg_swapchain_runtime().load()) {
-		Queue &device_queue = queue_families[command_queue->queue_family][command_queue->queue_index];
-		VkSwapchainKHR current_swapchain = swap_chain->vk_swapchain;
-
-		ffxCreateContextDescFrameGenerationSwapChainVK create_desc = {};
-		create_desc.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_FGSWAPCHAIN_VK;
-		create_desc.header.pNext = nullptr;
-		create_desc.physicalDevice = physical_device;
-		create_desc.device = vk_device;
-		create_desc.swapchain = &current_swapchain;
-		create_desc.allocator = VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SWAPCHAIN_KHR);
-		create_desc.createInfo = swap_create_info;
-		create_desc.gameQueue.queue = device_queue.queue;
-		create_desc.gameQueue.familyIndex = command_queue->queue_family;
-		create_desc.gameQueue.submitFunc = nullptr;
-		create_desc.asyncComputeQueue.queue = device_queue.queue;
-		create_desc.asyncComputeQueue.familyIndex = command_queue->queue_family;
-		create_desc.asyncComputeQueue.submitFunc = nullptr;
-		create_desc.presentQueue.queue = device_queue.queue;
-		create_desc.presentQueue.familyIndex = command_queue->queue_family;
-		create_desc.presentQueue.submitFunc = nullptr;
-		create_desc.imageAcquireQueue.queue = device_queue.queue;
-		create_desc.imageAcquireQueue.familyIndex = command_queue->queue_family;
-		create_desc.imageAcquireQueue.submitFunc = nullptr;
-
-		ffxContext swapchain_context = nullptr;
-		const ffxReturnCode_t create_result = fsr3_fg_swapchain_runtime().ffx_create_context(&swapchain_context, &create_desc.header, nullptr);
-		if (create_result == FFX_API_RETURN_OK && swapchain_context != nullptr && current_swapchain != VK_NULL_HANDLE) {
-			ffxQueryDescSwapchainReplacementFunctionsVK replacement_functions = {};
-			replacement_functions.header.type = FFX_API_QUERY_DESC_TYPE_FGSWAPCHAIN_FUNCTIONS_VK;
-			replacement_functions.header.pNext = nullptr;
-			const ffxReturnCode_t query_result = fsr3_fg_swapchain_runtime().ffx_query(&swapchain_context, &replacement_functions.header);
-
-			if (query_result != FFX_API_RETURN_OK ||
-					replacement_functions.pOutGetSwapchainImagesKHR == nullptr ||
-					replacement_functions.pOutAcquireNextImageKHR == nullptr ||
-					replacement_functions.pOutQueuePresentKHR == nullptr ||
-					replacement_functions.pOutDestroySwapchainFFXAPI == nullptr) {
-				fsr3_fg_swapchain_runtime().ffx_destroy_context(&swapchain_context, nullptr);
-				ERR_FAIL_V_MSG(ERR_CANT_CREATE, vformat("FidelityFX FSR 3 frame generation swapchain was created but did not expose the required Vulkan replacement functions: %s.", _fsr3_fg_result_to_string(query_result)));
-			}
-
-			swap_chain->vk_swapchain = current_swapchain;
-			swap_chain->fsr3_swapchain_context = swapchain_context;
-			swap_chain->fsr3_create_swapchain = replacement_functions.pOutCreateSwapchainFFXAPI;
-			swap_chain->fsr3_destroy_swapchain = replacement_functions.pOutDestroySwapchainFFXAPI;
-			swap_chain->fsr3_get_swapchain_images = replacement_functions.pOutGetSwapchainImagesKHR;
-			swap_chain->fsr3_acquire_next_image = replacement_functions.pOutAcquireNextImageKHR;
-			swap_chain->fsr3_queue_present = replacement_functions.pOutQueuePresentKHR;
-			swap_chain->fsr3_set_hdr_metadata = replacement_functions.pOutSetHdrMetadataEXT;
-			swap_chain->fsr3_get_last_present_count = replacement_functions.pOutGetLastPresentCountFFXAPI;
-			swap_chain->fsr3_frame_generation_swapchain = true;
-		} else {
-			WARN_PRINT_ONCE(vformat("FidelityFX FSR 3 frame generation swapchain was not enabled: %s.", _fsr3_fg_result_to_string(create_result)));
-			if (swapchain_context != nullptr) {
-				fsr3_fg_swapchain_runtime().ffx_destroy_context(&swapchain_context, nullptr);
-			}
-		}
-	} else {
-		print_verbose(vformat("FidelityFX FSR 3 frame generation swapchain was not enabled: %s", fsr3_fg_swapchain_runtime().get_unavailable_reason()));
-	}
-#endif
-
 #if defined(SWAPPY_FRAME_PACING_ENABLED)
 	if (swappy_frame_pacer_enable) {
 		SwappyVk_initAndGetRefreshCycleDuration(get_jni_env(), static_cast<OS_Android *>(OS::get_singleton())->get_godot_java()->get_activity(), physical_device,
@@ -4481,11 +4225,7 @@ Error RenderingDeviceDriverVulkan::swap_chain_resize(CommandQueueID p_cmd_queue,
 #endif
 
 	uint32_t image_count = 0;
-#if defined(VENDOR_UPSCALER_FSR31_REQUESTED) && defined(FIDELITYFX_FSR31_API_VK_HEADERS_PRESENT)
-	PFN_vkGetSwapchainImagesKHR get_swapchain_images = swap_chain->fsr3_get_swapchain_images != nullptr ? swap_chain->fsr3_get_swapchain_images : device_functions.GetSwapchainImagesKHR;
-#else
 	PFN_vkGetSwapchainImagesKHR get_swapchain_images = device_functions.GetSwapchainImagesKHR;
-#endif
 	err = get_swapchain_images(vk_device, swap_chain->vk_swapchain, &image_count, nullptr);
 	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, ERR_CANT_CREATE, vformat("Couldn't get Vulkan swapchain images (VkResult error %d).", err));
 
@@ -4634,11 +4374,7 @@ RDD::FramebufferID RenderingDeviceDriverVulkan::swap_chain_acquire_framebuffer(C
 	swap_chain->command_queues_acquired_semaphores.push_back(semaphore_index);
 
 	const uint64_t acquire_timeout = UINT64_MAX;
-#if defined(VENDOR_UPSCALER_FSR31_REQUESTED) && defined(FIDELITYFX_FSR31_API_VK_HEADERS_PRESENT)
-	PFN_vkAcquireNextImageKHR acquire_next_image = swap_chain->fsr3_acquire_next_image != nullptr ? swap_chain->fsr3_acquire_next_image : device_functions.AcquireNextImageKHR;
-#else
 	PFN_vkAcquireNextImageKHR acquire_next_image = device_functions.AcquireNextImageKHR;
-#endif
 	err = acquire_next_image(vk_device, swap_chain->vk_swapchain, acquire_timeout, semaphore, VK_NULL_HANDLE, &swap_chain->image_index);
 	if (err == VK_ERROR_OUT_OF_DATE_KHR) {
 		// Out of date leaves the semaphore in a signaled state that will never finish, so it's necessary to recreate it.
