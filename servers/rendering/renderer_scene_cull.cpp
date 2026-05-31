@@ -2858,9 +2858,8 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 	if (p_viewport.is_valid()) {
 		bool rt_temporal_motion_vectors = false;
 		if (camera_data.view_count == 1 && environment.is_valid() && scene_render->environment_get_pathtracing_enabled(environment)) {
-			PackedFloat32Array params = scene_render->environment_get_pathtracing_params(environment);
-			const uint32_t denoiser = params.size() > RSE::PT_PARAM_DENOISER ? (uint32_t)params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
-			rt_temporal_motion_vectors = denoiser != RSE::PT_DENOISER_NONE;
+			const RSE::PathtracingParams params = scene_render->environment_get_pathtracing_params(environment);
+			rt_temporal_motion_vectors = params.denoiser != RSE::PT_DENOISER_NONE;
 		}
 		RSG::viewport->viewport_set_rt_temporal_motion_vectors(p_viewport, rt_temporal_motion_vectors);
 	}

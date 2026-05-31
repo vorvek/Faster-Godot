@@ -312,9 +312,9 @@ public:
 	virtual void environment_set_sdfgi_frames_to_update_light(RS::EnvironmentSDFGIFramesToUpdateLight p_update) = 0;
 
 	virtual void environment_set_pathtracing(RID p_env, bool p_enable) = 0;
-	virtual void environment_set_pathtracing_params(RID p_env, const PackedFloat32Array &p_params) = 0;
+	virtual void environment_set_pathtracing_params(RID p_env, const RSE::PathtracingParams &p_params) = 0;
 	virtual bool environment_get_pathtracing_enabled(RID p_env) const = 0;
-	virtual PackedFloat32Array environment_get_pathtracing_params(RID p_env) const = 0;
+	virtual RSE::PathtracingParams environment_get_pathtracing_params(RID p_env) const = 0;
 	virtual Dictionary pathtracing_get_backend_status() const = 0;
 	virtual Dictionary pathtracing_get_backend_status_for_backend(RS::PathtracingBackend p_backend) const = 0;
 	virtual Array pathtracing_get_backend_capabilities() const = 0;

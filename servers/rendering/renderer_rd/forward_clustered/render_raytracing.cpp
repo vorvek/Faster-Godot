@@ -9733,9 +9733,9 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		static_assert(sizeof(rt_ubo) == 100 * sizeof(float));
 
 		if (p_render_data && p_render_data->environment.is_valid()) {
-			const float *env_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
+			const RSE::PathtracingParams *env_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
 			if (env_params) {
-				memcpy(rt_ubo.params, env_params, sizeof(float) * MIN((uint32_t)RSE::PT_PARAM_MAX, SceneShaderRaytracing::RT_PARAM_SHADER_FLOAT_COUNT));
+				RSE::pathtracing_params_to_shader_floats(*env_params, rt_ubo.params, MIN((uint32_t)RSE::PT_PARAM_MAX, SceneShaderRaytracing::RT_PARAM_SHADER_FLOAT_COUNT));
 			}
 		}
 		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_BACKEND] = float(active_backend);

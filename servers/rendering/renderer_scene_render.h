@@ -257,8 +257,8 @@ public:
 	// Pathtracing
 	void environment_set_pathtracing(RID p_env, bool p_enable);
 	bool environment_get_pathtracing_enabled(RID p_env) const;
-	void environment_set_pathtracing_params(RID p_env, const PackedFloat32Array &p_params);
-	PackedFloat32Array environment_get_pathtracing_params(RID p_env) const;
+	void environment_set_pathtracing_params(RID p_env, const RSE::PathtracingParams &p_params);
+	RSE::PathtracingParams environment_get_pathtracing_params(RID p_env) const;
 	virtual Dictionary pathtracing_get_backend_status() const;
 	virtual Dictionary pathtracing_get_backend_status_for_backend(RSE::PathtracingBackend p_backend) const;
 	virtual Array pathtracing_get_backend_capabilities() const;

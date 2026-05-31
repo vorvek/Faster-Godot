@@ -21,7 +21,7 @@
 #define RT_PARAM_DENOISER 3 // rt_params[0].w - Denoiser selection
 #define RT_PARAM_ENERGY 4 // rt_params[1].x - RTGI energy multiplier
 #define RT_PARAM_RTGI_RESOLUTION_SCALE 5 // rt_params[1].y - RTGI internal resolution scale
-#define RT_PARAM_MODE 6 // rt_params[1].z - 0=Reflections RT Only, 1=Full Path Tracing, 2=Hybrid RTGI
+#define RT_PARAM_MODE 6 // rt_params[1].z - 0=Reflections RT Only, 1=Full Scene Path-Traced GI, 2=Hybrid RTGI
 #define RT_PARAM_BACKGROUND_USES_SKY 7 // rt_params[1].w - Miss shader samples sky radiance
 #define RT_PARAM_BACKGROUND_R 8 // rt_params[2].x - Linear fallback background color
 #define RT_PARAM_BACKGROUND_G 9 // rt_params[2].y
@@ -51,7 +51,7 @@
 #define RT_PARAM_RTGI_STRC_BASE_PROBE_SPACING 32 // rt_params[8].x - Cascade 0 spacing in world units
 #define RT_PARAM_RTGI_STRC_RAYS_PER_FRAME 33 // rt_params[8].y - Probe update ray budget
 #define RT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT 34 // rt_params[8].z - Probe temporal accumulation weight
-#define RT_PARAM_RTGI_BACKEND 35 // rt_params[8].w - Requested vendor backend
+#define RT_PARAM_RTGI_BACKEND 35 // rt_params[8].w - RTGI backend
 #define RT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS 36 // rt_params[9].x - Static STRC visual layer mask
 #define RT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS 37 // rt_params[9].y - Dynamic STRC visual layer mask
 #define RT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES 38 // rt_params[9].z - Screen-space diffuse cache entry budget

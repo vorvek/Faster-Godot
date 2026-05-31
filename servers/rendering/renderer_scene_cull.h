@@ -1467,10 +1467,10 @@ public:
 
 	// Pathtracing
 	PASS2(environment_set_pathtracing, RID, bool)
-	PASS2(environment_set_pathtracing_params, RID, const PackedFloat32Array &)
+	PASS2(environment_set_pathtracing_params, RID, const RSE::PathtracingParams &)
 
 	PASS1RC(bool, environment_get_pathtracing_enabled, RID)
-	PASS1RC(PackedFloat32Array, environment_get_pathtracing_params, RID)
+	PASS1RC(RSE::PathtracingParams, environment_get_pathtracing_params, RID)
 	PASS0RC(Dictionary, pathtracing_get_backend_status)
 	PASS1RC(Dictionary, pathtracing_get_backend_status_for_backend, RSE::PathtracingBackend)
 	PASS0RC(Array, pathtracing_get_backend_capabilities)

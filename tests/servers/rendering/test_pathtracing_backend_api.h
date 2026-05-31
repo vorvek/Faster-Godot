@@ -369,9 +369,6 @@ TEST_CASE("[SceneTree][RenderingServer][PathTracing] Backend status and capabili
 
 TEST_CASE("[RenderingServer][PathTracing] Backend environment parameter mapping clamps legacy vendor and invalid values") {
 	CHECK_EQ(int(Environment::RTGI_BACKEND_VULKAN_GENERIC), int(RSE::PT_BACKEND_VULKAN_GENERIC));
-	CHECK_EQ(int(Environment::RTGI_BACKEND_NVIDIA_RTXPT), int(RSE::PT_BACKEND_NVIDIA_RTXPT));
-	CHECK_EQ(int(Environment::RTGI_BACKEND_AMD_HIP_RT), int(RSE::PT_BACKEND_AMD_HIP_RT));
-	CHECK_EQ(int(Environment::RTGI_BACKEND_INTEL_EMBREE), int(RSE::PT_BACKEND_INTEL_EMBREE));
 
 	CHECK_EQ(RendererSceneRenderImplementation::RenderRaytracing::backend_from_env_param(float(RSE::PT_BACKEND_VULKAN_GENERIC)), RSE::PT_BACKEND_VULKAN_GENERIC);
 	CHECK_EQ(RendererSceneRenderImplementation::RenderRaytracing::backend_from_env_param(float(RSE::PT_BACKEND_NVIDIA_RTXPT)), RSE::PT_BACKEND_VULKAN_GENERIC);

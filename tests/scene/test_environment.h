@@ -37,43 +37,40 @@
 
 namespace TestEnvironment {
 
-static void check_rtgi_backend_reaches_render_params(const Ref<Environment> &p_environment, Environment::RTGIBackend p_requested_backend, Environment::RTGIBackend p_expected_backend) {
-	p_environment->set_rtgi_backend(p_requested_backend);
-	CHECK_EQ(p_environment->get_rtgi_backend(), p_expected_backend);
+static void check_rtgi_backend_reaches_render_params(const Ref<Environment> &p_environment, int p_requested_backend) {
+	p_environment->set_rtgi_backend((Environment::RTGIBackend)p_requested_backend);
+	CHECK_EQ(p_environment->get_rtgi_backend(), Environment::RTGI_BACKEND_VULKAN_GENERIC);
 
 	RenderingServer *rendering_server = RenderingServer::get_singleton();
 	REQUIRE(rendering_server != nullptr);
 
-	const PackedFloat32Array params = rendering_server->environment_get_pathtracing_params(p_environment->get_rid());
-	REQUIRE_GT(params.size(), RSE::PT_PARAM_RTGI_BACKEND);
-	CHECK_EQ(int(params[RSE::PT_PARAM_RTGI_BACKEND]), int(p_expected_backend));
+	const RSE::PathtracingParams params = rendering_server->environment_get_pathtracing_params(p_environment->get_rid());
+	CHECK_EQ(params.backend, RSE::PT_BACKEND_VULKAN_GENERIC);
 }
 
-TEST_CASE("[SceneTree][Environment] RTGI backend selection clamps legacy vendor and invalid values to Vulkan Generic") {
+TEST_CASE("[SceneTree][Environment] RTGI backend selection exposes only Vulkan Generic") {
 	Ref<Environment> environment;
 	environment.instantiate();
 
 	CHECK_EQ(environment->get_rtgi_backend(), Environment::RTGI_BACKEND_VULKAN_GENERIC);
-	PackedFloat32Array params = RenderingServer::get_singleton()->environment_get_pathtracing_params(environment->get_rid());
-	REQUIRE_GT(params.size(), RSE::PT_PARAM_RTGI_BACKEND);
-	CHECK_EQ(int(params[RSE::PT_PARAM_RTGI_BACKEND]), int(Environment::RTGI_BACKEND_VULKAN_GENERIC));
+	RSE::PathtracingParams params = RenderingServer::get_singleton()->environment_get_pathtracing_params(environment->get_rid());
+	CHECK_EQ(params.backend, RSE::PT_BACKEND_VULKAN_GENERIC);
+	CHECK_EQ(params.mode, uint32_t(Environment::RTGI_MODE_HYBRID));
 
-	check_rtgi_backend_reaches_render_params(environment, Environment::RTGI_BACKEND_VULKAN_GENERIC, Environment::RTGI_BACKEND_VULKAN_GENERIC);
-	check_rtgi_backend_reaches_render_params(environment, Environment::RTGI_BACKEND_NVIDIA_RTXPT, Environment::RTGI_BACKEND_VULKAN_GENERIC);
-	check_rtgi_backend_reaches_render_params(environment, Environment::RTGI_BACKEND_AMD_HIP_RT, Environment::RTGI_BACKEND_VULKAN_GENERIC);
-	check_rtgi_backend_reaches_render_params(environment, Environment::RTGI_BACKEND_INTEL_EMBREE, Environment::RTGI_BACKEND_VULKAN_GENERIC);
+	check_rtgi_backend_reaches_render_params(environment, Environment::RTGI_BACKEND_VULKAN_GENERIC);
+	check_rtgi_backend_reaches_render_params(environment, RSE::PT_BACKEND_NVIDIA_RTXPT);
+	check_rtgi_backend_reaches_render_params(environment, RSE::PT_BACKEND_AMD_HIP_RT);
+	check_rtgi_backend_reaches_render_params(environment, RSE::PT_BACKEND_INTEL_EMBREE);
 
 	environment->set_rtgi_backend((Environment::RTGIBackend)-1);
 	CHECK_EQ(environment->get_rtgi_backend(), Environment::RTGI_BACKEND_VULKAN_GENERIC);
 	params = RenderingServer::get_singleton()->environment_get_pathtracing_params(environment->get_rid());
-	REQUIRE_GT(params.size(), RSE::PT_PARAM_RTGI_BACKEND);
-	CHECK_EQ(int(params[RSE::PT_PARAM_RTGI_BACKEND]), int(Environment::RTGI_BACKEND_VULKAN_GENERIC));
+	CHECK_EQ(params.backend, RSE::PT_BACKEND_VULKAN_GENERIC);
 
 	environment->set_rtgi_backend((Environment::RTGIBackend)RSE::PT_BACKEND_MAX);
 	CHECK_EQ(environment->get_rtgi_backend(), Environment::RTGI_BACKEND_VULKAN_GENERIC);
 	params = RenderingServer::get_singleton()->environment_get_pathtracing_params(environment->get_rid());
-	REQUIRE_GT(params.size(), RSE::PT_PARAM_RTGI_BACKEND);
-	CHECK_EQ(int(params[RSE::PT_PARAM_RTGI_BACKEND]), int(Environment::RTGI_BACKEND_VULKAN_GENERIC));
+	CHECK_EQ(params.backend, RSE::PT_BACKEND_VULKAN_GENERIC);
 }
 
 } // namespace TestEnvironment

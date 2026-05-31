@@ -195,7 +195,7 @@ func _build_scene() -> void:
 	env.glow_enabled = false
 	env.rtgi_enabled = true
 	env.rtgi_disable_in_editor = false
-	env.rtgi_mode = Environment.RTGI_MODE_FULL_PATH_TRACING
+	env.rtgi_mode = Environment.RTGI_MODE_HYBRID
 	env.rtgi_samples_per_pixel = 1
 	env.rtgi_max_bounces = 3
 	env.rtgi_energy = 1.0
@@ -504,7 +504,7 @@ func _build_coexistence_scene(env: Environment) -> void:
 	env.ambient_light_color = Color(0.018, 0.019, 0.022)
 	env.ambient_light_energy = 0.08
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.rtgi_mode = Environment.RTGI_MODE_FULL_PATH_TRACING if _scene_mode == "path_traced_sdfgi_exclusive" else Environment.RTGI_MODE_REFLECTIONS_RT_ONLY
+	env.rtgi_mode = Environment.RTGI_MODE_FULL_PATH_TRACING if _scene_mode == "path_traced_sdfgi_exclusive" else Environment.RTGI_MODE_HYBRID
 	env.rtgi_max_bounces = 4
 	env.sdfgi_enabled = _scene_mode in ["sdfgi", "path_traced_sdfgi_exclusive"]
 	if env.sdfgi_enabled:
@@ -1978,7 +1978,7 @@ func _capture_comparison_grid(base_name: String) -> void:
 		{
 			"name": "vendor_denoiser_fallback_nvidia",
 			"enabled": true,
-			"backend": Environment.RTGI_BACKEND_NVIDIA_RTXPT,
+			"backend": Environment.RTGI_BACKEND_VULKAN_GENERIC,
 			"mode": Environment.RTGI_MODE_FULL_PATH_TRACING,
 			"spp": 1,
 			"denoiser": Environment.RTGI_DENOISER_NVIDIA,

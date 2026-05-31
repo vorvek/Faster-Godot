@@ -79,9 +79,6 @@ public:
 
 	enum RTGIBackend {
 		RTGI_BACKEND_VULKAN_GENERIC = RSE::PT_BACKEND_VULKAN_GENERIC,
-		RTGI_BACKEND_NVIDIA_RTXPT = RSE::PT_BACKEND_NVIDIA_RTXPT,
-		RTGI_BACKEND_AMD_HIP_RT = RSE::PT_BACKEND_AMD_HIP_RT,
-		RTGI_BACKEND_INTEL_EMBREE = RSE::PT_BACKEND_INTEL_EMBREE,
 	};
 
 	enum RTGIMode {
@@ -235,7 +232,7 @@ private:
 	RSE::PathtracingDenoiser pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
 	RTGIBackend rtgi_backend = RTGI_BACKEND_VULKAN_GENERIC;
 	RTGIQualityPreset rtgi_quality_preset = RTGI_QUALITY_PRESET_PRODUCTION;
-	RTGIMode rtgi_mode = RTGI_MODE_FULL_PATH_TRACING;
+	RTGIMode rtgi_mode = RTGI_MODE_HYBRID;
 	float rtgi_energy = 1.0;
 	float rtgi_resolution_scale = 0.67f;
 	bool rtgi_disable_in_editor = true;

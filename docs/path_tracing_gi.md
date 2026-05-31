@@ -16,13 +16,15 @@ The feature is exposed on `Environment`, so it appears through the same
 - `rtgi_enabled`
 - `rtgi_backend`
   - `Vulkan Generic`
-  - `NVIDIA RTXPT`
-  - `AMD HIP RT`
-  - `Intel Embree`
+- `rtgi_quality_preset`
+  - `Custom`
+  - `Performance`
+  - `Balanced`
+  - `Production`
 - `rtgi_mode`
   - `Reflections RT Only`
-  - `Full Path Tracing`
   - `Hybrid RTGI`
+  - `Full Scene Path-Traced GI`
 - `rtgi_samples_per_pixel`
 - `rtgi_max_bounces`
 - `rtgi_energy`
@@ -63,29 +65,23 @@ The feature is exposed on `Environment`, so it appears through the same
     normal non-RT rendering path. This is off by default for new environments.
 - `rtgi_backend`
   - `Vulkan Generic`: uses the current built-in Vulkan ray tracing
-    implementation. This is the default backend.
-  - `NVIDIA RTXPT`: uses the NVIDIA Godot fork-compatible RenderingDevice/Vulkan
-    ray tracing dispatch path when the RTXPT module is compiled. Optional
-    NVIDIA denoising remains runtime-gated.
-  - `AMD HIP RT`: uses HIP RT scene and trace-kernel dispatch when the HIP RT
-    module, runtime libraries, and Vulkan/HIP external memory and semaphore
-    exchange are available. It reports unavailable instead of using readbacks
-    when external interop cannot be established.
-  - `Intel Embree`: uses Embree/OSPRay-capable CPU rendering when the backend is
-    compiled, then uploads the result into the RD-owned RTGI output. Probe
-    updates may still use the Vulkan Generic path in mixed mode.
+    implementation. This is the only exposed backend.
+- `rtgi_quality_preset`
+  - Applies named quality bundles for sampling, denoising, cache, STRC, and
+    reconstruction controls. It does not change `rtgi_mode`; selecting
+    `Full Scene Path-Traced GI` remains an explicit mode choice.
 - `rtgi_mode`
   - `Reflections RT Only`: keeps the normal Forward+ raster path and raster GI
     systems responsible for diffuse GI, then uses ray tracing for specular and
     reflection paths only.
-  - `Full Path Tracing`: routes full opaque lighting through the ray tracing path for
-    the view. It disables incompatible baked and screen-space GI contributions
-    and then composites transparent raster overlays after RT denoising. This is
-    heavier and is intended for high-quality dark scenes, captures, and RT
-    debugging rather than broad fallback compatibility.
   - `Hybrid RTGI`: keeps the normal Forward+ raster opaque pass and traces RTGI
     against raster G-buffer guides, then denoises and blends the RTGI
-    contribution into the raster frame.
+    contribution into the raster frame. This is the default mode.
+  - `Full Scene Path-Traced GI`: routes full opaque lighting through the ray
+    tracing path for the view. It disables incompatible baked and screen-space
+    GI contributions and then composites transparent raster overlays after RT
+    denoising. This is heavier and is intended for explicit high-quality dark
+    scenes, captures, and RT debugging rather than broad fallback compatibility.
 - `rtgi_samples_per_pixel`
   - Controls how many RT samples are traced per pixel each frame. Higher values
     reduce raw noise but cost more GPU time. Lower values rely more heavily on
@@ -100,7 +96,7 @@ The feature is exposed on `Environment`, so it appears through the same
 - `rtgi_resolution_scale`
   - Scales the internal RTGI render size before denoising and temporal
     stabilization, then reconstructs the result to the viewport's internal
-    resolution. The default is `0.5`, similar to the way real-time GI systems
+    resolution. The default is `0.67`, similar to the way real-time GI systems
     usually trace lighting below final display resolution and rely on guided
     reconstruction. Raise it toward `1.0` for sharper GI and lower it toward
     `0.25` for cheaper tracing with more denoiser/reconstruction pressure.
@@ -190,7 +186,9 @@ The backend API exposes `RenderingServer.pathtracing_get_backend_capabilities()`
 tooling can distinguish a serialized backend request from a runtime-available
 backend. The no-argument status reports the active renderer's last request; the
 request-scoped status reports the fallback decision for a specific backend
-without changing the current `Environment`. Status dictionaries include the
+without changing the current `Environment`. `Environment.rtgi_backend` only
+exposes `Vulkan Generic`; vendor backend status is diagnostic metadata for
+lower-level tooling, not a scene-facing backend selector. Status dictionaries include the
 requested backend, active backend, `using_fallback`, `fallback_backend`,
 `fallback_backend_name`, `fallback_reason`, and the requested/active capability
 dictionaries. `fallback_backend` is `-1` when no fallback is active; otherwise
@@ -228,9 +226,8 @@ available, and the backend has a real scene import/dispatch implementation:
 `rendering_device`, `external_memory` plus
 `external_semaphore`, `timeline_semaphore`, or `staged_copy`. Vendor backends
 stay unavailable until those checks and the implementation-ready gate are real.
-Selecting an unavailable vendor backend leaves the `Environment` request intact,
-emits one clear warning per backend, and falls back to `Vulkan Generic` for
-rendering.
+Request-scoped vendor backend status reports the diagnostic fallback decision
+without making those backends selectable from `Environment`.
 The Vulkan `RenderingDevice` reports external-memory, external-semaphore, and
 timeline-semaphore support as driver capabilities; vendor backends may expose
 those bits in their status even while their runtime probe or

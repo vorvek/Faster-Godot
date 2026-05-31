@@ -203,10 +203,10 @@
 			The reflected (specular) light source.
 		</member>
 		<member name="rtgi_backend" type="int" setter="set_rtgi_backend" getter="get_rtgi_backend" enum="Environment.RTGIBackend" default="0">
-			Selects the RTGI backend. [constant RTGI_BACKEND_VULKAN_GENERIC] is the built-in Vulkan ray tracing path and the only active backend. Legacy vendor backend values fall back to [constant RTGI_BACKEND_VULKAN_GENERIC].
+			Selects the RTGI backend. [constant RTGI_BACKEND_VULKAN_GENERIC] is the built-in Vulkan ray tracing path and the only exposed backend.
 		</member>
 		<member name="rtgi_quality_preset" type="int" setter="set_rtgi_quality_preset" getter="get_rtgi_quality_preset" enum="Environment.RTGIQualityPreset" default="3">
-			Applies a named RTGI quality bundle to the low-level RTGI controls. The controls remain editable; changing a covered control switches this property to [constant RTGI_QUALITY_PRESET_CUSTOM].
+			Applies a named RTGI quality bundle to the low-level RTGI controls without changing [member rtgi_mode]. The controls remain editable; changing a covered control switches this property to [constant RTGI_QUALITY_PRESET_CUSTOM].
 		</member>
 		<member name="rtgi_disable_in_editor" type="bool" setter="set_rtgi_disable_in_editor" getter="is_rtgi_disabled_in_editor" default="true">
 			If [code]true[/code], disables RTGI only while this environment is previewed in the editor. Running projects and exported builds still use [member rtgi_enabled].
@@ -214,8 +214,8 @@
 		<member name="rtgi_enabled" type="bool" setter="set_rtgi_enabled" getter="is_rtgi_enabled" default="false">
 			If [code]true[/code], enables hardware ray-traced global illumination for this environment when the active renderer and GPU support Vulkan ray tracing.
 		</member>
-		<member name="rtgi_mode" type="int" setter="set_rtgi_mode" getter="get_rtgi_mode" enum="Environment.RTGIMode" default="1">
-			Selects how RTGI contributes to the scene: specular/reflection paths only, full path-traced diffuse and specular lighting, or hybrid secondary lighting traced from the raster G-buffer.
+		<member name="rtgi_mode" type="int" setter="set_rtgi_mode" getter="get_rtgi_mode" enum="Environment.RTGIMode" default="2">
+			Selects how RTGI contributes to the scene: specular/reflection paths only, hybrid secondary lighting traced from the raster G-buffer, or full-scene path-traced GI.
 		</member>
 		<member name="rtgi_samples_per_pixel" type="int" setter="set_rtgi_samples_per_pixel" getter="get_rtgi_samples_per_pixel" default="1">
 			Sets the RTGI ray samples per pixel. Higher values reduce noise, but increase GPU cost.
@@ -578,20 +578,11 @@
 		<constant name="RTGI_BACKEND_VULKAN_GENERIC" value="0" enum="RTGIBackend">
 			Use the built-in Vulkan ray tracing RTGI backend.
 		</constant>
-		<constant name="RTGI_BACKEND_NVIDIA_RTXPT" value="1" enum="RTGIBackend">
-			Legacy NVIDIA RTXPT backend identifier. The runtime currently uses [constant RTGI_BACKEND_VULKAN_GENERIC] instead.
-		</constant>
-		<constant name="RTGI_BACKEND_AMD_HIP_RT" value="2" enum="RTGIBackend">
-			Legacy AMD HIP RT backend identifier. The runtime currently uses [constant RTGI_BACKEND_VULKAN_GENERIC] instead.
-		</constant>
-		<constant name="RTGI_BACKEND_INTEL_EMBREE" value="3" enum="RTGIBackend">
-			Legacy Intel Embree/OSPRay backend identifier. The runtime currently uses [constant RTGI_BACKEND_VULKAN_GENERIC] instead.
-		</constant>
 		<constant name="RTGI_MODE_REFLECTIONS_RT_ONLY" value="0" enum="RTGIMode">
 			Use RTGI for specular/reflection paths only while diffuse GI remains owned by raster GI systems.
 		</constant>
 		<constant name="RTGI_MODE_FULL_PATH_TRACING" value="1" enum="RTGIMode">
-			Use RTGI/path tracing for opaque diffuse and specular lighting.
+			Use full-scene path-traced GI for opaque diffuse and specular lighting.
 		</constant>
 		<constant name="RTGI_MODE_HYBRID" value="2" enum="RTGIMode">
 			Uses raster G-buffer primary hits and traces RTGI diffuse/specular secondary lighting as a composite contribution.

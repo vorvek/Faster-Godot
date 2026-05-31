@@ -149,6 +149,18 @@ static uint32_t _rtgi_diffuse_cache_max_entries_from_params(const float *p_rt_en
 	return MIN(4194304u, MAX(4096u, (uint32_t)p_rt_env_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES]));
 }
 
+static const float *_rtgi_shader_params_for_environment(RID p_environment, float *r_shader_params) {
+	if (!p_environment.is_valid()) {
+		return nullptr;
+	}
+	const RSE::PathtracingParams *params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_environment);
+	if (params == nullptr) {
+		return nullptr;
+	}
+	RSE::pathtracing_params_to_shader_floats(*params, r_shader_params);
+	return r_shader_params;
+}
+
 static const char *_rtgi_denoiser_name(uint32_t p_denoiser) {
 	switch (p_denoiser) {
 		case RSE::PT_DENOISER_NONE:
@@ -3079,9 +3091,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		WARN_PRINT_ONCE("Path tracing is not supported for multiview/XR viewports yet. Falling back to raster rendering for this viewport.");
 		scene_features.rt = false;
 	}
-	const float *rt_env_params = scene_features.rt && p_render_data->environment.is_valid()
-			? RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment)
-			: nullptr;
+	float rt_env_params_storage[RSE::PT_PARAM_MAX];
+	const float *rt_env_params = scene_features.rt ? _rtgi_shader_params_for_environment(p_render_data->environment, rt_env_params_storage) : nullptr;
 	bool rt_replaces_opaque = scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING;
 	const bool rt_hybrid_rtgi = scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_HYBRID;
 	scene_features.rt_replaces_opaque = rt_replaces_opaque;
@@ -3469,9 +3480,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		rt_uniform_set = RID();
 		rt_pipeline = RID();
 
-		const float *env_params = (p_render_data && p_render_data->environment.is_valid())
-				? RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment)
-				: nullptr;
+		float env_params_storage[RSE::PT_PARAM_MAX];
+		const float *env_params = p_render_data ? _rtgi_shader_params_for_environment(p_render_data->environment, env_params_storage) : nullptr;
 		const RSE::PathtracingBackend requested_rtgi_backend = env_params ? RenderRaytracing::backend_from_env_param(env_params[RSE::PT_PARAM_RTGI_BACKEND]) : RSE::PT_BACKEND_VULKAN_GENERIC;
 		raytracing->resolve_backend(requested_rtgi_backend);
 		rt_backend_status = raytracing->get_backend_status();
@@ -6643,7 +6653,8 @@ void RenderForwardClustered::sdfgi_update(const Ref<RenderSceneBuffers> &p_rende
 
 	bool is_full_path_tracing = false;
 	if (p_environment.is_valid() && RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_enabled(p_environment)) {
-		const float *rt_env_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_environment);
+		float rt_env_params_storage[RSE::PT_PARAM_MAX];
+		const float *rt_env_params = _rtgi_shader_params_for_environment(p_environment, rt_env_params_storage);
 		if (rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING) {
 			if (rb->get_view_count() <= 1) {
 				is_full_path_tracing = true;

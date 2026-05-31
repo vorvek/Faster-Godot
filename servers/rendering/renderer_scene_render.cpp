@@ -873,11 +873,11 @@ bool RendererSceneRender::environment_get_pathtracing_enabled(RID p_env) const {
 	return environment_storage.environment_get_pathtracing_enabled(p_env);
 }
 
-void RendererSceneRender::environment_set_pathtracing_params(RID p_env, const PackedFloat32Array &p_params) {
+void RendererSceneRender::environment_set_pathtracing_params(RID p_env, const RSE::PathtracingParams &p_params) {
 	environment_storage.environment_set_pathtracing_params(p_env, p_params);
 }
 
-PackedFloat32Array RendererSceneRender::environment_get_pathtracing_params(RID p_env) const {
+RSE::PathtracingParams RendererSceneRender::environment_get_pathtracing_params(RID p_env) const {
 	return environment_storage.environment_get_pathtracing_params(p_env);
 }
 
