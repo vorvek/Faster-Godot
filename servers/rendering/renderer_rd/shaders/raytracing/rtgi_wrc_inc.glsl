@@ -317,7 +317,7 @@ vec3 rtgi_wrc_sample_irradiance(
 
 		// Cosine-integrate this probe's octahedral radiance against N.
 		vec3 probe_irr = vec3(0.0);
-		float cos_norm = 0.0; // summed cosine weights (solid angle cancels).
+		float cos_norm = 0.0; // summed confidence-weighted cosine weights (ndl*conf; see below).
 		float probe_conf = 0.0;
 		float conf_norm = 0.0;
 		for (int ty = 0; ty < res; ty++) {
@@ -333,7 +333,12 @@ vec3 rtgi_wrc_sample_irradiance(
 				// .a holds per-texel confidence; weight radiance by it so
 				// never-written texels (a==0) don't poison the integral.
 				probe_irr += rad.rgb * (ndl * rad.a);
-				cos_norm += ndl;
+				// Confidence-weighted normalizer (matches the ndl*rad.a numerator, like
+				// the radiance query's rad_norm). Dividing by this makes rad.a cancel, so
+				// unwritten texels (a==0) are excluded and partial / under-converged
+				// coverage still yields the true cosine-mean radiance (~= L) rather than a
+				// value dimmed by the average confidence. (Previously += ndl -> dim GI.)
+				cos_norm += ndl * rad.a;
 				probe_conf += rad.a * ndl;
 				conf_norm += ndl;
 			}
@@ -341,7 +346,7 @@ vec3 rtgi_wrc_sample_irradiance(
 		if (cos_norm <= 0.0 || conf_norm <= 0.0) {
 			continue; // No lit hemisphere coverage for this corner.
 		}
-		probe_irr /= cos_norm; // Cosine-weighted average radiance (== irradiance/PI scale-free).
+		probe_irr /= cos_norm; // Confidence-weighted cosine-average radiance (~= L; coverage-robust).
 		probe_conf /= conf_norm; // Mean per-texel confidence over the lit hemisphere.
 
 		// Chebyshev visibility of the shading point from this probe.
