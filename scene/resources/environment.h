@@ -262,6 +262,7 @@ private:
 	float rtgi_strc_base_probe_spacing = 1.25f;
 	int rtgi_strc_rays_per_frame = 8192;
 	float rtgi_strc_temporal_weight = 0.97f;
+	float rtgi_wrc_strength = 1.0f;
 	float rtgi_overscan_horizontal = 0.0f;
 	float rtgi_overscan_vertical = 0.0f;
 	uint32_t rtgi_strc_static_visual_layers = 0xfffff;
@@ -531,6 +532,8 @@ public:
 	int get_rtgi_strc_rays_per_frame() const;
 	void set_rtgi_strc_temporal_weight(float p_weight);
 	float get_rtgi_strc_temporal_weight() const;
+	void set_rtgi_wrc_strength(float p_strength);
+	float get_rtgi_wrc_strength() const;
 	void set_rtgi_overscan_horizontal(float p_overscan);
 	float get_rtgi_overscan_horizontal() const;
 	void set_rtgi_overscan_vertical(float p_overscan);

@@ -71,10 +71,11 @@ layout(set = 0, binding = 5, std140) uniform GiDebugParams {
 	int screen_width;
 	int screen_height;
 
-	// camera_pos (clipmap center) packed as 3 floats + pad to keep std140 happy
-	// (vec3 is 16-byte aligned; the trailing scalar packs into its 4th slot).
+	// camera_pos (clipmap center) packed as 3 floats; the trailing scalar packs into
+	// the vec3's 4th slot (vec3 is 16-byte aligned in std140). Reused as the artistic
+	// WRC strength multiplier (Task 8) applied to the sampled irradiance below.
 	vec3 camera_pos;
-	uint pad0;
+	float strength;
 
 	// Full inverse projection (clip -> view) and view -> world (camera transform).
 	// std140: each mat4 is 16-byte aligned (the scalar block above totals 48 B,
@@ -143,7 +144,8 @@ void main() {
 	float confidence = 0.0;
 	vec3 irradiance = rtgi_wrc_sample_irradiance(radiance_atlas, distance_atlas, wp, world_pos, world_normal, confidence);
 
-	// RAW irradiance, linear, un-tonemapped. Albedo / beauty compositing is NOT
-	// applied here (the harness gate handles albedo*L). .a carries confidence.
-	imageStore(dest_image, pos, vec4(irradiance, confidence));
+	// RAW irradiance, linear, un-tonemapped, scaled by the artistic strength knob.
+	// Albedo / beauty compositing is NOT applied here (the harness gate handles
+	// albedo*L). .a carries confidence.
+	imageStore(dest_image, pos, vec4(irradiance * params.strength, confidence));
 }

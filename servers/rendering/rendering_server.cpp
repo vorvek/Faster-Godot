@@ -3926,6 +3926,30 @@ void RenderingServer::init() {
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/pathtracer/multimesh_blas_cache_ttl_frames", PROPERTY_HINT_RANGE, "1,18000,1"), 3600);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/pathtracer/multimesh_merged_blas_max_triangles", PROPERTY_HINT_RANGE, "256,1048576,1"), 65536);
 
+	// RTGI World Radiance Cache (WRC) per-preset clipmap tunables. The per-scene
+	// Environment.rtgi_quality_preset selector picks one of these tiers; the
+	// renderer resolves the active tier's six knobs live (no restart) so games can
+	// retune Performance/Balanced/Production globally and raise ceilings for newer
+	// hardware without recompiling. Clamp ranges mirror the renderer's CLAMPs.
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/performance/grid_size", PROPERTY_HINT_RANGE, "12,32,1"), 12);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/performance/cascade_count", PROPERTY_HINT_RANGE, "1,4,1"), 3);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/performance/octahedral_resolution", PROPERTY_HINT_RANGE, "4,16,1"), 8);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/world_radiance_cache/performance/base_spacing", PROPERTY_HINT_RANGE, "0.25,8.0,0.05"), 2.0);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/performance/rays_per_frame", PROPERTY_HINT_RANGE, "1024,32768,256"), 4096);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/performance/temporal_sample_cap", PROPERTY_HINT_RANGE, "8,256,1"), 96);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/balanced/grid_size", PROPERTY_HINT_RANGE, "12,32,1"), 16);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/balanced/cascade_count", PROPERTY_HINT_RANGE, "1,4,1"), 4);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/balanced/octahedral_resolution", PROPERTY_HINT_RANGE, "4,16,1"), 8);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/world_radiance_cache/balanced/base_spacing", PROPERTY_HINT_RANGE, "0.25,8.0,0.05"), 1.5);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/balanced/rays_per_frame", PROPERTY_HINT_RANGE, "1024,32768,256"), 8192);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/balanced/temporal_sample_cap", PROPERTY_HINT_RANGE, "8,256,1"), 64);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/production/grid_size", PROPERTY_HINT_RANGE, "12,32,1"), 20);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/production/cascade_count", PROPERTY_HINT_RANGE, "1,4,1"), 4);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/production/octahedral_resolution", PROPERTY_HINT_RANGE, "4,16,1"), 8);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/world_radiance_cache/production/base_spacing", PROPERTY_HINT_RANGE, "0.25,8.0,0.05"), 1.25);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/production/rays_per_frame", PROPERTY_HINT_RANGE, "1024,32768,256"), 12288);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/production/temporal_sample_cap", PROPERTY_HINT_RANGE, "8,256,1"), 48);
+
 	// OpenGL limits
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/limits/opengl/max_renderable_elements", PROPERTY_HINT_RANGE, "1024,65536,1"), 65536);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/limits/opengl/max_renderable_lights", PROPERTY_HINT_RANGE, "2,256,1"), 32);

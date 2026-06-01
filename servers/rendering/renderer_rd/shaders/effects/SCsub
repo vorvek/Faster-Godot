@@ -12,8 +12,12 @@ if "RD_GLSL" in env["BUILDERS"]:
     if env["faster_godot"]:
         glsl_files = [f for f in glsl_files if f != "tonemap_mobile.glsl"]
 
-    # make sure we recompile shaders if include files change
-    env.Depends([f + ".gen.h" for f in glsl_files], gl_include_files + ["#glsl_builders.py"])
+    # make sure we recompile shaders if include files change. The WRC consumer
+    # (rtgi_wrc_gi_consumer.glsl) #includes ../raytracing/rtgi_wrc_inc.glsl, which is
+    # not covered by the local *_inc.glsl globs above, so watch the raytracing
+    # includes too or edits there won't retrigger a shader rebuild.
+    rt_include_files = [str(f) for f in Glob("../raytracing/*_inc.glsl")]
+    env.Depends([f + ".gen.h" for f in glsl_files], gl_include_files + rt_include_files + ["#glsl_builders.py"])
 
     # compile shaders
     for glsl_file in glsl_files:

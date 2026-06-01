@@ -232,6 +232,40 @@ static bool _rt_camera_history_cut_detected(const RenderDataRD *p_render_data) {
 	return current_forward.dot(previous_forward) < 0.70710678f;
 }
 
+// Resolves the active WRC clipmap params from the per-preset Project Settings.
+// preset: 1=Performance, 2=Balanced, 3=Production; anything else (incl. 0=Custom) -> Balanced.
+// Each knob is GLOBAL_GET + CLAMPed to the same range the renderer/raygen enforce
+// (mirrors gi.cpp's sdfgi CLAMP pattern). r_rays_per_frame / r_temporal_n_cap carry
+// the two scalars that are not part of ClipmapParams (optional out-params; pass nullptr to skip).
+static RtgiWrc::ClipmapParams _resolve_wrc_params(uint32_t p_preset, uint32_t *r_rays_per_frame = nullptr, float *r_temporal_n_cap = nullptr) {
+	const char *prefix;
+	switch (p_preset) {
+		case 1:
+			prefix = "rendering/rtgi/world_radiance_cache/performance/";
+			break;
+		case 3:
+			prefix = "rendering/rtgi/world_radiance_cache/production/";
+			break;
+		case 2:
+		default:
+			prefix = "rendering/rtgi/world_radiance_cache/balanced/";
+			break;
+	}
+	const String base = String(prefix);
+	RtgiWrc::ClipmapParams params;
+	params.cascade_count = CLAMP(int32_t(GLOBAL_GET(base + "cascade_count")), 1, 4);
+	params.grid = CLAMP(int32_t(GLOBAL_GET(base + "grid_size")), 12, 32);
+	params.oct_res = CLAMP(int32_t(GLOBAL_GET(base + "octahedral_resolution")), 4, 16);
+	params.base_spacing = CLAMP(float(GLOBAL_GET(base + "base_spacing")), 0.25f, 8.0f);
+	if (r_rays_per_frame) {
+		*r_rays_per_frame = (uint32_t)CLAMP(int32_t(GLOBAL_GET(base + "rays_per_frame")), 1024, 32768);
+	}
+	if (r_temporal_n_cap) {
+		*r_temporal_n_cap = (float)CLAMP(int32_t(GLOBAL_GET(base + "temporal_sample_cap")), 8, 256);
+	}
+	return params;
+}
+
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_specular() {
 	ERR_FAIL_NULL(render_buffers);
 
@@ -3038,10 +3072,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// radiance-probes pipeline is developed behind this switch; legacy is the
 	// default and keeps the existing dispatch below completely unchanged.
 	RSE::RTGIPipeline rtgi_pipeline_sel = RSE::RTGI_PIPELINE_LEGACY;
+	// Active WRC quality-preset selector (default Production when no Environment
+	// params are present); resolved into the per-preset clipmap settings below.
+	uint32_t rtgi_quality_preset_sel = 3u;
 	if (scene_features.rt && p_render_data->environment.is_valid()) {
 		const RSE::PathtracingParams *rtgi_pipeline_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
 		if (rtgi_pipeline_params != nullptr) {
 			rtgi_pipeline_sel = rtgi_pipeline_params->rtgi_pipeline;
+			rtgi_quality_preset_sel = rtgi_pipeline_params->rtgi_quality_preset;
 		}
 	}
 	// Radiance-probes (World Radiance Cache) pipeline gating. When selected we keep
@@ -3057,17 +3095,16 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		scene_features.rt = false;
 	}
 	// Single clamped ClipmapParams used for BOTH atlas sizing and scroll/dispatch so
-	// the two never diverge (prior-review unification). Defaults: 4 cascades, grid 32,
-	// oct_res 8, base_spacing 1.0. Task 8 will source these from the Environment.
-	RtgiWrc::ClipmapParams wrc_params;
-	wrc_params.cascade_count = CLAMP(wrc_params.cascade_count, 1, 4);
-	wrc_params.grid = CLAMP(wrc_params.grid, 1, 64);
-	wrc_params.oct_res = CLAMP(wrc_params.oct_res, 1, 16);
-	// Default probe-update ray budget for Task 5a (Task 8 makes this an Environment
-	// knob). The WRC results SSBO is sized to exactly this many entries and the
-	// dispatch launches exactly this many rays, so every gl_LaunchIDEXT.x indexes a
-	// valid results slot (the raygen stub relies on that 1:1 launch==capacity invariant).
-	const uint32_t wrc_rays_per_frame = 8192u;
+	// the two never diverge (prior-review unification). Sourced from the per-preset
+	// Project Settings via _resolve_wrc_params (Task 8); the active tier is the
+	// Environment's rtgi_quality_preset carried on the params struct (default
+	// Production when no params are present). The WRC results SSBO is sized to
+	// exactly wrc_rays_per_frame entries and the dispatch launches exactly that many
+	// rays, so every gl_LaunchIDEXT.x indexes a valid results slot (the raygen stub
+	// relies on that 1:1 launch==capacity invariant).
+	uint32_t wrc_rays_per_frame;
+	float wrc_n_cap;
+	RtgiWrc::ClipmapParams wrc_params = _resolve_wrc_params(rtgi_quality_preset_sel, &wrc_rays_per_frame, &wrc_n_cap);
 	if (rt_radiance_probes_only) {
 		if (rtgi_wrc != nullptr && rb.is_valid()) {
 			rtgi_wrc->ensure_resources(rb, wrc_params, (int)rb->get_view_count());
@@ -4140,6 +4177,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				wrc_frame.camera_pos = wrc_cur_camera;
 				wrc_frame.frame_index = rt_state->frame_counter;
 				wrc_frame.rays_this_frame = wrc_rays_per_frame;
+				wrc_frame.temporal_n_cap = wrc_n_cap; // per-preset 1/n accumulate blend cap (Task 8).
 				for (uint32_t cascade = 0; cascade < 4; cascade++) {
 					const Vector3i scroll = rb_data->rt_wrc_scroll_valid ? RtgiWrc::recenter_delta(wrc_params, (int)cascade, rb_data->rt_wrc_prev_camera, wrc_cur_camera) : Vector3i();
 					wrc_frame.scroll_delta[cascade][0] = scroll.x;
@@ -5414,15 +5452,15 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 		// it consumes: depth always exists post-opaque, and normal-roughness is
 		// forced on for this debug mode at the depth-prepass-mode selection site.
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_WRC_GI && rtgi_wrc != nullptr && rtgi_wrc->get_radiance_atlas().is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
-			// Recover the SAME clamped ClipmapParams used at the WRC dispatch site
-			// (default-constructed + clamped); these MUST match the atlas the query
-			// addresses. Keep in lock-step with the wrc_params block in _render_scene.
-			RtgiWrc::ClipmapParams wrc_dbg_params;
-			wrc_dbg_params.cascade_count = CLAMP(wrc_dbg_params.cascade_count, 1, 4);
-			wrc_dbg_params.grid = CLAMP(wrc_dbg_params.grid, 1, 64);
-			wrc_dbg_params.oct_res = CLAMP(wrc_dbg_params.oct_res, 1, 16);
+			// Recover the SAME clamped ClipmapParams used at the WRC dispatch site by
+			// resolving the active preset's Project Settings (Task 8); these MUST match
+			// the atlas the query addresses. Keep in lock-step with the wrc_params block
+			// in _render_scene. The debug query only needs the ClipmapParams.
+			const RSE::PathtracingParams *dbg_pt = p_render_data->environment.is_valid() ? RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment) : nullptr;
+			RtgiWrc::ClipmapParams wrc_dbg_params = _resolve_wrc_params(dbg_pt ? dbg_pt->rtgi_quality_preset : 3u);
+			const float wrc_dbg_strength = dbg_pt ? dbg_pt->wrc_strength : 1.0f;
 			const Vector3 wrc_dbg_camera = p_render_data->scene_data->cam_transform.origin;
-			rtgi_wrc->render_gi_debug(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, wrc_dbg_params, wrc_dbg_camera, fb, rb->get_internal_size());
+			rtgi_wrc->render_gi_debug(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, wrc_dbg_params, wrc_dbg_camera, wrc_dbg_strength, fb, rb->get_internal_size());
 		}
 	}
 

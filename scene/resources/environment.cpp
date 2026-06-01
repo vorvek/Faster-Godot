@@ -1175,6 +1175,18 @@ float Environment::get_rtgi_strc_temporal_weight() const {
 	return rtgi_strc_temporal_weight;
 }
 
+void Environment::set_rtgi_wrc_strength(float p_strength) {
+	// Artistic multiplier applied to the World Radiance Cache irradiance. Orthogonal
+	// to the quality preset (it does not change the clipmap sizing), so unlike the
+	// STRC knobs it does NOT mark the preset Custom.
+	rtgi_wrc_strength = CLAMP(p_strength, 0.0f, 8.0f);
+	_update_pathtracing();
+}
+
+float Environment::get_rtgi_wrc_strength() const {
+	return rtgi_wrc_strength;
+}
+
 void Environment::set_rtgi_overscan_horizontal(float p_overscan) {
 	rtgi_overscan_horizontal = CLAMP(p_overscan, 0.0f, 0.25f);
 	_mark_rtgi_quality_preset_custom();
@@ -1246,6 +1258,7 @@ void Environment::_update_pathtracing() {
 	params.resolution_scale = rtgi_resolution_scale;
 	params.mode = (uint32_t)rtgi_mode;
 	params.rtgi_pipeline = (RSE::RTGIPipeline)rtgi_pipeline;
+	params.rtgi_quality_preset = (uint32_t)rtgi_quality_preset;
 	params.overscan_horizontal = rtgi_overscan_horizontal;
 	params.overscan_vertical = rtgi_overscan_vertical;
 	params.backend = (RSE::PathtracingBackend)rtgi_backend;
@@ -1269,6 +1282,7 @@ void Environment::_update_pathtracing() {
 	params.strc_base_probe_spacing = rtgi_strc_base_probe_spacing;
 	params.strc_rays_per_frame = (uint32_t)rtgi_strc_rays_per_frame;
 	params.strc_temporal_weight = rtgi_strc_temporal_weight;
+	params.wrc_strength = rtgi_wrc_strength;
 	params.strc_static_visual_layers = rtgi_strc_static_visual_layers;
 	params.strc_dynamic_visual_layers = rtgi_strc_dynamic_visual_layers;
 	RS::get_singleton()->environment_set_pathtracing_params(environment, params);
@@ -2174,6 +2188,8 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_rtgi_strc_rays_per_frame"), &Environment::get_rtgi_strc_rays_per_frame);
 	ClassDB::bind_method(D_METHOD("set_rtgi_strc_temporal_weight", "weight"), &Environment::set_rtgi_strc_temporal_weight);
 	ClassDB::bind_method(D_METHOD("get_rtgi_strc_temporal_weight"), &Environment::get_rtgi_strc_temporal_weight);
+	ClassDB::bind_method(D_METHOD("set_rtgi_wrc_strength", "strength"), &Environment::set_rtgi_wrc_strength);
+	ClassDB::bind_method(D_METHOD("get_rtgi_wrc_strength"), &Environment::get_rtgi_wrc_strength);
 	ClassDB::bind_method(D_METHOD("set_rtgi_overscan_horizontal", "overscan"), &Environment::set_rtgi_overscan_horizontal);
 	ClassDB::bind_method(D_METHOD("get_rtgi_overscan_horizontal"), &Environment::get_rtgi_overscan_horizontal);
 	ClassDB::bind_method(D_METHOD("set_rtgi_overscan_vertical", "overscan"), &Environment::set_rtgi_overscan_vertical);
@@ -2218,6 +2234,7 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_strc_base_probe_spacing", PROPERTY_HINT_RANGE, "0.25,8,0.01"), "set_rtgi_strc_base_probe_spacing", "get_rtgi_strc_base_probe_spacing");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_strc_rays_per_frame", PROPERTY_HINT_RANGE, "0,32768,1"), "set_rtgi_strc_rays_per_frame", "get_rtgi_strc_rays_per_frame");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_strc_temporal_weight", PROPERTY_HINT_RANGE, "0,0.995,0.001"), "set_rtgi_strc_temporal_weight", "get_rtgi_strc_temporal_weight");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_wrc_strength", PROPERTY_HINT_RANGE, "0,8,0.01"), "set_rtgi_wrc_strength", "get_rtgi_wrc_strength");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_horizontal", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_horizontal", "get_rtgi_overscan_horizontal");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_vertical", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_vertical", "get_rtgi_overscan_vertical");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_strc_static_visual_layers", PROPERTY_HINT_LAYERS_3D_RENDER), "set_rtgi_strc_static_visual_layers", "get_rtgi_strc_static_visual_layers");

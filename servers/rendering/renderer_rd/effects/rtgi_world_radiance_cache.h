@@ -77,8 +77,9 @@ public:
 	// irradiance. The RAW linear irradiance is written to a debug image then
 	// blitted (un-tonemapped) to `p_dest_fb`, so the Task-7b furnace gate can read
 	// measurable linear values. `p_params` MUST be the same ClipmapParams the
-	// atlases were built from; `p_camera_pos` is the clipmap center (cam origin).
-	void render_gi_debug(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_depth, RID p_normal_roughness, const Projection &p_inv_projection, const Transform3D &p_cam_transform, const RtgiWrc::ClipmapParams &p_params, const Vector3 &p_camera_pos, RID p_dest_fb, const Size2i &p_size);
+	// atlases were built from; `p_camera_pos` is the clipmap center (cam origin);
+	// `p_strength` is the artistic WRC irradiance multiplier (Task 8).
+	void render_gi_debug(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_depth, RID p_normal_roughness, const Projection &p_inv_projection, const Transform3D &p_cam_transform, const RtgiWrc::ClipmapParams &p_params, const Vector3 &p_camera_pos, float p_strength, RID p_dest_fb, const Size2i &p_size);
 
 	void free_resources();
 
@@ -114,7 +115,7 @@ private:
 	// RenderingDevice's MAX_PUSH_CONSTANT_SIZE (128) cap, and the scalars push the
 	// total to 176 bytes. UBOs are uncapped. The member layout below EXACTLY
 	// matches the std140 `GiDebugParams` block in rtgi_wrc_gi_consumer.glsl:
-	// scalars 0..48 (camera_pos vec3 @ 32 + pad0 @ 44), then two 16-byte-aligned
+	// scalars 0..48 (camera_pos vec3 @ 32 + strength @ 44), then two 16-byte-aligned
 	// mat4s at offsets 48 and 112 (total 176 bytes).
 	struct GiDebugUBO {
 		int32_t cascade_count;
@@ -128,7 +129,7 @@ private:
 		int32_t screen_height;
 
 		float camera_pos[3];
-		uint32_t pad0;
+		float strength; // packs into camera_pos's std140 4th slot (was pad0); WRC artistic multiplier.
 
 		float inv_projection[16];
 		float inv_view[16];

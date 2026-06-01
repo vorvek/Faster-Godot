@@ -922,6 +922,11 @@ struct PathtracingParams {
 	// CPU-side RTGI pipeline selector. Not packed into the shader float params:
 	// it gates which radiance pipeline the renderer builds, defaulting to legacy.
 	RTGIPipeline rtgi_pipeline = RTGI_PIPELINE_LEGACY;
+	// CPU-side quality-preset selector (mirrors Environment::RTGIQualityPreset:
+	// 0=Custom,1=Performance,2=Balanced,3=Production). Like rtgi_pipeline it is read
+	// directly off the struct on the CPU (the renderer resolves the matching
+	// per-preset Project Settings) and is NOT packed into the shader float params.
+	uint32_t rtgi_quality_preset = 3;
 	float overscan_horizontal = 0.0f;
 	float overscan_vertical = 0.0f;
 	float denoiser_strength = 0.90f;
@@ -944,6 +949,10 @@ struct PathtracingParams {
 	float strc_base_probe_spacing = 1.25f;
 	uint32_t strc_rays_per_frame = 8192;
 	float strc_temporal_weight = 0.97f;
+	// CPU-side artistic multiplier for the World Radiance Cache irradiance, applied
+	// in the WRC GI consumer. Read directly off the struct on the CPU; NOT packed
+	// into the shader float params.
+	float wrc_strength = 1.0f;
 	PathtracingBackend backend = PT_BACKEND_VULKAN_GENERIC;
 	uint32_t strc_static_visual_layers = 0xfffff;
 	uint32_t strc_dynamic_visual_layers = 0xfffff;

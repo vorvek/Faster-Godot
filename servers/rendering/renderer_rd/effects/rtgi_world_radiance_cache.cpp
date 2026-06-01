@@ -271,7 +271,7 @@ void RTGIWorldRadianceCache::_ensure_gi_debug_image(const Size2i &p_size) {
 	gi_debug_image_size = wanted;
 }
 
-void RTGIWorldRadianceCache::render_gi_debug(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_depth, RID p_normal_roughness, const Projection &p_inv_projection, const Transform3D &p_cam_transform, const RtgiWrc::ClipmapParams &p_params, const Vector3 &p_camera_pos, RID p_dest_fb, const Size2i &p_size) {
+void RTGIWorldRadianceCache::render_gi_debug(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_depth, RID p_normal_roughness, const Projection &p_inv_projection, const Transform3D &p_cam_transform, const RtgiWrc::ClipmapParams &p_params, const Vector3 &p_camera_pos, float p_strength, RID p_dest_fb, const Size2i &p_size) {
 	if (!resources_valid || !radiance_atlas[read_index].is_valid() || !distance_atlas[read_index].is_valid()) {
 		return;
 	}
@@ -373,6 +373,7 @@ void RTGIWorldRadianceCache::render_gi_debug(Ref<RenderSceneBuffersRD> p_render_
 	ubo.camera_pos[0] = p_camera_pos.x;
 	ubo.camera_pos[1] = p_camera_pos.y;
 	ubo.camera_pos[2] = p_camera_pos.z;
+	ubo.strength = p_strength;
 	MaterialStorage::store_camera(p_inv_projection, ubo.inv_projection);
 	MaterialStorage::store_transform(p_cam_transform, ubo.inv_view);
 	RD::get_singleton()->buffer_update(gi_debug_ubo, 0, sizeof(GiDebugUBO), &ubo);
