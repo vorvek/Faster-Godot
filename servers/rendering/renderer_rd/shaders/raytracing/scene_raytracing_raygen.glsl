@@ -412,22 +412,114 @@ void rt_strc_probe_update_main() {
 	rt_strc_probe_ray_results[ray_index].metadata = vec4(dynamic_hit ? 1.0 : 0.0, confidence, float(source_mask), float(update_index));
 }
 
-// World Radiance Cache probe-update raygen. Task 5a STUB: this writes a zeroed
-// result per ray so the dispatch is a valid, side-effect-free ray pass (the AS
-// is traced by the backend setup, but this body performs no rayQuery / shading).
-// Structure mirrors rt_strc_probe_update_main(): one invocation == one ray ==
-// one (probe, direction) octahedral texel. Real cascade/probe addressing,
-// tracing, shading and scheduling land in Task 5b.
+// World Radiance Cache probe-update raygen. Task 5b: the WRC probe-ray PRODUCER
+// is structurally identical to the STRC producer (same cubic probe grid, same
+// 8x8 octahedral directions, same scheduler, same full-path-trace + NEE shading),
+// so this body is a copy of rt_strc_probe_update_main() that differs ONLY in the
+// three output-buffer writes (STRC results SSBO -> WRC results SSBO). It reads the
+// SAME RT_PARAM_RTGI_STRC_* slots; the C++ WRC dispatch site fills those slots with
+// the WRC clipmap params so probe-addressing matches the WRC atlas. The WRC's real
+// divergence (octahedral integration, sample-counted accumulate, integrating
+// consumer) lives in Tasks 6/7, NOT here. No WRC atlas sampling / cache feedback:
+// the full path trace already yields ground-truth multi-bounce radiance.
 void rt_wrc_probe_update_main() {
-	// The probe-update dispatch launches exactly `wrc_rays_per_frame` rays and the
-	// results SSBO is sized to that same capacity, so gl_LaunchIDEXT.x is always a
-	// valid in-bounds index (one ray == one results slot). No extra bound needed
-	// for the stub; Task 5b adds real (probe, direction) addressing + a rays param.
 	uint ray_index = gl_LaunchIDEXT.x;
+	uint ray_count = uint(max(get_rt_param(RT_PARAM_RTGI_STRC_RAYS_PER_FRAME), 0.0));
+	if (ray_index >= ray_count) {
+		return;
+	}
 
-	rt_wrc_probe_ray_results[ray_index].radiance_distance = vec4(0.0);
-	rt_wrc_probe_ray_results[ray_index].normal_confidence = vec4(0.0);
-	rt_wrc_probe_ray_results[ray_index].metadata = vec4(0.0);
+	uint grid = clamp(uint(get_rt_param(RT_PARAM_RTGI_STRC_GRID_SIZE)), 12u, 32u);
+	uint cascade_count = clamp(uint(get_rt_param(RT_PARAM_RTGI_STRC_CASCADE_COUNT)), 1u, 4u);
+	uint probe_count = cascade_count * grid * grid * grid;
+	uint texel_count = probe_count * 64u;
+	uint frame_index = uint(get_rt_param(RT_PARAM_FRAME_INDEX));
+	uint update_index = texel_count > 0u ? rt_strc_select_update_index(ray_index, max(ray_count, 1u), grid, cascade_count, frame_index) % texel_count : 0u;
+	uint probe_index = update_index >> 6u;
+	uint dir_index = update_index & 63u;
+	uint probes_per_cascade = grid * grid * grid;
+	uint cascade = min(probe_index / probes_per_cascade, cascade_count - 1u);
+	uint probe = probe_index - cascade * probes_per_cascade;
+	uint px = probe % grid;
+	uint py = (probe / grid) % grid;
+	uint pz = probe / (grid * grid);
+
+	float spacing = max(get_rt_param(RT_PARAM_RTGI_STRC_BASE_PROBE_SPACING), 0.25) * exp2(float(cascade));
+	vec3 camera_origin = rt_camera_world_origin();
+	vec3 cascade_center = floor(camera_origin / spacing) * spacing;
+	vec3 probe_local = (vec3(float(px), float(py), float(pz)) + vec3(0.5)) - vec3(float(grid) * 0.5);
+	vec3 ray_origin = cascade_center + probe_local * spacing;
+
+	vec2 oct_uv = (vec2(float(dir_index & 7u), float((dir_index >> 3u) & 7u)) + vec2(0.5)) / 8.0;
+	vec3 ray_dir = normalize(oct_to_vec3(oct_uv * 2.0 - 1.0));
+
+	PathState ps;
+	ps.radiance = vec3(0.0);
+	ps.specular_radiance = vec3(0.0);
+	ps.throughput = vec3(1.0);
+	ps.packed_bounces_flags = set_sample_zero(0u);
+	ps.rng_state = init_blue_noise_rng(uvec2(ray_index & 255u, (ray_index >> 8u) & 255u), frame_index, dir_index);
+	ps.hit_t = 65504.0;
+	ps.offset_normal = vec3(0.0, 1.0, 0.0);
+	ps.next_ray_dir = ray_dir;
+
+	float first_hit_distance = 65504.0;
+	vec3 first_hit_normal = ps.offset_normal;
+	bool first_hit_recorded = false;
+	const uint max_bounces = RT_GET_MAX_BOUNCES();
+	[[dont_unroll]] for (uint bounce = 0u; bounce <= max_bounces; bounce++) {
+		path_pack(payload, ps);
+#ifdef USE_SER
+		hitObjectNV hitObject;
+		hitObjectTraceRayNV(hitObject, tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
+		uint hint = 0;
+		if (hitObjectIsHitNV(hitObject)) {
+			hint = hitObjectGetInstanceIdNV(hitObject);
+		}
+		reorderThreadNV(hitObject, hint, 8);
+		hitObjectExecuteShaderNV(hitObject, 0);
+#else
+		traceRayEXT(tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
+#endif
+		ps = path_unpack(payload);
+		if (!first_hit_recorded) {
+			first_hit_distance = clamp(ps.hit_t, 0.0, 65504.0);
+			first_hit_normal = ps.offset_normal;
+			first_hit_recorded = true;
+		}
+		if (is_path_terminated(ps.packed_bounces_flags)) {
+			break;
+		}
+		vec3 hit_pos = ray_origin + ray_dir * ps.hit_t;
+		ray_origin = offset_ray_origin(hit_pos, ps.offset_normal);
+		ray_dir = ps.next_ray_dir;
+	}
+
+	vec3 radiance = sanitize_payload_vec3(ps.radiance);
+	bool dynamic_hit = has_strc_dynamic_hit(ps.packed_bounces_flags);
+	float radiance_luma = rt_luminance(radiance);
+	uint source_mask = get_strc_source_mask(ps.packed_bounces_flags);
+	if (source_mask == 0u && radiance_luma > 0.0005) {
+		source_mask = STRC_SOURCE_MASK_INDIRECT;
+	}
+	float source_quality = 0.0;
+	if ((source_mask & STRC_SOURCE_MASK_DIRECT) != 0u) {
+		source_quality = max(source_quality, 1.0);
+	}
+	if ((source_mask & STRC_SOURCE_MASK_EMISSIVE) != 0u) {
+		source_quality = max(source_quality, 0.95);
+	}
+	if ((source_mask & STRC_SOURCE_MASK_SKY) != 0u) {
+		source_quality = max(source_quality, 0.80);
+	}
+	if ((source_mask & STRC_SOURCE_MASK_INDIRECT) != 0u) {
+		source_quality = max(source_quality, 0.60);
+	}
+	float radiance_validity = smoothstep(0.0005, 0.0060, radiance_luma);
+	float confidence = radiance_validity * source_quality * (dynamic_hit ? 0.45 : 1.0);
+	rt_wrc_probe_ray_results[ray_index].radiance_distance = vec4(radiance, first_hit_distance);
+	rt_wrc_probe_ray_results[ray_index].normal_confidence = vec4(first_hit_normal * 0.5 + 0.5, confidence);
+	rt_wrc_probe_ray_results[ray_index].metadata = vec4(dynamic_hit ? 1.0 : 0.0, confidence, float(source_mask), float(update_index));
 }
 
 void main() {

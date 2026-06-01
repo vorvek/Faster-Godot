@@ -9730,6 +9730,18 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_RAYS_PER_FRAME] = float(SceneShaderRaytracing::RTGI_STRC_INTERNAL_FALLBACK_RAYS_PER_FRAME);
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT] = SceneShaderRaytracing::RTGI_STRC_INTERNAL_FALLBACK_TEMPORAL_WEIGHT;
 		}
+		// WRC probe-update reuses the STRC grid/cascade/spacing/rays param slots for
+		// probe-addressing, but needs the WRC's own clipmap values (which the WRC atlas
+		// was sized from) rather than the Environment's STRC settings filled above. The
+		// dispatch site channels those values through RTViewportState; override them here
+		// AFTER the Environment fill, gated on the WRC flag so STRC/main dispatches are
+		// byte-identical to before (wrc_grid > 0 is a belt-and-suspenders sentinel).
+		if ((p_rt_flags & SceneShaderRaytracing::RT_FLAG_WRC_PROBE_UPDATE) != 0 && p_state->wrc_grid > 0u) {
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_GRID_SIZE] = float(p_state->wrc_grid);
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_CASCADE_COUNT] = float(p_state->wrc_cascade_count);
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_BASE_PROBE_SPACING] = p_state->wrc_base_spacing;
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_RAYS_PER_FRAME] = float(p_state->wrc_rays_per_frame);
+		}
 
 		// rt_params layout (see RaytracingParamIndex enum):
 		// [0] = VIS_MODE, [1] = SAMPLE_COUNT, [2] = MAX_BOUNCES,

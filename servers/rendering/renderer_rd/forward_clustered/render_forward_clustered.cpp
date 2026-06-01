@@ -4116,6 +4116,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			if (rt_resources_ready && rt_state && rtgi_wrc && rtgi_wrc->get_ray_result_buffer().is_valid()) {
 				RD::get_singleton()->draw_command_begin_label("RTGI WRC Probe Update");
 				const uint32_t wrc_flags = rt_flags | SceneShaderRaytracing::RT_FLAG_WRC_PROBE_UPDATE;
+				// Channel the WRC's own clipmap values into the params UBO the probe-update
+				// raygen reads (via update_uniform_set's RT_FLAG_WRC_PROBE_UPDATE override),
+				// so probe-addressing matches the atlas that was sized from wrc_params. rt_state
+				// IS rt_backend_context.viewport_state, the same object update_uniform_set sees.
+				rt_state->wrc_grid = (uint32_t)wrc_params.grid;
+				rt_state->wrc_cascade_count = (uint32_t)wrc_params.cascade_count;
+				rt_state->wrc_base_spacing = wrc_params.base_spacing;
+				rt_state->wrc_rays_per_frame = wrc_rays_per_frame;
 				raytracing->dispatch_probe_update_backend(rt_backend_context, wrc_flags, rtgi_wrc->get_ray_result_buffer(), wrc_rays_per_frame);
 				rt_state = rt_backend_context.viewport_state;
 

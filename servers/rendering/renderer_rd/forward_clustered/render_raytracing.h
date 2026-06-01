@@ -461,6 +461,18 @@ struct RTViewportState {
 	bool light_buffer_signature_valid = false;
 
 	uint32_t frame_counter = 0;
+
+	// WRC clipmap params channeled to update_uniform_set so the WRC probe-update
+	// raygen reads the WRC's own grid/cascade/spacing/rays (which the WRC atlas was
+	// sized from) out of the STRC RT-param slots, instead of the Environment's STRC
+	// settings. A zero wrc_grid is the "not a WRC probe-update dispatch" sentinel:
+	// the override in update_uniform_set only fires when wrc_grid > 0 AND the
+	// RT_FLAG_WRC_PROBE_UPDATE flag is set, so STRC/main dispatches are untouched.
+	uint32_t wrc_grid = 0;
+	uint32_t wrc_cascade_count = 0;
+	float wrc_base_spacing = 0.0f;
+	uint32_t wrc_rays_per_frame = 0;
+
 	uint64_t radiance_history_signature = 0;
 	bool radiance_history_signature_valid = false;
 	bool radiance_history_invalidated = false;
