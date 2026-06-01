@@ -38,6 +38,7 @@
 #include "servers/rendering/renderer_rd/effects/rtgi_diffuse_cache.h"
 #include "servers/rendering/renderer_rd/effects/rtgi_denoise.h"
 #include "servers/rendering/renderer_rd/effects/rtgi_spatiotemporal_radiance_cache.h"
+#include "servers/rendering/renderer_rd/effects/rtgi_world_radiance_cache.h"
 #include "servers/rendering/renderer_rd/effects/ss_effects.h"
 #include "servers/rendering/renderer_rd/effects/taa.h"
 #include "servers/rendering/renderer_rd/forward_clustered/render_raytracing.h"
@@ -933,6 +934,7 @@ private:
 	RendererRD::RTGIDiffuseCache *rtgi_diffuse_cache = nullptr;
 	RendererRD::RTGIDenoise *rtgi_denoise = nullptr;
 	RendererRD::RTGISpatioTemporalRadianceCache *rtgi_strc = nullptr;
+	RendererRD::RTGIWorldRadianceCache *rtgi_wrc = nullptr;
 	RendererRD::FSR2Effect *fsr2_effect = nullptr;
 	RendererRD::SSEffects *ss_effects = nullptr;
 

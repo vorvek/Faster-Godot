@@ -3044,10 +3044,27 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 	}
 	if (rtgi_pipeline_sel == RSE::RTGI_PIPELINE_RADIANCE_PROBES) {
-		// New radiance-probes pipeline path. Intentionally empty for now: by
-		// disabling the legacy RTGI dispatch here we keep the new pipeline a
-		// no-op while it is built out, without touching the legacy code below.
+		// New radiance-probes pipeline path (World Radiance Cache). Disable the
+		// legacy RTGI dispatch so the two paths never run together (no double GI),
+		// then ensure the WRC atlases exist and record its update dispatches.
+		//
+		// Task 4 ships the structure only: the clipmap/scroll math and probe-ray
+		// tracing land in Task 5, so we drive the effect from static defaults and
+		// the empty scroll/accumulate kernels here. The goal is allocate + dispatch
+		// without crashing; the cache produces no lighting yet.
 		scene_features.rt = false;
+		if (rtgi_wrc != nullptr && rb.is_valid() && !is_reflection_probe) {
+			RtgiWrc::ClipmapParams wrc_params; // Defaults: 4 cascades, grid 32, oct_res 8.
+			rtgi_wrc->ensure_resources(rb, wrc_params, (int)rb->get_view_count());
+
+			RendererRD::WRCFrameParams wrc_frame;
+			wrc_frame.camera_pos = p_render_data->scene_data->cam_transform.origin;
+			wrc_frame.frame_index = (uint32_t)RSG::rasterizer->get_frame_number();
+			// scroll_delta stays zero (no recenter math yet, Task 5); rays_this_frame
+			// stays zero (no probe tracing yet, Task 5).
+			memset(wrc_frame.scroll_delta, 0, sizeof(wrc_frame.scroll_delta));
+			rtgi_wrc->update(RID(), RID(), wrc_frame);
+		}
 	}
 	const float *rt_env_params = scene_features.rt ? _rtgi_shader_params_for_environment(p_render_data->environment, rt_env_params_storage) : nullptr;
 	bool rt_replaces_opaque = scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING;
@@ -8041,6 +8058,7 @@ RenderForwardClustered::RenderForwardClustered() {
 	rtgi_diffuse_cache = memnew(RendererRD::RTGIDiffuseCache);
 	rtgi_denoise = memnew(RendererRD::RTGIDenoise);
 	rtgi_strc = memnew(RendererRD::RTGISpatioTemporalRadianceCache);
+	rtgi_wrc = memnew(RendererRD::RTGIWorldRadianceCache);
 	fsr2_effect = memnew(RendererRD::FSR2Effect);
 	ss_effects = memnew(RendererRD::SSEffects);
 	motion_vectors_store = memnew(RendererRD::MotionVectorsStore);
@@ -8070,6 +8088,11 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (rtgi_strc != nullptr) {
 		memdelete(rtgi_strc);
 		rtgi_strc = nullptr;
+	}
+
+	if (rtgi_wrc != nullptr) {
+		memdelete(rtgi_wrc);
+		rtgi_wrc = nullptr;
 	}
 
 	if (rtgi_diffuse_cache != nullptr) {
