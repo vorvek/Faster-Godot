@@ -8538,7 +8538,7 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 		return cumulative_weight;
 	};
 
-	auto add_emissive_candidate = [&](const Transform3D &p_transform, uint32_t p_geometry_index, const RT_GeometryData &p_geom, const RT_MaterialData &p_mat, uint32_t p_sbt_offset, uint8_t p_instance_mask, void *p_mesh_surface) {
+	auto add_emissive_candidate = [&](const Transform3D &p_transform, uint32_t p_geometry_index, const RT_GeometryData &p_geom, const RT_MaterialData &p_mat, uint32_t p_sbt_offset, uint8_t p_instance_mask, void *p_mesh_surface, bool p_two_sided = false) {
 		if ((p_instance_mask & RT_INSTANCE_MASK_VISIBLE) == 0 || p_sbt_offset != 0 || emissive_candidates.size() >= RTGI_MAX_EMISSIVE_CANDIDATES) {
 			return;
 		}
@@ -8571,6 +8571,9 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 		candidate.selection_weight = weight;
 		emissive_candidates.push_back(candidate);
 		geometry_data[p_geometry_index].flags |= RT_GEOM_FLAG_EXPLICIT_EMISSIVE_CANDIDATE;
+		if (p_two_sided) {
+			geometry_data[p_geometry_index].flags |= RT_GEOM_FLAG_TWO_SIDED;
+		}
 		emissive_candidate_total_weight += weight;
 		current_emissive_candidate_signature = _rt_history_mix(current_emissive_candidate_signature, p_geometry_index);
 		current_emissive_candidate_signature = _rt_history_mix(current_emissive_candidate_signature, p_mat.flags);
@@ -8969,7 +8972,8 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 				material_data.push_back(surface_material);
 				instance_flags.push_back(p_inst_flags);
 				instance_masks.push_back(p_instance_mask);
-				add_emissive_candidate(final_transform, geometry_index, rt_geometry, surface_material, rt_sbt_offset, p_instance_mask, mesh_surface);
+				const bool surface_two_sided = surf->shader && surf->shader->rt_cull_mode() == RSE::CULL_MODE_DISABLED;
+				add_emissive_candidate(final_transform, geometry_index, rt_geometry, surface_material, rt_sbt_offset, p_instance_mask, mesh_surface, surface_two_sided);
 				pushed_entries++;
 			};
 
@@ -9039,7 +9043,8 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 				}
 				instance_flags.push_back(p_inst_flags);
 				instance_masks.push_back(p_instance_mask);
-				add_emissive_candidate(pending.instance_transform, geometry_index, merged_geometry, surface_material, pending.rt_sbt_offset, p_instance_mask, nullptr);
+				const bool mm_merged_two_sided = pending.mm_surf->shader && pending.mm_surf->shader->rt_cull_mode() == RSE::CULL_MODE_DISABLED;
+				add_emissive_candidate(pending.instance_transform, geometry_index, merged_geometry, surface_material, pending.rt_sbt_offset, p_instance_mask, nullptr, mm_merged_two_sided);
 				pushed_entries++;
 			};
 
@@ -9149,7 +9154,8 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 
 					instance_flags.push_back(p_inst_flags);
 					instance_masks.push_back(p_instance_mask);
-					add_emissive_candidate(final_transform, geometry_index, rt_geometry, surface_material, pending.rt_sbt_offset, p_instance_mask, pending.mesh_surface);
+					const bool mm_expanded_two_sided = pending.mm_surf->shader && pending.mm_surf->shader->rt_cull_mode() == RSE::CULL_MODE_DISABLED;
+					add_emissive_candidate(final_transform, geometry_index, rt_geometry, surface_material, pending.rt_sbt_offset, p_instance_mask, pending.mesh_surface, mm_expanded_two_sided);
 				};
 
 				push_mm_instance_entry(pending.visible_instance_mask, pending.visible_inst_flags);

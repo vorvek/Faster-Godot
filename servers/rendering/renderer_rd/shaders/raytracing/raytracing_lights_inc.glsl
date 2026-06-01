@@ -724,7 +724,14 @@ RTDirectLighting lights_evaluate_explicit_emissive_candidate_split(
 	}
 
 	vec3 light_normal = normalize(area_vec);
-	float light_cos = max(dot(light_normal, -L), 0.0);
+	// Two-sided emitters (material cull_mode == disabled) emit from both faces, so
+	// flip the winding normal to whichever side faces the receiver. One-sided
+	// emitters keep the back-face rejection (no light leak from their dark side).
+	bool emitter_two_sided = (geom.flags & RT_GEOM_FLAG_TWO_SIDED) != 0u;
+	if (emitter_two_sided && dot(light_normal, -L) < 0.0) {
+		light_normal = -light_normal;
+	}
+	float light_cos = dot(light_normal, -L);
 	if (light_cos <= 0.0) {
 		return rt_direct_lighting_zero();
 	}

@@ -309,6 +309,9 @@ enum {
 	// Fold gl_PrimitiveID into the guide history ID for merged BLASes.
 	RT_GEOM_FLAG_PRIMITIVE_HISTORY_ID = 32u,
 	RT_GEOM_FLAG_EXPLICIT_EMISSIVE_CANDIDATE = 1024u,
+	// Emitter whose material has cull_mode == DISABLED. NEE flips the geometric
+	// normal toward the receiver instead of rejecting back-winding triangles.
+	RT_GEOM_FLAG_TWO_SIDED = 2048u,
 	// Primary hit belongs to a raster GI owner in Simple RT. The shader uses
 	// these to suppress diffuse RTGI while keeping RT specular/reflections.
 	RT_GEOM_FLAG_RASTER_GI_LIGHTMAP = 64u,

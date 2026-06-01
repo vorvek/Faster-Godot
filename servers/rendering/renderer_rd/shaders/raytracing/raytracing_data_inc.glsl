@@ -59,6 +59,9 @@ const uint RT_GEOM_FLAG_RASTER_GI_LIGHTMAP_CAPTURE = 128u;
 const uint RT_GEOM_FLAG_RASTER_GI_VOXELGI = 256u;
 const uint RT_GEOM_FLAG_RASTER_GI_SDFGI = 512u;
 const uint RT_GEOM_FLAG_EXPLICIT_EMISSIVE_CANDIDATE = 1024u;
+// Emitter whose material has cull_mode == DISABLED; NEE flips the winding normal
+// to whichever face faces the receiver instead of rejecting back-winding triangles.
+const uint RT_GEOM_FLAG_TWO_SIDED = 2048u;
 const uint RT_GEOM_FLAG_RASTER_GI_OWNER =
 		RT_GEOM_FLAG_RASTER_GI_LIGHTMAP |
 		RT_GEOM_FLAG_RASTER_GI_LIGHTMAP_CAPTURE |
