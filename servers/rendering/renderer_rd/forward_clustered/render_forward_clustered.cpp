@@ -4130,7 +4130,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				// Per-cascade clipmap scroll deltas (mirrors STRC's CPU recenter math at
 				// the STRC dispatch site, but via RtgiWrc::recenter_delta from the prev/cur
 				// camera using the unified clamped wrc_params). Stored in WRCFrameParams for
-				// Task 6's accumulate; the Task 4 empty accumulate kernel ignores it for now.
+				// the rtgi_wrc->update() accumulate (mode 1) + recenter (mode 0) dispatch below.
 				RendererRD::WRCFrameParams wrc_frame;
 				const Vector3 wrc_cur_camera = p_render_data->scene_data->cam_transform.origin;
 				wrc_frame.camera_pos = wrc_cur_camera;
@@ -4144,7 +4144,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				}
 				rb_data->rt_wrc_prev_camera = wrc_cur_camera;
 				rb_data->rt_wrc_scroll_valid = true;
-				(void)wrc_frame; // Consumed by Task 6's accumulate dispatch.
+				rtgi_wrc->update(RID(), RID(), wrc_frame); // mode 1 accumulate probe rays -> atlas + mode 0 recenter.
 				RD::get_singleton()->draw_command_end_label();
 			} else {
 				rb_data->rt_wrc_scroll_valid = false;

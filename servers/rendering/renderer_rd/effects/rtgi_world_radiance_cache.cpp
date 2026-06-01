@@ -154,6 +154,12 @@ void RTGIWorldRadianceCache::update(RID p_tlas, RID p_scene_uniform_set, const W
 	if (!resources_valid || !radiance_atlas[0].is_valid()) {
 		return;
 	}
+	// The ray-result SSBO is bound at set-0 binding 6, which the shader declares
+	// unconditionally and the single uniform set drives BOTH dispatches (mode 0
+	// recenter + mode 1 accumulate). It is sized to >= 1 entry by
+	// ensure_ray_result_buffer(), so a missing buffer means update() was called
+	// before that ran -- bail rather than build an incomplete descriptor set.
+	ERR_FAIL_COND(!ray_result_buffer.is_valid());
 
 	const uint32_t write_index = 1u - read_index;
 
@@ -162,8 +168,8 @@ void RTGIWorldRadianceCache::update(RID p_tlas, RID p_scene_uniform_set, const W
 	RID shader_rd = shader.version_get_shader(shader_version, 0);
 
 	// Bindings mirror the shader's set 0 layout: read (front) atlases at 0..2,
-	// write (back) atlases at 3..5. The Task 4 kernels are no-ops, but the
-	// descriptor set is wired so Tasks 5/6 only fill in kernel bodies.
+	// write (back) atlases at 3..5, and the probe-ray result SSBO at 6 (consumed
+	// by the mode-1 accumulate kernel).
 	LocalVector<RD::Uniform> uniforms;
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 0, radiance_atlas[read_index]));
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 1, distance_atlas[read_index]));
@@ -171,6 +177,7 @@ void RTGIWorldRadianceCache::update(RID p_tlas, RID p_scene_uniform_set, const W
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 3, radiance_atlas[write_index]));
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 4, distance_atlas[write_index]));
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 5, metadata_atlas[write_index]));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 6, ray_result_buffer));
 
 	PushConstant push_constant;
 	memset(&push_constant, 0, sizeof(PushConstant));
@@ -198,16 +205,24 @@ void RTGIWorldRadianceCache::update(RID p_tlas, RID p_scene_uniform_set, const W
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
 
-	// Mode 0: scroll/recenter the cache into the write atlas over the full atlas.
+	// Mode 0: scroll/recenter the cache into the write atlas over the full atlas
+	// (one thread per atlas texel). Always dispatched -- with zero scroll it is the
+	// identity FRONT->BACK copy the ping-pong + in-place accumulate depend on.
 	push_constant.mode = 0u;
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, atlas_size.x, atlas_size.y, 1);
 	RD::get_singleton()->compute_list_add_barrier(compute_list);
 
-	// Mode 1: accumulate this frame's probe rays into the write atlas.
-	push_constant.mode = 1u;
-	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
-	RD::get_singleton()->compute_list_dispatch_threads(compute_list, atlas_size.x, atlas_size.y, 1);
+	// Mode 1: accumulate this frame's probe rays into the write atlas. ONE thread
+	// per ray result (1D dispatch over rays_this_frame), since the producer writes
+	// exactly one result per ray and each carries a distinct (probe, dir) ->
+	// distinct atlas texel. Skipped when no rays were traced this frame (the mode-0
+	// recenter already produced a valid BACK atlas to swap in).
+	if (push_constant.rays_this_frame > 0u) {
+		push_constant.mode = 1u;
+		RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
+		RD::get_singleton()->compute_list_dispatch_threads(compute_list, MAX(push_constant.rays_this_frame, 1u), 1, 1);
+	}
 	RD::get_singleton()->compute_list_end();
 
 	// Ping-pong: the freshly written back atlases become the new front.
