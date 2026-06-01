@@ -3678,6 +3678,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					rt_hybrid_rtgi ||
 					ce_needs_normal_roughness ||
 					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_NORMAL_BUFFER ||
+					// WRC-GI debug consumer (Task 7a) reads the world normal from this
+					// G-buffer, so force the normal-roughness prepass when it is active
+					// (radiance-probes mode otherwise leaves it unpopulated).
+					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_WRC_GI ||
 					scene_state.used_normal_texture) {
 				depth_pass_mode = PASS_MODE_DEPTH_NORMAL_ROUGHNESS;
 			}
@@ -5399,6 +5403,26 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_WRC_CONFIDENCE && rtgi_wrc != nullptr && rtgi_wrc->get_radiance_atlas().is_valid()) {
 			copy_effects->copy_to_fb_rect(rtgi_wrc->get_radiance_atlas(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_ALPHA_TO_LUMINANCE);
+		}
+
+		// WRC-GI debug view (Task 7a): the first real per-pixel CONSUMER of the
+		// cache. Unlike the RADIANCE/CONFIDENCE atlas blits above, this runs a
+		// full-screen compute pass that reconstructs world position from depth +
+		// the world normal from the normal-roughness G-buffer, samples the cache's
+		// cosine-integrated irradiance, and blits the RAW linear irradiance (no
+		// albedo, no tonemap) for the Task-7b furnace gate. Guard on the G-buffers
+		// it consumes: depth always exists post-opaque, and normal-roughness is
+		// forced on for this debug mode at the depth-prepass-mode selection site.
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_WRC_GI && rtgi_wrc != nullptr && rtgi_wrc->get_radiance_atlas().is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
+			// Recover the SAME clamped ClipmapParams used at the WRC dispatch site
+			// (default-constructed + clamped); these MUST match the atlas the query
+			// addresses. Keep in lock-step with the wrc_params block in _render_scene.
+			RtgiWrc::ClipmapParams wrc_dbg_params;
+			wrc_dbg_params.cascade_count = CLAMP(wrc_dbg_params.cascade_count, 1, 4);
+			wrc_dbg_params.grid = CLAMP(wrc_dbg_params.grid, 1, 64);
+			wrc_dbg_params.oct_res = CLAMP(wrc_dbg_params.oct_res, 1, 16);
+			const Vector3 wrc_dbg_camera = p_render_data->scene_data->cam_transform.origin;
+			rtgi_wrc->render_gi_debug(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, wrc_dbg_params, wrc_dbg_camera, fb, rb->get_internal_size());
 		}
 	}
 

@@ -7,6 +7,8 @@
 
 #include "rtgi_world_radiance_cache.h"
 
+#include "servers/rendering/renderer_rd/effects/copy_effects.h"
+#include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 
 using namespace RendererRD;
@@ -15,11 +17,19 @@ RTGIWorldRadianceCache::RTGIWorldRadianceCache() {
 	shader.initialize({ "" });
 	shader_version = shader.version_create();
 	pipeline = RD::get_singleton()->compute_pipeline_create(shader.version_get_shader(shader_version, 0));
+
+	// WRC-GI debug consumer pipeline. Same single-variant setup as the update
+	// shader above; this is the first compile of rtgi_wrc_inc.glsl (included by
+	// the consumer), so a GLSL error in that header surfaces here at build time.
+	gi_debug_shader.initialize({ "" });
+	gi_debug_shader_version = gi_debug_shader.version_create();
+	gi_debug_pipeline = RD::get_singleton()->compute_pipeline_create(gi_debug_shader.version_get_shader(gi_debug_shader_version, 0));
 }
 
 RTGIWorldRadianceCache::~RTGIWorldRadianceCache() {
 	free_resources();
 	shader.version_free(shader_version);
+	gi_debug_shader.version_free(gi_debug_shader_version);
 }
 
 Size2i RTGIWorldRadianceCache::_atlas_size(const RtgiWrc::ClipmapParams &p_params) const {
@@ -74,6 +84,15 @@ void RTGIWorldRadianceCache::free_resources() {
 			metadata_atlas[i] = RID();
 		}
 	}
+	if (gi_debug_image.is_valid()) {
+		RD::get_singleton()->free_rid(gi_debug_image);
+		gi_debug_image = RID();
+	}
+	if (gi_debug_ubo.is_valid()) {
+		RD::get_singleton()->free_rid(gi_debug_ubo);
+		gi_debug_ubo = RID();
+	}
+	gi_debug_image_size = Size2i();
 	read_index = 0;
 	atlas_size = Size2i();
 	resources_valid = false;
@@ -227,4 +246,151 @@ void RTGIWorldRadianceCache::update(RID p_tlas, RID p_scene_uniform_set, const W
 
 	// Ping-pong: the freshly written back atlases become the new front.
 	read_index = write_index;
+}
+
+void RTGIWorldRadianceCache::_ensure_gi_debug_image(const Size2i &p_size) {
+	const Size2i wanted = Size2i(MAX(p_size.x, 1), MAX(p_size.y, 1));
+	if (gi_debug_image.is_valid() && gi_debug_image_size == wanted) {
+		return;
+	}
+	if (gi_debug_image.is_valid()) {
+		RD::get_singleton()->free_rid(gi_debug_image);
+		gi_debug_image = RID();
+	}
+
+	RD::TextureFormat tf;
+	// RGBA16F to hold linear, un-tonemapped HDR irradiance (.rgb) + confidence (.a)
+	// without clipping; STORAGE (the consumer writes it) + SAMPLING (the blit reads
+	// it through copy_to_fb_rect).
+	tf.format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
+	tf.width = wanted.x;
+	tf.height = wanted.y;
+	tf.usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
+	gi_debug_image = RD::get_singleton()->texture_create(tf, RD::TextureView());
+	RD::get_singleton()->set_resource_name(gi_debug_image, "RTGI WRC GI Debug Image");
+	gi_debug_image_size = wanted;
+}
+
+void RTGIWorldRadianceCache::render_gi_debug(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_depth, RID p_normal_roughness, const Projection &p_inv_projection, const Transform3D &p_cam_transform, const RtgiWrc::ClipmapParams &p_params, const Vector3 &p_camera_pos, RID p_dest_fb, const Size2i &p_size) {
+	if (!resources_valid || !radiance_atlas[read_index].is_valid() || !distance_atlas[read_index].is_valid()) {
+		return;
+	}
+	ERR_FAIL_COND(p_depth.is_null());
+	ERR_FAIL_COND(p_normal_roughness.is_null());
+	ERR_FAIL_COND(p_dest_fb.is_null());
+
+	const Size2i size = Size2i(MAX(p_size.x, 1), MAX(p_size.y, 1));
+	_ensure_gi_debug_image(size);
+
+	// The consumer's params live in a UBO (bound at set 0, binding 5), not a push
+	// constant: GiDebugUBO is 176 bytes and the two mat4s alone already hit the
+	// 128-byte MAX_PUSH_CONSTANT_SIZE cap. Created once, reused every frame.
+	if (gi_debug_ubo.is_null()) {
+		gi_debug_ubo = RD::get_singleton()->uniform_buffer_create(sizeof(GiDebugUBO));
+		RD::get_singleton()->set_resource_name(gi_debug_ubo, "RTGI WRC GI Debug Params UBO");
+	}
+
+	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
+	ERR_FAIL_NULL(uniform_set_cache);
+	MaterialStorage *material_storage = MaterialStorage::get_singleton();
+	ERR_FAIL_NULL(material_storage);
+
+	RID shader_rd = gi_debug_shader.version_get_shader(gi_debug_shader_version, 0);
+	// Linear sampler, clamp-to-edge: the query does bilinear taps and already
+	// clamps its UVs to the per-tile half-texel inset, so edge clamp is correct.
+	RID linear_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+
+	// Set 0: radiance/distance atlases (sampler+texture), depth + normal-roughness
+	// G-buffers (sampler+texture), and the output storage image.
+	LocalVector<RD::Uniform> uniforms;
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 0;
+		u.append_id(linear_sampler);
+		u.append_id(radiance_atlas[read_index]);
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 1;
+		u.append_id(linear_sampler);
+		u.append_id(distance_atlas[read_index]);
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 2;
+		u.append_id(linear_sampler);
+		u.append_id(p_depth);
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 3;
+		u.append_id(linear_sampler);
+		u.append_id(p_normal_roughness);
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		u.binding = 4;
+		u.append_id(gi_debug_image);
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
+		u.binding = 5;
+		u.append_id(gi_debug_ubo);
+		uniforms.push_back(u);
+	}
+
+	// Fill WrcParams from cached_params -- the EXACT ClipmapParams the atlas was
+	// built from in ensure_resources(). The caller reconstructs the same clamped
+	// defaults into p_params; assert they agree so a future divergence (params not
+	// kept in lock-step) trips loudly in dev builds instead of silently
+	// mis-addressing the query tiles. Using cached_params (not p_params) keeps the
+	// query pinned to the atlas's actual layout regardless of the caller.
+	DEV_ASSERT(p_params.cascade_count == cached_params.cascade_count &&
+			p_params.grid == cached_params.grid &&
+			p_params.oct_res == cached_params.oct_res);
+
+	GiDebugUBO ubo;
+	memset(&ubo, 0, sizeof(GiDebugUBO));
+	ubo.cascade_count = MAX(cached_params.cascade_count, 1);
+	ubo.grid = MAX(cached_params.grid, 1);
+	ubo.oct_res = MAX(cached_params.oct_res, 1);
+	ubo.base_spacing = cached_params.base_spacing;
+	ubo.occlusion_bias_spacing = 0.5f; // sane default per rtgi_wrc_inc.glsl WrcParams docs.
+	ubo.min_variance = 0.0001f;
+	ubo.screen_width = size.x;
+	ubo.screen_height = size.y;
+	ubo.camera_pos[0] = p_camera_pos.x;
+	ubo.camera_pos[1] = p_camera_pos.y;
+	ubo.camera_pos[2] = p_camera_pos.z;
+	MaterialStorage::store_camera(p_inv_projection, ubo.inv_projection);
+	MaterialStorage::store_transform(p_cam_transform, ubo.inv_view);
+	RD::get_singleton()->buffer_update(gi_debug_ubo, 0, sizeof(GiDebugUBO), &ubo);
+
+	RD::get_singleton()->draw_command_begin_label("RTGI WRC GI Debug");
+	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, gi_debug_pipeline);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
+	// No push constant: the params are supplied via gi_debug_ubo (binding 5),
+	// bound in the uniform set above and updated via buffer_update() this frame.
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, size.x, size.y, 1);
+	RD::get_singleton()->compute_list_end();
+	RD::get_singleton()->draw_command_end_label();
+
+	// Blit the raw linear irradiance to the destination framebuffer. No sRGB, no
+	// LOG_LUMINANCE: keep values linear/measurable for the furnace gate.
+	CopyEffects *copy_effects = CopyEffects::get_singleton();
+	ERR_FAIL_NULL(copy_effects);
+	const bool multiview = p_render_buffers.is_valid() && p_render_buffers->get_view_count() > 1;
+	copy_effects->copy_to_fb_rect(gi_debug_image, p_dest_fb, Rect2i(Point2i(), size), false, false, false, false, RID(), multiview, false, false, false, Rect2(), 1.0, true, CopyEffects::COPY_TO_FB_FLAG_MODE_NONE);
 }
