@@ -412,7 +412,29 @@ void rt_strc_probe_update_main() {
 	rt_strc_probe_ray_results[ray_index].metadata = vec4(dynamic_hit ? 1.0 : 0.0, confidence, float(source_mask), float(update_index));
 }
 
+// World Radiance Cache probe-update raygen. Task 5a STUB: this writes a zeroed
+// result per ray so the dispatch is a valid, side-effect-free ray pass (the AS
+// is traced by the backend setup, but this body performs no rayQuery / shading).
+// Structure mirrors rt_strc_probe_update_main(): one invocation == one ray ==
+// one (probe, direction) octahedral texel. Real cascade/probe addressing,
+// tracing, shading and scheduling land in Task 5b.
+void rt_wrc_probe_update_main() {
+	// The probe-update dispatch launches exactly `wrc_rays_per_frame` rays and the
+	// results SSBO is sized to that same capacity, so gl_LaunchIDEXT.x is always a
+	// valid in-bounds index (one ray == one results slot). No extra bound needed
+	// for the stub; Task 5b adds real (probe, direction) addressing + a rays param.
+	uint ray_index = gl_LaunchIDEXT.x;
+
+	rt_wrc_probe_ray_results[ray_index].radiance_distance = vec4(0.0);
+	rt_wrc_probe_ray_results[ray_index].normal_confidence = vec4(0.0);
+	rt_wrc_probe_ray_results[ray_index].metadata = vec4(0.0);
+}
+
 void main() {
+	if (rt_wrc_probe_update_mode()) {
+		rt_wrc_probe_update_main();
+		return;
+	}
 	if (rt_strc_probe_update_mode()) {
 		rt_strc_probe_update_main();
 		return;

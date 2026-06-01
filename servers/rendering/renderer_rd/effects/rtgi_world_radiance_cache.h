@@ -50,6 +50,13 @@ public:
 	// (re)allocation happened.
 	bool ensure_resources(Ref<RenderSceneBuffersRD> p_render_buffers, const RtgiWrc::ClipmapParams &p_params, int p_view_count);
 
+	// Allocate (or reallocate on growth) the per-frame probe-update ray-result
+	// SSBO consumed by the WRC accumulate kernel (Task 6). One entry per ray ==
+	// one (probe, direction) octahedral texel; layout mirrors STRC's
+	// RTGISTRCProbeRayResult (3 x vec4 = 48 bytes). Returns true on (re)alloc.
+	bool ensure_ray_result_buffer(uint32_t p_rays_per_frame);
+	RID get_ray_result_buffer() const { return ray_result_buffer; }
+
 	// Record the scroll (mode 0) + accumulate (mode 1) compute dispatches and
 	// swap the ping-pong atlases. `p_tlas` / `p_scene_uniform_set` are unused by
 	// the Task 4 empty kernels (no probe tracing yet) and reserved for Task 5.
@@ -90,6 +97,12 @@ private:
 	RID distance_atlas[2]; // RG16F, distance moments (mean, mean^2).
 	RID metadata_atlas[2]; // RGBA8, per-probe metadata (age/flags).
 	uint32_t read_index = 0;
+
+	// Per-frame probe-update ray results (binding 107 in the raytracing uniform
+	// set). Written by the WRC probe-update raygen, consumed by the accumulate
+	// kernel. Reallocated only when the requested ray count exceeds capacity.
+	RID ray_result_buffer;
+	uint32_t ray_result_capacity = 0;
 
 	RtgiWrc::ClipmapParams cached_params;
 	Size2i atlas_size;

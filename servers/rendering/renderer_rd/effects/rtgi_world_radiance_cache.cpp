@@ -35,7 +35,31 @@ Size2i RTGIWorldRadianceCache::_atlas_size(const RtgiWrc::ClipmapParams &p_param
 	return Size2i(tiles_per_row * oct_res, MAX(tile_rows, 1) * oct_res);
 }
 
+bool RTGIWorldRadianceCache::ensure_ray_result_buffer(uint32_t p_rays_per_frame) {
+	const uint32_t capacity = MAX(1u, p_rays_per_frame);
+	if (ray_result_buffer.is_valid() && ray_result_capacity >= capacity) {
+		return false;
+	}
+	if (ray_result_buffer.is_valid()) {
+		RD::get_singleton()->free_rid(ray_result_buffer);
+		ray_result_buffer = RID();
+	}
+
+	// 3 x vec4 = 48 bytes per entry, identical to STRC's RTGISTRCProbeRayResult
+	// so the GLSL RTGIWRCProbeRayResult struct and Task 6's accumulate match.
+	const uint32_t result_stride = sizeof(float) * 12u;
+	ray_result_buffer = RD::get_singleton()->storage_buffer_create(uint64_t(capacity) * result_stride);
+	RD::get_singleton()->set_resource_name(ray_result_buffer, "RTGI WRC Probe Ray Results");
+	ray_result_capacity = capacity;
+	return true;
+}
+
 void RTGIWorldRadianceCache::free_resources() {
+	if (ray_result_buffer.is_valid()) {
+		RD::get_singleton()->free_rid(ray_result_buffer);
+		ray_result_buffer = RID();
+	}
+	ray_result_capacity = 0;
 	for (uint32_t i = 0; i < 2; i++) {
 		if (radiance_atlas[i].is_valid()) {
 			RD::get_singleton()->free_rid(radiance_atlas[i]);

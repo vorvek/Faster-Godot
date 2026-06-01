@@ -9,6 +9,7 @@ layout(constant_id = 0) const uint RT_FLAGS = 0u;
 #define RT_FLAG_STRC_ENABLED (1u << 4)
 #define RT_FLAG_STRC_PROBE_UPDATE (1u << 5)
 #define RT_FLAG_STRC_INTERNAL_FALLBACK (1u << 6)
+#define RT_FLAG_WRC_PROBE_UPDATE (1u << 7)
 
 #define RT_SAMPLE_COUNT_SHIFT 21u
 #define RT_SAMPLE_COUNT_MASK 0xFFu
@@ -48,6 +49,10 @@ float get_rt_param(uint idx) {
 
 bool rt_strc_probe_update_mode() {
 	return (RT_FLAGS & RT_FLAG_STRC_PROBE_UPDATE) != 0u;
+}
+
+bool rt_wrc_probe_update_mode() {
+	return (RT_FLAGS & RT_FLAG_WRC_PROBE_UPDATE) != 0u;
 }
 
 uint rt_strc_static_visual_layer_mask() {
@@ -1236,6 +1241,21 @@ layout(set = 0, binding = 66, std430) buffer RTGISTRCProbeRayResultBuffer {
 	RTGISTRCProbeRayResult rt_strc_probe_ray_results[];
 };
 layout(set = 0, binding = 75, rgba16f) uniform image2D rt_strc_metadata_image;
+
+// World Radiance Cache probe-update ray results. Same 48-byte 3xvec4 layout as
+// RTGISTRCProbeRayResult so Task 6's accumulate reuses the texel-mapping
+// convention: one ray == one (probe, direction) == one octahedral texel.
+// metadata.w holds the WRC update_index (probe_linear << 6 | dir_index for the
+// default oct_res 8 => 64 dirs => 6 bits, identical to STRC's packing).
+struct RTGIWRCProbeRayResult {
+	vec4 radiance_distance;
+	vec4 normal_confidence;
+	vec4 metadata;
+};
+
+layout(set = 0, binding = 107, std430) buffer RTGIWRCProbeRayResultBuffer {
+	RTGIWRCProbeRayResult rt_wrc_probe_ray_results[];
+};
 
 bool rt_strc_enabled() {
 	return (RT_FLAGS & RT_FLAG_STRC_ENABLED) != 0u && get_rt_param(RT_PARAM_RTGI_STRC_ENABLED) > 0.5 && get_rt_param(RT_PARAM_RTGI_STRC_STRENGTH) > 0.001;

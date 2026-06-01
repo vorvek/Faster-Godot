@@ -180,6 +180,13 @@ public:
 		bool rt_diffuse_cache_signature_valid = false;
 		Vector3i rt_strc_probe_origins[4];
 		bool rt_strc_scroll_valid = false;
+		// World Radiance Cache clipmap recenter state (Task 5). The previous frame's
+		// camera position; RtgiWrc::recenter_delta(prev, cur) yields the per-cascade
+		// integer scroll (floor(cur/spacing) - floor(prev/spacing)). Zero-initialized
+		// and only read once rt_wrc_scroll_valid is true (false on the first frame /
+		// after rt_clear_textures), so the initial (0,0,0) value is never used.
+		Vector3 rt_wrc_prev_camera;
+		bool rt_wrc_scroll_valid = false;
 
 		bool rt_update_overscan(const Size2i &p_visible_size, float p_horizontal, float p_vertical, const Vector2 &p_motion_pixels, float p_resolution_scale);
 		void rt_clear_textures();

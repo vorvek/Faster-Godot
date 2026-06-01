@@ -10336,6 +10336,22 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		uniforms.push_back(u);
 	}
 
+	// Binding 107: RTGI World Radiance Cache probe-update ray-result buffer.
+	// Mirrors the STRC binding-66 wiring; written by the WRC probe-update raygen
+	// when RT_FLAG_WRC_PROBE_UPDATE is set. Falls back to the default storage
+	// buffer when the WRC effect has no results buffer (e.g. legacy pipeline).
+	{
+		RD::Uniform u;
+		u.binding = 107;
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		if (owner->rtgi_wrc && owner->rtgi_wrc->get_ray_result_buffer().is_valid()) {
+			add_uniform_id(u, owner->rtgi_wrc->get_ray_result_buffer());
+		} else {
+			add_uniform_id(u, default_storage_buffer);
+		}
+		uniforms.push_back(u);
+	}
+
 	// Binding 60: RTGI specular reflection-direction diagnostic output.
 	{
 		RD::Uniform u;

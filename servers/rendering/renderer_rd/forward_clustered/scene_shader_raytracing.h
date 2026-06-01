@@ -82,6 +82,7 @@ public:
 		RT_FLAG_STRC_ENABLED = (1 << 4),
 		RT_FLAG_STRC_PROBE_UPDATE = (1 << 5),
 		RT_FLAG_STRC_INTERNAL_FALLBACK = (1 << 6),
+		RT_FLAG_WRC_PROBE_UPDATE = (1 << 7),
 	};
 
 	constexpr static uint32_t RT_SAMPLE_COUNT_SHIFT = 21;

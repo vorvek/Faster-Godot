@@ -401,6 +401,7 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_clear_textures
 	rt_diffuse_cache_signature = 0;
 	rt_diffuse_cache_signature_valid = false;
 	rt_strc_scroll_valid = false;
+	rt_wrc_scroll_valid = false;
 	rt_reconstructed_valid = false;
 }
 
@@ -3043,32 +3044,46 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			rtgi_pipeline_sel = rtgi_pipeline_params->rtgi_pipeline;
 		}
 	}
-	if (rtgi_pipeline_sel == RSE::RTGI_PIPELINE_RADIANCE_PROBES) {
-		// New radiance-probes pipeline path (World Radiance Cache). Disable the
-		// legacy RTGI dispatch so the two paths never run together (no double GI),
-		// then ensure the WRC atlases exist and record its update dispatches.
-		//
-		// Task 4 ships the structure only: the clipmap/scroll math and probe-ray
-		// tracing land in Task 5, so we drive the effect from static defaults and
-		// the empty scroll/accumulate kernels here. The goal is allocate + dispatch
-		// without crashing; the cache produces no lighting yet.
+	// Radiance-probes (World Radiance Cache) pipeline gating. When selected we keep
+	// the RT acceleration structure + backend context alive (scene_features.rt stays
+	// true so the TLAS builds) but disable every legacy GI consumer; the only WRC GPU
+	// work in Task 5a is the probe-update RAY dispatch wired into the RT block below.
+	const bool rt_radiance_probes_only = scene_features.rt && !is_reflection_probe && rtgi_pipeline_sel == RSE::RTGI_PIPELINE_RADIANCE_PROBES;
+	// Reflection probes have no World Radiance Cache (it is view-independent / built
+	// for the main view only), so when the radiance-probes pipeline is selected we
+	// simply disable RTGI for the probe render, matching the pre-WRC behavior where
+	// the radiance-probes branch unconditionally cleared scene_features.rt.
+	if (is_reflection_probe && rtgi_pipeline_sel == RSE::RTGI_PIPELINE_RADIANCE_PROBES) {
 		scene_features.rt = false;
-		if (rtgi_wrc != nullptr && rb.is_valid() && !is_reflection_probe) {
-			RtgiWrc::ClipmapParams wrc_params; // Defaults: 4 cascades, grid 32, oct_res 8.
+	}
+	// Single clamped ClipmapParams used for BOTH atlas sizing and scroll/dispatch so
+	// the two never diverge (prior-review unification). Defaults: 4 cascades, grid 32,
+	// oct_res 8, base_spacing 1.0. Task 8 will source these from the Environment.
+	RtgiWrc::ClipmapParams wrc_params;
+	wrc_params.cascade_count = CLAMP(wrc_params.cascade_count, 1, 4);
+	wrc_params.grid = CLAMP(wrc_params.grid, 1, 64);
+	wrc_params.oct_res = CLAMP(wrc_params.oct_res, 1, 16);
+	// Default probe-update ray budget for Task 5a (Task 8 makes this an Environment
+	// knob). The WRC results SSBO is sized to exactly this many entries and the
+	// dispatch launches exactly this many rays, so every gl_LaunchIDEXT.x indexes a
+	// valid results slot (the raygen stub relies on that 1:1 launch==capacity invariant).
+	const uint32_t wrc_rays_per_frame = 8192u;
+	if (rt_radiance_probes_only) {
+		if (rtgi_wrc != nullptr && rb.is_valid()) {
 			rtgi_wrc->ensure_resources(rb, wrc_params, (int)rb->get_view_count());
-
-			RendererRD::WRCFrameParams wrc_frame;
-			wrc_frame.camera_pos = p_render_data->scene_data->cam_transform.origin;
-			wrc_frame.frame_index = (uint32_t)RSG::rasterizer->get_frame_number();
-			// scroll_delta stays zero (no recenter math yet, Task 5); rays_this_frame
-			// stays zero (no probe tracing yet, Task 5).
-			memset(wrc_frame.scroll_delta, 0, sizeof(wrc_frame.scroll_delta));
-			rtgi_wrc->update(RID(), RID(), wrc_frame);
+			// IMPORTANT: ensure the ray-result buffer AFTER ensure_resources, because an
+			// atlas (re)allocation inside ensure_resources frees the ray buffer via
+			// free_resources(); re-creating it here keeps binding 107 valid this frame.
+			rtgi_wrc->ensure_ray_result_buffer(wrc_rays_per_frame);
 		}
 	}
 	const float *rt_env_params = scene_features.rt ? _rtgi_shader_params_for_environment(p_render_data->environment, rt_env_params_storage) : nullptr;
-	bool rt_replaces_opaque = scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING;
-	const bool rt_hybrid_rtgi = scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_HYBRID;
+	// In radiance-probes mode the path tracer never replaces the opaque pass and the
+	// legacy hybrid/denoise consumers are disabled: the raster opaque pass renders
+	// normally and the WRC produces no displayable GI yet. Force the gating vars off
+	// regardless of the Environment's RT mode so only the WRC probe-ray dispatch runs.
+	bool rt_replaces_opaque = !rt_radiance_probes_only && scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING;
+	const bool rt_hybrid_rtgi = !rt_radiance_probes_only && scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_HYBRID;
 	scene_features.rt_replaces_opaque = rt_replaces_opaque;
 	const uint32_t rt_denoiser = rt_env_params ? (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
 	const float rt_resolution_scale_requested = _rtgi_resolution_scale_from_params(rt_env_params);
@@ -3147,7 +3162,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RENDER_TIMESTAMP("Setup 3D Scene");
 
 	bool using_debug_mvs = get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_MOTION_VECTORS;
-	bool using_rt_denoise = !is_reflection_probe && scene_features.rt && rt_temporal_denoiser;
+	// Radiance-probes mode uses viewport TAA only (no RT-internal denoise/TAA), so the
+	// legacy GI denoiser + composite never run for the WRC path.
+	bool using_rt_denoise = !is_reflection_probe && !rt_radiance_probes_only && scene_features.rt && rt_temporal_denoiser;
 	bool using_viewport_taa = rb->get_use_taa();
 	bool using_rt_internal_taa = using_rt_denoise;
 	bool using_taa = using_viewport_taa || using_rt_denoise;
@@ -3267,7 +3284,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		// Free GPU resources for screen-space effects disabled by raytracing.
 		// SDFGI cleanup is handled by sdfgi_update(); these cover SSIL/SSR/SSAO.
-		if (scene_features.rt) {
+		// Radiance-probes mode keeps RT alive only to build the AS + run the WRC
+		// probe dispatch; it does NOT replace the raster pass, so preserve the
+		// screen-space effects (matches the pre-WRC behavior where rt was disabled).
+		if (scene_features.rt && !rt_radiance_probes_only) {
 			rb->clear_context(RB_SCOPE_SSIL);
 			rb->clear_context(RB_SCOPE_SSAO);
 			rb->clear_context(RB_SCOPE_SSR);
@@ -4061,9 +4081,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		RENDER_TIMESTAMP("Pathtracer");
 
-		const RTGIBackendDispatchResult rt_dispatch_result = rt_resources_ready ? raytracing->dispatch_path_trace_backend(rt_backend_context) : RTGI_BACKEND_DISPATCH_SAFE_FAILURE;
+		// Radiance-probes mode keeps the AS + backend context alive (built by
+		// setup_rt_state() above) but does NOT run the main full-screen GI dispatch.
+		// Instead it runs only the WRC probe-update RAY dispatch below; the legacy
+		// rt_dispatch_ok block (GI texture copies, STRC, denoiser, composite) stays
+		// skipped. rt_dispatch_ok is forced false so none of that legacy work runs,
+		// but the dispatch "failure" disable-RT path must NOT fire here.
+		const RTGIBackendDispatchResult rt_dispatch_result = (!rt_radiance_probes_only && rt_resources_ready) ? raytracing->dispatch_path_trace_backend(rt_backend_context) : RTGI_BACKEND_DISPATCH_SAFE_FAILURE;
 		bool rt_dispatch_ok = rt_dispatch_result == RTGI_BACKEND_DISPATCH_OK;
-		if (!rt_dispatch_ok) {
+		if (!rt_dispatch_ok && !rt_radiance_probes_only) {
 			ERR_PRINT_ONCE_ED(rt_dispatch_result == RTGI_BACKEND_DISPATCH_SAFE_FAILURE ? "Failed to dispatch the active RTGI backend after recovering RTGI output ownership. Rendering will continue with RT disabled for this frame." : "Failed to dispatch the active RTGI backend and recover RTGI output ownership. Rendering will continue with RT disabled for this frame.");
 			scene_features.rt = false;
 			scene_features.rt_replaces_opaque = false;
@@ -4074,13 +4100,57 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->draw_command_end_label();
 		}
 
+		if (rt_radiance_probes_only) {
+			// The TLAS/backend context are valid after setup_rt_state() regardless of the
+			// (skipped) main dispatch, so extract rt_state directly and gate the WRC
+			// dispatch on its validity (NOT rt_dispatch_ok, which is false here). This
+			// branch always runs in radiance-probes mode so the "Raytracing" draw label
+			// opened above is always balanced, even if resource setup failed this frame.
+			if (rt_resources_ready) {
+				rt_backend_status = raytracing->get_backend_status();
+				rt_path_output_backend = rt_backend_status.active_backend;
+				rt_state = rt_backend_context.viewport_state;
+			} else {
+				rt_state = nullptr;
+			}
+			if (rt_resources_ready && rt_state && rtgi_wrc && rtgi_wrc->get_ray_result_buffer().is_valid()) {
+				RD::get_singleton()->draw_command_begin_label("RTGI WRC Probe Update");
+				const uint32_t wrc_flags = rt_flags | SceneShaderRaytracing::RT_FLAG_WRC_PROBE_UPDATE;
+				raytracing->dispatch_probe_update_backend(rt_backend_context, wrc_flags, rtgi_wrc->get_ray_result_buffer(), wrc_rays_per_frame);
+				rt_state = rt_backend_context.viewport_state;
+
+				// Per-cascade clipmap scroll deltas (mirrors STRC's CPU recenter math at
+				// the STRC dispatch site, but via RtgiWrc::recenter_delta from the prev/cur
+				// camera using the unified clamped wrc_params). Stored in WRCFrameParams for
+				// Task 6's accumulate; the Task 4 empty accumulate kernel ignores it for now.
+				RendererRD::WRCFrameParams wrc_frame;
+				const Vector3 wrc_cur_camera = p_render_data->scene_data->cam_transform.origin;
+				wrc_frame.camera_pos = wrc_cur_camera;
+				wrc_frame.frame_index = rt_state->frame_counter;
+				wrc_frame.rays_this_frame = wrc_rays_per_frame;
+				for (uint32_t cascade = 0; cascade < 4; cascade++) {
+					const Vector3i scroll = rb_data->rt_wrc_scroll_valid ? RtgiWrc::recenter_delta(wrc_params, (int)cascade, rb_data->rt_wrc_prev_camera, wrc_cur_camera) : Vector3i();
+					wrc_frame.scroll_delta[cascade][0] = scroll.x;
+					wrc_frame.scroll_delta[cascade][1] = scroll.y;
+					wrc_frame.scroll_delta[cascade][2] = scroll.z;
+				}
+				rb_data->rt_wrc_prev_camera = wrc_cur_camera;
+				rb_data->rt_wrc_scroll_valid = true;
+				(void)wrc_frame; // Consumed by Task 6's accumulate dispatch.
+				RD::get_singleton()->draw_command_end_label();
+			} else {
+				rb_data->rt_wrc_scroll_valid = false;
+			}
+			RD::get_singleton()->draw_command_end_label();
+		}
+
 		if (rt_dispatch_ok) {
 			rt_backend_status = raytracing->get_backend_status();
 			rt_path_output_backend = rt_backend_status.active_backend;
 			rt_state = rt_backend_context.viewport_state;
 			bool rt_post_safe = true;
 			Size2i rt_size = rb_data->rt_get_size();
-			if (rt_strc_enabled && rtgi_strc && rt_state && rt_strc_rays_per_frame > 0 && rtgi_strc->get_ray_result_buffer().is_valid()) {
+			if (rt_strc_enabled && !rt_radiance_probes_only && rtgi_strc && rt_state && rt_strc_rays_per_frame > 0 && rtgi_strc->get_ray_result_buffer().is_valid()) {
 				RD::get_singleton()->draw_command_begin_label("RTGI STRC Probe Update");
 				const uint32_t probe_flags = rt_flags | SceneShaderRaytracing::RT_FLAG_STRC_PROBE_UPDATE;
 				const RTGIBackendDispatchResult probe_dispatch_result = raytracing->dispatch_probe_update_backend(rt_backend_context, probe_flags, rtgi_strc->get_ray_result_buffer(), rt_strc_rays_per_frame);
@@ -4318,7 +4388,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			taa->process_texture_with_rt_history(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED, p_history_context, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, velocity_texture, p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, true, reconstructed_history_validity, reconstructed_prev_history_validity, reconstructed_history_id, reconstructed_prev_history_id, 0.88f, output_size, rb->get_depth_texture(), reactivity_texture, RB_TEX_RT_RECONSTRUCTED_HISTORY_VALIDITY, RB_TEX_RT_RECONSTRUCTED_HISTORY_VALIDITY_PREV, RB_TEX_RT_RECONSTRUCTED_HISTORY_ID, RB_TEX_RT_RECONSTRUCTED_HISTORY_ID_PREV, RB_TEX_RT_RECONSTRUCTED_REACTIVITY, rb_data->rt_get_reconstructed_signal_confidence(), rb_data->rt_get_reconstructed_moments(), rb_data->rt_get_reconstructed_prev_moments(), rb_data->rt_get_reconstructed_history_meta(), rb_data->rt_get_reconstructed_prev_history_meta(), RB_TEX_RT_RECONSTRUCTED_SIGNAL_CONFIDENCE, RB_TEX_RT_RECONSTRUCTED_MOMENTS, RB_TEX_RT_RECONSTRUCTED_MOMENTS_PREV, RB_TEX_RT_RECONSTRUCTED_HISTORY_META, RB_TEX_RT_RECONSTRUCTED_HISTORY_META_PREV);
 		};
 
-		if (using_rt_denoise) {
+		if (using_rt_denoise && !rt_radiance_probes_only) {
 			RD::get_singleton()->draw_command_begin_label("RT Denoise");
 			RENDER_TIMESTAMP("RT Denoise");
 			const float rt_denoise_strength = CLAMP(rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_STRENGTH] : 0.8f, 0.0f, 1.0f);
