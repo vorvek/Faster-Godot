@@ -5380,6 +5380,26 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_STRC_REJECTION && rb->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_REJECTION_DEBUG)) {
 			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_REJECTION_DEBUG), fb, Rect2(Vector2(), rtsize), false, true);
 		}
+
+		// World Radiance Cache (WRC) debug views. Unlike STRC (which keeps dedicated
+		// per-metric debug atlases on the render buffers), the WRC owns its world-space
+		// ping-pong atlases inside the rtgi_wrc effect, so we blit its current read
+		// atlas directly. RADIANCE shows the atlas .rgb (log-luminance tonemapped);
+		// CONFIDENCE shows the atlas .a channel (temporal-N confidence) as luminance.
+		// Guard on rtgi_wrc + a valid atlas (the effect-owned analogue of STRC's
+		// has_texture() guard) so this never touches normal/legacy rendering.
+		// NOTE: the WRC radiance atlas is huge (~2904x2896) and, in radiance_probes
+		// mode, is SPARSELY populated -- only the camera-front probes the view-biased
+		// scheduler reaches converge quickly, so the blit looks MOSTLY DARK with a
+		// region/scatter of non-black 8x8 probe tiles. That is EXPECTED: non-black
+		// tiles == Task 6a's accumulate is writing radiance into the atlas.
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_WRC_RADIANCE && rtgi_wrc != nullptr && rtgi_wrc->get_radiance_atlas().is_valid()) {
+			copy_effects->copy_to_fb_rect(rtgi_wrc->get_radiance_atlas(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
+		}
+
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_WRC_CONFIDENCE && rtgi_wrc != nullptr && rtgi_wrc->get_radiance_atlas().is_valid()) {
+			copy_effects->copy_to_fb_rect(rtgi_wrc->get_radiance_atlas(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_ALPHA_TO_LUMINANCE);
+		}
 	}
 
 	if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RECONSTRUCTED_DEPTH && rb->has_texture(RB_SCOPE_BUFFERS, RB_TEX_RECONSTRUCTED_DEPTH)) {
