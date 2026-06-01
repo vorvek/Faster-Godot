@@ -876,6 +876,29 @@ float3 evalMultiScatterApproximation(float alpha, float NdV, float3 F0) {
 	return 1.0 + F0 * Ems;
 }
 
+// Energy-conserving specular/diffuse split (Fdez-Aguera 2019, "A Multiple-Scattering
+// Microfacet Model for Real-Time Image-Based Lighting"). Returns the diffuse factor kD
+// such that  diffuse_lobe*kD + specular_lobe(with multi-scatter)  conserves energy.
+// Replaces the previous single-sample stochastic (1 - F(VdotH)) attenuation, which lost
+// ~7% at roughness 1.0 (specular furnace) and injected diffuse-channel noise. Uses Karis'
+// split-sum env BRDF (scale,bias) WITHOUT the DLSS-RR x2 scale found in DLSSRR_envBRDFApprox.
+float3 energyConservingDiffuseFactor(float3 F0, float roughness, float NdotV) {
+	const float4 c0 = float4(-1.0f, -0.0275f, -0.572f, 0.022f);
+	const float4 c1 = float4(1.0f, 0.0425f, 1.04f, -0.04f);
+	float4 r = roughness * c0 + c1;
+	float a004 = min(r.x * r.x, exp2(-9.28f * NdotV)) * r.x + r.y;
+	float2 AB = float2(-1.04f, 1.04f) * a004 + r.zw;   // AB.x = scale, AB.y = bias
+	// F90/bias term gated by shadowedF90 to match the specular lobe's own Fresnel
+	// (brdf_inc.glsl evalFresnel call) — no effect for real materials (F0>=MIN_DIELECTRICS_F0
+	// => shadowedF90==1), but yields factor==1.0 for SPECULAR_DISABLED (F0=0, no specular lobe).
+	float3 FssEss = F0 * AB.x + shadowedF90(F0) * AB.y; // single-scatter specular albedo
+	float Ess = AB.x + AB.y;                           // white-furnace specular albedo (F0=1)
+	float Ems = 1.0f - Ess;                            // energy missed by single scatter
+	float3 Favg = F0 + (1.0f - F0) * (1.0f / 21.0f);
+	float3 FmsEms = (Ems * FssEss * Favg) / max(1.0f - Favg * Ems, 1e-4f);
+	return max(1.0f - FssEss - FmsEms, 0.0f);          // diffuse keeps what specular does not reflect
+}
+
 // Samples a reflection ray from the rough surface using selected microfacet distribution and sampling method
 // Resulting weight includes multiplication by cosine (NdotL) term
 float3 sampleSpecularMicrofacet(float3 Vlocal, float alpha, float alphaSquared, float3 specularF0, float2 u, OUT_PARAMETER(float3) weight) {
@@ -1118,13 +1141,12 @@ bool evalIndirectCombinedBRDF(float2 u, float3 shadingNormal, float3 geometryNor
 		sampleWeight = data.diffuseReflectance * diffuseTerm(data);
 
 #if COMBINE_BRDFS_WITH_FRESNEL
-		// Decorrelate random variables using a Golden Ratio Weyl sequence shift to avoid correlation bias
-		vec2 u_spec = fract(u + vec2(0.61803398875, 0.75487766625));
-		float3 Hspecular = sampleSpecularHalfVector(Vlocal, float2(data.alpha, data.alpha), u_spec);
-
-		// Clamp HdotL to small value to prevent numerical instability. Assume that rays incident from below the hemisphere have been filtered
-		float VdotH = max(0.00001f, min(1.0f, dot(Vlocal, Hspecular)));
-		sampleWeight *= (float3(1.0f, 1.0f, 1.0f) - evalFresnel(data.specularF0, shadowedF90(data.specularF0), VdotH));
+		// Deterministic energy-conserving diffuse attenuation (replaces the previous
+		// single-sample stochastic (1 - F(VdotH)) split, which lost ~7% at roughness 1.0
+		// and injected diffuse-channel noise). In local space the shading normal is +Z,
+		// so NdotV = Vlocal.z. See energyConservingDiffuseFactor.
+		float NdotV_local = max(0.00001f, min(1.0f, Vlocal.z));
+		sampleWeight *= energyConservingDiffuseFactor(data.specularF0, data.roughness, NdotV_local);
 #endif
 
 	} else if (brdfType == SPECULAR_TYPE) {
