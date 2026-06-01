@@ -853,6 +853,15 @@ enum PathtracingBackend {
 	PT_BACKEND_MAX,
 };
 
+// Selects which RTGI radiance pipeline the forward+ renderer builds. Mirrored by
+// Environment::RTGIPipeline. RTGI_PIPELINE_LEGACY is the existing path; the
+// radiance-probes pipeline is built incrementally behind this switch.
+enum RTGIPipeline {
+	RTGI_PIPELINE_LEGACY = 0,
+	RTGI_PIPELINE_RADIANCE_PROBES = 1,
+	RTGI_PIPELINE_MAX,
+};
+
 // Pathtracing parameter indices. Indices copied into the ray tracing shader
 // params buffer must match RT_PARAM_* defines in raytracing_inc.glsl.
 enum PathtracingParamIndex {
@@ -907,6 +916,9 @@ struct PathtracingParams {
 	float energy = 1.0f;
 	float resolution_scale = 0.67f;
 	uint32_t mode = 2;
+	// CPU-side RTGI pipeline selector. Not packed into the shader float params:
+	// it gates which radiance pipeline the renderer builds, defaulting to legacy.
+	RTGIPipeline rtgi_pipeline = RTGI_PIPELINE_LEGACY;
 	float overscan_horizontal = 0.0f;
 	float overscan_vertical = 0.0f;
 	float denoiser_strength = 0.90f;

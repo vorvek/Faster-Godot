@@ -914,6 +914,23 @@ Environment::RTGIMode Environment::get_rtgi_mode() const {
 	return rtgi_mode;
 }
 
+void Environment::set_rtgi_pipeline(RTGIPipeline p_pipeline) {
+	switch ((int)p_pipeline) {
+		case RTGI_PIPELINE_LEGACY:
+		case RTGI_PIPELINE_RADIANCE_PROBES:
+			rtgi_pipeline = p_pipeline;
+			break;
+		default:
+			rtgi_pipeline = RTGI_PIPELINE_LEGACY;
+			break;
+	}
+	_update_pathtracing();
+}
+
+Environment::RTGIPipeline Environment::get_rtgi_pipeline() const {
+	return rtgi_pipeline;
+}
+
 void Environment::set_rtgi_samples_per_pixel(int p_samples) {
 	set_pathtracing_samples_per_pixel(p_samples);
 }
@@ -1228,6 +1245,7 @@ void Environment::_update_pathtracing() {
 	params.energy = rtgi_energy;
 	params.resolution_scale = rtgi_resolution_scale;
 	params.mode = (uint32_t)rtgi_mode;
+	params.rtgi_pipeline = (RSE::RTGIPipeline)rtgi_pipeline;
 	params.overscan_horizontal = rtgi_overscan_horizontal;
 	params.overscan_vertical = rtgi_overscan_vertical;
 	params.backend = (RSE::PathtracingBackend)rtgi_backend;
@@ -2104,6 +2122,8 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_rtgi_quality_preset"), &Environment::get_rtgi_quality_preset);
 	ClassDB::bind_method(D_METHOD("set_rtgi_mode", "mode"), &Environment::set_rtgi_mode);
 	ClassDB::bind_method(D_METHOD("get_rtgi_mode"), &Environment::get_rtgi_mode);
+	ClassDB::bind_method(D_METHOD("set_rtgi_pipeline", "pipeline"), &Environment::set_rtgi_pipeline);
+	ClassDB::bind_method(D_METHOD("get_rtgi_pipeline"), &Environment::get_rtgi_pipeline);
 	ClassDB::bind_method(D_METHOD("set_rtgi_samples_per_pixel", "samples"), &Environment::set_rtgi_samples_per_pixel);
 	ClassDB::bind_method(D_METHOD("get_rtgi_samples_per_pixel"), &Environment::get_rtgi_samples_per_pixel);
 	ClassDB::bind_method(D_METHOD("set_rtgi_max_bounces", "bounces"), &Environment::set_rtgi_max_bounces);
@@ -2172,6 +2192,7 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_backend", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR), "set_rtgi_backend", "get_rtgi_backend");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_quality_preset", PROPERTY_HINT_ENUM, "Custom,Performance,Balanced,Production"), "set_rtgi_quality_preset", "get_rtgi_quality_preset");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_mode", PROPERTY_HINT_ENUM, "Reflections RT Only,Full Scene Path-Traced GI,Hybrid RTGI"), "set_rtgi_mode", "get_rtgi_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_pipeline", PROPERTY_HINT_ENUM, "Legacy,Radiance Probes"), "set_rtgi_pipeline", "get_rtgi_pipeline");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_samples_per_pixel", PROPERTY_HINT_RANGE, "1,16,1"), "set_rtgi_samples_per_pixel", "get_rtgi_samples_per_pixel");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_max_bounces", PROPERTY_HINT_RANGE, "1,8,1"), "set_rtgi_max_bounces", "get_rtgi_max_bounces");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_energy", PROPERTY_HINT_RANGE, "0,16,0.01,or_greater"), "set_rtgi_energy", "get_rtgi_energy");
@@ -2406,6 +2427,9 @@ void Environment::_bind_methods() {
 	BIND_ENUM_CONSTANT(RTGI_MODE_FULL_PATH_TRACING);
 	BIND_ENUM_CONSTANT(RTGI_MODE_HYBRID);
 	BIND_ENUM_CONSTANT(RTGI_MODE_PATH_TRACED);
+
+	BIND_ENUM_CONSTANT(RTGI_PIPELINE_LEGACY);
+	BIND_ENUM_CONSTANT(RTGI_PIPELINE_RADIANCE_PROBES);
 
 	BIND_ENUM_CONSTANT(RTGI_QUALITY_PRESET_CUSTOM);
 	BIND_ENUM_CONSTANT(RTGI_QUALITY_PRESET_PERFORMANCE);

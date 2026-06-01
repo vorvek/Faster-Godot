@@ -3033,6 +3033,22 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		scene_features.rt = false;
 	}
 	float rt_env_params_storage[RSE::PT_PARAM_MAX];
+	// Select which RTGI radiance pipeline to build for this viewport. The new
+	// radiance-probes pipeline is developed behind this switch; legacy is the
+	// default and keeps the existing dispatch below completely unchanged.
+	RSE::RTGIPipeline rtgi_pipeline_sel = RSE::RTGI_PIPELINE_LEGACY;
+	if (scene_features.rt && p_render_data->environment.is_valid()) {
+		const RSE::PathtracingParams *rtgi_pipeline_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
+		if (rtgi_pipeline_params != nullptr) {
+			rtgi_pipeline_sel = rtgi_pipeline_params->rtgi_pipeline;
+		}
+	}
+	if (rtgi_pipeline_sel == RSE::RTGI_PIPELINE_RADIANCE_PROBES) {
+		// New radiance-probes pipeline path. Intentionally empty for now: by
+		// disabling the legacy RTGI dispatch here we keep the new pipeline a
+		// no-op while it is built out, without touching the legacy code below.
+		scene_features.rt = false;
+	}
 	const float *rt_env_params = scene_features.rt ? _rtgi_shader_params_for_environment(p_render_data->environment, rt_env_params_storage) : nullptr;
 	bool rt_replaces_opaque = scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING;
 	const bool rt_hybrid_rtgi = scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_HYBRID;
