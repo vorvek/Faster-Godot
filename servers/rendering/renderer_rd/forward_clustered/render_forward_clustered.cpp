@@ -4156,6 +4156,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			}
 			if (rt_resources_ready && rt_state && rtgi_wrc && rtgi_wrc->get_ray_result_buffer().is_valid()) {
 				RD::get_singleton()->draw_command_begin_label("RTGI WRC Probe Update");
+				RENDER_TIMESTAMP("RTGI WRC Probe Update");
 				const uint32_t wrc_flags = rt_flags | SceneShaderRaytracing::RT_FLAG_WRC_PROBE_UPDATE;
 				// Channel the WRC's own clipmap values into the params UBO the probe-update
 				// raygen reads (via update_uniform_set's RT_FLAG_WRC_PROBE_UPDATE override),
@@ -4186,7 +4187,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				}
 				rb_data->rt_wrc_prev_camera = wrc_cur_camera;
 				rb_data->rt_wrc_scroll_valid = true;
+				RENDER_TIMESTAMP("RTGI WRC Accumulate");
 				rtgi_wrc->update(RID(), RID(), wrc_frame); // mode 1 accumulate probe rays -> atlas + mode 0 recenter.
+				RENDER_TIMESTAMP("RTGI WRC End");
 				RD::get_singleton()->draw_command_end_label();
 			} else {
 				rb_data->rt_wrc_scroll_valid = false;
