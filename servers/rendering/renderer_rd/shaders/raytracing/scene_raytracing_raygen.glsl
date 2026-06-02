@@ -61,6 +61,12 @@ layout(set = 0, binding = 32, std430) readonly buffer MotionTransforms {
 };
 // clang-format on
 
+// SPG gather (A2-T2): hemi-oct basis math + the binding-agnostic WRC query API.
+// rtgi_wrc_inc is binding-agnostic (atlas samplers passed as params), so it is safe
+// to include after raytracing_common_inc declares the SPG/WRC sampler bindings above.
+#include "rtgi_spg_inc.glsl"
+#include "rtgi_wrc_inc.glsl"
+
 bool rtgi_trace_specular_reflected_hit_raygen(vec3 hit_pos, vec3 geometry_normal, vec3 normal, vec3 view_dir, out float hit_distance, out vec3 hit_normal, out vec3 reflection_dir) {
 	hit_distance = RT_FP16_MAX;
 	hit_normal = vec3(0.0);
@@ -524,7 +530,142 @@ void rt_wrc_probe_update_main() {
 	rt_wrc_probe_ray_results[ray_index].metadata = vec4(dynamic_hit ? 1.0 : 0.0, confidence, float(source_mask), float(update_index));
 }
 
+// Screen Probe Gather raygen (A2-T2). For each selected (screen-probe, octahedral
+// direction) this frame: query the World Radiance Cache (cheap, no ray); if the cache
+// is cold (confidence below the SPG fallback threshold) trace a full HW-RT path
+// (ground-truth radiance, identical to the WRC producer's loop) instead. The result is
+// written to the SPG ray-result SSBO; the T3 accumulate folds it into the atlas.
+
+// Fills WrcParams for the WRC radiance query. cascade/grid/spacing come from the STRC
+// param slots (the SPG dispatch's update_uniform_set override fills them with the WRC's
+// clipmap values, exactly as the WRC probe-update pass reuses them); oct_res comes from
+// the dedicated SPG_WRC_OCT_RES param; camera + bias are constants matching the WRC
+// consumer (rtgi_wrc_gi_consumer / render_gi_debug).
+WrcParams spg_make_wrc_params() {
+	WrcParams p;
+	p.cascade_count = int(max(get_rt_param(RT_PARAM_RTGI_STRC_CASCADE_COUNT), 1.0));
+	p.grid = int(max(get_rt_param(RT_PARAM_RTGI_STRC_GRID_SIZE), 1.0));
+	p.oct_res = int(max(get_rt_param(RT_PARAM_RTGI_SPG_WRC_OCT_RES), 1.0));
+	p.base_spacing = max(get_rt_param(RT_PARAM_RTGI_STRC_BASE_PROBE_SPACING), 0.25);
+	p.camera_pos = rt_camera_world_origin();
+	p.occlusion_bias_spacing = 0.5;
+	p.min_variance = 0.0001;
+	return p;
+}
+
+void rt_spg_gather_main() {
+	uint ray_index = gl_LaunchIDEXT.x;
+	uint grid_w = uint(max(get_rt_param(RT_PARAM_RTGI_SPG_GRID_W), 0.0));
+	uint grid_h = uint(max(get_rt_param(RT_PARAM_RTGI_SPG_GRID_H), 0.0));
+	uint oct_res = uint(max(get_rt_param(RT_PARAM_RTGI_SPG_OCT_RES), 1.0));
+	uint dirs_per_frame = uint(max(get_rt_param(RT_PARAM_RTGI_SPG_DIRS_PER_FRAME), 1.0));
+	uint probe_count = grid_w * grid_h;
+	uint ray_count = probe_count * dirs_per_frame;
+	if (ray_index >= ray_count) {
+		return;
+	}
+	uint frame_index = uint(get_rt_param(RT_PARAM_FRAME_INDEX));
+
+	uint probe_linear = ray_index / dirs_per_frame;
+	uint slot = ray_index % dirs_per_frame;
+	uint dir_total = oct_res * oct_res;
+	// Rotate the per-frame dir subset across the full O*O set so temporal accumulation
+	// (T3) integrates all directions over frames.
+	uint dir_index = (slot * (dir_total / max(dirs_per_frame, 1u)) + frame_index * 7u + slot * 13u) % dir_total;
+	ivec2 probe = ivec2(int(probe_linear % grid_w), int(probe_linear / grid_w));
+
+	vec4 plane = texelFetch(rt_spg_header_plane, probe, 0);
+	vec4 aux = texelFetch(rt_spg_header_aux, probe, 0);
+	if (plane.w <= 0.0) { // invalid probe (empty tile) -> write empty result.
+		rt_spg_ray_results[ray_index].radiance_distance = vec4(0.0, 0.0, 0.0, -1.0);
+		rt_spg_ray_results[ray_index].probe_dir = vec4(float(probe_linear), float(dir_index), 0.0, 0.0);
+		return;
+	}
+	vec3 anchor_pos = plane.xyz;
+	// Header normal is stored via vec3_to_oct (oct_inc.glsl), which maps to [0,1]^2;
+	// oct_to_vec3 expects [-1,1]^2, so undo the *0.5+0.5 with *2-1 (same convention as
+	// the PathState oct decode in raytracing_inc.glsl).
+	vec3 anchor_n = oct_to_vec3(aux.xy * 2.0 - 1.0);
+
+	// Local hemioct dir -> world dir via the anchor basis.
+	vec2 oct = (vec2(float(dir_index % oct_res), float(dir_index / oct_res)) + vec2(0.5)) / float(oct_res);
+	vec3 local_dir = spg_hemioct_decode(oct);
+	vec3 tang, bitang;
+	spg_build_basis(anchor_n, tang, bitang);
+	vec3 world_dir = spg_local_to_world(local_dir, tang, bitang, anchor_n);
+
+	// Priority 1: query the WRC (cheap, no ray).
+	WrcParams wp = spg_make_wrc_params();
+	float cone = 3.14159265 / float(oct_res); // SPG per-direction angular footprint (the SPG oct_res, intentionally not wp.oct_res).
+	float wrc_conf = 0.0;
+	vec3 radiance = rtgi_wrc_sample_radiance(rt_wrc_radiance_for_spg, rt_wrc_distance_for_spg, wp, anchor_pos, world_dir, cone, wrc_conf);
+	float hit_dist = -1.0; // -1 = WRC-sourced / no trace.
+
+	float fallback_conf = get_rt_param(RT_PARAM_RTGI_SPG_FALLBACK_CONF);
+	if (wrc_conf < fallback_conf) {
+		// Priority 2: trace a HW-RT ray. The PathState init + bounce loop below is a
+		// VERBATIM copy of rt_wrc_probe_update_main()'s path trace (full path trace =
+		// ground-truth multi-bounce radiance; no cache feedback added), with the gather's
+		// own ray origin/dir + RNG seed.
+		vec3 ray_origin = offset_ray_origin(anchor_pos, anchor_n);
+		vec3 ray_dir = world_dir;
+
+		PathState ps;
+		ps.radiance = vec3(0.0);
+		ps.specular_radiance = vec3(0.0);
+		ps.throughput = vec3(1.0);
+		ps.packed_bounces_flags = set_sample_zero(0u);
+		ps.rng_state = init_blue_noise_rng(uvec2(ray_index & 255u, (ray_index >> 8u) & 255u), frame_index, dir_index);
+		ps.hit_t = 65504.0;
+		ps.offset_normal = vec3(0.0, 1.0, 0.0);
+		ps.next_ray_dir = ray_dir;
+		ps.pdf_bsdf = 0.0;
+
+		float first_hit_distance = 65504.0;
+		vec3 first_hit_normal = ps.offset_normal;
+		bool first_hit_recorded = false;
+		const uint max_bounces = RT_GET_MAX_BOUNCES();
+		[[dont_unroll]] for (uint bounce = 0u; bounce <= max_bounces; bounce++) {
+			path_pack(payload, ps);
+#ifdef USE_SER
+			hitObjectNV hitObject;
+			hitObjectTraceRayNV(hitObject, tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
+			uint hint = 0;
+			if (hitObjectIsHitNV(hitObject)) {
+				hint = hitObjectGetInstanceIdNV(hitObject);
+			}
+			reorderThreadNV(hitObject, hint, 8);
+			hitObjectExecuteShaderNV(hitObject, 0);
+#else
+			traceRayEXT(tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
+#endif
+			ps = path_unpack(payload);
+			if (!first_hit_recorded) {
+				first_hit_distance = clamp(ps.hit_t, 0.0, 65504.0);
+				first_hit_normal = ps.offset_normal;
+				first_hit_recorded = true;
+			}
+			if (is_path_terminated(ps.packed_bounces_flags)) {
+				break;
+			}
+			vec3 hit_pos = ray_origin + ray_dir * ps.hit_t;
+			ray_origin = offset_ray_origin(hit_pos, ps.offset_normal);
+			ray_dir = ps.next_ray_dir;
+		}
+
+		radiance = sanitize_payload_vec3(ps.radiance);
+		hit_dist = first_hit_distance;
+	}
+
+	rt_spg_ray_results[ray_index].radiance_distance = vec4(radiance, hit_dist);
+	rt_spg_ray_results[ray_index].probe_dir = vec4(float(probe_linear), float(dir_index), 0.0, 0.0);
+}
+
 void main() {
+	if (rt_spg_gather_mode()) {
+		rt_spg_gather_main();
+		return;
+	}
 	if (rt_wrc_probe_update_mode()) {
 		rt_wrc_probe_update_main();
 		return;

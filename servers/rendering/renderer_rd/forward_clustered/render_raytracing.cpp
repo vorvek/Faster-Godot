@@ -9722,7 +9722,10 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			float rt_prev_view_rect[4];
 			float rt_jitter[4];
 		} rt_ubo = {};
-		static_assert(sizeof(rt_ubo) == 100 * sizeof(float));
+		// 48 params + 3 mat4 (48) + 3 vec4 (12) = 108 floats. params[] grew from 40 to 48
+		// (RT_PARAM_SHADER_FLOAT_COUNT) for the SPG params; keep this in lock-step with the
+		// GLSL `vec4 rt_params[12]` declaration in raytracing_common_inc.glsl.
+		static_assert(sizeof(rt_ubo) == 108 * sizeof(float));
 
 		if (p_render_data && p_render_data->environment.is_valid()) {
 			const RSE::PathtracingParams *env_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
@@ -9750,6 +9753,28 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_CASCADE_COUNT] = float(p_state->wrc_cascade_count);
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_BASE_PROBE_SPACING] = p_state->wrc_base_spacing;
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_RAYS_PER_FRAME] = float(p_state->wrc_rays_per_frame);
+		}
+		// SPG gather (A2-T2) reuses (a) the STRC grid/cascade/spacing slots so the WRC
+		// radiance query inside the gather addresses the SAME atlas the WRC was sized from
+		// (mirrors the WRC override above, sourced from the same wrc_* fields the dispatch
+		// site set), AND (b) the dedicated RT_PARAM_RTGI_SPG_* slots for the gather's own
+		// grid/oct/dir budget + WRC-query oct_res. Gated on the SPG flag + spg_grid_w > 0
+		// sentinel so STRC/WRC/main dispatches stay byte-identical.
+		if ((p_rt_flags & SceneShaderRaytracing::RT_FLAG_SPG_GATHER) != 0 && p_state->spg_grid_w > 0u) {
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_GRID_SIZE] = float(p_state->wrc_grid);
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_CASCADE_COUNT] = float(p_state->wrc_cascade_count);
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_BASE_PROBE_SPACING] = p_state->wrc_base_spacing;
+			// Zero the STRC ray budget defensively: the WRC query reads only the STRC
+			// grid/cascade/spacing slots, and a stale nonzero RAYS_PER_FRAME would let the
+			// closest-hit shader sample STRC indirect into the gather's ground-truth rays
+			// should SPG ever run with STRC enabled (mirrors the WRC override's guard).
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_RAYS_PER_FRAME] = 0.0f;
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_SPG_GRID_W] = float(p_state->spg_grid_w);
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_SPG_GRID_H] = float(p_state->spg_grid_h);
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_SPG_OCT_RES] = float(p_state->spg_oct_res);
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_SPG_DIRS_PER_FRAME] = float(p_state->spg_dirs_per_frame);
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_SPG_FALLBACK_CONF] = p_state->spg_fallback_conf;
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_SPG_WRC_OCT_RES] = float(p_state->spg_wrc_oct_res);
 		}
 
 		// rt_params layout (see RaytracingParamIndex enum):
@@ -10377,6 +10402,61 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			add_uniform_id(u, default_rw_storage_buffer);
 		}
 		uniforms.push_back(u);
+	}
+
+	// Binding 108: RTGI Screen Probe Gather (SPG) gather ray-result buffer (A2-T2).
+	// Written by the SPG gather raygen when RT_FLAG_SPG_GATHER is set; read by the T3
+	// accumulate. Mirrors the WRC binding-107 wiring, including the *writable* default-
+	// buffer fallback (NOT the read-only default) for the same single-usage reason
+	// documented on binding 107.
+	{
+		RD::Uniform u;
+		u.binding = 108;
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		if (owner->rtgi_spg && owner->rtgi_spg->get_ray_result_buffer().is_valid()) {
+			add_uniform_id(u, owner->rtgi_spg->get_ray_result_buffer());
+		} else {
+			add_uniform_id(u, default_rw_storage_buffer);
+		}
+		uniforms.push_back(u);
+	}
+
+	// Bindings 109-112: SPG gather combined-sampler inputs (GLSL `sampler2D`, so each is
+	// UNIFORM_TYPE_SAMPLER_WITH_TEXTURE = sampler + texture, mirroring the WRC GI consumer
+	// which the gather's rtgi_wrc_sample_radiance() query is shared with). 109/110 = the
+	// SPG probe headers (plane: world-pos + linear-depth; aux: oct-normal + motion) from
+	// run_placement, point-sampled (per-probe texelFetch) so a NEAREST sampler. 111/112 =
+	// the WRC radiance + distance atlases the cold-cache gather queries with bilinear
+	// textureLod taps, so a LINEAR clamp sampler (identical to render_gi_debug). Each
+	// texture falls back to a default when its effect is null / not yet allocated; the
+	// gather only runs with the SPG flag + valid resources, so the fallbacks are bound
+	// only on the unrelated dispatches that never sample them.
+	{
+		RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
+		RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
+		RID nearest_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+		RID linear_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+		RID default_black = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+
+		RID spg_header_plane = (owner->rtgi_spg && owner->rtgi_spg->get_header_plane().is_valid()) ? owner->rtgi_spg->get_header_plane() : default_black;
+		RID spg_header_aux = (owner->rtgi_spg && owner->rtgi_spg->get_header_aux().is_valid()) ? owner->rtgi_spg->get_header_aux() : default_black;
+		RID wrc_radiance = (owner->rtgi_wrc && owner->rtgi_wrc->get_radiance_atlas().is_valid()) ? owner->rtgi_wrc->get_radiance_atlas() : default_black;
+		RID wrc_distance = (owner->rtgi_wrc && owner->rtgi_wrc->get_distance_atlas().is_valid()) ? owner->rtgi_wrc->get_distance_atlas() : default_black;
+
+		auto add_combined = [&](uint32_t p_binding, RID p_sampler, RID p_texture) {
+			RD::Uniform u;
+			u.binding = p_binding;
+			u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+			u.append_id(p_sampler);
+			u.append_id(p_texture);
+			signature_add(p_sampler);
+			signature_add(p_texture);
+			uniforms.push_back(u);
+		};
+		add_combined(109, nearest_sampler, spg_header_plane);
+		add_combined(110, nearest_sampler, spg_header_aux);
+		add_combined(111, linear_sampler, wrc_radiance);
+		add_combined(112, linear_sampler, wrc_distance);
 	}
 
 	// Binding 60: RTGI specular reflection-direction diagnostic output.

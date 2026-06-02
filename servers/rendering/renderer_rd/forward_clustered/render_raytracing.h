@@ -476,6 +476,19 @@ struct RTViewportState {
 	float wrc_base_spacing = 0.0f;
 	uint32_t wrc_rays_per_frame = 0;
 
+	// Screen Probe Gather (SPG) per-frame scalars channeled to update_uniform_set so the
+	// SPG gather raygen reads its grid/oct/dir budget + WRC-query oct_res out of the
+	// RT_PARAM_RTGI_SPG_* slots (filled by the RT_FLAG_SPG_GATHER override). All zero is
+	// the "not an SPG gather dispatch" sentinel; the override only fires when the
+	// RT_FLAG_SPG_GATHER flag is set, so STRC/WRC/main dispatches are untouched. The SPG
+	// gather reuses the WRC's STRC-slot override (wrc_grid/...) to address the WRC atlas.
+	uint32_t spg_grid_w = 0;
+	uint32_t spg_grid_h = 0;
+	uint32_t spg_oct_res = 0;
+	uint32_t spg_dirs_per_frame = 0;
+	uint32_t spg_wrc_oct_res = 0;
+	float spg_fallback_conf = 0.0f;
+
 	uint64_t radiance_history_signature = 0;
 	bool radiance_history_signature_valid = false;
 	bool radiance_history_invalidated = false;

@@ -10,6 +10,7 @@ layout(constant_id = 0) const uint RT_FLAGS = 0u;
 #define RT_FLAG_STRC_PROBE_UPDATE (1u << 5)
 #define RT_FLAG_STRC_INTERNAL_FALLBACK (1u << 6)
 #define RT_FLAG_WRC_PROBE_UPDATE (1u << 7)
+#define RT_FLAG_SPG_GATHER (1u << 8)
 
 #define RT_SAMPLE_COUNT_SHIFT 21u
 #define RT_SAMPLE_COUNT_MASK 0xFFu
@@ -34,7 +35,10 @@ layout(set = 0, binding = 14, std430) readonly buffer GlobalShaderUniformData {
 global_shader_uniforms;
 
 layout(set = 0, binding = 6, std140) uniform RaytracingParams {
-	vec4 rt_params[10];
+	// 12 vec4s == RT_PARAM_SHADER_FLOAT_COUNT (48) floats. Grown from 10 to 12 to make
+	// room for the Screen Probe Gather (SPG) params (indices 39..44); see the matching
+	// RT_PARAM_SHADER_FLOAT_COUNT in scene_shader_raytracing.h + the rt_ubo static_assert.
+	vec4 rt_params[12];
 	mat4 prev_vp_unjittered;
 mat4 curr_vp_unjittered;
 mat4 inv_projection_unjittered;
@@ -53,6 +57,10 @@ bool rt_strc_probe_update_mode() {
 
 bool rt_wrc_probe_update_mode() {
 	return (RT_FLAGS & RT_FLAG_WRC_PROBE_UPDATE) != 0u;
+}
+
+bool rt_spg_gather_mode() {
+	return (RT_FLAGS & RT_FLAG_SPG_GATHER) != 0u;
 }
 
 uint rt_strc_static_visual_layer_mask() {
@@ -1256,6 +1264,26 @@ struct RTGIWRCProbeRayResult {
 layout(set = 0, binding = 107, std430) buffer RTGIWRCProbeRayResultBuffer {
 	RTGIWRCProbeRayResult rt_wrc_probe_ray_results[];
 };
+
+// Screen Probe Gather (SPG) gather ray results (A2-T2). One entry per selected
+// (screen-probe, octahedral direction) this frame; the T3 accumulate folds these
+// into the per-probe octahedral radiance atlas. 32-byte stride (2 x vec4) matches
+// RTGIScreenProbeGather::ensure_ray_result_buffer.
+struct RTGISPGRayResult {
+	vec4 radiance_distance; // .rgb = incident radiance, .a = hit distance (-1 = WRC-sourced / no trace)
+	vec4 probe_dir; // .x = probe_linear, .y = dir_index, .zw = pad
+};
+layout(set = 0, binding = 108, std430) buffer RTGISPGRayResultBuffer {
+	RTGISPGRayResult rt_spg_ray_results[];
+};
+
+// SPG gather read-only inputs. 109/110 = the SPG probe headers written by run_placement
+// (RGBA32F plane: .xyz world-pos, .w linear-depth(<=0 invalid); RGBA16F aux: .xy oct-normal,
+// .zw motion). 111/112 = the WRC radiance + distance atlases the cold-cache gather queries.
+layout(set = 0, binding = 109) uniform sampler2D rt_spg_header_plane;
+layout(set = 0, binding = 110) uniform sampler2D rt_spg_header_aux;
+layout(set = 0, binding = 111) uniform sampler2D rt_wrc_radiance_for_spg;
+layout(set = 0, binding = 112) uniform sampler2D rt_wrc_distance_for_spg;
 
 bool rt_strc_enabled() {
 	return (RT_FLAGS & RT_FLAG_STRC_ENABLED) != 0u && get_rt_param(RT_PARAM_RTGI_STRC_ENABLED) > 0.5 && get_rt_param(RT_PARAM_RTGI_STRC_STRENGTH) > 0.001;

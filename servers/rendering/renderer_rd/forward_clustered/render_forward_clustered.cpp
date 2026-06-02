@@ -272,7 +272,12 @@ static RtgiWrc::ClipmapParams _resolve_wrc_params(uint32_t p_preset, uint32_t *r
 static RendererRD::RTGIScreenProbeGather::SpgParams _resolve_spg_params(uint32_t p_preset) {
 	// T7 wires per-preset project settings; until then every preset uses defaults.
 	(void)p_preset;
-	return RendererRD::RTGIScreenProbeGather::SpgParams{};
+	RendererRD::RTGIScreenProbeGather::SpgParams params;
+	// Keep the per-frame direction budget below the probe's full O*O direction count:
+	// at/above it the rotating scheduler would double-sample some directions and starve
+	// others within a frame, biasing the T3 1/n temporal blend.
+	params.dirs_per_probe_per_frame = CLAMP(params.dirs_per_probe_per_frame, 1, params.oct_res * params.oct_res - 1);
+	return params;
 }
 
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_specular() {
@@ -4247,6 +4252,39 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				sfp.rays_this_frame = (uint32_t)(spg_grid.x * spg_grid.y) * (uint32_t)spg_params.dirs_per_probe_per_frame;
 				sfp.frame_index = rt_state ? rt_state->frame_counter : 0;
 				rtgi_spg->run_placement(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), spg_vel, sfp, p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, spg_size);
+
+				// SPG gather (A2-T2): for each selected (probe, direction) this frame, query
+				// the WRC (cheap) and trace a HW-RT ray only when the cache is cold, writing
+				// the result to the SPG ray-result SSBO (T3 accumulates it into the atlas).
+				// Reuses the flag-generic backend dispatch (same as the WRC probe-update).
+				// The render graph auto-synchronizes the header textures run_placement just
+				// wrote before the gather samples them (same graph resource tracking the WRC
+				// probe-update + accumulate rely on), so no manual barrier is needed. The
+				// gather also queries the WRC atlas, so feed the WRC clipmap values through
+				// the rt_state wrc_* fields (the SPG override addresses the WRC atlas via the
+				// STRC slots, exactly like the WRC probe-update pass).
+				// rt_state IS rt_backend_context.viewport_state, but is null when resources
+				// weren't ready this frame (set at the top of this rt_radiance_probes_only
+				// block); gate on it before the dispatch (mirrors the WRC block's rt_state
+				// guard) since the gather writes the rt_state SPG/WRC param fields and the
+				// backend dispatch needs the valid TLAS/context that null signals are absent.
+				if (rt_state && rtgi_spg->get_ray_result_buffer().is_valid() && sfp.rays_this_frame > 0) {
+					RENDER_TIMESTAMP("RTGI SPG Gather");
+					// The ray-result SSBO was already (re)allocated for this frame's ray count
+					// in the rt_radiance_probes_only ensure block above (grow-only); no re-ensure.
+					rt_state->wrc_grid = (uint32_t)wrc_params.grid;
+					rt_state->wrc_cascade_count = (uint32_t)wrc_params.cascade_count;
+					rt_state->wrc_base_spacing = wrc_params.base_spacing;
+					rt_state->spg_grid_w = sfp.grid_w;
+					rt_state->spg_grid_h = sfp.grid_h;
+					rt_state->spg_oct_res = (uint32_t)spg_params.oct_res;
+					rt_state->spg_dirs_per_frame = (uint32_t)spg_params.dirs_per_probe_per_frame;
+					rt_state->spg_fallback_conf = spg_params.rt_fallback_confidence;
+					rt_state->spg_wrc_oct_res = (uint32_t)wrc_params.oct_res; // WRC atlas oct_res for the query.
+					const uint32_t spg_flags = rt_flags | SceneShaderRaytracing::RT_FLAG_SPG_GATHER;
+					raytracing->dispatch_probe_update_backend(rt_backend_context, spg_flags, rtgi_spg->get_ray_result_buffer(), sfp.rays_this_frame);
+					rt_state = rt_backend_context.viewport_state;
+				}
 				RD::get_singleton()->draw_command_end_label();
 			}
 

@@ -13,7 +13,7 @@
 // ============================================================================
 // RT_PARAMS INDICES - Must match RT_PARAM_* in scene_shader_raytracing.h
 // ============================================================================
-// rt_params is a vec4[10] uniform buffer (40 floats total)
+// rt_params is a vec4[12] uniform buffer (48 floats total)
 // Access: rt_params[idx >> 2][idx & 3] or get_rt_param(idx)
 #define RT_PARAM_VIS_MODE 0 // rt_params[0].x - Debug visualization mode (0 = disabled)
 #define RT_PARAM_SAMPLE_COUNT 1 // rt_params[0].y - Samples per pixel
@@ -55,6 +55,16 @@
 #define RT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS 36 // rt_params[9].x - Static STRC visual layer mask
 #define RT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS 37 // rt_params[9].y - Dynamic STRC visual layer mask
 #define RT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES 38 // rt_params[9].z - Screen-space diffuse cache entry budget
+// Screen Probe Gather (SPG) params (indices 39..44). Renderer-internal RT-param slots
+// filled by update_uniform_set's RT_FLAG_SPG_GATHER override (the gather dispatch), not
+// by the Environment pathtracing-params fill (which only writes indices < 39). Must match
+// the RT_PARAM_RTGI_SPG_* constants in scene_shader_raytracing.h. Backed by rt_params[12].
+#define RT_PARAM_RTGI_SPG_GRID_W 39 // rt_params[9].w - SPG probe-grid width (probes).
+#define RT_PARAM_RTGI_SPG_GRID_H 40 // rt_params[10].x - SPG probe-grid height (probes).
+#define RT_PARAM_RTGI_SPG_OCT_RES 41 // rt_params[10].y - SPG per-probe octahedral tile resolution.
+#define RT_PARAM_RTGI_SPG_DIRS_PER_FRAME 42 // rt_params[10].z - SPG directions gathered per probe per frame.
+#define RT_PARAM_RTGI_SPG_FALLBACK_CONF 43 // rt_params[10].w - WRC confidence below which the gather traces a ray.
+#define RT_PARAM_RTGI_SPG_WRC_OCT_RES 44 // rt_params[11].x - WRC atlas oct_res for the WRC radiance query.
 
 #define RTGI_SAMPLING_ANALYTIC_LIGHTS_BIT 1u
 #define RTGI_SAMPLING_EXPLICIT_EMISSIVE_BIT 2u
