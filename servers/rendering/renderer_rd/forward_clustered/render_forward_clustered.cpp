@@ -293,6 +293,15 @@ static RendererRD::RTGIScreenProbeGather::SpgParams _resolve_spg_params(uint32_t
 	return params;
 }
 
+// Resolves the active RTGI GI-Resolve params from the per-preset Project Settings.
+// T0 STUB: returns the GiResolveParams defaults for every preset (the real per-preset
+// GLOBAL_GET + CLAMP body lands in T7, mirroring _resolve_spg_params). The `p_preset`
+// argument is accepted now so the call site is stable across T0 -> T7.
+static RendererRD::RTGIGIResolve::GiResolveParams _resolve_gi_resolve_params(uint32_t p_preset) {
+	(void)p_preset;
+	return RendererRD::RTGIGIResolve::GiResolveParams{};
+}
+
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_specular() {
 	ERR_FAIL_NULL(render_buffers);
 
@@ -3135,6 +3144,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// SPG params (hoisted next to wrc_params so the PLACE dispatch site below reads the
 	// SAME tunables the grid was sized from). T1 returns defaults for every preset.
 	RendererRD::RTGIScreenProbeGather::SpgParams spg_params = _resolve_spg_params(rtgi_quality_preset_sel);
+	// GI-Resolve params (A3). Hoisted alongside spg_params for the resolve dispatch site
+	// below. T0 returns defaults for every preset (real per-preset body in T7).
+	RendererRD::RTGIGIResolve::GiResolveParams resolve_params = _resolve_gi_resolve_params(rtgi_quality_preset_sel);
 	if (rt_radiance_probes_only) {
 		if (rtgi_wrc != nullptr && rb.is_valid()) {
 			rtgi_wrc->ensure_resources(rb, wrc_params, (int)rb->get_view_count());
@@ -3765,6 +3777,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					// force the prepass when either SPG debug view is active.
 					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_GI ||
 					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_RADIANCE ||
+					// RTGI Resolve (A3) reconstructs the world normal from this G-buffer
+					// (its INTEGRATE runs on the SPG path), so force the prepass for its view.
+					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_RESOLVE_GI ||
 					scene_state.used_normal_texture) {
 				depth_pass_mode = PASS_MODE_DEPTH_NORMAL_ROUGHNESS;
 			}
@@ -4245,8 +4260,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// views; A3 promotes it to always-on with the production resolve + production
 			// G-buffer. Gated to run only in radiance-probes mode AND when an SPG debug
 			// view is active, so it costs nothing in normal rendering. rt_state is valid
-			// here (set inside this rt_resources_ready block).
-			const bool spg_debug_active = get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_GI || get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_RADIANCE;
+			// here (set inside this rt_resources_ready block). The RTGI-Resolve (A3) debug
+			// view also depends on the SPG atlas, so it counts as an SPG-active view here
+			// (the resolve dispatch below reads the SPG getters this placement+accumulate
+			// fills); A3 later promotes both SPG + resolve to always-on for the composite.
+			const bool resolve_debug_active = get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_RESOLVE_GI;
+			const bool spg_debug_active = get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_GI || get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_RADIANCE || resolve_debug_active;
 			if (rt_radiance_probes_only && spg_debug_active && rtgi_spg && rtgi_spg->get_radiance_atlas().is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
 				RD::get_singleton()->draw_command_begin_label("RTGI SPG");
 				RENDER_TIMESTAMP("RTGI SPG Placement");
@@ -4309,6 +4328,42 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				// before this reads them (same resource tracking the WRC accumulate uses).
 				RENDER_TIMESTAMP("RTGI SPG Accumulate");
 				rtgi_spg->run_accumulate(sfp);
+
+				// RTGI GI Resolve (A3-T0): the production per-pixel consumer of the SPG/WRC
+				// probes. INTEGRATE reconstructs world pos/normal from the SAME raster
+				// G-buffers the SPG placement used, gathers the 4 surrounding probes
+				// (plane-weighted, confidence-weighted cosine normalizer), falls back to the
+				// WRC irradiance, and writes the LIGHTING-SPACE diffuse A (no albedo) to its
+				// own ping-pong buffer; the spec buffer is 0 (T1). No beauty composite yet
+				// (T4/T5) -- the RESOLVE_GI debug view (in _render_buffers_debug_draw)
+				// remodulates by albedo + blits. Runs only when an SPG-active view is on
+				// (resolve_debug_active is folded into spg_debug_active above, so the SPG
+				// atlas this reads is populated). The render graph auto-synchronizes the SPG
+				// atlas + headers before this samples them (same resource tracking the SPG
+				// accumulate relies on).
+				if (rtgi_resolve != nullptr && rtgi_wrc != nullptr && rtgi_wrc->get_radiance_atlas().is_valid() && rtgi_wrc->get_distance_atlas().is_valid()) {
+					RENDER_TIMESTAMP("RTGI Resolve");
+					rtgi_resolve->ensure_resources(rb, resolve_params, rb->get_internal_size());
+					RendererRD::RTGIGIResolve::GiResolveFrameParams rfp;
+					rfp.frame_index = sfp.frame_index;
+					rfp.params = resolve_params;
+					rfp.wrc_grid = (uint32_t)wrc_params.grid;
+					rfp.wrc_cascade_count = (uint32_t)wrc_params.cascade_count;
+					rfp.wrc_base_spacing = wrc_params.base_spacing;
+					rfp.spg_grid_w = sfp.grid_w;
+					rfp.spg_grid_h = sfp.grid_h;
+					rfp.spg_oct_res = (uint32_t)spg_params.oct_res;
+					rfp.spg_spacing_f = (uint32_t)spg_params.spacing_f;
+					// SPG getters source the SPATIAL-filtered atlas + the front headers (what
+					// this frame's placement+accumulate produced). WRC getters source the
+					// cache's front atlases for the fallback query. The resolve no longer takes
+					// albedo (INTEGRATE never used it; the debug view shows the raw lighting-
+					// space output, and remod-by-albedo lands at the composite in T4/T5).
+					rtgi_resolve->run_resolve(rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), spg_vel,
+							rtgi_spg->get_radiance_filtered(), rtgi_spg->get_header_plane(), rtgi_spg->get_header_aux(),
+							rtgi_wrc->get_radiance_atlas(), rtgi_wrc->get_distance_atlas(),
+							rfp, p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform);
+				}
 				RD::get_singleton()->draw_command_end_label();
 			}
 
@@ -5611,6 +5666,18 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 		// strength field (unlike the WRC's wrc_strength), so pass the raw 1.0 the gate reads.
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_GI && rtgi_spg != nullptr && rtgi_spg->get_radiance_filtered().is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
 			rtgi_spg->render_gi_debug(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, rb->get_internal_size(), 1.0f, fb);
+		}
+
+		// RTGI_RESOLVE_GI is the A3 production-resolve debug view: it outputs the resolve's
+		// RAW lighting-space output -- the lighting-space diffuse A + the rough-spec radiance
+		// (0 in T0) -- then blits the RAW linear result (no albedo, no tonemap) for the furnace
+		// gate. NO albedo remodulation: that lands at the composite (T4/T5), where the full
+		// G-buffer albedo exists (this view forces a depth-prepass that does not populate
+		// rt_albedo_metalness). On the furnace A ~= L (albedo-independent), matching the A2
+		// SPG-GI gate. The diffuse buffer was filled by run_resolve on the SPG path in
+		// _render_scene (gated to run for this view too); guard on the resolved buffer.
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_RESOLVE_GI && rtgi_resolve != nullptr && rtgi_resolve->get_diffuse_gi().is_valid()) {
+			rtgi_resolve->render_resolve_debug(rb, rb->get_internal_size(), fb);
 		}
 	}
 
@@ -8370,6 +8437,7 @@ RenderForwardClustered::RenderForwardClustered() {
 	rtgi_strc = memnew(RendererRD::RTGISpatioTemporalRadianceCache);
 	rtgi_wrc = memnew(RendererRD::RTGIWorldRadianceCache);
 	rtgi_spg = memnew(RendererRD::RTGIScreenProbeGather);
+	rtgi_resolve = memnew(RendererRD::RTGIGIResolve);
 	fsr2_effect = memnew(RendererRD::FSR2Effect);
 	ss_effects = memnew(RendererRD::SSEffects);
 	motion_vectors_store = memnew(RendererRD::MotionVectorsStore);
@@ -8409,6 +8477,11 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (rtgi_spg != nullptr) {
 		memdelete(rtgi_spg);
 		rtgi_spg = nullptr;
+	}
+
+	if (rtgi_resolve != nullptr) {
+		memdelete(rtgi_resolve);
+		rtgi_resolve = nullptr;
 	}
 
 	if (rtgi_diffuse_cache != nullptr) {
