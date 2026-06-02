@@ -943,10 +943,18 @@ float3 evalMicrofacet(const BrdfData data) {
 	float G2 = Smith_G2(data.alpha, data.alphaSquared, data.NdotL, data.NdotV);
 	//float3 F = evalFresnel(data.specularF0, shadowedF90(data.specularF0), data.VdotH); //< Unused, F is precomputed already
 
-#if G2_DIVIDED_BY_DENOMINATOR
-	return data.F * (G2 * D * data.NdotL);
+	// Multi-scatter energy compensation, matching sampleSpecularMicrofacet so direct/NEE
+	// specular has the same energy as the BSDF-sampled (indirect) specular (C8).
+#if MICROFACET_DISTRIBUTION == GGX
+	float3 ms = evalMultiScatterApproximation(data.alpha, data.NdotV, data.specularF0);
 #else
-	return ((data.F * G2 * D) / (4.0f * data.NdotL * data.NdotV)) * data.NdotL;
+	float3 ms = float3(1.0f, 1.0f, 1.0f);
+#endif
+
+#if G2_DIVIDED_BY_DENOMINATOR
+	return ms * data.F * (G2 * D * data.NdotL);
+#else
+	return ms * ((data.F * G2 * D) / (4.0f * data.NdotL * data.NdotV)) * data.NdotL;
 #endif
 }
 
