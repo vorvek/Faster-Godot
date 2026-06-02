@@ -67,6 +67,12 @@ private:
 	static MeshStorage *singleton;
 
 	RID default_rd_storage_buffer;
+	// Distinct RID used as the fallback for *writable* SSBO bindings (e.g. the
+	// RTGI STRC/WRC ray-result buffers). Kept separate from the read-only default
+	// above so the same RID is never recorded with both STORAGE_BUFFER_READ and
+	// STORAGE_BUFFER_READ_WRITE usage in one command list, which would trip the
+	// render-graph single-usage-per-resource assert.
+	RID default_rw_rd_storage_buffer;
 
 	/* Mesh */
 
@@ -370,6 +376,7 @@ public:
 	bool free(RID p_rid);
 
 	RID get_default_rd_storage_buffer() const { return default_rd_storage_buffer; }
+	RID get_default_rw_rd_storage_buffer() const { return default_rw_rd_storage_buffer; }
 
 	/* MESH API */
 

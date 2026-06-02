@@ -9597,6 +9597,9 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 	Vector<RD::Uniform> uniforms;
 	uint64_t uniform_signature = _rt_history_mix(0x7274756e69666f72ULL, p_rt_flags);
 	RID default_storage_buffer = RendererRD::MeshStorage::get_singleton()->get_default_rd_storage_buffer();
+	// Writable-binding fallback (distinct RID) — see binding 107 below for why a
+	// separate read-write default is required.
+	RID default_rw_storage_buffer = RendererRD::MeshStorage::get_singleton()->get_default_rw_rd_storage_buffer();
 	auto signature_add = [&](RID p_rid) {
 		uniform_signature = _rt_signature_mix_rid(uniform_signature, p_rid);
 	};
@@ -10338,7 +10341,8 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		if (owner->rtgi_strc && owner->rtgi_strc->get_ray_result_buffer().is_valid()) {
 			add_uniform_id(u, owner->rtgi_strc->get_ray_result_buffer());
 		} else {
-			add_uniform_id(u, default_storage_buffer);
+			// Writable binding: must use the read-write default (see binding 107).
+			add_uniform_id(u, default_rw_storage_buffer);
 		}
 		uniforms.push_back(u);
 	}
@@ -10356,8 +10360,13 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 
 	// Binding 107: RTGI World Radiance Cache probe-update ray-result buffer.
 	// Mirrors the STRC binding-66 wiring; written by the WRC probe-update raygen
-	// when RT_FLAG_WRC_PROBE_UPDATE is set. Falls back to the default storage
-	// buffer when the WRC effect has no results buffer (e.g. legacy pipeline).
+	// when RT_FLAG_WRC_PROBE_UPDATE is set. Falls back to the dedicated *writable*
+	// default buffer when the WRC effect has no results buffer (e.g. the legacy
+	// pipeline, which never allocates one). The fallback MUST be the read-write
+	// default, not the shared read-only one: this binding is writable, so reusing
+	// the read-only default would record that RID with both READ and READ_WRITE
+	// usage in the raytracing list and trip the render-graph single-usage assert
+	// whenever a read-only binding also falls back to the default the same frame.
 	{
 		RD::Uniform u;
 		u.binding = 107;
@@ -10365,7 +10374,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		if (owner->rtgi_wrc && owner->rtgi_wrc->get_ray_result_buffer().is_valid()) {
 			add_uniform_id(u, owner->rtgi_wrc->get_ray_result_buffer());
 		} else {
-			add_uniform_id(u, default_storage_buffer);
+			add_uniform_id(u, default_rw_storage_buffer);
 		}
 		uniforms.push_back(u);
 	}
