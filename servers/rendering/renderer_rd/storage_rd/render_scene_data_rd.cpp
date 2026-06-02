@@ -69,7 +69,7 @@ RID RenderSceneDataRD::create_uniform_buffer() {
 	return RD::get_singleton()->uniform_buffer_create(sizeof(UBODATA));
 }
 
-void RenderSceneDataRD::update_ubo(RID p_uniform_buffer, RS::ViewportDebugDraw p_debug_mode, RID p_env, RID p_reflection_probe_instance, RID p_camera_attributes, bool p_pancake_shadows, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, float p_luminance_multiplier, bool p_opaque_render_buffers, bool p_apply_alpha_multiplier) {
+void RenderSceneDataRD::update_ubo(RID p_uniform_buffer, RS::ViewportDebugDraw p_debug_mode, RID p_env, RID p_reflection_probe_instance, RID p_camera_attributes, bool p_pancake_shadows, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, float p_luminance_multiplier, bool p_opaque_render_buffers, bool p_apply_alpha_multiplier, bool p_suppress_environment_ambient) {
 	RendererSceneRenderRD *render_scene_render = RendererSceneRenderRD::get_singleton();
 
 	UBODATA ubo_data;
@@ -234,6 +234,28 @@ void RenderSceneDataRD::update_ubo(RID p_uniform_buffer, RS::ViewportDebugDraw p
 			ubo.ambient_light_color_energy[2] = clear_color.b;
 			ubo.ambient_light_color_energy[3] = 1.0;
 		}
+	}
+
+	// RTGI radiance-probes Hybrid: suppress the environment AMBIENT (diffuse) so the additive GI
+	// composite is the sole provider of environment-diffuse-indirect (otherwise the raster opaque
+	// pass adds sky/ambient irradiance AND the composite adds the same indirect -> ~2x double-count
+	// on sky/ambient-lit scenes). Clearing USE_AMBIENT_LIGHT skips the env-ambient diffuse block in
+	// the scene shader (ambient_light stays 0 from the env), and USE_AMBIENT_CUBEMAP is cleared with
+	// it so the diffuse cubemap-ambient mix is skipped too. ambient_light_color_energy.rgb is zeroed
+	// defensively (it is the only .rgb consumer of the diffuse-ambient path). IMPORTANT: .a (the IBL
+	// energy scale read by the specular/reflection path) is left untouched, and the separate
+	// USE_REFLECTION_CUBEMAP flag is not modified -- the environment REFLECTION/specular path is a
+	// deliberate, untouched separate concern here (the GI rough-spec is gated to rough>=cutoff and
+	// sharp reflections remain raster-provided; that diffuse-vs-rough-spec overlap is a separate
+	// follow-up). Direct lights, emission, and SDFGI/VoxelGI/lightmap ambient are unaffected: this
+	// caller only requests suppression when none of those other indirect providers is active (the GI
+	// composite gate requires the same), and those providers overwrite ambient_light in the shader
+	// rather than reading these env-ambient flags.
+	if (p_suppress_environment_ambient) {
+		ubo.flags &= ~(SCENE_DATA_FLAGS_USE_AMBIENT_LIGHT | SCENE_DATA_FLAGS_USE_AMBIENT_CUBEMAP);
+		ubo.ambient_light_color_energy[0] = 0.0;
+		ubo.ambient_light_color_energy[1] = 0.0;
+		ubo.ambient_light_color_energy[2] = 0.0;
 	}
 
 	if (p_camera_attributes.is_valid()) {

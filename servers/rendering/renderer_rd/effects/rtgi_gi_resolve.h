@@ -108,6 +108,18 @@ public:
 	// consumed G-buffer (internal) size.
 	void render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const Size2i &p_size, RID p_dest_fb, uint32_t p_debug_channel);
 
+	// RTGI Hybrid BEAUTY composite (A3-T4): the production CONSUMER of the resolved screen GI.
+	// Dispatches RESOLVE_MODE_COMPOSITE (BEAUTY remod L_indirect = albedo * diffuse_A + spec, the
+	// remod the DEBUG_GI view deferred) into gi_debug_image, then ADDITIVELY blends that onto
+	// p_dest_color_fb (the internal HDR linear color FB the raster opaque pass already wrote -- the
+	// SAME RID the legacy hybrid additive_blend composited into). The set-0 layout is identical to
+	// render_resolve_debug except: binding 0 = the REAL depth (the background mask), binding 2 = the
+	// REAL guide albedo (the diffuse remod), bindings 11/12 = the [read_index] resolved diffuse/spec
+	// (this frame's output). No same-resource sampler+image hazard: read textures only on samplers,
+	// gi_debug_image only on images (same discipline as render_resolve_debug). p_size is the consumed
+	// (internal) size; p_view_count drives the multiview additive blit.
+	void render_composite(RID p_depth, RID p_guide_albedo, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count);
+
 	void free_resources();
 
 private:

@@ -62,6 +62,9 @@ layout(local_size_x = GROUP_SIZE, local_size_y = GROUP_SIZE, local_size_z = 1) i
 #define RESOLVE_MODE_TEMPORAL 1u
 #define RESOLVE_MODE_SPATIAL 2u
 #define RESOLVE_MODE_DEBUG_GI 3u
+// COMPOSITE (A3-T4): the BEAUTY remod of the resolved GI -> dest_image (binding 13) for the
+// additive blit onto the raster-lit frame. out = albedo * diffuse_A + spec (background masked).
+#define RESOLVE_MODE_COMPOSITE 4u
 
 // Push constant: 20 x 4 B = 80 B (a multiple of 16, so the std430-rounded size matches
 // the C++ PushConstant exactly -- a mismatch silently rejects every dispatch). Matches
@@ -788,6 +791,35 @@ void resolve_debug_gi_main(ivec2 pos) {
 	imageStore(dest_image, pos, vec4(result, diffuse.a)); // .a = post-TEMPORAL sample-count fraction n/n_cap (inspection).
 }
 
+// COMPOSITE (A3-T4): the BEAUTY remod of the resolved screen GI, written to dest_image (13) for the
+// additive blit onto the raster-lit opaque frame. This is the surface light-out the DEBUG_GI view
+// deferred: L_indirect = albedo * A + spec, where A is the LIGHTING-SPACE diffuse incident radiance
+// (no albedo, PI-free at storage -> the per-surface remod is the albedo multiply HERE) and spec is
+// already RADIANCE space (the INTEGRATE rough-spec already applied the split-sum BRDF, so it is
+// added directly). Background/sky (raw_depth <= 0) is masked to 0 so the additive_blend leaves the
+// raster sky untouched. render_composite binds 11/12 to the [read_index] (THIS frame's resolved)
+// set -- same discipline as render_resolve_debug -- so diffuse_history/spec_history here are this
+// frame's TEMPORAL/SPATIAL output, NOT a history buffer. guide_albedo (2) is the REAL material-guide
+// albedo (linear); depth (0) is the real depth buffer (the background mask).
+void resolve_composite_main(ivec2 pos) {
+	float raw_depth = texelFetch(depth_buffer, pos, 0).r; // binding 0: real depth (reverse-Z; 0 = sky).
+	vec3 albedo = texelFetch(guide_albedo, pos, 0).rgb; // binding 2: material-guide albedo (linear).
+	vec3 A = texelFetch(diffuse_history, pos, 0).rgb; // binding 11 = [read_index] diffuse: lighting-space A.
+	vec3 spec = texelFetch(spec_history, pos, 0).rgb; // binding 12 = [read_index] spec: radiance-space (BRDF applied).
+	// Mask the background so the additive composite does not lift the raster sky/clear color.
+	vec3 indirect = (raw_depth <= 0.0) ? vec3(0.0) : (albedo * A + spec);
+	// Sanitize before the additive store (B4): this lands on a PERSISTENT color FB via additive_blend
+	// (dest.rgb += source.rgb), so a single negative or non-finite resolve value would STICK and
+	// permanently corrupt the beauty. Clamp negatives to 0 (the indirect contribution is additive
+	// energy, never negative), then replace any Inf/NaN component with 0 so it cannot poison the FB.
+	// Two separate componentwise mix()es (the proven copy.glsl idiom) -- isinf()/isnan() return a
+	// bvec3 the mix selects on; a logical-OR of the two bvec3s is NOT valid GLSL.
+	indirect = max(indirect, vec3(0.0));
+	indirect = mix(indirect, vec3(0.0), isinf(indirect));
+	indirect = mix(indirect, vec3(0.0), isnan(indirect));
+	imageStore(dest_image, pos, vec4(indirect, 0.0)); // binding 13 = gi_debug_image; .a unused by the additive blit.
+}
+
 void main() {
 	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
 	if (pos.x >= int(pc.screen_w) || pos.y >= int(pc.screen_h)) {
@@ -808,6 +840,10 @@ void main() {
 	}
 	if (pc.mode == RESOLVE_MODE_DEBUG_GI) {
 		resolve_debug_gi_main(pos);
+		return;
+	}
+	if (pc.mode == RESOLVE_MODE_COMPOSITE) {
+		resolve_composite_main(pos);
 		return;
 	}
 }

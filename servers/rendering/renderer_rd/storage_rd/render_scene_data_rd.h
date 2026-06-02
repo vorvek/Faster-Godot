@@ -95,7 +95,13 @@ public:
 	virtual Projection get_view_projection(uint32_t p_view) const override;
 
 	RID create_uniform_buffer();
-	void update_ubo(RID p_uniform_buffer, RS::ViewportDebugDraw p_debug_mode, RID p_env, RID p_reflection_probe_instance, RID p_camera_attributes, bool p_pancake_shadows, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, float p_luminance_multiplier, bool p_opaque_render_buffers, bool p_apply_alpha_multiplier);
+	// p_suppress_environment_ambient: when true, the environment AMBIENT (diffuse sky/ambient-color
+	// irradiance) is forced off for this UBO -- the USE_AMBIENT_LIGHT/USE_AMBIENT_CUBEMAP flags are
+	// cleared and ambient_light_color_energy.rgb is zeroed. Only the diffuse ambient is affected;
+	// .a (the IBL/reflection energy scale) and the separate USE_REFLECTION_CUBEMAP specular path are
+	// left intact. Used by the RTGI radiance-probes Hybrid opaque pass so the GI composite is the
+	// sole environment-diffuse-indirect provider (no double-count). Defaults false (legacy behavior).
+	void update_ubo(RID p_uniform_buffer, RS::ViewportDebugDraw p_debug_mode, RID p_env, RID p_reflection_probe_instance, RID p_camera_attributes, bool p_pancake_shadows, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, float p_luminance_multiplier, bool p_opaque_render_buffers, bool p_apply_alpha_multiplier, bool p_suppress_environment_ambient = false);
 	virtual RID get_uniform_buffer() const override;
 
 	static uint32_t get_uniform_buffer_size_bytes() { return sizeof(UBODATA); }

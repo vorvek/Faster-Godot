@@ -9,6 +9,7 @@
 
 #include "servers/rendering/renderer_rd/effects/copy_effects.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 
 using namespace RendererRD;
@@ -20,6 +21,9 @@ using namespace RendererRD;
 #define RESOLVE_MODE_TEMPORAL 1u
 #define RESOLVE_MODE_SPATIAL 2u
 #define RESOLVE_MODE_DEBUG_GI 3u
+// COMPOSITE (A3-T4): BEAUTY remod (albedo * diffuse_A + spec) -> gi_debug_image for the
+// additive blit onto the raster-lit frame. EXACTLY matches RESOLVE_MODE_COMPOSITE in the GLSL.
+#define RESOLVE_MODE_COMPOSITE 4u
 
 RTGIGIResolve::RTGIGIResolve() {
 	// Single compute shader with a `mode` push-constant (mirrors the SPG PLACE shader
@@ -155,8 +159,14 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	ERR_FAIL_COND(p_depth.is_null());
 	ERR_FAIL_COND(p_normal_roughness.is_null());
 	ERR_FAIL_COND(p_velocity.is_null());
-	ERR_FAIL_COND(p_guide_albedo.is_null());
-	ERR_FAIL_COND(p_guide_orm.is_null());
+	// NO hard-abort on the material-guide textures (A-fix): the DIFFUSE INTEGRATE writes a
+	// LIGHTING-SPACE A that uses NEITHER guide_albedo (binding 2) NOR guide_orm (binding 15) --
+	// they feed ONLY the do_spec-gated rough-spec F0/roughness/metallic (rtgi_gi_resolve.glsl
+	// ~:370/470). A null guide must therefore NOT kill the diffuse resolve, and -- critically --
+	// must NOT leave read_index flipped-with-nothing-written (a temporal-history desync, since the
+	// flip already happened at the top of this frame). When a guide is null we bind the neutral
+	// white default below so the dispatch stays valid and the spec-F0 degrades gracefully; the
+	// diffuse path always runs and writes A, keeping the read_index flip consistent.
 	ERR_FAIL_COND(p_spg_radiance.is_null());
 	ERR_FAIL_COND(p_spg_header_plane.is_null());
 	ERR_FAIL_COND(p_spg_header_aux.is_null());
@@ -187,6 +197,18 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	// the SPG consumer); the WRC fallback query does bilinear taps + already clamps its
 	// per-tile UVs, so clamp-to-edge is correct.
 	RID linear_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+
+	// Neutral guide fallback (A-fix): the guide-albedo (binding 2) and guide-orm (binding 15) are
+	// consumed ONLY by the do_spec-gated rough-spec path; the diffuse A is guide-independent. If a
+	// guide RID is null this frame (its material-guide texture was freed between the prepass and
+	// this consume) bind the default WHITE texture so the dispatch stays valid -- the guides here
+	// are plain sampler2D (single-view; depth/normal at 0/1 are likewise bound view-0), so the 2D
+	// WHITE default matches the declared layout. White ORM/albedo degrade the spec-F0 gracefully
+	// (mix(0.04, white, metalness)); the diffuse resolve is unaffected. Keeping the real guide bound
+	// when it IS valid leaves behavior identical to before.
+	RID guide_default = RendererRD::TextureStorage::get_singleton()->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
+	RID guide_albedo_rid = p_guide_albedo.is_valid() ? p_guide_albedo : guide_default;
+	RID guide_orm_rid = p_guide_orm.is_valid() ? p_guide_orm : guide_default;
 
 	// Set 0 declares EVERY binding any mode of rtgi_gi_resolve.glsl uses (one GLSL
 	// shader's set-0 layout must declare all of them): G-buffers (0-1), the material-guide
@@ -219,12 +241,13 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		uniforms.push_back(u);
 	}
 	// Binding 2: material-guide albedo (A3-T1; INTEGRATE reads it for the rough-spec F0 mix).
+	// guide_albedo_rid falls back to the WHITE default when p_guide_albedo is null (see above).
 	{
 		RD::Uniform u;
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
 		u.binding = 2;
 		u.append_id(linear_sampler);
-		u.append_id(p_guide_albedo);
+		u.append_id(guide_albedo_rid);
 		uniforms.push_back(u);
 	}
 	// Binding 3: velocity buffer (A3-T2; TEMPORAL reprojects the history with it). Now declared
@@ -329,12 +352,13 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		uniforms.push_back(u);
 	}
 	// Binding 15: material-guide ORM (A3-T1; INTEGRATE reads g = roughness, b = metallic).
+	// guide_orm_rid falls back to the WHITE default when p_guide_orm is null (see above).
 	{
 		RD::Uniform u;
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
 		u.binding = 15;
 		u.append_id(linear_sampler);
-		u.append_id(p_guide_orm);
+		u.append_id(guide_orm_rid);
 		uniforms.push_back(u);
 	}
 
@@ -587,4 +611,162 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 	ERR_FAIL_NULL(copy_effects);
 	const bool multiview = p_rb.is_valid() && p_rb->get_view_count() > 1;
 	copy_effects->copy_to_fb_rect(gi_debug_image, p_dest_fb, Rect2i(Point2i(), size), false, false, false, false, RID(), multiview, false, false, false, Rect2(), 1.0, true, CopyEffects::COPY_TO_FB_FLAG_MODE_NONE);
+}
+
+void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count) {
+	if (!resources_valid || !diffuse_gi[read_index].is_valid() || !spec_gi[read_index].is_valid()) {
+		return;
+	}
+	ERR_FAIL_COND(p_dest_color_fb.is_null());
+	ERR_FAIL_COND(p_depth.is_null());
+	ERR_FAIL_COND(p_guide_albedo.is_null());
+	// COMPOSITE writes the BEAUTY remod (albedo * diffuse_A + spec) into the dedicated scratch
+	// image (binding 13), then ADDITIVELY blends it onto the raster-lit color FB. gi_debug_image is
+	// the same RGBA16F render-size scratch render_resolve_debug uses.
+	ERR_FAIL_COND(!gi_debug_image.is_valid());
+
+	const Size2i size = Size2i(MAX(p_size.x, 1), MAX(p_size.y, 1));
+
+	if (resolve_ubo.is_null()) {
+		resolve_ubo = RD::get_singleton()->uniform_buffer_create(sizeof(GiResolveUBO));
+		RD::get_singleton()->set_resource_name(resolve_ubo, "RTGI Resolve Params UBO");
+	}
+
+	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
+	ERR_FAIL_NULL(uniform_set_cache);
+	MaterialStorage *material_storage = MaterialStorage::get_singleton();
+	ERR_FAIL_NULL(material_storage);
+
+	RID shader_rd = shader.version_get_shader(shader_version, 0);
+	RID linear_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+
+	// Same full set-0 layout as render_resolve_debug (one GLSL shader, one layout), with the SAME
+	// hazard discipline: the ONLY images in this set are gi_debug_image (at 9/10/13), and every read
+	// texture is bound only on a sampler -- so no texture is bound as BOTH a sampler and a storage
+	// image. COMPOSITE reads binding 0 (depth, the background mask), 2 (guide albedo, the diffuse
+	// remod), 11 (diffuse_gi[read_index]) and 12 (spec_gi[read_index] = THIS frame's resolved GI),
+	// and writes 13. The departures from the debug layout are exactly: binding 0 = the REAL depth and
+	// binding 2 = the REAL guide albedo (not the neutral diffuse texture). All other sampler slots
+	// (1, 3, 4-8, 15) stay neutral (point at diffuse_gi[read_index], a read texture) since COMPOSITE
+	// ignores them. The set provides exactly {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}.
+	LocalVector<RD::Uniform> uniforms;
+	{
+		// Binding 0: the REAL depth buffer (COMPOSITE reads it to mask the background/sky).
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 0;
+		u.append_id(linear_sampler);
+		u.append_id(p_depth);
+		uniforms.push_back(u);
+	}
+	{
+		// Binding 1: neutral (COMPOSITE does not read normal-roughness).
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 1;
+		u.append_id(linear_sampler);
+		u.append_id(diffuse_gi[read_index]);
+		uniforms.push_back(u);
+	}
+	{
+		// Binding 2: the REAL material-guide albedo (COMPOSITE remods the resolved diffuse A by it).
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 2;
+		u.append_id(linear_sampler);
+		u.append_id(p_guide_albedo);
+		uniforms.push_back(u);
+	}
+	for (uint32_t b = 3; b <= 8; b++) {
+		// Bindings 3-8 (velocity, SPG atlas/headers, WRC atlases): neutral -- COMPOSITE ignores them,
+		// so they point at the resolved-diffuse read texture (a read texture on a sampler slot is safe).
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = b;
+		u.append_id(linear_sampler);
+		u.append_id(diffuse_gi[read_index]);
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		u.binding = 9;
+		u.append_id(gi_debug_image);
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		u.binding = 10;
+		u.append_id(gi_debug_image);
+		uniforms.push_back(u);
+	}
+	{
+		// Binding 11 = the [read_index] diffuse GI (THIS frame's resolved lighting-space A). Bound to
+		// the read set just like render_resolve_debug, so COMPOSITE reads this frame's output.
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 11;
+		u.append_id(linear_sampler);
+		u.append_id(diffuse_gi[read_index]);
+		uniforms.push_back(u);
+	}
+	{
+		// Binding 12 = the [read_index] spec GI (THIS frame's resolved rough-spec radiance).
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 12;
+		u.append_id(linear_sampler);
+		u.append_id(spec_gi[read_index]);
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		u.binding = 13;
+		u.append_id(gi_debug_image);
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
+		u.binding = 14;
+		u.append_id(resolve_ubo);
+		uniforms.push_back(u);
+	}
+	{
+		// Binding 15 (material-guide ORM): neutral -- COMPOSITE does not read it (the spec is already
+		// BRDF-applied radiance from INTEGRATE). Points at the resolved-diffuse read texture like the
+		// other neutral samplers (the only images in this set are gi_debug_image at 9/10/13).
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 15;
+		u.append_id(linear_sampler);
+		u.append_id(diffuse_gi[read_index]);
+		uniforms.push_back(u);
+	}
+
+	PushConstant push_constant;
+	memset(&push_constant, 0, sizeof(PushConstant));
+	push_constant.mode = RESOLVE_MODE_COMPOSITE;
+	push_constant.screen_w = (uint32_t)size.x;
+	push_constant.screen_h = (uint32_t)size.y;
+
+	RD::get_singleton()->draw_command_begin_label("RTGI Composite Hybrid");
+	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
+	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, size.x, size.y, 1);
+	RD::get_singleton()->compute_list_end();
+
+	// ADDITIVELY blend the composited indirect GI onto the raster-lit color FB: merge_specular's
+	// SPECULAR_MERGE_ADDITIVE_ADD path (dest.rgb += source.rgb), linear additive. This lands the
+	// indirect-at-primary on top of the DIRECT light the opaque pass already wrote. Background pixels
+	// were masked to 0 in the shader, so the raster sky/clear color is untouched.
+	CopyEffects *copy_effects = CopyEffects::get_singleton();
+	ERR_FAIL_NULL(copy_effects);
+	copy_effects->additive_blend(p_dest_color_fb, gi_debug_image, p_view_count);
+
+	RD::get_singleton()->draw_command_end_label();
 }

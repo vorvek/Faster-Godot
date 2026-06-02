@@ -1047,8 +1047,17 @@ void main() {
 	}
 
 	uint rt_mode = uint(get_rt_param(RT_PARAM_MODE));
+	// HYBRID/REFLECTIONS suppress the bounce-0 (primary) miss sky because the raster pass
+	// supplies the background for the per-pixel beauty path. But the radiance_probes WRC/SPG
+	// gather rays run through this SAME miss to build the GI, and a probe ray that directly
+	// sees the sky (a bounce-0 miss) IS the first-bounce environment the GI must capture
+	// (A3-T4: GI = the unified environment-indirect provider). Excluding the probe-update /
+	// gather modes lets those rays fall through to the sky term below, so radiance_probes-Hybrid
+	// gathers the environment exactly as FPT does (where this gate is inactive). The per-pixel
+	// primary miss (neither probe mode) still gets the raster background as before.
 	if ((rt_mode == RT_MODE_REFLECTIONS_RT_ONLY || rt_mode == RT_MODE_HYBRID) &&
-			get_total_bounces(ps.packed_bounces_flags) == 0u) {
+			get_total_bounces(ps.packed_bounces_flags) == 0u &&
+			!rt_wrc_probe_update_mode() && !rt_spg_gather_mode()) {
 		ps.radiance = vec3(0.0);
 		ps.specular_radiance = vec3(0.0);
 		path_pack(payload, ps);
