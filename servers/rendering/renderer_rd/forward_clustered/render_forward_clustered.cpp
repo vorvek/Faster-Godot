@@ -5586,11 +5586,18 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 			copy_effects->copy_to_fb_rect(rtgi_spg->get_radiance_filtered(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_NONE);
 		}
 
-		// SPG_GI is the per-pixel integrate consumer (analogue of the WRC-GI view). The
-		// integrate consumer is built in T5; this empty guarded branch is the documented
-		// scope boundary (the feature genuinely lands in T5), not a band-aid.
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_GI) {
-			// T5: render_gi_debug -- per-pixel SPG integrate consumer + blit.
+		// SPG_GI is the VALIDATION-ONLY per-pixel integrate consumer (the screen-probe
+		// analogue of the WRC-GI view): a full-screen compute pass that reconstructs world
+		// position + normal from the G-buffers, locates the 4 surrounding screen probes,
+		// cosine-integrates each probe's hemioct radiance tile against the surface normal,
+		// bilinearly blends them, and blits the RAW linear incident radiance (no albedo, no
+		// tonemap) for the A2-T6 furnace gate. Guard mirrors the WRC-GI block: the SPATIAL
+		// atlas (via get_radiance_filtered()) + normal-roughness (forced on for this debug
+		// mode at the depth-prepass-mode selection site; depth always exists post-opaque).
+		// No demod/remod, no composite into beauty -- that is A3. The SPG has no artistic
+		// strength field (unlike the WRC's wrc_strength), so pass the raw 1.0 the gate reads.
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_GI && rtgi_spg != nullptr && rtgi_spg->get_radiance_filtered().is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
+			rtgi_spg->render_gi_debug(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, rb->get_internal_size(), 1.0f, fb);
 		}
 	}
 

@@ -7,6 +7,7 @@
 
 #include "rtgi_screen_probe_gather.h"
 
+#include "servers/rendering/renderer_rd/effects/copy_effects.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 
@@ -29,12 +30,20 @@ RTGIScreenProbeGather::RTGIScreenProbeGather() {
 	accum_shader.initialize({ "" });
 	accum_shader_version = accum_shader.version_create();
 	accum_pipeline = RD::get_singleton()->compute_pipeline_create(accum_shader.version_get_shader(accum_shader_version, 0));
+
+	// SPG-GI debug consumer shader (A2-T5; separate set-0 layout again -- see header).
+	// First compile of rtgi_spg_gi_consumer.glsl (and thus of its rtgi_spg_inc.glsl /
+	// oct_inc.glsl include usage in a consumer context), so a GLSL error there trips here.
+	gi_debug_shader.initialize({ "" });
+	gi_debug_shader_version = gi_debug_shader.version_create();
+	gi_debug_pipeline = RD::get_singleton()->compute_pipeline_create(gi_debug_shader.version_get_shader(gi_debug_shader_version, 0));
 }
 
 RTGIScreenProbeGather::~RTGIScreenProbeGather() {
 	free_resources();
 	shader.version_free(shader_version);
 	accum_shader.version_free(accum_shader_version);
+	gi_debug_shader.version_free(gi_debug_shader_version);
 }
 
 bool RTGIScreenProbeGather::ensure_ray_result_buffer(uint32_t p_rays_per_frame) {
@@ -84,6 +93,15 @@ void RTGIScreenProbeGather::free_resources() {
 		RD::get_singleton()->free_rid(place_ubo);
 		place_ubo = RID();
 	}
+	if (gi_debug_image.is_valid()) {
+		RD::get_singleton()->free_rid(gi_debug_image);
+		gi_debug_image = RID();
+	}
+	if (gi_debug_ubo.is_valid()) {
+		RD::get_singleton()->free_rid(gi_debug_ubo);
+		gi_debug_ubo = RID();
+	}
+	gi_debug_image_size = Size2i();
 	read_index = 0;
 	atlas_size = Size2i();
 	grid_size = Size2i();
@@ -409,4 +427,153 @@ void RTGIScreenProbeGather::run_accumulate(const SpgFrameParams &p_frame) {
 
 	RD::get_singleton()->compute_list_end();
 	// NO ping-pong swap: the frame swap is done in run_placement.
+}
+
+void RTGIScreenProbeGather::_ensure_gi_debug_image(const Size2i &p_size) {
+	const Size2i wanted = Size2i(MAX(p_size.x, 1), MAX(p_size.y, 1));
+	if (gi_debug_image.is_valid() && gi_debug_image_size == wanted) {
+		return;
+	}
+	if (gi_debug_image.is_valid()) {
+		RD::get_singleton()->free_rid(gi_debug_image);
+		gi_debug_image = RID();
+	}
+
+	RD::TextureFormat tf;
+	// RGBA16F to hold linear, un-tonemapped incident radiance (.rgb) + a coverage flag
+	// (.a) without clipping; STORAGE (the consumer writes it) + SAMPLING (the blit reads
+	// it through copy_to_fb_rect).
+	tf.format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
+	tf.width = wanted.x;
+	tf.height = wanted.y;
+	tf.usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
+	gi_debug_image = RD::get_singleton()->texture_create(tf, RD::TextureView());
+	RD::get_singleton()->set_resource_name(gi_debug_image, "RTGI SPG GI Debug Image");
+	gi_debug_image_size = wanted;
+}
+
+void RTGIScreenProbeGather::render_gi_debug(Ref<RenderSceneBuffersRD> p_rb, RID p_depth, RID p_normal_roughness, const Projection &p_inv_projection, const Transform3D &p_cam_transform, const Size2i &p_size, float p_strength, RID p_dest_fb) {
+	// get_radiance_filtered() falls back to the current atlas until radiance_filtered
+	// allocates, so guarding resources_valid + the headers covers every texture this
+	// consumer binds (all allocated together in _allocate).
+	if (!resources_valid || !header_plane[read_index].is_valid() || !header_aux[read_index].is_valid()) {
+		return;
+	}
+	ERR_FAIL_COND(p_depth.is_null());
+	ERR_FAIL_COND(p_normal_roughness.is_null());
+	ERR_FAIL_COND(p_dest_fb.is_null());
+
+	const Size2i size = Size2i(MAX(p_size.x, 1), MAX(p_size.y, 1));
+	_ensure_gi_debug_image(size);
+
+	// The consumer's params live in a UBO (bound at set 0, binding 6), not a push
+	// constant: SpgGiUBO is 160 bytes and the two mat4s alone already hit the 128-byte
+	// MAX_PUSH_CONSTANT_SIZE cap. Created once, reused every frame.
+	if (gi_debug_ubo.is_null()) {
+		gi_debug_ubo = RD::get_singleton()->uniform_buffer_create(sizeof(SpgGiUBO));
+		RD::get_singleton()->set_resource_name(gi_debug_ubo, "RTGI SPG GI Debug Params UBO");
+	}
+
+	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
+	ERR_FAIL_NULL(uniform_set_cache);
+	MaterialStorage *material_storage = MaterialStorage::get_singleton();
+	ERR_FAIL_NULL(material_storage);
+
+	RID shader_rd = gi_debug_shader.version_get_shader(gi_debug_shader_version, 0);
+	// Linear sampler, clamp-to-edge. The consumer only does integer texelFetch()es, but
+	// the atlas/headers/G-buffers are bound as SAMPLER_WITH_TEXTURE (mirroring the WRC
+	// consumer + PLACE), so a sampler is required; clamp-to-edge is safe for the unused
+	// filtering.
+	RID linear_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+
+	// Set 0: SPATIAL-filtered radiance atlas + the two probe headers (sampler+texture),
+	// depth + normal-roughness G-buffers (sampler+texture), the output storage image,
+	// and the params UBO. Sourcing get_radiance_filtered() matches the SPG_RADIANCE blit
+	// + what A3 will consume.
+	LocalVector<RD::Uniform> uniforms;
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 0;
+		u.append_id(linear_sampler);
+		u.append_id(get_radiance_filtered());
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 1;
+		u.append_id(linear_sampler);
+		u.append_id(header_plane[read_index]);
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 2;
+		u.append_id(linear_sampler);
+		u.append_id(header_aux[read_index]);
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 3;
+		u.append_id(linear_sampler);
+		u.append_id(p_depth);
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 4;
+		u.append_id(linear_sampler);
+		u.append_id(p_normal_roughness);
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		u.binding = 5;
+		u.append_id(gi_debug_image);
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
+		u.binding = 6;
+		u.append_id(gi_debug_ubo);
+		uniforms.push_back(u);
+	}
+
+	SpgGiUBO ubo;
+	memset(&ubo, 0, sizeof(SpgGiUBO));
+	MaterialStorage::store_camera(p_inv_projection, ubo.inv_projection);
+	MaterialStorage::store_transform(p_cam_transform, ubo.inv_view);
+	ubo.screen_width = size.x;
+	ubo.screen_height = size.y;
+	ubo.grid_w = grid_size.x;
+	ubo.grid_h = grid_size.y;
+	ubo.spacing_f = MAX(cached_params.spacing_f, 1);
+	ubo.oct_res = MAX(cached_params.oct_res, 1);
+	ubo.strength = p_strength;
+	RD::get_singleton()->buffer_update(gi_debug_ubo, 0, sizeof(SpgGiUBO), &ubo);
+
+	RD::get_singleton()->draw_command_begin_label("RTGI SPG GI Debug");
+	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, gi_debug_pipeline);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
+	// No push constant: the params are supplied via gi_debug_ubo (binding 6), bound in
+	// the uniform set above and updated via buffer_update() this frame.
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, size.x, size.y, 1);
+	RD::get_singleton()->compute_list_end();
+	RD::get_singleton()->draw_command_end_label();
+
+	// Blit the raw linear incident radiance to the destination framebuffer. No sRGB, no
+	// LOG_LUMINANCE: keep values linear/measurable for the A2-T6 furnace gate (mirrors
+	// the WRC-GI consumer blit + the SPG_RADIANCE raw-linear blit).
+	CopyEffects *copy_effects = CopyEffects::get_singleton();
+	ERR_FAIL_NULL(copy_effects);
+	const bool multiview = p_rb.is_valid() && p_rb->get_view_count() > 1;
+	copy_effects->copy_to_fb_rect(gi_debug_image, p_dest_fb, Rect2i(Point2i(), size), false, false, false, false, RID(), multiview, false, false, false, Rect2(), 1.0, true, CopyEffects::COPY_TO_FB_FLAG_MODE_NONE);
 }

@@ -11,6 +11,7 @@
 #include "core/math/transform_3d.h"
 #include "servers/rendering/renderer_rd/shaders/effects/rtgi_screen_probe_gather.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/rtgi_spg_accumulate.glsl.gen.h"
+#include "servers/rendering/renderer_rd/shaders/effects/rtgi_spg_gi_consumer.glsl.gen.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.h"
 
 namespace RendererRD {
@@ -91,6 +92,22 @@ public:
 	// swap is done in run_placement). Must be called AFTER the gather has filled the
 	// ray-result SSBO for this frame. A no-op if resources are invalid.
 	void run_accumulate(const SpgFrameParams &p_frame);
+
+	// SPG-GI debug view (A2-T5): the VALIDATION-ONLY per-pixel CONSUMER of the
+	// SPATIAL-filtered per-probe radiance atlas (the screen-probe analogue of
+	// RTGIWorldRadianceCache::render_gi_debug). For each screen pixel it reconstructs
+	// the WORLD position from `p_depth` (raw reverse-Z) + the camera matrices, decodes
+	// the WORLD normal from `p_normal_roughness` (a VIEW-space G-buffer normal rotated
+	// to world), locates the 4 surrounding probes, cosine-integrates each probe's
+	// hemioct tile against the surface normal (confidence-weighted normalizer, so
+	// partial coverage still yields ~= L), bilinearly blends them, and blits the RAW
+	// linear incident radiance (no albedo, no tonemap) to `p_dest_fb` so the A2-T6
+	// furnace gate can read measurable linear values. This is NOT the production
+	// resolve (A3): no demod/remod, no composite into beauty. `p_inv_projection` is the
+	// clip->view inverse projection; `p_cam_transform` is the view->world transform;
+	// `p_size` is the consumed G-buffer (internal) size; `p_strength` is an artistic
+	// multiplier (1.0 = raw, what the gate reads).
+	void render_gi_debug(Ref<RenderSceneBuffersRD> p_rb, RID p_depth, RID p_normal_roughness, const Projection &p_inv_projection, const Transform3D &p_cam_transform, const Size2i &p_size, float p_strength, RID p_dest_fb);
 
 	// Current read (front) grid textures. Valid only after ensure_resources().
 	RID get_header_plane() const { return header_plane[read_index]; } // RGBA32F: xyz = world_pos, w = linear_depth (<= 0 invalid).
@@ -173,10 +190,52 @@ private:
 	RID accum_shader_version;
 	RID accum_pipeline;
 
+	// SPG-GI debug consumer (A2-T5): its OWN full-screen compute shader that reads the
+	// SPATIAL-filtered atlas + headers + depth + normal-roughness and writes the raw
+	// integrated incident radiance. A SEPARATE shader from PLACE/accumulate (its set-0
+	// layout binds the filtered atlas + headers as samplers, a dest image, and a params
+	// UBO -- none of which the other passes' layouts declare). Set up in the constructor
+	// exactly like `shader`/`accum_shader` above; this is the first compile of
+	// rtgi_spg_gi_consumer.glsl, so a GLSL error there surfaces here at build time.
+	RtgiSpgGiConsumerShaderRD gi_debug_shader;
+	RID gi_debug_shader_version;
+	RID gi_debug_pipeline;
+
+	// The consumer's params travel in a UBO (set 0, binding 6), not a push constant:
+	// the two mat4s alone are 128 bytes, which already hits RenderingDevice's
+	// MAX_PUSH_CONSTANT_SIZE (128) cap, and the scalars push the total past it. The
+	// member layout below EXACTLY matches the std140 `SpgGiParams` block in
+	// rtgi_spg_gi_consumer.glsl: two 16-byte-aligned mat4s at offsets 0 and 64 (each 64
+	// bytes), then seven scalars packed at offsets 128..156, tail-padded to 160 bytes
+	// (a multiple of 16). Mirrors RTGIWorldRadianceCache::GiDebugUBO's layout discipline.
+	struct SpgGiUBO {
+		float inv_projection[16]; // offset 0.
+		float inv_view[16]; // offset 64.
+		int32_t screen_width; // offset 128.
+		int32_t screen_height; // offset 132.
+		int32_t grid_w; // offset 136.
+		int32_t grid_h; // offset 140.
+		int32_t spacing_f; // offset 144.
+		int32_t oct_res; // offset 148.
+		float strength; // offset 152.
+		int32_t pad0; // offset 156: tail pad so sizeof == 160 (multiple of 16).
+	};
+
 	// Uniform buffer carrying PlaceUBO (the PLACE pass's camera matrices; see above
 	// for why a UBO and not a push constant). Created lazily on first run_placement()
 	// and bound for the dispatch; freed in free_resources().
 	RID place_ubo;
+
+	// Uniform buffer carrying SpgGiUBO (the GI-debug consumer's params). Created lazily
+	// on first render_gi_debug() and bound at set 0, binding 6; freed in free_resources().
+	RID gi_debug_ubo;
+
+	// Lazily (re)allocated RGBA16F image the consumer writes the raw linear incident
+	// radiance into, sized to the consumed G-buffer (internal) size; blitted to the
+	// destination framebuffer afterwards.
+	RID gi_debug_image;
+	Size2i gi_debug_image_size;
+	void _ensure_gi_debug_image(const Size2i &p_size);
 
 	// Ping-pong grid textures owned directly by the effect. `read_index` selects THIS
 	// frame's (current) set; `1 - read_index` is the previous frame's. The frame swap
