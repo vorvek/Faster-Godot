@@ -391,7 +391,69 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, size.x, size.y, 1);
 
+	// SPATIAL (A3-T3): ONE joint (diffuse + spec) edge-aware a-trous filter, run
+	// `spatial_iterations` times after TEMPORAL (0 = skip; 1 = default; 2 = escalation). The
+	// a-trous reads NEIGHBORS, so it CANNOT run in place -- each iteration reads a SOURCE set and
+	// writes a DISTINCT DEST set, ping-ponging between [read_index] (the TEMPORAL output / running
+	// result) and [prev_index] (the previous frame's history, already consumed by TEMPORAL this
+	// frame, so it is FREE scratch -- next frame's INTEGRATE overwrites it after the flip).
+	//
+	// BINDING: per iteration the SOURCE goes on the read samplers (11/12) and the DEST on the write
+	// images (9/10), reusing the existing set-0 layout. SOURCE != DEST every iteration, so within
+	// each per-iteration set no texture is bound as BOTH a sampler and a storage image (the only
+	// same-resource hazard the validator flags); the velocity / guide / SPG / WRC bindings stay
+	// bound (SPATIAL reads depth/normal/ORM + the GI buffers, and ignores the rest).
+	//
+	// PARITY: starting iter 0 src=[read]->dst=[prev], the result alternates dst = [prev],[read],
+	// [prev],... so an ODD iteration count ends in [prev], an EVEN one in [read]. The getters (and
+	// next frame's history) read [read_index], so for an odd count we texture_copy [prev]->[read]
+	// after the compute list (a GPU blit; the buffers carry CAN_COPY_FROM/TO). The default (1) is
+	// odd. A third scratch pair is avoided -- [prev] suffices.
+	const uint32_t spatial_iterations = (uint32_t)MAX(cached_params.spatial_iterations, 0);
+	uint32_t spatial_src = read_index; // iter 0 reads the TEMPORAL output in [read_index].
+	for (uint32_t it = 0; it < spatial_iterations; it++) {
+		const uint32_t spatial_dst = 1u - spatial_src;
+
+		// Barrier so this iteration reads the FULLY-written previous pass (TEMPORAL for iter 0, the
+		// prior a-trous step otherwise) rather than a partial write.
+		RD::get_singleton()->compute_list_add_barrier(compute_list);
+
+		// Per-iteration set: identical to the run_resolve layout except the 4 GI bindings. Copy the
+		// common uniforms (0-8, 13-15 untouched) and override 9/10 (DEST images) + 11/12 (SOURCE
+		// samplers). The pushed order is binding-sequential, so uniforms[b].binding == b for b<=15.
+		LocalVector<RD::Uniform> spatial_uniforms = uniforms;
+		spatial_uniforms[9].clear_ids();
+		spatial_uniforms[9].append_id(diffuse_gi[spatial_dst]);
+		spatial_uniforms[10].clear_ids();
+		spatial_uniforms[10].append_id(spec_gi[spatial_dst]);
+		spatial_uniforms[11].clear_ids();
+		spatial_uniforms[11].append_id(linear_sampler);
+		spatial_uniforms[11].append_id(diffuse_gi[spatial_src]);
+		spatial_uniforms[12].clear_ids();
+		spatial_uniforms[12].append_id(linear_sampler);
+		spatial_uniforms[12].append_id(spec_gi[spatial_src]);
+
+		RID spatial_set = uniform_set_cache->get_cache_vec(shader_rd, 0, spatial_uniforms);
+		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, spatial_set, 0);
+
+		push_constant.mode = RESOLVE_MODE_SPATIAL;
+		push_constant.cur_iter = it; // a-trous step = 1 << cur_iter (1, 2, 4, ...).
+		RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
+		RD::get_singleton()->compute_list_dispatch_threads(compute_list, size.x, size.y, 1);
+
+		spatial_src = spatial_dst; // next iteration reads what this one wrote.
+	}
+
 	RD::get_singleton()->compute_list_end();
+
+	// PARITY copy: if the a-trous loop left the final result in [prev_index] (odd iteration count),
+	// blit it back to [read_index] so the getters / next frame's history see it. spatial_src now
+	// holds the buffer index of the final write; copy only when it is NOT [read_index].
+	if (spatial_iterations > 0 && spatial_src != read_index) {
+		RD::get_singleton()->texture_copy(diffuse_gi[spatial_src], diffuse_gi[read_index], Vector3(), Vector3(), Vector3(size.x, size.y, 1), 0, 0, 0, 0);
+		RD::get_singleton()->texture_copy(spec_gi[spatial_src], spec_gi[read_index], Vector3(), Vector3(), Vector3(size.x, size.y, 1), 0, 0, 0, 0);
+	}
+
 	RD::get_singleton()->draw_command_end_label();
 }
 

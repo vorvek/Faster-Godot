@@ -612,6 +612,152 @@ void resolve_temporal_main(ivec2 pos) {
 	imageStore(spec_gi_rw, pos, vec4(os, ns / n_cap));
 }
 
+// ---------------------------------------------------------------------------------------
+// SPATIAL (A3-T3): one JOINT (diffuse + spec together) edge-aware a-trous filter, run
+// spatial_iterations times AFTER TEMPORAL.
+//
+// This is the per-screen-pixel analogue of rtgi_spg_accumulate.glsl's SPATIAL (the proven
+// same-surface filter in this codebase): an edge-stopping weighted mean over a small window
+// at an expanding step (a-trous), rejecting cross-edge neighbors so radiance never leaks
+// across a silhouette. Two departures, both required by the resolve:
+//   * JOINT over diffuse + spec -- ONE pass filters both signals with the SAME geometric
+//     edge weight (no per-signal decomposition); diffuse and spec accumulate in parallel.
+//   * VARIANCE FROM CONFIDENCE (the C16 fix). The blur strength is driven by the .a the
+//     TEMPORAL pass writes (.a == n / n_cap, the sample-count fraction), NOT a fixed or
+//     clamped moment: a low-confidence center (few samples / freshly disoccluded) WIDENS the
+//     effective blur (leans harder on neighbors to denoise), a converged center (.a -> 1)
+//     preserves detail (its own value dominates). Each neighbor is in turn weighted by ITS
+//     OWN .a, so a noisy neighbor contributes little. This recovers variance from the real
+//     probe/sample confidence rather than a synthetic moment.
+//
+// Because the a-trous reads NEIGHBORS it CANNOT run in place: run_resolve ping-pongs distinct
+// SOURCE/DEST buffers per iteration (SOURCE at the read samplers 11/12, DEST at the write
+// images 9/10), with a barrier between iterations and the final result landed back in
+// [read_index] (see the .cpp). The SOURCE here is the post-TEMPORAL accumulate (iter 0) or
+// the previous a-trous iteration's output. .a (the sample count) is PRESERVED through the
+// filter -- it is next frame's history confidence, so the blur must not wash it out.
+
+// Edge-stopping weight between the center surface and a tap, on depth + normal + roughness
+// (a same-surface gate: a tap on a different plane / facing away / much rougher gets ~0, so
+// no cross-edge leak). Returns a 0..1 multiplier; the kernel scales it by the spatial falloff
+// and the tap's confidence. `cdepth`/`tdepth` are view-space linear depths (positive in
+// front), `cn`/`tn` world normals, `crough`/`trough` the guide roughness.
+float resolve_edge_weight(float cdepth, vec3 cn, float crough, float tdepth, vec3 tn, float trough) {
+	// Depth: relative difference, 0 at equal depth -> 0 weight at a 5% break (the same rel-tol
+	// family the TEMPORAL reject + the SPG plane match use). max() guards a near-zero depth.
+	float depth_rel = abs(tdepth - cdepth) / max(cdepth, 1e-4);
+	float w_depth = max(1.0 - depth_rel / 0.05, 0.0);
+	// Normal: sharpened cosine (dot^4), falling off well before a hard cutoff so a grazing /
+	// silhouette neighbor fades smoothly to 0 (mirrors the accumulate SPATIAL's dot^4 term).
+	float ndot = max(dot(cn, tn), 0.0);
+	float w_normal = ndot * ndot * ndot * ndot;
+	// Roughness: keep the joint filter on similar-roughness surfaces so a mirror-ish pixel does
+	// not borrow a rough pixel's blurred spec (and vice versa). 1 at equal roughness -> 0 at a
+	// 0.5 difference; the diffuse channel is largely roughness-flat so this mostly gates spec.
+	float w_rough = max(1.0 - abs(trough - crough) / 0.5, 0.0);
+	return w_depth * w_normal * w_rough;
+}
+
+// SPATIAL: per screen pixel, one joint edge-aware a-trous step at step = 1 << cur_iter.
+void resolve_spatial_main(ivec2 pos) {
+	// SOURCE is bound at the history samplers (11/12); DEST at the write images (9/10). The
+	// center value is read from the SOURCE so iterations chain (iter k reads iter k-1's output).
+	vec4 cd = texelFetch(diffuse_history, pos, 0); // .rgb = lighting-space A, .a = n/n_cap.
+	vec4 cs = texelFetch(spec_history, pos, 0); // .rgb = rough-spec radiance, .a = n/n_cap.
+
+	// spatial_iterations == 0 -> passthrough: copy SOURCE -> DEST unchanged for BOTH channels so
+	// the getter's [read_index] still holds the TEMPORAL output after the ping-pong. (run_resolve
+	// skips the whole loop at 0, so this guard is a defensive no-op for that path; it also makes a
+	// stray 0-iter dispatch a clean copy rather than garbage.)
+	if (pc.spatial_iter == 0u) {
+		imageStore(diffuse_gi_rw, pos, cd);
+		imageStore(spec_gi_rw, pos, cs);
+		return;
+	}
+
+	// Center surface (CURRENT-frame G-buffer; the same reconstruction INTEGRATE/TEMPORAL use). A
+	// background / degenerate-normal pixel has no surface to filter -> pass the (zero) center
+	// through unchanged, preserving .a (so the furnace background stays black, no edge leak).
+	float craw = texelFetch(depth_buffer, pos, 0).r;
+	vec3 cn;
+	if (craw <= 0.0 || !resolve_world_normal(pos, cn)) {
+		imageStore(diffuse_gi_rw, pos, cd);
+		imageStore(spec_gi_rw, pos, cs);
+		return;
+	}
+	float cdepth = -resolve_reconstruct_view_position(pos, craw).z; // view-space linear depth.
+	float crough = texelFetch(guide_orm, pos, 0).g;
+
+	int atrous_step = 1 << int(pc.cur_iter); // a-trous hole size: 1, 2, 4, ... per iteration.
+	int radius = 2; // 5x5 tap footprint (at the current step).
+
+	// VARIANCE FROM CONFIDENCE (C16), PER SIGNAL: each channel's neighbor pull is widened by ITS
+	// OWN low confidence (the sample-count fraction in .a). The center stays ANCHORED at unit
+	// weight -- it is NOT down-weighted, which bounds how much a single noisy center is smeared;
+	// the boost only modulates how strongly NEIGHBORS pull, from 0.25x (converged center, detail
+	// preserved) to 1.0x (fresh/disoccluded center, full neighbor support to denoise). Diffuse uses
+	// cd.a, spec uses cs.a: a JOINT filter must not let one signal's convergence set the other's
+	// blur (the separate-accumulator reason below).
+	float boost_d = mix(0.25, 1.0, 1.0 - clamp(cd.a, 0.0, 1.0)); // 0.25 (converged) .. 1.0 (fresh).
+	float boost_s = mix(0.25, 1.0, 1.0 - clamp(cs.a, 0.0, 1.0));
+
+	// Center always contributes with unit weight (the anchor + the fallback). Diffuse and spec
+	// share the SAME geometric edge weight but keep SEPARATE accumulators + boosts (a tap may carry
+	// one signal's confidence but not the other's).
+	vec3 sd = cd.rgb;
+	float wd = 1.0;
+	vec3 ss = cs.rgb;
+	float ws = 1.0;
+
+	for (int dy = -radius; dy <= radius; dy++) {
+		for (int dx = -radius; dx <= radius; dx++) {
+			if (dx == 0 && dy == 0) {
+				continue; // center already folded in.
+			}
+			ivec2 tp = pos + ivec2(dx, dy) * atrous_step;
+			if (tp.x < 0 || tp.y < 0 || tp.x >= int(pc.screen_w) || tp.y >= int(pc.screen_h)) {
+				continue; // off-screen tap.
+			}
+			float traw = texelFetch(depth_buffer, tp, 0).r;
+			vec3 tn;
+			if (traw <= 0.0 || !resolve_world_normal(tp, tn)) {
+				continue; // background / degenerate neighbor -> reject (no leak into/out of geometry).
+			}
+			float tdepth = -resolve_reconstruct_view_position(tp, traw).z;
+			float trough = texelFetch(guide_orm, tp, 0).g;
+			// Edge-stopping (depth + normal + roughness): a different-surface tap gets ~0.
+			float edge = resolve_edge_weight(cdepth, cn, crough, tdepth, tn, trough);
+			if (edge <= 0.0) {
+				continue;
+			}
+			// Spatial a-trous falloff: a simple inverse-quadratic on the UN-dilated offset (nearer
+			// taps weigh more); the footprint dilates via atrous_step while this shape stays fixed.
+			float kernel = 1.0 / (1.0 + float(dx * dx + dy * dy));
+			// Geometric weight shared by both signals; the per-signal confidence widening is applied
+			// below (boost_d != boost_s in general).
+			float w_geo = edge * kernel;
+			// Per-signal: scale by THAT signal's center boost AND that tap's own confidence (.a), so a
+			// noisy tap counts little and each channel widens on its own convergence.
+			vec4 td = texelFetch(diffuse_history, tp, 0);
+			vec4 ts = texelFetch(spec_history, tp, 0);
+			float wnd = w_geo * boost_d * clamp(td.a, 0.0, 1.0);
+			float wns = w_geo * boost_s * clamp(ts.a, 0.0, 1.0);
+			sd += td.rgb * wnd;
+			wd += wnd;
+			ss += ts.rgb * wns;
+			ws += wns;
+		}
+	}
+
+	// Weighted mean, but PRESERVE the center .a (the sample count) -- the filter smooths
+	// radiance, it does not change how converged the pixel is (that .a is next frame's history
+	// confidence). With no positive neighbor weight the center passes through unchanged. On a
+	// PERFECTLY uniform field every tap equals the center, so the mean == center (an exact no-op);
+	// the furnace's probe-interpolated field is only NEAR-uniform, so the smoothing shift is small.
+	imageStore(diffuse_gi_rw, pos, vec4((wd > 0.0) ? (sd / wd) : cd.rgb, cd.a));
+	imageStore(spec_gi_rw, pos, vec4((ws > 0.0) ? (ss / ws) : cs.rgb, cs.a));
+}
+
 // DEBUG_GI: output the resolve's RAW output -- the channel selected by pc.debug_channel
 // (diffuse-space A, the rough-spec radiance, or their sum) -- written RAW (linear) for the
 // blit. The .a keeps the diffuse confidence for inspection. NO albedo remodulation: the per-surface remod by
@@ -656,11 +802,12 @@ void main() {
 		resolve_temporal_main(pos);
 		return;
 	}
+	if (pc.mode == RESOLVE_MODE_SPATIAL) {
+		resolve_spatial_main(pos);
+		return;
+	}
 	if (pc.mode == RESOLVE_MODE_DEBUG_GI) {
 		resolve_debug_gi_main(pos);
 		return;
 	}
-
-	// SPATIAL (2) lands in T3; this shader runs INTEGRATE + TEMPORAL + DEBUG_GI.
-	return;
 }
