@@ -79,10 +79,16 @@ public:
 	// SPG probes, cosine-integrates each probe's hemioct tile against the surface
 	// normal (confidence-weighted normalizer), bilinearly blends them, falls back to
 	// the WRC irradiance when no probe qualifies, and writes the LIGHTING-SPACE A to
-	// the diffuse buffer (spec buffer 0 for now). TEMPORAL/SPATIAL (T2/T3) will
-	// ping-pong the GI buffers; T0 implements INTEGRATE only. `p_inv_proj` is the
-	// clip->view inverse projection; `p_inv_view` the view->world transform.
+	// the diffuse buffer. A3-T1 also resolves a rough-spec channel: it cone-prefilters
+	// the SAME probe octahedra around the reflection vector and applies the split-sum
+	// specular BRDF, writing RADIANCE-space spec (no demod) to the spec buffer. The
+	// per-pixel albedo/roughness/metalness come from the material-guide textures
+	// (`p_guide_albedo` rgb = albedo, `p_guide_orm` g = roughness, b = metallic), NOT
+	// the dead rt_albedo_metalness. TEMPORAL/SPATIAL (T2/T3) will ping-pong the GI
+	// buffers. `p_inv_proj` is the clip->view inverse projection; `p_inv_view` the
+	// view->world transform.
 	void run_resolve(RID p_depth, RID p_normal_roughness, RID p_velocity,
+			RID p_guide_albedo, RID p_guide_orm,
 			RID p_spg_radiance, RID p_spg_header_plane, RID p_spg_header_aux,
 			RID p_wrc_radiance, RID p_wrc_distance,
 			const GiResolveFrameParams &p_frame, const Projection &p_inv_proj, const Transform3D &p_inv_view);
@@ -90,23 +96,23 @@ public:
 	RID get_diffuse_gi() const { return diffuse_gi[read_index]; } // RGBA16F: rgb = lighting-space A, a = confidence/variance.
 	RID get_spec_gi() const { return spec_gi[read_index]; } // RGBA16F: rgb = rough-spec radiance, a = variance.
 
-	// RTGI-RESOLVE-GI debug view (A3-T0): the VALIDATION per-pixel view of the resolved
+	// RTGI-RESOLVE debug views (A3): the VALIDATION per-pixel views of the resolved
 	// screen GI (the resolve analogue of RTGIScreenProbeGather::render_gi_debug). It
-	// outputs the resolve's RAW lighting-space output -- out = diffuse_gi.rgb +
-	// spec_gi.rgb (spec 0 in T0) -- then blits the RAW linear value (no albedo, no
-	// tonemap) so the furnace gate can read measurable linear values. NO albedo
-	// remodulation here: the per-surface remod (L_o = albedo * A) is applied at the
-	// composite (T4/T5), where the full G-buffer albedo exists (this view forces a
-	// depth-prepass that does not populate rt_albedo_metalness). On the furnace A ~= L
-	// (albedo-independent), matching the SPG-GI gate. `p_size` is the consumed G-buffer
-	// (internal) size.
-	void render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const Size2i &p_size, RID p_dest_fb);
+	// blits the RAW linear value (no albedo, no tonemap) of the channel selected by
+	// `p_debug_channel`: 0 = diffuse-only (RESOLVE_GI view), 1 = spec-only (RESOLVE_SPEC
+	// view), else = combined. NO albedo remodulation on the diffuse channel: the
+	// per-surface remod (L_o = albedo * A) is applied at the composite (T4/T5), where the
+	// full G-buffer albedo exists (this view forces a depth-prepass that does not populate
+	// rt_albedo_metalness). The spec channel is already radiance-space (BRDF applied). On
+	// the furnace A ~= L (albedo-independent), matching the SPG-GI gate. `p_size` is the
+	// consumed G-buffer (internal) size.
+	void render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const Size2i &p_size, RID p_dest_fb, uint32_t p_debug_channel);
 
 	void free_resources();
 
 private:
-	// Mode selectors live in the .cpp (RESOLVE_MODE_*). The push constant is 16 x 4 B =
-	// 64 B (a multiple of 16, so the std430-rounded size matches and the dispatch is not
+	// Mode selectors live in the .cpp (RESOLVE_MODE_*). The push constant is 20 x 4 B =
+	// 80 B (a multiple of 16, so the std430-rounded size matches and the dispatch is not
 	// silently rejected). The world-pos reconstruction matrices (inv_proj + inv_view)
 	// are too big for the push, so they travel in GiResolveUBO below. Matches the std430
 	// `Params` block in rtgi_gi_resolve.glsl EXACTLY.
@@ -127,6 +133,10 @@ private:
 		uint32_t wrc_grid;
 		uint32_t wrc_cascade_count;
 		float wrc_base_spacing;
+		uint32_t debug_channel; // DEBUG_GI: 0 = diffuse only, 1 = spec only, else = combined.
+		uint32_t pad0; // Pad to a 16-byte multiple (80 B); matches the GLSL Params block.
+		uint32_t pad1;
+		uint32_t pad2;
 	};
 
 	// World-pos reconstruction needs inv_proj + inv_view (two mat4s = 128 bytes, which

@@ -133,6 +133,7 @@ bool RTGIGIResolve::ensure_resources(Ref<RenderSceneBuffersRD> p_rb, const GiRes
 }
 
 void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_velocity,
+		RID p_guide_albedo, RID p_guide_orm,
 		RID p_spg_radiance, RID p_spg_header_plane, RID p_spg_header_aux,
 		RID p_wrc_radiance, RID p_wrc_distance,
 		const GiResolveFrameParams &p_frame, const Projection &p_inv_proj, const Transform3D &p_inv_view) {
@@ -145,6 +146,8 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	ERR_FAIL_COND(p_depth.is_null());
 	ERR_FAIL_COND(p_normal_roughness.is_null());
 	ERR_FAIL_COND(p_velocity.is_null());
+	ERR_FAIL_COND(p_guide_albedo.is_null());
+	ERR_FAIL_COND(p_guide_orm.is_null());
 	ERR_FAIL_COND(p_spg_radiance.is_null());
 	ERR_FAIL_COND(p_spg_header_plane.is_null());
 	ERR_FAIL_COND(p_spg_header_aux.is_null());
@@ -173,14 +176,15 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	RID linear_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 
 	// Set 0 declares EVERY binding any mode of rtgi_gi_resolve.glsl uses (one GLSL
-	// shader's set-0 layout must declare all of them): G-buffers (0-1; binding 2 is free
-	// and 3 is reserved for velocity in T2, neither declared by the T0 shader), SPG atlas
-	// + headers (4-6), WRC atlases (7-8), the GI write images (9-10), the GI read
-	// samplers (11-12, used by DEBUG_GI), the debug dest image (13), and the params UBO
-	// (14). INTEGRATE writes 9-10 and reads 0-1 + 4-8; the bindings it does not touch
-	// (11-13) are pointed at the neutral gi_debug_image below so no GI buffer is both
-	// written and sampled in this set. ONE uniform set drives both modes. The set binds
-	// exactly {0,1,4,5,6,7,8,9,10,11,12,13,14} (no binding 2, no binding 3).
+	// shader's set-0 layout must declare all of them): G-buffers (0-1), the material-guide
+	// albedo (2; binding 3 is reserved for velocity in T2 and is NOT declared by the
+	// shader), SPG atlas + headers (4-6), WRC atlases (7-8), the GI write images (9-10),
+	// the GI read samplers (11-12, used by DEBUG_GI), the debug dest image (13), the params
+	// UBO (14), and the material-guide ORM (15). INTEGRATE writes 9-10 and reads 0-2 + 4-8
+	// + 15; the bindings it does not touch (11-13) are pointed at the neutral gi_debug_image
+	// / a pure-read texture below so no GI buffer is both written and sampled in this set.
+	// ONE uniform set drives both modes. The set binds exactly
+	// {0,1,2,4,5,6,7,8,9,10,11,12,13,14,15} (no binding 3).
 	LocalVector<RD::Uniform> uniforms;
 	{
 		RD::Uniform u;
@@ -198,10 +202,17 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		u.append_id(p_normal_roughness);
 		uniforms.push_back(u);
 	}
-	// Binding 2 (albedo) is now free (the resolve no longer samples albedo: INTEGRATE never
-	// did, DEBUG_GI no longer remodulates), and binding 3 (velocity) is reserved for T2;
-	// neither is declared by the T0 shader, so neither is bound here. p_velocity is accepted
-	// in the signature but not bound yet.
+	// Binding 2: material-guide albedo (A3-T1; INTEGRATE reads it for the rough-spec F0 mix).
+	// Binding 3 (velocity) is reserved for T2 and NOT declared by the shader, so it is not
+	// bound here; p_velocity is accepted in the signature but not bound yet.
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 2;
+		u.append_id(linear_sampler);
+		u.append_id(p_guide_albedo);
+		uniforms.push_back(u);
+	}
 	{
 		RD::Uniform u;
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
@@ -292,6 +303,15 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		u.append_id(resolve_ubo);
 		uniforms.push_back(u);
 	}
+	// Binding 15: material-guide ORM (A3-T1; INTEGRATE reads g = roughness, b = metallic).
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 15;
+		u.append_id(linear_sampler);
+		u.append_id(p_guide_orm);
+		uniforms.push_back(u);
+	}
 
 	GiResolveUBO ubo;
 	memset(&ubo, 0, sizeof(GiResolveUBO));
@@ -329,7 +349,7 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	RD::get_singleton()->draw_command_end_label();
 }
 
-void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const Size2i &p_size, RID p_dest_fb) {
+void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const Size2i &p_size, RID p_dest_fb, uint32_t p_debug_channel) {
 	if (!resources_valid || !diffuse_gi[read_index].is_valid() || !spec_gi[read_index].is_valid()) {
 		return;
 	}
@@ -357,18 +377,19 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 
 	// Same full set-0 layout as run_resolve (one GLSL shader, one layout). DEBUG_GI reads
 	// binding 11 (diffuse), 12 (spec) and writes 13 (debug dest). The neutral SAMPLER slots
-	// (0,1,4-8) point at diffuse_gi[read_index] (a read texture, like 11) and the neutral
+	// (0,1,2,4-8,15) point at diffuse_gi[read_index] (a read texture, like 11) and the neutral
 	// IMAGE slots (9-10) point at gi_debug_image (the write target, like 13), so NO texture is
 	// bound as both a sampler and a storage image in this set: read textures (diffuse/spec)
 	// appear only as samplers, gi_debug_image only as images. That avoids a same-resource
-	// read+write within one descriptor set.
+	// read+write within one descriptor set. The set provides exactly
+	// {0,1,2,4,5,6,7,8,9,10,11,12,13,14,15} -- the same layout run_resolve provides.
 	LocalVector<RD::Uniform> uniforms;
 	for (uint32_t b = 0; b <= 8; b++) {
-		// Samplers 0-8 all point at the resolved-diffuse read texture (neutral). Binding 2
-		// (albedo, now free) and binding 3 (velocity, reserved for T2) are NOT in the T0
-		// reflected layout, so both must be skipped here or the uniform set would not match
-		// the shader.
-		if (b == 2u || b == 3u) {
+		// Samplers 0-8 (incl. binding 2, the material-guide albedo) all point at the
+		// resolved-diffuse read texture (neutral; DEBUG_GI does not read them). Binding 3
+		// (velocity, reserved for T2) is NOT in the reflected layout, so it must be skipped
+		// here or the uniform set would not match the shader.
+		if (b == 3u) {
 			continue;
 		}
 		RD::Uniform u;
@@ -422,15 +443,27 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 		u.append_id(resolve_ubo);
 		uniforms.push_back(u);
 	}
+	// Binding 15 (material-guide ORM): neutral here -- DEBUG_GI does not read it, so it points
+	// at the resolved-diffuse read texture like the other neutral samplers (never a same-resource
+	// read+write, since the only images in this set are gi_debug_image at 9/10/13).
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 15;
+		u.append_id(linear_sampler);
+		u.append_id(diffuse_gi[read_index]);
+		uniforms.push_back(u);
+	}
 
 	PushConstant push_constant;
 	memset(&push_constant, 0, sizeof(PushConstant));
 	push_constant.mode = RESOLVE_MODE_DEBUG_GI;
 	push_constant.screen_w = (uint32_t)size.x;
 	push_constant.screen_h = (uint32_t)size.y;
-	// rough_cutoff is left 0 (memset above): DEBUG_GI does not read it (the debug view no
-	// longer remodulates or scales). INTEGRATE uses rough_cutoff for the real roughness
-	// cutoff in T1; the field stays in the PushConstant struct.
+	// Channel select (A3-T1): 0 = diffuse-only (RESOLVE_GI), 1 = spec-only (RESOLVE_SPEC),
+	// else = combined. rough_cutoff/rough_enabled stay 0 (memset): DEBUG_GI does not read them
+	// (only INTEGRATE uses them for the rough-spec gate); the fields stay in the PushConstant.
+	push_constant.debug_channel = p_debug_channel;
 
 	RD::get_singleton()->draw_command_begin_label("RTGI Resolve GI Debug");
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();

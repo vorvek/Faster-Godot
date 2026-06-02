@@ -3778,8 +3778,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_GI ||
 					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_RADIANCE ||
 					// RTGI Resolve (A3) reconstructs the world normal from this G-buffer
-					// (its INTEGRATE runs on the SPG path), so force the prepass for its view.
+					// (its INTEGRATE runs on the SPG path), so force the prepass for its views
+					// (diffuse RESOLVE_GI + rough-spec RESOLVE_SPEC).
 					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_RESOLVE_GI ||
+					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_RESOLVE_SPEC ||
 					scene_state.used_normal_texture) {
 				depth_pass_mode = PASS_MODE_DEPTH_NORMAL_ROUGHNESS;
 			}
@@ -3984,6 +3986,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	bool using_depth_prepass = scene_features.has(SCENE_FEATURE_DEPTH_PREPASS);
 	bool using_ssao = using_depth_prepass && scene_features.has(SCENE_FEATURE_SSAO);
 
+	// Hoisted from the SPG-active block below (~SPG placement site) so the additive
+	// material-guide prepass (A3-T1a, inserted right after the depth prepass) can share
+	// the same SPG-active gate. These depend only on get_debug_draw_mode(), so computing
+	// them here is equivalent; their use at the SPG block is unchanged.
+	const bool resolve_debug_active = get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_RESOLVE_GI || get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_RESOLVE_SPEC;
+	const bool spg_debug_active = get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_GI || get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_RADIANCE || resolve_debug_active;
+
 	if (using_depth_prepass) { //depth pre pass
 		bool needs_pre_resolve = _needs_post_prepass_render(p_render_data, using_sdfgi || using_voxelgi);
 		if (needs_pre_resolve) {
@@ -4028,6 +4037,49 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RENDER_TIMESTAMP("Copy Path Tracing Guide Depth");
 			_render_buffers_ensure_depth_texture(p_render_data);
 			_render_buffers_copy_depth_texture(p_render_data);
+		}
+	}
+
+	// Material-guide prepass (A3-T1a): under radiance_probes the FPT primary-shading dispatch
+	// that would fill the albedo G-buffer is gated off, so populate the per-pixel albedo+ORM
+	// material guide here for the GI-resolve's upcoming rough-spec F0 + composite remod. Runs
+	// only when an SPG-active view drives the resolve (cost-free otherwise; T4/T5 will widen
+	// this gate to always-on for the beauty composite). SUPPLEMENTAL to the raster depth-normal
+	// prepass (which still fills RB_TEX_NORMAL_ROUGHNESS for SPG + the SPG-active guard); writes
+	// only the guide color attachments and re-establishes the guide FB's own depth from the same
+	// opaque geometry (identical to the raster depth already resolved, so SPG/resolve depth reads
+	// are unaffected). POPULATE ONLY -- no consumer is wired here (resolve binding is task T1).
+	if (rt_radiance_probes_only && spg_debug_active && rb_data.is_valid()) {
+		// MANDATORY: SHADER_VERSION_DEPTH_PASS_WITH_MATERIAL lives in SHADER_GROUP_ADVANCED;
+		// without enabling it the DEPTH_PASS_WITH_MATERIAL pipeline isn't compiled and the draw
+		// silently no-ops. Mirrors the rt_path_tracing_fullres_guides DEPTH_MATERIAL path (no-arg:
+		// DEPTH_MATERIAL has no multiview variant and ERR_FAILs under view_count > 1).
+		scene_shader.enable_advanced_shader_group();
+		RID guide_fb = rb_data->rt_ensure_material_guide_framebuffer(rb->get_internal_size());
+		if (guide_fb.is_valid()) {
+			// SAME order/colors as the PASS_MODE_DEPTH_MATERIAL depth-FB selection switch:
+			// albedo, normal, orm, emission, viewz.
+			Vector<Color> guide_clear;
+			guide_clear.push_back(Color(1, 1, 1, 1));
+			guide_clear.push_back(Color(0.5, 0.5, 1.0, 0.0));
+			guide_clear.push_back(Color(1, 1, 0, 0));
+			guide_clear.push_back(Color(0, 0, 0, 0));
+			guide_clear.push_back(Color(0, 0, 0, 0));
+			// Distinct uniform-buffer index from the depth prepass's: _setup_environment hands out
+			// the next monotonically-increasing UBO slot (count reset once per frame), so the
+			// resulting cached uniform set is content-distinct and cannot collide with the depth
+			// prepass's set. Same args as the depth-prepass _setup_environment (opaque_render_buffers
+			// = false) -- DEPTH_MATERIAL does not read the opaque render buffers.
+			uint32_t guide_prepass_uniform_buffer_index = _setup_environment(p_render_data, is_reflection_probe, screen_size, screen_size, p_default_bg_color, false);
+			RID guide_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_OPAQUE, nullptr, RID(), samplers, guide_prepass_uniform_buffer_index);
+			// Mirrors the depth-prepass RenderListParameters, but forced to PASS_MODE_DEPTH_MATERIAL
+			// and the guide uniform set. RENDER_LIST_OPAQUE is already filled with the opaque
+			// surfaces (PASS_MODE_COLOR fill); the depth prepass reuses the same list the same way.
+			RenderListParameters guide_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_DEPTH_MATERIAL, 0, rb_data.is_null(), p_render_data->directional_light_soft_shadows, guide_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
+			RD::get_singleton()->draw_command_begin_label("RTGI Material Guide Prepass");
+			RENDER_TIMESTAMP("RTGI Material Guide Prepass");
+			_render_list_with_draw_list(&guide_params, guide_fb, RD::DRAW_CLEAR_ALL, guide_clear, 0.0f, 0u, p_render_data->render_region);
+			RD::get_singleton()->draw_command_end_label();
 		}
 	}
 
@@ -4264,8 +4316,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// view also depends on the SPG atlas, so it counts as an SPG-active view here
 			// (the resolve dispatch below reads the SPG getters this placement+accumulate
 			// fills); A3 later promotes both SPG + resolve to always-on for the composite.
-			const bool resolve_debug_active = get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_RESOLVE_GI;
-			const bool spg_debug_active = get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_GI || get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_RADIANCE || resolve_debug_active;
+			// resolve_debug_active / spg_debug_active are hoisted above the depth prepass
+			// (shared with the additive material-guide prepass); see their declaration there.
 			if (rt_radiance_probes_only && spg_debug_active && rtgi_spg && rtgi_spg->get_radiance_atlas().is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
 				RD::get_singleton()->draw_command_begin_label("RTGI SPG");
 				RENDER_TIMESTAMP("RTGI SPG Placement");
@@ -4356,10 +4408,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					rfp.spg_spacing_f = (uint32_t)spg_params.spacing_f;
 					// SPG getters source the SPATIAL-filtered atlas + the front headers (what
 					// this frame's placement+accumulate produced). WRC getters source the
-					// cache's front atlases for the fallback query. The resolve no longer takes
-					// albedo (INTEGRATE never used it; the debug view shows the raw lighting-
-					// space output, and remod-by-albedo lands at the composite in T4/T5).
+					// cache's front atlases for the fallback query. The material-guide albedo +
+					// ORM (A3-T1; populated by the "RTGI Material Guide Prepass" above) feed the
+					// rough-spec F0 + roughness/metallic; INTEGRATE's diffuse still takes no albedo
+					// (the debug view shows the raw lighting-space output, and remod-by-albedo
+					// lands at the composite in T4/T5).
 					rtgi_resolve->run_resolve(rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), spg_vel,
+							rb_data->rt_get_guide_albedo(), rb_data->rt_get_guide_orm(),
 							rtgi_spg->get_radiance_filtered(), rtgi_spg->get_header_plane(), rtgi_spg->get_header_aux(),
 							rtgi_wrc->get_radiance_atlas(), rtgi_wrc->get_distance_atlas(),
 							rfp, p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform);
@@ -5668,16 +5723,21 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 			rtgi_spg->render_gi_debug(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, rb->get_internal_size(), 1.0f, fb);
 		}
 
-		// RTGI_RESOLVE_GI is the A3 production-resolve debug view: it outputs the resolve's
-		// RAW lighting-space output -- the lighting-space diffuse A + the rough-spec radiance
-		// (0 in T0) -- then blits the RAW linear result (no albedo, no tonemap) for the furnace
-		// gate. NO albedo remodulation: that lands at the composite (T4/T5), where the full
-		// G-buffer albedo exists (this view forces a depth-prepass that does not populate
-		// rt_albedo_metalness). On the furnace A ~= L (albedo-independent), matching the A2
-		// SPG-GI gate. The diffuse buffer was filled by run_resolve on the SPG path in
-		// _render_scene (gated to run for this view too); guard on the resolved buffer.
+		// RTGI_RESOLVE_GI / RTGI_RESOLVE_SPEC are the A3 production-resolve debug views: they
+		// blit the resolve's RAW linear output (no albedo, no tonemap) for the furnace gate.
+		// RESOLVE_GI shows the diffuse channel only (lighting-space A, debug_channel 0);
+		// RESOLVE_SPEC shows the rough-spec channel only (radiance-space, BRDF applied,
+		// debug_channel 1). NO albedo remodulation on the diffuse channel: that lands at the
+		// composite (T4/T5), where the full G-buffer albedo exists (this view forces a
+		// depth-prepass that does not populate rt_albedo_metalness). On the furnace A ~= L
+		// (albedo-independent), matching the A2 SPG-GI gate. Both GI buffers were filled by
+		// run_resolve on the SPG path in _render_scene (gated to run for these views too);
+		// guard on the resolved buffer for the active channel.
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_RESOLVE_GI && rtgi_resolve != nullptr && rtgi_resolve->get_diffuse_gi().is_valid()) {
-			rtgi_resolve->render_resolve_debug(rb, rb->get_internal_size(), fb);
+			rtgi_resolve->render_resolve_debug(rb, rb->get_internal_size(), fb, 0u);
+		}
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_RESOLVE_SPEC && rtgi_resolve != nullptr && rtgi_resolve->get_spec_gi().is_valid()) {
+			rtgi_resolve->render_resolve_debug(rb, rb->get_internal_size(), fb, 1u);
 		}
 	}
 

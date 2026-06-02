@@ -59,7 +59,7 @@ layout(local_size_x = GROUP_SIZE, local_size_y = GROUP_SIZE, local_size_z = 1) i
 #define RESOLVE_MODE_SPATIAL 2u
 #define RESOLVE_MODE_DEBUG_GI 3u
 
-// Push constant: 16 x 4 B = 64 B (a multiple of 16, so the std430-rounded size matches
+// Push constant: 20 x 4 B = 80 B (a multiple of 16, so the std430-rounded size matches
 // the C++ PushConstant exactly -- a mismatch silently rejects every dispatch). Matches
 // RTGIGIResolve::PushConstant field-for-field.
 layout(push_constant, std430) uniform Params {
@@ -74,28 +74,35 @@ layout(push_constant, std430) uniform Params {
 	uint spg_oct_res;
 	uint spg_spacing_f;
 	float temporal_n_cap;
-	float rough_cutoff; // INTEGRATE: roughness cutoff (deferred to T1). Unused by DEBUG_GI.
-	uint rough_enabled;
+	float rough_cutoff; // INTEGRATE: roughness cutoff (T1 rough-spec gate). Unused by DEBUG_GI.
+	uint rough_enabled; // INTEGRATE: 0 disables the rough-spec channel (writes spec 0).
 	uint wrc_grid;
 	uint wrc_cascade_count;
 	float wrc_base_spacing;
+	// DEBUG_GI channel select (T1): 0 = diffuse_gi only, 1 = spec_gi only, else = combined.
+	// Unused by INTEGRATE. The 3 pad uints keep the block a 16-byte multiple (80 B).
+	uint debug_channel;
+	uint pad0;
+	uint pad1;
+	uint pad2;
 }
 pc;
 
 // Set 0 declares every binding the implemented modes reference (a single GLSL shader's
 // set-0 layout is the union over its reachable code paths; mirrors how
-// rtgi_spg_accumulate.glsl declares its full layout). G-buffers (0-1; 2 free, 3 reserved
-// for velocity in T2), SPG atlas + headers (4-6), WRC atlases (7-8), the GI write images
-// (9-10), the GI read samplers (11-12), the debug dest image (13), and the params UBO
-// (14). INTEGRATE writes 9-10 and reads 0-1 + 4-8; DEBUG_GI reads 11-12 and writes 13.
+// rtgi_spg_accumulate.glsl declares its full layout). G-buffers (0-1), the material-guide
+// albedo (2; 3 reserved for velocity in T2), SPG atlas + headers (4-6), WRC atlases (7-8),
+// the GI write images (9-10), the GI read samplers (11-12), the debug dest image (13), the
+// params UBO (14), and the material-guide ORM (15). INTEGRATE writes 9-10 and reads
+// 0-2 + 4-8 + 15; DEBUG_GI reads 11-12 and writes 13.
 layout(set = 0, binding = 0) uniform sampler2D depth_buffer;
 layout(set = 0, binding = 1) uniform sampler2D normal_roughness_buffer;
-// NOTE: binding 2 is now FREE (the albedo sampler was removed: no reachable mode references
-// it -- INTEGRATE never did, and DEBUG_GI no longer remodulates by albedo; a declared-but-
-// unreferenced sampler is stripped from the reflected set layout and would mismatch the C++
-// uniform set). The composite (T4) re-uses binding 2 for the G-buffer albedo at remod time.
+// Material-guide albedo (A3-T1): rgb = base albedo, a = alpha. Populated by the "RTGI Material
+// Guide Prepass" (RB_TEX_RT_GUIDE_ALBEDO). INTEGRATE reads it for the rough-spec F0 mix; the
+// composite (T4/T5) reuses it for the diffuse remod. NOT the dead rt_albedo_metalness.
+layout(set = 0, binding = 2) uniform sampler2D guide_albedo;
 // NOTE: binding 3 is RESERVED for the velocity buffer (consumed by the TEMPORAL mode in
-// T2). It is deliberately NOT declared in T0: a sampler referenced by no reachable code
+// T2). It is deliberately NOT declared in T0/T1: a sampler referenced by no reachable code
 // path is stripped from the reflected set layout, which would make the C++ uniform set
 // (which must match the reflected layout) reject a binding-3 uniform. T2 adds the
 // declaration + its texelFetch and binds it. The C++ run_resolve already carries p_velocity.
@@ -111,7 +118,7 @@ layout(set = 0, binding = 6) uniform sampler2D spg_header_aux;
 layout(set = 0, binding = 7) uniform sampler2D wrc_radiance;
 layout(set = 0, binding = 8) uniform sampler2D wrc_distance;
 // Screen-GI output images (INTEGRATE writes these). diffuse_gi_write: .rgb = lighting-space
-// A, .a = confidence. spec_gi_write: .rgb = rough-spec radiance (0 in T0), .a = variance.
+// A, .a = confidence. spec_gi_write: .rgb = rough-spec radiance (A3-T1; BRDF applied), .a = variance.
 layout(set = 0, binding = 9, rgba16f) uniform restrict writeonly image2D diffuse_gi_write;
 layout(set = 0, binding = 10, rgba16f) uniform restrict writeonly image2D spec_gi_write;
 // Resolved screen-GI read samplers (DEBUG_GI reads these).
@@ -128,6 +135,52 @@ layout(set = 0, binding = 14, std140) uniform GiResolveUBO {
 	mat4 inv_view; // view -> world (camera transform).
 }
 ubo;
+
+// Material-guide ORM (A3-T1): r = ao, g = roughness, b = metallic, a = sss (the packing the
+// material guide / scene_forward_clustered.glsl writes). Populated by the "RTGI Material Guide
+// Prepass" (RB_TEX_RT_GUIDE_ORM). INTEGRATE reads g (roughness) + b (metallic) for the
+// rough-spec cone + F0; declared at binding 15 (after the UBO) to keep the existing 0-14
+// numbering stable.
+layout(set = 0, binding = 15) uniform sampler2D guide_orm;
+
+// Split-sum environment-BRDF DFG approximation (Karis' analytic fit), returning the
+// (scale, bias) pair so the specular term is F0 * dfg.x + dfg.y. This is the SAME analytic
+// fit the engine already relies on in brdf_inc.glsl (DLSSRR_envBRDFApprox /
+// energyConservingDiffuseFactor both use these exact c0/c1 coefficients); here we expose the
+// raw (scale, bias) WITHOUT the DLSS-RR x2 scale (which DLSSRR_envBRDFApprox bakes in and is
+// wrong for a standard split-sum -- see the energyConservingDiffuseFactor comment). The
+// engine's other split-sum consumer, prefiltered_dfg() in scene_forward_clustered_inc.glsl,
+// is a precomputed-LUT sampler that needs its own texture+UBO bindings, so it is not usable
+// from this self-contained effect; this analytic fit matches it closely.
+// Source: Brian Karis, "Physically Based Shading on Mobile"
+// (https://www.unrealengine.com/en-US/blog/physically-based-shading-on-mobile).
+vec2 resolve_env_brdf_dfg(float NoV, float roughness) {
+	const vec4 c0 = vec4(-1.0, -0.0275, -0.572, 0.022);
+	const vec4 c1 = vec4(1.0, 0.0425, 1.04, -0.04);
+	vec4 r = roughness * c0 + c1;
+	float a004 = min(r.x * r.x, exp2(-9.28 * NoV)) * r.x + r.y;
+	return vec2(-1.04, 1.04) * a004 + r.zw; // x = scale, y = bias.
+}
+
+// Energy-conserving multi-scatter specular albedo (Fdez-Aguera 2019, "A Multiple-Scattering
+// Microfacet Model for Real-Time Image-Based Lighting"). Returns FssEss + FmsEms -- the
+// single-scatter split-sum specular albedo PLUS the multi-scatter energy compensation that
+// single-scatter GGX loses (large for rough high-F0/metal surfaces). The plain
+// resolve_env_brdf_dfg term (F0 * scale + bias) is FssEss ALONE and under-lights rough metals;
+// this lifts it back to energy conservation. Mirrors brdf_inc.glsl::energyConservingDiffuseFactor
+// (same (scale,bias) AB fit, same Favg = F0 + (1-F0)/21, same max(...,1e-4) guard) but returns
+// the SPECULAR part rather than its diffuse complement (1 - FssEss - FmsEms) -- C8-consistent.
+// In the resolve F0 = mix(0.04, albedo, metalness) >= 0.04 always, so shadowedF90(F0) == 1.0
+// (per the brdf_inc.glsl comment); the F90/bias term is therefore just AB.y (no shadowedF90 port).
+vec3 resolve_env_brdf_specular(vec3 F0, float roughness, float NoV) {
+	vec2 AB = resolve_env_brdf_dfg(NoV, roughness); // AB.x = scale, AB.y = bias (same Karis fit).
+	vec3 FssEss = F0 * AB.x + AB.y; // single-scatter specular albedo (F90 == 1.0 here).
+	float Ess = AB.x + AB.y; // white-furnace specular albedo (F0 = 1).
+	float Ems = 1.0 - Ess; // energy missed by single scatter.
+	vec3 Favg = F0 + (1.0 - F0) * (1.0 / 21.0);
+	vec3 FmsEms = (Ems * FssEss * Favg) / max(1.0 - Favg * Ems, 1e-4);
+	return FssEss + FmsEms; // energy-conserving (multi-scatter) specular albedo.
+}
 
 // Reconstruct VIEW-space position from the raw depth buffer at integer pixel `pos`.
 // Mirrors rtgi_spg_gi_consumer.glsl::reconstruct_view_position: build a clip-space point
@@ -195,6 +248,65 @@ vec3 resolve_integrate_probe(ivec2 probe, vec3 probe_N, vec3 world_N, out float 
 	return (cos_norm > 0.0) ? (irr / cos_norm) : vec3(0.0);
 }
 
+// Cone-prefilter one SPG probe's HEMISPHERE-octahedral radiance tile around the reflection
+// direction `R` (A3-T1 rough-spec). Same tile addressing + local->world rotation as
+// resolve_integrate_probe, but the per-texel weight is a GGX-lobe term toward R instead of a
+// cosine toward the surface normal: a roughness-driven cone (narrow lobe at low roughness,
+// widening toward the diffuse hemisphere at roughness 1). The lobe weight is the GGX NDF of
+// the half-vector between R and the sampled direction, evaluated with alpha = roughness^2
+// (Disney/UE remap). CONFIDENCE-WEIGHTED NORMALIZER (matches the diffuse integrate): both the
+// numerator and the normalizer weight by lobe * rad.a, so rad.a cancels and unwritten texels
+// (a == 0) are excluded. Returns the prefiltered radiance; `lobe_norm` reports the summed
+// weight (0 == no usable texels). The split-sum BRDF (F0 * dfg.x + dfg.y) is applied by the
+// caller -- this returns radiance only.
+vec3 resolve_prefilter_probe(ivec2 probe, vec3 probe_N, vec3 R, float roughness, out float lobe_norm) {
+	lobe_norm = 0.0;
+	vec3 pref = vec3(0.0);
+
+	// GGX NDF with the perceptual->linear roughness remap (alpha = roughness^2). alpha2 is
+	// clamped off zero so a perfectly smooth surface still yields a finite, sharply-peaked
+	// lobe rather than a divide-by-zero.
+	float alpha = max(roughness * roughness, 1e-3);
+	float alpha2 = alpha * alpha;
+
+	int res = int(max(pc.spg_oct_res, 1u));
+	float inv_res = 1.0 / float(res);
+	vec3 pt, pb;
+	spg_build_basis(probe_N, pt, pb);
+	ivec2 tile_origin = probe * res;
+
+	for (int ty = 0; ty < res; ty++) {
+		for (int tx = 0; tx < res; tx++) {
+			vec2 local_oct = (vec2(tx, ty) + vec2(0.5)) * inv_res; // texel center.
+			vec3 local_dir = spg_hemioct_decode(local_oct); // local, +Z = probe_N.
+			vec3 world_dir = spg_local_to_world(local_dir, pt, pb, probe_N);
+			// GGX lobe weight toward R: the half-vector between the reflection direction and the
+			// sampled direction, scored by the GGX NDF (D). NoH = dot(R, H) since the lobe is
+			// centered on R. Directions outside the lobe (or pointing away from R) get ~0 weight.
+			// Guard the half-vector normalize against the near-antiparallel case (world_dir ~= -R,
+			// where R + world_dir ~= 0 -> normalize NaN): such directions are opposite the lobe,
+			// so skip them (their GGX weight is ~0 anyway).
+			vec3 h = R + world_dir;
+			float hlen2 = dot(h, h);
+			if (hlen2 < 1e-8) {
+				continue;
+			}
+			vec3 H = h * inversesqrt(hlen2);
+			float NoH = max(dot(R, H), 0.0);
+			float d = (alpha2 - 1.0) * NoH * NoH + 1.0;
+			float lobe = alpha2 / max(d * d, 1e-8); // GGX D (PI-free; the constant cancels in the normalize).
+			if (lobe <= 0.0) {
+				continue;
+			}
+			vec4 rad = texelFetch(spg_radiance, tile_origin + ivec2(tx, ty), 0);
+			float w = lobe * rad.a;
+			pref += rad.rgb * w;
+			lobe_norm += w;
+		}
+	}
+	return (lobe_norm > 0.0) ? (pref / lobe_norm) : vec3(0.0);
+}
+
 // INTEGRATE: per pixel -> 4 surrounding SPG probes, plane-weighted, cosine-integrate the
 // hemisphere-oct -> lighting-space diffuse A (confidence-weighted). NO albedo here.
 void resolve_integrate_main(ivec2 pos) {
@@ -225,6 +337,25 @@ void resolve_integrate_main(ivec2 pos) {
 	float pixel_linear_depth = -view_pos.z;
 	vec3 world_N = normalize(mat3(ubo.inv_view) * view_normal);
 
+	// Rough-spec view + reflection vectors (A3-T1). The camera world position is inv_view's
+	// translation column (the same clipmap center the WRC params use). V points from the
+	// surface toward the eye; R is the mirror reflection of -V about the surface normal.
+	vec3 cam_pos = ubo.inv_view[3].xyz;
+	vec3 V = normalize(cam_pos - world_pos);
+	vec3 R = reflect(-V, world_N);
+
+	// Per-pixel material guide (A3-T1): roughness (ORM.g) + metallic (ORM.b) drive the
+	// rough-spec cone + F0; albedo (guide RGB) is the metallic tint of F0. The dead
+	// rt_albedo_metalness is NOT used -- these come from the material-guide prepass.
+	vec4 orm = texelFetch(guide_orm, pos, 0); // r=ao, g=roughness, b=metallic, a=sss.
+	float rough = orm.g;
+	float metalness = orm.b;
+	vec3 albedo = texelFetch(guide_albedo, pos, 0).rgb;
+	// Gate the rough-spec channel: only the rough domain (roughness >= cutoff) is resolved from
+	// the diffuse-style probe octahedra; the sharp domain (below cutoff) is a separate mirror /
+	// ray-traced reflection path (T-later) and stays 0 here. Also honors the global enable.
+	bool do_spec = (pc.rough_enabled != 0u) && (rough >= pc.rough_cutoff);
+
 	// Locate the 4 surrounding probes. Probe (gx, gy) anchors near tile center
 	// (tile_origin + spacing/2), so a pixel's continuous probe-grid coordinate is
 	// pf = (pos + 0.5) / spacing - 0.5; the lower-left corner is floor(pf) and `frac` is
@@ -240,6 +371,11 @@ void resolve_integrate_main(ivec2 pos) {
 
 	vec3 A = vec3(0.0);
 	float wsum = 0.0;
+	// Rough-spec prefiltered-radiance accumulator, bilinearly blended over the SAME qualifying
+	// probes as the diffuse A (its own normalizer `spec_wsum` so a probe with diffuse coverage
+	// but no spec-cone coverage does not bias the spec blend).
+	vec3 spec_rad = vec3(0.0);
+	float spec_wsum = 0.0;
 
 	for (int cy = 0; cy < 2; cy++) {
 		for (int cx = 0; cx < 2; cx++) {
@@ -276,6 +412,18 @@ void resolve_integrate_main(ivec2 pos) {
 
 			A += probe_irr * bw;
 			wsum += bw;
+
+			// Rough-spec cone-prefilter from the SAME probe tile, around R (A3-T1). Shares this
+			// probe's plane/normal validation + bilinear weight; only accumulated when the spec
+			// channel is active and the cone found usable (confidence-weighted) texels.
+			if (do_spec) {
+				float lobe_norm;
+				vec3 probe_spec = resolve_prefilter_probe(probe, probe_N, R, rough, lobe_norm);
+				if (lobe_norm > 0.0) {
+					spec_rad += probe_spec * bw;
+					spec_wsum += bw;
+				}
+			}
 		}
 	}
 
@@ -290,12 +438,28 @@ void resolve_integrate_main(ivec2 pos) {
 	}
 
 	imageStore(diffuse_gi_write, pos, vec4(A, 1.0)); // lighting space; .a = confidence (1.0 = resolved).
-	imageStore(spec_gi_write, pos, vec4(0.0)); // T1 fills rough-spec.
+
+	// Rough-spec channel (A3-T1): apply the ENERGY-CONSERVING multi-scatter specular BRDF to the
+	// prefiltered radiance. spec_gi is RADIANCE space (NO demod) -- the env-BRDF factor already
+	// carries the BRDF, so the composite adds spec_gi directly (unlike diffuse A, which the
+	// composite remods by albedo). The factor is FssEss + FmsEms (Fdez-Aguera 2019 multi-scatter),
+	// not just the single-scatter F0*scale + bias: single-scatter GGX under-lights rough high-F0
+	// (metal) surfaces, so this mirrors brdf_inc.glsl's energyConservingDiffuseFactor's specular
+	// part (C8-consistent). For a rough metal under uniform Le it recovers ~= albedo * Le.
+	vec3 spec = vec3(0.0);
+	if (do_spec && spec_wsum > 0.0) {
+		vec3 pref = spec_rad / spec_wsum; // prefiltered incident radiance around R.
+		float NoV = max(dot(world_N, V), 1e-4);
+		vec3 F0 = mix(vec3(0.04), albedo, metalness); // dielectric 4% -> albedo-tinted for metals.
+		spec = pref * resolve_env_brdf_specular(F0, rough, NoV); // FssEss + FmsEms.
+	}
+	// .a = variance/confidence proxy (1.0 for now; T2/T3 fill a real variance).
+	imageStore(spec_gi_write, pos, vec4(spec, 1.0));
 }
 
-// DEBUG_GI: output the resolve's RAW lighting-space output -- the lighting-space diffuse A
-// plus the rough-spec radiance (0 in T0) -- written RAW (linear) for the blit. The .a keeps
-// the diffuse confidence for inspection. NO albedo remodulation: the per-surface remod by
+// DEBUG_GI: output the resolve's RAW output -- the channel selected by pc.debug_channel
+// (diffuse-space A, the rough-spec radiance, or their sum) -- written RAW (linear) for the
+// blit. The .a keeps the diffuse confidence for inspection. NO albedo remodulation: the per-surface remod by
 // albedo (L_o = albedo * A) is applied at the COMPOSITE (Hybrid/FPT in T4/T5), which runs in
 // the full render where the G-buffer albedo genuinely exists -- the forced depth-prepass that
 // this debug view triggers does NOT populate rt_albedo_metalness (it reads 0, which would
@@ -303,9 +467,21 @@ void resolve_integrate_main(ivec2 pos) {
 // outputs raw incident radiance. On the furnace A ~= L (albedo-independent), so the energy
 // gate passes. Reads BOTH the diffuse (11) and spec (12) GI buffers so both stay referenced.
 void resolve_debug_gi_main(ivec2 pos) {
+	// Read BOTH the diffuse (11) and spec (12) GI buffers so both stay referenced regardless of
+	// the selected channel (an unreferenced sampler would be stripped from the reflected layout).
 	vec4 diffuse = texelFetch(diffuse_gi_read, pos, 0);
 	vec3 spec = texelFetch(spec_gi_read, pos, 0).rgb;
-	vec3 result = diffuse.rgb + spec; // raw lighting-space resolve output (spec 0 in T0).
+	// Channel select (A3-T1): 0 = diffuse-only (RESOLVE_GI view), 1 = spec-only (RESOLVE_SPEC
+	// view), else = combined. Diffuse is lighting-space A (no albedo); spec is radiance-space
+	// (BRDF already applied). Written RAW (linear) for the furnace gate.
+	vec3 result;
+	if (pc.debug_channel == 0u) {
+		result = diffuse.rgb;
+	} else if (pc.debug_channel == 1u) {
+		result = spec;
+	} else {
+		result = diffuse.rgb + spec;
+	}
 	imageStore(dest_image, pos, vec4(result, diffuse.a)); // .a = diffuse confidence (inspection).
 }
 
