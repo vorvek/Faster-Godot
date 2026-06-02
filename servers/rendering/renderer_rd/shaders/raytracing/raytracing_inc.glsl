@@ -123,6 +123,11 @@ struct PathState {
 	float hit_t;
 	vec3 offset_normal;
 	vec3 next_ray_dir;
+	// BSDF-sampling solid-angle pdf of next_ray_dir, carried from the sampling
+	// vertex to the next hit so an emissive BSDF-hit can be power-heuristic MIS
+	// weighted against emissive NEE. Reuses the previously-unused .y of
+	// packed_specular[1]; never read for non-emissive paths.
+	float pdf_bsdf;
 };
 
 PathState path_unpack(PathPayload p) {
@@ -135,6 +140,7 @@ PathState path_unpack(PathPayload p) {
 	s.radiance = sanitize_payload_vec3(vec3(rg.x, rg.y, bR.x));
 	s.specular_radiance = sanitize_payload_vec3(vec3(specular_rg.x, specular_rg.y, specular_b.x));
 	s.throughput = sanitize_payload_vec3(vec3(bR.y, GB.x, GB.y));
+	s.pdf_bsdf = specular_b.y; // BSDF-sampling pdf packed alongside specular_radiance.b
 	s.packed_bounces_flags = p.packed_bounces_flags;
 	s.rng_state = p.rng_state;
 	s.hit_t = p.hit_t;
@@ -151,7 +157,8 @@ void path_pack(inout PathPayload p, PathState s) {
 	p.packed_rt[1] = packHalf2x16(vec2(r.b, t.r));
 	p.packed_rt[2] = packHalf2x16(vec2(t.g, t.b));
 	p.packed_specular[0] = packHalf2x16(vec2(sr.r, sr.g));
-	p.packed_specular[1] = packHalf2x16(vec2(sr.b, 0.0));
+	// .y carries the BSDF-sampling pdf for MIS (clamp keeps it finite in fp16).
+	p.packed_specular[1] = packHalf2x16(vec2(sr.b, clamp(s.pdf_bsdf, 0.0, 60000.0)));
 	p.packed_bounces_flags = s.packed_bounces_flags;
 	p.rng_state = s.rng_state;
 	p.hit_t = s.hit_t;

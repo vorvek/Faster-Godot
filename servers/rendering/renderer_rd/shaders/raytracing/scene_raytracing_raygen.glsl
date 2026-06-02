@@ -352,6 +352,7 @@ void rt_strc_probe_update_main() {
 	ps.hit_t = 65504.0;
 	ps.offset_normal = vec3(0.0, 1.0, 0.0);
 	ps.next_ray_dir = ray_dir;
+	ps.pdf_bsdf = 0.0;
 
 	float first_hit_distance = 65504.0;
 	vec3 first_hit_normal = ps.offset_normal;
@@ -462,6 +463,7 @@ void rt_wrc_probe_update_main() {
 	ps.hit_t = 65504.0;
 	ps.offset_normal = vec3(0.0, 1.0, 0.0);
 	ps.next_ray_dir = ray_dir;
+	ps.pdf_bsdf = 0.0;
 
 	float first_hit_distance = 65504.0;
 	vec3 first_hit_normal = ps.offset_normal;
@@ -597,6 +599,7 @@ void main() {
 			ps.hit_t = 65504.0;
 			ps.offset_normal = raster_world_normal;
 			ps.next_ray_dir = raster_world_normal;
+			ps.pdf_bsdf = 0.0;
 
 			bool trace_specular = rand(ps.rng_state) < specular_probability;
 			vec2 u = rand2(ps.rng_state);
@@ -663,6 +666,7 @@ void main() {
 			ps.throughput = vec3(1.0);
 			ps.packed_bounces_flags = (sample_idx == 0u) ? set_sample_zero(0u) : 0u;
 			ps.rng_state = init_blue_noise_rng(rng_pixel, frame_index, sample_idx);
+			ps.pdf_bsdf = 0.0;
 
 			// Jitter primary rays in final-pixel units for scaled Full Path Tracing.
 			// Reconstruction treats each scaled RT sample as a stable source sample;

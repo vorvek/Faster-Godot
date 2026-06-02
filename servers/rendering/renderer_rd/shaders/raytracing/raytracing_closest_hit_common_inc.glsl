@@ -778,17 +778,30 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	if (!hybrid_primary) {
 		bool secondary_emissive = total_bounces > 0u;
 		bool explicit_emissive_candidate = (geometries[h.geometry_idx].flags & RT_GEOM_FLAG_EXPLICIT_EMISSIVE_CANDIDATE) != 0u;
-		bool suppress_diffuse_path_emissive = secondary_emissive && diffuse_bounces > 0u && explicit_emissive_candidate &&
-				(rtgi_sampling_controls & RTGI_SAMPLING_EXPLICIT_EMISSIVE_BIT) != 0u;
-		if (!suppress_diffuse_path_emissive) {
-			vec3 raw_emissive_contribution = ps.throughput * m.emissive;
-			vec3 emissive_contribution = rt_clamp_path_contribution(raw_emissive_contribution, material_roughness, m.metalness, secondary_emissive, secondary_emissive);
-			rt_strc_mark_source_if_probe(ps, STRC_EMISSIVE_SOURCE_FLAG, emissive_contribution);
-			rt_signal_add_emissive(ivec2(gl_LaunchIDEXT.xy), emissive_contribution, secondary_emissive, rt_signal_clamp_delta(raw_emissive_contribution, emissive_contribution));
-			ps.radiance += emissive_contribution;
-			if (total_bounces == 0u || get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {
-				ps.specular_radiance += emissive_contribution;
+		// Power-heuristic (beta=2) MIS weight for this BSDF-sampled emissive hit.
+		// Defaults to 1.0 for the primary hit / when explicit-emissive NEE is off
+		// (no competing strategy). When NEE could have sampled this emitter, split
+		// the energy against NEE so a glossy receiver under emissive-only light no
+		// longer double-counts (its own NEE + its specular-bounce BSDF-hit). The
+		// the diffuse path still integrates to albedo*Le: the power-heuristic weights
+		// partition each emitter direction (w_nee + w_bsdf = 1) between NEE and the
+		// BSDF-hit, so the two estimators jointly single-count it.
+		float w_bsdf = 1.0;
+		if (total_bounces > 0u && explicit_emissive_candidate && (rtgi_sampling_controls & RTGI_SAMPLING_EXPLICIT_EMISSIVE_BIT) != 0u) {
+			float pdf_b = ps.pdf_bsdf; // carried from the previous (sampling) vertex
+			float pdf_n = rt_emissive_nee_solid_angle_pdf_at_hit(h.geometry_idx, uint(gl_PrimitiveID), h.geometry_normal, gl_WorldRayDirectionEXT, gl_HitTEXT);
+			if (pdf_n > 0.0) {
+				w_bsdf = (pdf_b * pdf_b) / max(pdf_b * pdf_b + pdf_n * pdf_n, 1e-12);
 			}
+			// pdf_n == 0 (NEE could not have sampled this hit) -> w_bsdf stays 1.0.
+		}
+		vec3 raw_emissive_contribution = ps.throughput * m.emissive * w_bsdf;
+		vec3 emissive_contribution = rt_clamp_path_contribution(raw_emissive_contribution, material_roughness, m.metalness, secondary_emissive, secondary_emissive);
+		rt_strc_mark_source_if_probe(ps, STRC_EMISSIVE_SOURCE_FLAG, emissive_contribution);
+		rt_signal_add_emissive(ivec2(gl_LaunchIDEXT.xy), emissive_contribution, secondary_emissive, rt_signal_clamp_delta(raw_emissive_contribution, emissive_contribution));
+		ps.radiance += emissive_contribution;
+		if (total_bounces == 0u || get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {
+			ps.specular_radiance += emissive_contribution;
 		}
 	}
 
@@ -903,8 +916,27 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		float emissive_weight = 0.0;
 		uint emissive_source_key = 0u;
 		float emissive_distribution_debug = 0.0;
+		float emissive_pdf_solid_angle = 0.0;
+		vec3 emissive_L = vec3(0.0);
 		RTDirectLighting emissive_light = lights_evaluate_explicit_emissive_candidate_split(
-				h.hit_pos, h.geometry_normal, N, V, brdf_mat, ps.rng_state, receiver_layer_mask, emissive_pdf, emissive_weight, emissive_source_key, emissive_distribution_debug);
+				h.hit_pos, h.geometry_normal, N, V, brdf_mat, ps.rng_state, receiver_layer_mask, emissive_pdf, emissive_weight, emissive_source_key, emissive_distribution_debug, emissive_pdf_solid_angle, emissive_L);
+		// Emissive MIS (power heuristic, beta=2): weight this NEE sample against the
+		// competing BSDF-sampling strategy that could have hit the same emitter.
+		// NEE runs before the lobe is chosen (line ~1019), so derive P(specular)
+		// inline from specularF0/diffuseReflectance using the same formula.
+		if (emissive_pdf_solid_angle > 0.0) {
+			float p_spec_nee = rt_lobe_specular_probability(specularF0, diffuseReflectance);
+			// Evaluate the BSDF pdf at the actual sampling roughness (the variance-
+			// reduction clamp the BSDF sampler uses), matching the BSDF-hit MIS side so
+			// the weights stay consistent for smooth secondary bounces (1-spp pipeline).
+			MaterialProperties nee_pdf_mat = brdf_mat;
+			nee_pdf_mat.roughness = sampling_roughness;
+			float pdf_b_L = rt_bsdf_sampling_pdf(emissive_L, N, V, nee_pdf_mat, p_spec_nee);
+			float pdf_n_sa = emissive_pdf_solid_angle;
+			float w_nee = (pdf_n_sa * pdf_n_sa) / max(pdf_b_L * pdf_b_L + pdf_n_sa * pdf_n_sa, 1e-12);
+			emissive_light.diffuse *= w_nee;
+			emissive_light.specular *= w_nee;
+		}
 		vec3 raw_emissive_diffuse = ps.throughput * emissive_light.diffuse;
 		vec3 raw_emissive_specular = ps.throughput * emissive_light.specular;
 		vec3 emissive_diffuse = rt_clamp_path_contribution(raw_emissive_diffuse, material_roughness, m.metalness, is_indirect, true);
@@ -999,6 +1031,9 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	bool rtgi_primary_rough_diffuse_sequence = rt_mode == RT_MODE_PATH_TRACED && RT_GET_SAMPLE_COUNT() == 1u && total_bounces == 0u && material_roughness > 0.52 && m.metalness < 0.20;
 
 	int brdfType;
+	// P(specular lobe) actually used for selection — fed to rt_bsdf_sampling_pdf
+	// so the emissive BSDF-hit MIS weight (Part 3) matches this vertex's sampler.
+	float next_p_spec = 0.0;
 	if (reflections_only) {
 		if (specularLum < 0.0001) {
 			ps.packed_bounces_flags = set_path_terminated(ps.packed_bounces_flags);
@@ -1006,17 +1041,22 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 			return;
 		}
 		brdfType = SPECULAR_TYPE;
+		next_p_spec = 1.0;
 	} else if (diffuseLum < 0.0001) {
 		brdfType = SPECULAR_TYPE;
+		next_p_spec = 1.0;
 	} else if (specularLum < 0.0001) {
 		brdfType = DIFFUSE_TYPE;
+		next_p_spec = 0.0;
 	} else if (rtgi_primary_rough_diffuse_sequence) {
 		// Treat rough dielectric single-sample GI as diffuse final gather work.
 		// Direct specular is already evaluated above; stochastic specular
 		// continuation here mostly creates high-throughput temporal outliers.
 		brdfType = DIFFUSE_TYPE;
+		next_p_spec = 0.0;
 	} else {
 		float brdfProbability = clamp(specularLum / (specularLum + diffuseLum), 0.01, 0.99);
+		next_p_spec = brdfProbability;
 		if (rand(ps.rng_state) < brdfProbability) {
 			brdfType = SPECULAR_TYPE;
 			ps.throughput /= brdfProbability;
@@ -1111,6 +1151,12 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		}
 		ps.packed_bounces_flags = inc_total_bounce(ps.packed_bounces_flags);
 	}
+
+	// Carry the BSDF-sampling solid-angle pdf of next_dir for emissive MIS at the
+	// next hit (Part 3). Evaluated at the actual sampling roughness (sampling_brdf_mat,
+	// the variance-reduction clamp the sampler used), matching the NEE-side pdf so the
+	// BSDF/NEE MIS weights for any emitter direction sum to 1.
+	ps.pdf_bsdf = rt_bsdf_sampling_pdf(next_dir, N, V, sampling_brdf_mat, next_p_spec);
 
 	// Hand the next ray back to raygen. PATH_TERMINATED_FLAG stays clear so
 	// the raygen loop continues with the reconstructed origin and next_ray_dir.

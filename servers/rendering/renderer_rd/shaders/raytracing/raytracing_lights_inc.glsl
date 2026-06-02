@@ -253,6 +253,7 @@ bool lights_trace_shadow_ray(vec3 origin, vec3 direction, float max_dist, uint s
 	shadow_ps.hit_t = 0.0;
 	shadow_ps.offset_normal = vec3(0.0, 0.0, 1.0);
 	shadow_ps.next_ray_dir = vec3(0.0, 0.0, 1.0);
+	shadow_ps.pdf_bsdf = 0.0;
 	path_pack(payload, shadow_ps);
 
 	hitObjectNV hitObject;
@@ -279,6 +280,7 @@ bool lights_trace_shadow_ray(vec3 origin, vec3 direction, float max_dist, uint s
 	shadow_ps.hit_t = 0.0;
 	shadow_ps.offset_normal = vec3(0.0, 0.0, 1.0);
 	shadow_ps.next_ray_dir = vec3(0.0, 0.0, 1.0);
+	shadow_ps.pdf_bsdf = 0.0;
 	path_pack(payload, shadow_ps);
 
 	traceRayEXT(tlas,
@@ -626,6 +628,150 @@ bool rt_emissive_candidate_sample_bary_and_emission(
 	return true;
 }
 
+// ============================================================================
+// Emissive MIS (power heuristic) — shared BSDF/NEE solid-angle pdf helpers
+// ============================================================================
+
+// Full BSDF-sampling solid-angle pdf for direction `dir`, as the lobe mixture
+// used by shade_and_bounce's importance sampler:
+//   P(diffuse) = 1 - p_spec  -> cosine-hemisphere pdf
+//   P(specular) = p_spec     -> GGX VNDF reflection pdf (brdf_inc.glsl)
+// `p_spec` must equal the lobe-selection probability actually used at that
+// vertex (brdfProbability, or 1/0 for the single-lobe degenerate cases).
+float rt_bsdf_sampling_pdf(vec3 dir, vec3 N, vec3 V, MaterialProperties mat, float p_spec) {
+	float ndl = max(dot(N, dir), 0.0);
+	if (ndl <= 0.0) {
+		return 0.0;
+	}
+	float pdf_diffuse = ndl * ONE_OVER_PI; // cosine-hemisphere
+
+	vec3 H = normalize(dir + V);
+	float NdotH = max(dot(N, H), 0.0);
+	float NdotV = max(dot(N, V), 0.00001);
+	float LdotH = max(dot(dir, H), 0.0);
+	float alpha = mat.roughness * mat.roughness;
+	float alphaSquared = alpha * alpha;
+	float pdf_specular = sampleGGXVNDFReflectionPdf(alpha, alphaSquared, NdotH, NdotV, LdotH);
+
+	return clamp(1.0 - p_spec, 0.0, 1.0) * pdf_diffuse + clamp(p_spec, 0.0, 1.0) * pdf_specular;
+}
+
+// Lobe-selection probability P(specular) used by shade_and_bounce (line ~1019),
+// including the single-lobe degenerate cases. Mirrors that logic so NEE-side MIS
+// (which runs before the lobe is chosen) and BSDF-side MIS agree.
+float rt_lobe_specular_probability(vec3 specularF0, vec3 diffuseReflectance) {
+	float specularLum = luminance(specularF0);
+	float diffuseLum = luminance(diffuseReflectance);
+	if (diffuseLum < 0.0001) {
+		return 1.0; // specular-only
+	}
+	if (specularLum < 0.0001) {
+		return 0.0; // diffuse-only
+	}
+	return clamp(specularLum / (specularLum + diffuseLum), 0.01, 0.99);
+}
+
+// Reverse lookup: the emissive-NEE SOLID-ANGLE pdf that explicit-emissive NEE
+// would have produced for a BSDF-sampled hit on `geometry_idx`/`primitive_id`.
+// Returns 0.0 when the hit geometry is not an emissive candidate (then the BSDF
+// MIS weight collapses to 1.0). Texel pdf factor is approximated as 1.0 (exact
+// for untextured emitters incl. the furnace; textured emitters are approximated,
+// matching the small bias already present in the NEE-side texel reservoir).
+float rt_emissive_nee_solid_angle_pdf_at_hit(
+		uint geometry_idx,
+		uint primitive_id,
+		vec3 hit_geom_normal,
+		vec3 ray_dir,
+		float hit_distance) {
+	uint candidate_count = min(uint(get_rt_param(RT_PARAM_EMISSIVE_CANDIDATE_COUNT)), 512u);
+	float total_weight = get_rt_param(RT_PARAM_EMISSIVE_CANDIDATE_TOTAL_WEIGHT);
+	if (candidate_count == 0u || total_weight <= 0.0) {
+		return 0.0;
+	}
+
+	// Find the candidate that covers this geometry (selection-distribution entry).
+	int found = -1;
+	for (uint i = 0u; i < 512u; i++) {
+		if (i >= candidate_count) {
+			break;
+		}
+		if (rt_emissive_candidates[i].geometry_index == geometry_idx) {
+			found = int(i);
+			break;
+		}
+	}
+	if (found < 0) {
+		return 0.0;
+	}
+
+	RTEmissiveCandidate candidate = rt_emissive_candidates[found];
+	float candidate_weight = max(candidate.selection_weight, 0.0);
+	float select_pdf = candidate_weight / total_weight;
+	if (select_pdf <= 1e-8) {
+		return 0.0;
+	}
+
+	GeometryData geom = geometries[geometry_idx];
+	if (geom.primitive_count == 0u || geom.vertex_address == 0ul || primitive_id >= geom.primitive_count) {
+		return 0.0;
+	}
+
+	// Per-primitive pdf: mirror rt_emissive_candidate_select_primitive for the
+	// specific hit primitive when a primitive distribution is present, else the
+	// uniform 1/primitive_count fallback.
+	float primitive_pdf;
+	if ((candidate.flags & RT_EMISSIVE_CANDIDATE_FLAG_PRIMITIVE_DISTRIBUTION) != 0u && candidate.primitive_count > 0u && candidate.primitive_weight_sum > 1e-8) {
+		float prim_weight = 0.0;
+		// Linear scan of the candidate's CDF slice to recover the hit primitive's
+		// individual weight (cumulative[k] - cumulative[k-1]).
+		float prev_cdf = 0.0;
+		bool prim_found = false;
+		for (uint k = 0u; k < candidate.primitive_count; k++) {
+			RTEmissivePrimitiveDistribution dist = rt_emissive_primitive_distributions[candidate.primitive_offset + k];
+			float w = max(dist.cumulative_weight - prev_cdf, 0.0);
+			if (dist.primitive_id == primitive_id) {
+				prim_weight = w;
+				prim_found = true;
+				break;
+			}
+			prev_cdf = dist.cumulative_weight;
+		}
+		if (!prim_found || prim_weight <= 1e-8) {
+			return 0.0; // primitive not selectable under the distribution
+		}
+		primitive_pdf = prim_weight / max(candidate.primitive_weight_sum, 1e-8);
+	} else {
+		primitive_pdf = 1.0 / max(float(geom.primitive_count), 1.0);
+	}
+	if (primitive_pdf <= 1e-8) {
+		return 0.0;
+	}
+
+	float texel_pdf_factor = 1.0; // see function comment (untextured-exact approximation)
+
+	// Triangle area in the candidate's world space (same math as NEE, lights:692-699).
+	uint i0, i1, i2;
+	get_triangle_indices_ex(geom, primitive_id, i0, i1, i2);
+	vec3 p0 = fetch_position(geom, i0);
+	vec3 p1 = fetch_position(geom, i1);
+	vec3 p2 = fetch_position(geom, i2);
+	vec3 wp0 = rt_emissive_candidate_transform_point(candidate, p0);
+	vec3 wp1 = rt_emissive_candidate_transform_point(candidate, p1);
+	vec3 wp2 = rt_emissive_candidate_transform_point(candidate, p2);
+	float tri_area = length(cross(wp1 - wp0, wp2 - wp0)) * 0.5;
+	if (tri_area <= 1e-8) {
+		return 0.0;
+	}
+
+	// abs() matches the two-sided NEE flip (T3): emitter cosine is taken on the
+	// face that faces the receiver, so direction sign is irrelevant here.
+	float light_cos = max(abs(dot(normalize(hit_geom_normal), ray_dir)), 1e-4);
+	float dist_sq = hit_distance * hit_distance;
+
+	float area_pdf = select_pdf * primitive_pdf * texel_pdf_factor / max(tri_area, 1e-8);
+	return area_pdf * dist_sq / light_cos; // area -> solid-angle measure
+}
+
 RTDirectLighting lights_evaluate_explicit_emissive_candidate_split(
 		vec3 hit_pos,
 		vec3 geometry_normal,
@@ -637,11 +783,15 @@ RTDirectLighting lights_evaluate_explicit_emissive_candidate_split(
 		out float out_pdf,
 		out float out_selected_weight,
 		out uint out_source_key,
-		out float out_distribution_debug) {
+		out float out_distribution_debug,
+		out float out_pdf_solid_angle,
+		out vec3 out_L) {
 	out_pdf = 0.0;
 	out_selected_weight = 0.0;
 	out_source_key = 0u;
 	out_distribution_debug = 0.0;
+	out_pdf_solid_angle = 0.0;
+	out_L = vec3(0.0);
 	if ((uint(get_rt_param(RT_PARAM_RTGI_SAMPLING_CONTROLS)) & RTGI_SAMPLING_EXPLICIT_EMISSIVE_BIT) == 0u) {
 		return rt_direct_lighting_zero();
 	}
@@ -747,6 +897,10 @@ RTDirectLighting lights_evaluate_explicit_emissive_candidate_split(
 	out_pdf = pdf_area;
 	float geom_term = light_cos / max(dist_sq, 1e-6);
 	float inv_pdf = 1.0 / max(pdf_area, 1e-8);
+	// Solid-angle measure pdf and sampled direction for emissive MIS (power
+	// heuristic against rt_bsdf_sampling_pdf(L) at this vertex).
+	out_pdf_solid_angle = pdf_area / max(geom_term, 1e-12);
+	out_L = L;
 
 	RTDirectLighting result;
 	result.diffuse = brdf_diffuse * emission * geom_term * inv_pdf;
