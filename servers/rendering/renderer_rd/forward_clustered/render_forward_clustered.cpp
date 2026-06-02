@@ -5580,8 +5580,10 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 			// Raw linear copy (not LOG_LUMINANCE): the SPG incident radiance is typically
 			// sub-1.0 (e.g. ~0.6 on the uniform furnace), which log2(luminance) would clamp
 			// to black. Matches the WRC-GI consumer view's raw-linear blit so the atlas is
-			// visible/measurable for the furnace validation.
-			copy_effects->copy_to_fb_rect(rtgi_spg->get_radiance_atlas(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_NONE);
+			// visible/measurable for the furnace validation. Sources the SPATIAL-filtered
+			// atlas (A2-T4) so the view reflects the final same-surface-smoothed radiance A3
+			// consumes; falls back to the unfiltered atlas until radiance_filtered allocates.
+			copy_effects->copy_to_fb_rect(rtgi_spg->get_radiance_filtered(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_NONE);
 		}
 
 		// SPG_GI is the per-pixel integrate consumer (analogue of the WRC-GI view). The

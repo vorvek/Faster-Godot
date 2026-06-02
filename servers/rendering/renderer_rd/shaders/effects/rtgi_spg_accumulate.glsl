@@ -4,12 +4,14 @@
 
 #VERSION_DEFINES
 
-// Screen Probe Gather (SPG) temporal-accumulate compute shader (A2-T3).
+// Screen Probe Gather (SPG) temporal-accumulate + spatial-filter compute shader
+// (A2-T3 + A2-T4).
 //
 // Folds this frame's gather ray results (the RTGISPGRayResult SSBO produced by the
 // T2 raygen) into the per-probe octahedral radiance atlas with a sample-counted 1/n
-// temporal blend, motion-reprojected from the previous frame. Two modes selected by
-// the `mode` push-constant drive TWO dispatches recorded back-to-back (barrier
+// temporal blend, motion-reprojected from the previous frame, then same-surface 3x3
+// spatial-filters that atlas into a separate output. Three modes selected by the
+// `mode` push-constant drive THREE dispatches recorded back-to-back (barriers
 // between) by RTGIScreenProbeGather::run_accumulate():
 //
 //   mode 1 -- REPROJECT: one thread per radiance-atlas texel. Carry the previous
@@ -27,10 +29,19 @@
 //             from the confidence channel .a as conf * n_cap). A never-written /
 //             just-reset texel (conf 0) takes the new sample outright (w == 1).
 //
+//   mode 3 -- SPATIAL: one thread per radiance-atlas texel. Smooth this texel against
+//             the SAME texel-direction sampled from the 3x3 neighbor probes, but only
+//             across SAME-SURFACE neighbors (the same plane-match REPROJECT uses) so
+//             radiance never leaks across a silhouette, with the same RE-ORIENT-ON-READ
+//             into each neighbor's frame. Writes a SEPARATE atlas (radiance_filtered)
+//             so the unfiltered atlas stays intact as next frame's history; radius 0 ->
+//             a straight passthrough copy.
+//
 // PING-PONG: the frame swap happens in run_placement (read_index flips there). This
-// pass reads radiance_prev/header_*_prev = the (1 - read_index) set and writes
-// radiance_cur = the read_index set; it performs NO swap. The atlas it writes is
-// what get_radiance_atlas() (== radiance[read_index]) returns to the debug blit.
+// pass reads radiance_prev/header_*_prev = the (1 - read_index) set, writes
+// radiance_cur = the read_index set (REPROJECT + BLEND), and writes radiance_filtered
+// (SPATIAL); it performs NO swap. radiance_filtered is what get_radiance_filtered()
+// returns to A3 + the debug blit.
 //
 // This is the per-probe-local-hemioct analogue of the WRC update shader's mode-0
 // (full-atlas carry) + mode-1 (per-ray 1/n accumulate) pair; the structure (full
@@ -48,13 +59,14 @@ layout(local_size_x = GROUP_SIZE, local_size_y = GROUP_SIZE, local_size_z = 1) i
 #include "../oct_inc.glsl"
 
 // Mode selectors. PLACE (0) lives in rtgi_screen_probe_gather.glsl; this shader runs
-// REPROJECT (1) + BLEND (2). The numeric values match RTGIScreenProbeGather's
-// SPG_MODE_* defines in the cpp.
+// REPROJECT (1) + BLEND (2) + SPATIAL (3). The numeric values match
+// RTGIScreenProbeGather's SPG_MODE_* defines in the cpp.
 #define SPG_MODE_REPROJECT 1u
 #define SPG_MODE_BLEND 2u
+#define SPG_MODE_SPATIAL 3u
 
 layout(push_constant, std430) uniform Params {
-	uint mode; // 1 = REPROJECT, 2 = BLEND.
+	uint mode; // 1 = REPROJECT, 2 = BLEND, 3 = SPATIAL.
 	uint grid_w;
 	uint grid_h;
 	uint oct_res;
@@ -64,8 +76,8 @@ layout(push_constant, std430) uniform Params {
 	uint atlas_height;
 	uint rays_this_frame;
 	float temporal_n_cap;
-	uint pad0; // std430 rounds the push-constant block to a multiple of 16 (40 -> 48 B);
-	uint pad1; // pad explicitly so it matches the C++ AccumPushConstant size the dispatch supplies.
+	uint spatial_radius; // SPATIAL (A2-T4) 3x3 neighbor reach; 0 -> straight copy. (Was pad0.)
+	uint pad1; // std430 rounds the push-constant block to a multiple of 16 (40 -> 48 B);
 }
 params;
 
@@ -96,6 +108,11 @@ struct RTGISPGRayResult {
 layout(set = 0, binding = 6, std430) readonly buffer SPGRayResults {
 	RTGISPGRayResult results[];
 };
+
+// SPATIAL output (A2-T4): the same-surface 3x3-filtered radiance atlas. Written only by
+// the SPATIAL mode (REPROJECT/BLEND leave it untouched); consumed by A3 + the debug
+// integrate via get_radiance_filtered(). Same RGBA16F layout as radiance_cur.
+layout(set = 0, binding = 7, rgba16f) uniform restrict writeonly image2D radiance_filtered;
 
 // Clamp a colour to finite, non-negative values so a NaN/Inf ray result cannot
 // poison the accumulated radiance (RGBA16F max is 65504). Mirrors wrc_sanitize_color.
@@ -203,6 +220,120 @@ void spg_blend_main() {
 	imageStore(radiance_cur, texel, vec4(acc, n_new / n_cap));
 }
 
+// SPATIAL (A2-T4): one thread per radiance-atlas texel. Smooth this texel against the
+// SAME texel-direction sampled from the 3x3 neighbor probes, but only across neighbors
+// that lie on the SAME SURFACE (plane-matched on depth + world-pos + normal, the same
+// tolerances REPROJECT uses) so radiance never leaks across a silhouette. Because
+// neighbor probes generally have a different normal, this texel's world direction is
+// re-expressed in each neighbor's tangent frame (RE-ORIENT ON READ, identical to
+// REPROJECT) before sampling that neighbor's octahedron. The accumulate already ran
+// (REPROJECT + BLEND, barrier before this), so radiance_cur is this frame's final
+// per-probe radiance; the filtered result is written to a SEPARATE atlas
+// (radiance_filtered) so the unfiltered atlas stays intact for next frame's history.
+void spg_spatial_main(ivec2 texel) {
+	uint oct_res_u = max(params.oct_res, 1u);
+	int oct_res = int(oct_res_u);
+	int grid_w = int(params.grid_w);
+	int grid_h = int(params.grid_h);
+	// texel -> (probe, in-tile dir). Bounds-guard against grid_w/grid_h (the atlas can be
+	// wider than grid_w * oct_res only via rounding; guard mirrors REPROJECT).
+	ivec2 probe = texel / oct_res;
+	ivec2 in_tile = texel - probe * oct_res;
+	if (probe.x >= grid_w || probe.y >= grid_h) {
+		return;
+	}
+	vec4 cur_plane = imageLoad(header_plane_cur, probe);
+	if (cur_plane.w <= 0.0) {
+		imageStore(radiance_filtered, texel, vec4(0.0)); // invalid probe.
+		return;
+	}
+	// The center texel's own (post-accumulate) radiance + confidence. Always the fallback
+	// and the carrier of the output confidence (.a), so the filter never inflates n.
+	vec4 center = imageLoad(radiance_cur, texel);
+	if (params.spatial_radius == 0u) {
+		imageStore(radiance_filtered, texel, center); // radius 0 -> straight passthrough copy.
+		return;
+	}
+	// Cap the neighbor reach to a sane 3x3 (..5x5) window; the SPG grid is coarse, so a
+	// larger radius would pull in unrelated surfaces faster than it helps.
+	int r = int(min(params.spatial_radius, 2u));
+
+	vec4 cur_aux = imageLoad(header_aux_cur, probe);
+	vec3 cur_n = oct_to_vec3(cur_aux.xy * 2.0 - 1.0);
+	// This texel's world direction (CUR probe local hemioct -> world); re-oriented into
+	// each neighbor's frame below. Built once.
+	vec2 local_oct = (vec2(in_tile) + 0.5) / float(oct_res);
+	vec3 local_dir = spg_hemioct_decode(local_oct);
+	vec3 ct, cb;
+	spg_build_basis(cur_n, ct, cb);
+	vec3 world_dir = spg_local_to_world(local_dir, ct, cb, cur_n);
+
+	// Center contributes with weight = its own confidence: a low-confidence (freshly
+	// reset) center leans more on its neighbors, a converged one dominates its own value.
+	float center_conf = clamp(center.a, 0.0, 1.0);
+	vec3 rgb_sum = center.rgb * center_conf;
+	float w_sum = center_conf;
+
+	for (int dy = -r; dy <= r; dy++) {
+		for (int dx = -r; dx <= r; dx++) {
+			if (dx == 0 && dy == 0) {
+				continue; // center already folded in above.
+			}
+			ivec2 np = probe + ivec2(dx, dy);
+			if (np.x < 0 || np.y < 0 || np.x >= grid_w || np.y >= grid_h) {
+				continue; // off-grid.
+			}
+			// All neighbors are THIS frame's probes (same header set as the center) -- the
+			// spatial filter is purely intra-frame, so there is no reprojection here.
+			vec4 np_plane = imageLoad(header_plane_cur, np);
+			if (np_plane.w <= 0.0) {
+				continue; // invalid / background neighbor -> reject (no edge leak).
+			}
+			vec4 np_aux = imageLoad(header_aux_cur, np);
+			vec3 np_n = oct_to_vec3(np_aux.xy * 2.0 - 1.0);
+			// Plane-match: same surface (linear-depth rel-tol + world-pos dist + normal dot),
+			// the same tolerances REPROJECT uses to reject disocclusions.
+			float ndot = dot(np_n, cur_n);
+			bool match = abs(np_plane.w - cur_plane.w) <= 0.05 * cur_plane.w &&
+					distance(np_plane.xyz, cur_plane.xyz) <= 2.0 * cur_plane.w * 0.01 + 0.25 &&
+					ndot >= 0.906; // ~25 deg.
+			if (!match) {
+				continue;
+			}
+			// RE-ORIENT ON READ: this texel's world_dir expressed in the NEIGHBOR probe's
+			// frame -> neighbor hemioct texel. Only valid if it stays in the neighbor's upper
+			// hemisphere (else that direction is simply not represented in the neighbor).
+			vec3 nt, nb;
+			spg_build_basis(np_n, nt, nb);
+			vec3 np_local = spg_world_to_local(world_dir, nt, nb, np_n);
+			if (np_local.z <= 0.0) {
+				continue;
+			}
+			vec2 np_oct = spg_hemioct_encode(np_local);
+			ivec2 np_texel = np * oct_res + clamp(ivec2(np_oct * float(oct_res)), ivec2(0), ivec2(oct_res - 1));
+			vec4 np_rad = imageLoad(radiance_cur, np_texel); // .rgb radiance, .a = n/n_cap.
+			// Weight: a plane-compatibility term (normal dot, sharpened) * a depth-similarity
+			// term * the neighbor texel's confidence. A barely-matching or low-confidence
+			// neighbor contributes little; a parallel, converged one contributes fully.
+			float w_normal = ndot * ndot * ndot * ndot; // dot^4: falls off well before the 25 deg cutoff.
+			float depth_rel = abs(np_plane.w - cur_plane.w) / max(cur_plane.w, 1e-4);
+			float w_depth = max(1.0 - depth_rel / 0.05, 0.0); // 1 at equal depth -> 0 at the rel-tol edge.
+			float w = w_normal * w_depth * clamp(np_rad.a, 0.0, 1.0);
+			if (w > 0.0) {
+				rgb_sum += np_rad.rgb * w;
+				w_sum += w;
+			}
+		}
+	}
+
+	// Normalize. With any positive weight, output the weighted mean but KEEP the center
+	// texel's confidence (.a) -- the filter smooths radiance, it does not change how
+	// converged the probe is. With no positive weight (e.g. an isolated probe with a
+	// zero-confidence center) fall back to the center texel unchanged.
+	vec3 filtered_rgb = (w_sum > 0.0) ? (rgb_sum / w_sum) : center.rgb;
+	imageStore(radiance_filtered, texel, vec4(filtered_rgb, center.a));
+}
+
 void main() {
 	if (params.mode == SPG_MODE_REPROJECT) {
 		ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
@@ -210,6 +341,14 @@ void main() {
 			return;
 		}
 		spg_reproject_main(texel);
+		return;
+	} else if (params.mode == SPG_MODE_SPATIAL) {
+		// SPATIAL is a 2D dispatch over the atlas (same grid as REPROJECT).
+		ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+		if (uint(texel.x) >= params.atlas_width || uint(texel.y) >= params.atlas_height) {
+			return;
+		}
+		spg_spatial_main(texel);
 		return;
 	}
 

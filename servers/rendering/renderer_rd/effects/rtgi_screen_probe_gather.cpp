@@ -12,12 +12,13 @@
 
 using namespace RendererRD;
 
-// Mode selectors. PLACE (0) is the placement shader; REPROJECT (1) + BLEND (2) are
-// the accumulate shader's two modes. These EXACTLY match the SPG_MODE_* defines in
-// the respective GLSL shaders.
+// Mode selectors. PLACE (0) is the placement shader; REPROJECT (1) + BLEND (2) +
+// SPATIAL (3) are the accumulate shader's three modes. These EXACTLY match the
+// SPG_MODE_* defines in the respective GLSL shaders.
 #define SPG_MODE_PLACE 0u
 #define SPG_MODE_REPROJECT 1u
 #define SPG_MODE_BLEND 2u
+#define SPG_MODE_SPATIAL 3u
 
 RTGIScreenProbeGather::RTGIScreenProbeGather() {
 	shader.initialize({ "" });
@@ -74,6 +75,10 @@ void RTGIScreenProbeGather::free_resources() {
 			RD::get_singleton()->free_rid(header_aux[i]);
 			header_aux[i] = RID();
 		}
+	}
+	if (radiance_filtered.is_valid()) {
+		RD::get_singleton()->free_rid(radiance_filtered);
+		radiance_filtered = RID();
 	}
 	if (place_ubo.is_valid()) {
 		RD::get_singleton()->free_rid(place_ubo);
@@ -147,15 +152,23 @@ void RTGIScreenProbeGather::_allocate(const SpgParams &p_params, const Size2i &p
 		RD::get_singleton()->texture_clear(header_plane[i], Color(0, 0, 0, 0), 0, 1, 0, 1);
 		RD::get_singleton()->texture_clear(header_aux[i], Color(0, 0, 0, 0), 0, 1, 0, 1);
 	}
+
+	// SPATIAL output (A2-T4): same format/size/usage as the radiance atlas, but a single
+	// (non-ping-pong) texture -- the SPATIAL pass of run_accumulate fully rewrites every
+	// texel each frame from the current atlas, so no history set is needed.
+	radiance_filtered = RD::get_singleton()->texture_create(radiance_format, RD::TextureView());
+	RD::get_singleton()->set_resource_name(radiance_filtered, "RTGI SPG Radiance Filtered");
+	RD::get_singleton()->texture_clear(radiance_filtered, Color(0, 0, 0, 0), 0, 1, 0, 1);
+
 	read_index = 0;
 	resources_valid = true;
 
 	// Log total VRAM. RGBA16F = 8 B/texel, RGBA32F = 16 B/texel; radiance atlas and
-	// both headers are ping-ponged (x2).
+	// both headers are ping-ponged (x2), plus one non-ping-pong filtered atlas (A2-T4).
 	const uint64_t atlas_texels = uint64_t(atlas_size.x) * uint64_t(atlas_size.y);
 	const uint64_t header_texels = uint64_t(grid_size.x) * uint64_t(grid_size.y);
 	const uint64_t bytes_per_set = atlas_texels * 8ULL + header_texels * (16ULL + 8ULL); // radiance(16F)=8; per probe: header_plane(32F)=16 + header_aux(16F)=8.
-	const uint64_t total_bytes = bytes_per_set * 2ULL;
+	const uint64_t total_bytes = bytes_per_set * 2ULL + atlas_texels * 8ULL; // x2 ping-pong sets + filtered atlas(16F)=8.
 	print_verbose(vformat("RTGI SPG: allocated screen-probe grid %dx%d probes (spacing=%d oct_res=%d, atlas %dx%d) using %.2f MiB VRAM.",
 			grid_size.x, grid_size.y, spacing_f, oct_res, atlas_size.x, atlas_size.y,
 			double(total_bytes) / (1024.0 * 1024.0)));
@@ -329,7 +342,10 @@ void RTGIScreenProbeGather::run_accumulate(const SpgFrameParams &p_frame) {
 
 	// Set 0 mirrors rtgi_spg_accumulate.glsl's layout: radiance_prev(0, readonly) +
 	// radiance_cur(1) + header_plane_cur(2) + header_aux_cur(3) + header_plane_prev(4)
-	// + header_aux_prev(5) as storage images, and the gather ray-result SSBO(6).
+	// + header_aux_prev(5) as storage images, the gather ray-result SSBO(6), and the
+	// SPATIAL output radiance_filtered(7). A single GLSL shader's set-0 layout must
+	// declare every binding any dispatch binds, so ONE uniform set (0-7) drives all
+	// three modes -- REPROJECT/BLEND just don't write binding 7; SPATIAL writes it.
 	LocalVector<RD::Uniform> uniforms;
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 0, radiance_atlas[prev_index]));
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 1, radiance_atlas[read_index]));
@@ -338,6 +354,7 @@ void RTGIScreenProbeGather::run_accumulate(const SpgFrameParams &p_frame) {
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 4, header_plane[prev_index]));
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 5, header_aux[prev_index]));
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 6, ray_result_buffer));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 7, radiance_filtered));
 
 	AccumPushConstant push_constant;
 	memset(&push_constant, 0, sizeof(AccumPushConstant));
@@ -350,6 +367,9 @@ void RTGIScreenProbeGather::run_accumulate(const SpgFrameParams &p_frame) {
 	push_constant.atlas_height = (uint32_t)atlas_size.y;
 	push_constant.rays_this_frame = p_frame.rays_this_frame;
 	push_constant.temporal_n_cap = MAX(cached_params.temporal_n_cap, 1.0f);
+	// SPATIAL filter radius (A2-T4). Clamped >= 0 here; the shader additionally caps it
+	// to a sane neighbor reach. Radius 0 -> SPATIAL is a straight copy of the atlas.
+	push_constant.spatial_radius = (uint32_t)MAX(cached_params.spatial_radius, 0);
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, accum_pipeline);
@@ -367,12 +387,26 @@ void RTGIScreenProbeGather::run_accumulate(const SpgFrameParams &p_frame) {
 	// BLEND: one thread per gather ray (1D dispatch). Each ray maps to a distinct
 	// (probe, dir) atlas texel and folds its radiance into the reprojected history
 	// with a 1/n weight. Skipped when no rays were traced this frame (REPROJECT still
-	// produced the carried-forward atlas the debug blit reads).
+	// produced the carried-forward atlas the SPATIAL pass + debug blit read).
 	if (push_constant.rays_this_frame > 0u) {
 		push_constant.mode = SPG_MODE_BLEND;
 		RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(AccumPushConstant));
 		RD::get_singleton()->compute_list_dispatch_threads(compute_list, MAX(push_constant.rays_this_frame, 1u), 1, 1);
+		// Barrier so SPATIAL reads the fully-blended radiance_cur (not a partial write).
+		// Only needed when BLEND ran; with no rays the REPROJECT barrier above already
+		// fenced radiance_cur for the SPATIAL read.
+		RD::get_singleton()->compute_list_add_barrier(compute_list);
 	}
+
+	// SPATIAL (A2-T4): one thread per radiance-atlas texel. Smooth each probe's octahedron
+	// against its 3x3 same-surface neighbor probes (plane-matched, re-oriented on read) of
+	// the just-accumulated radiance_cur into radiance_filtered. ALWAYS dispatched -- with
+	// spatial_radius 0 the shader copies radiance_cur straight through, so radiance_filtered
+	// is a valid consumer target every frame (A3 + the debug-integrate read it).
+	push_constant.mode = SPG_MODE_SPATIAL;
+	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(AccumPushConstant));
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, atlas_size.x, atlas_size.y, 1);
+
 	RD::get_singleton()->compute_list_end();
 	// NO ping-pong swap: the frame swap is done in run_placement.
 }

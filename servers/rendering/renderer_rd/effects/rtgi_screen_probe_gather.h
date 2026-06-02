@@ -25,11 +25,11 @@ namespace RendererRD {
 // Structure mirrors RTGIWorldRadianceCache: ping-pong RID arrays + read_index, a
 // realloc-guarded ensure_resources(), and an _allocate() that texture_create()s +
 // texture_clear()s the grid textures. The PLACE pass (mode 0) lives in
-// rtgi_screen_probe_gather.glsl; the temporal accumulate (REPROJECT + BLEND) lives
-// in its OWN shader rtgi_spg_accumulate.glsl with a distinct set-0 layout / pipeline
-// (it binds the radiance ping-pong + ray-result SSBO, which PLACE never touches, so
-// separate shaders keep each pass binding exactly what it uses). The spatial filter
-// (T4) lands later.
+// rtgi_screen_probe_gather.glsl; the temporal accumulate (REPROJECT + BLEND) plus the
+// same-surface 3x3 spatial filter (SPATIAL, A2-T4) live in their OWN shader
+// rtgi_spg_accumulate.glsl with a distinct set-0 layout / pipeline (it binds the
+// radiance ping-pong + ray-result SSBO + the filtered-atlas output, which PLACE never
+// touches, so separate shaders keep each pass binding exactly what it uses).
 class RTGIScreenProbeGather {
 public:
 	// Per-quality tunables (resolved from per-preset Project Settings in T7; for
@@ -80,13 +80,15 @@ public:
 	// clip->view inverse projection; `p_cam_transform` is the view->world transform.
 	void run_placement(Ref<RenderSceneBuffersRD> p_rb, RID p_depth, RID p_normal_roughness, RID p_velocity, const SpgFrameParams &p_frame, const Projection &p_inv_projection, const Transform3D &p_cam_transform, const Size2i &p_render_size);
 
-	// Record the temporal-accumulate dispatches (A2-T3): a REPROJECT pass over the
-	// whole radiance atlas (motion-reproject + plane-match + re-orient-on-read of the
-	// previous frame's radiance) followed by a BLEND pass over this frame's gather
-	// rays (sample-counted 1/n accumulate into the reprojected history), with a
-	// barrier between. Reads the PREVIOUS (1 - read_index) atlas/headers and writes
-	// the CURRENT (read_index) atlas; performs NO ping-pong swap (the frame swap is
-	// done in run_placement). Must be called AFTER the gather has filled the
+	// Record the temporal-accumulate + spatial-filter dispatches (A2-T3 + A2-T4) on a
+	// single compute list (barriers between): a REPROJECT pass over the whole radiance
+	// atlas (motion-reproject + plane-match + re-orient-on-read of the previous frame's
+	// radiance), then a BLEND pass over this frame's gather rays (sample-counted 1/n
+	// accumulate into the reprojected history), then a SPATIAL pass (same-surface 3x3
+	// neighbor-probe smoothing of the just-accumulated atlas into radiance_filtered).
+	// Reads the PREVIOUS (1 - read_index) atlas/headers and writes the CURRENT
+	// (read_index) atlas + radiance_filtered; performs NO ping-pong swap (the frame
+	// swap is done in run_placement). Must be called AFTER the gather has filled the
 	// ray-result SSBO for this frame. A no-op if resources are invalid.
 	void run_accumulate(const SpgFrameParams &p_frame);
 
@@ -94,6 +96,10 @@ public:
 	RID get_header_plane() const { return header_plane[read_index]; } // RGBA32F: xyz = world_pos, w = linear_depth (<= 0 invalid).
 	RID get_header_aux() const { return header_aux[read_index]; } // RGBA16F: xy = oct_normal, zw = screen_motion.
 	RID get_radiance_atlas() const { return radiance_atlas[read_index]; } // RGBA16F: rgb = radiance, a = confidence.
+
+	// SPATIAL output (A2-T4); A3 + the debug-integrate read this. Falls back to the
+	// unfiltered current atlas until radiance_filtered is allocated.
+	RID get_radiance_filtered() const { return radiance_filtered.is_valid() ? radiance_filtered : radiance_atlas[read_index]; }
 
 	// Probe-grid dimensions (ceil(render_size / spacing_f)); also the header texture
 	// size. Valid only after ensure_resources(). The single source of truth for the
@@ -133,9 +139,10 @@ private:
 		uint32_t rays_this_frame;
 		float temporal_n_cap;
 		// std430 rounds a push-constant block up to a multiple of 16 bytes, so the
-		// shader's pipeline requires 48 B (40 rounded up). Pad explicitly so
-		// sizeof(AccumPushConstant) == 48 and the dispatch's push-constant matches.
-		uint32_t pad0;
+		// shader's pipeline requires 48 B (40 rounded up). The first trailing slot
+		// (formerly pad0) carries the SPATIAL filter radius (A2-T4); pad1 is the second
+		// pad slot. Keep sizeof(AccumPushConstant) == 48 so the dispatch matches.
+		uint32_t spatial_radius;
 		uint32_t pad1;
 	};
 
@@ -182,6 +189,12 @@ private:
 	RID header_plane[2]; // RGBA32F, .xyz = world_pos, .w = linear_depth (<= 0 invalid).
 	RID header_aux[2]; // RGBA16F, .xy = octahedral world normal, .zw = screen motion.
 	uint32_t read_index = 0;
+
+	// SPATIAL output (A2-T4): the SPATIAL pass of run_accumulate writes the same-surface
+	// 3x3-filtered radiance here (RGBA16F, same format/size as radiance_atlas). NOT
+	// ping-ponged -- it is a pure per-frame derivative of the current atlas that A3 +
+	// the debug-integrate consume via get_radiance_filtered().
+	RID radiance_filtered;
 
 	// Per-frame gather ray results consumed by the SPG gather kernel (T2). 32-byte
 	// stride (2 x vec4). Reallocated only when the requested ray count exceeds
