@@ -158,6 +158,7 @@
 #include "tests/servers/test_audio_rb_resampler.h"
 #include "tests/servers/rendering/test_pathtracing_backend_api.h"
 #include "tests/servers/rendering/test_renderer_scene_cull.h"
+#include "tests/servers/rendering/test_rtgi_spg_math.h"
 #include "tests/servers/rendering/test_rtgi_wrc_math.h"
 #include "tests/servers/rendering/test_shader_preprocessor.h"
 #include "tests/servers/test_nav_heap.h"
