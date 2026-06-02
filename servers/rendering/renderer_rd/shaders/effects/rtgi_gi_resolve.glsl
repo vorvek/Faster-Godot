@@ -16,9 +16,13 @@
 //     integrate the hemisphere-oct radiance against the surface normal (confidence-
 //     weighted normalizer), bilinearly blend, fall back to the WRC irradiance when no
 //     probe qualifies. Writes LIGHTING-SPACE A (the confidence-weighted cosine-average
-//     of incident radiance) to diffuse_gi_write -- NO albedo, NO extra 1/PI (the demod
-//     is PI-free at storage; the surface adds L_o = albedo * A). spec_gi_write is 0 (T1).
-//   * TEMPORAL (1) / SPATIAL (2): declared for numbering stability; implemented in T2/T3.
+//     of incident radiance) to diffuse_gi_rw -- NO albedo, NO extra 1/PI (the demod
+//     is PI-free at storage; the surface adds L_o = albedo * A). spec_gi_rw holds the T1
+//     rough-spec radiance.
+//   * TEMPORAL (1): motion-reproject the PREVIOUS frame's accumulated GI (the [1-read_index]
+//     history at 11/12), reject bad history on a same-surface depth+normal AND-gate, and blend
+//     with a sample-counted 1/n weight, IN-PLACE on diffuse_gi_rw/spec_gi_rw (A3-T2). SPATIAL
+//     (2) is declared for numbering stability; implemented in T3.
 //   * DEBUG_GI (3): output the resolve's RAW lighting-space output -> out = diffuse_gi.rgb +
 //     spec_gi.rgb (spec is 0 in T0), written RAW (linear) for the furnace gate. NO albedo:
 //     remodulation by the pixel albedo belongs at the COMPOSITE (T4/T5), where the full
@@ -80,9 +84,9 @@ layout(push_constant, std430) uniform Params {
 	uint wrc_cascade_count;
 	float wrc_base_spacing;
 	// DEBUG_GI channel select (T1): 0 = diffuse_gi only, 1 = spec_gi only, else = combined.
-	// Unused by INTEGRATE. The 3 pad uints keep the block a 16-byte multiple (80 B).
+	// Unused by INTEGRATE. The 2 pad uints keep the block a 16-byte multiple (80 B).
 	uint debug_channel;
-	uint pad0;
+	float history_rejection; // TEMPORAL (T2): depth/normal reproject tolerance scale (was pad0).
 	uint pad1;
 	uint pad2;
 }
@@ -91,21 +95,22 @@ pc;
 // Set 0 declares every binding the implemented modes reference (a single GLSL shader's
 // set-0 layout is the union over its reachable code paths; mirrors how
 // rtgi_spg_accumulate.glsl declares its full layout). G-buffers (0-1), the material-guide
-// albedo (2; 3 reserved for velocity in T2), SPG atlas + headers (4-6), WRC atlases (7-8),
-// the GI write images (9-10), the GI read samplers (11-12), the debug dest image (13), the
-// params UBO (14), and the material-guide ORM (15). INTEGRATE writes 9-10 and reads
-// 0-2 + 4-8 + 15; DEBUG_GI reads 11-12 and writes 13.
+// albedo (2), the velocity buffer (3, TEMPORAL), SPG atlas + headers (4-6), WRC atlases
+// (7-8), the GI read+write images (9-10), the GI history read samplers (11-12), the debug
+// dest image (13), the params UBO (14), and the material-guide ORM (15). INTEGRATE writes
+// 9-10 and reads 0-2 + 4-8 + 15 (it ignores 3/11/12); TEMPORAL reads 3 + 11-12 + the cur
+// G-buffer and read-modify-writes 9-10 in place; DEBUG_GI reads 11-12 and writes 13.
 layout(set = 0, binding = 0) uniform sampler2D depth_buffer;
 layout(set = 0, binding = 1) uniform sampler2D normal_roughness_buffer;
 // Material-guide albedo (A3-T1): rgb = base albedo, a = alpha. Populated by the "RTGI Material
 // Guide Prepass" (RB_TEX_RT_GUIDE_ALBEDO). INTEGRATE reads it for the rough-spec F0 mix; the
 // composite (T4/T5) reuses it for the diffuse remod. NOT the dead rt_albedo_metalness.
 layout(set = 0, binding = 2) uniform sampler2D guide_albedo;
-// NOTE: binding 3 is RESERVED for the velocity buffer (consumed by the TEMPORAL mode in
-// T2). It is deliberately NOT declared in T0/T1: a sampler referenced by no reachable code
-// path is stripped from the reflected set layout, which would make the C++ uniform set
-// (which must match the reflected layout) reject a binding-3 uniform. T2 adds the
-// declaration + its texelFetch and binds it. The C++ run_resolve already carries p_velocity.
+// Velocity buffer (A3-T2): .xy = screen-space motion in PIXELS (cur - prev, forward), the
+// same convention the SPG anchor motion uses. Consumed by the TEMPORAL mode to motion-
+// reproject the previous frame's accumulated GI; INTEGRATE/DEBUG_GI ignore it. Bound by
+// run_resolve from p_velocity. (Was reserved/undeclared in T0/T1.)
+layout(set = 0, binding = 3) uniform sampler2D velocity_buffer;
 // SPG SPATIAL-filtered per-probe radiance atlas (grid_w*oct_res x grid_h*oct_res): each
 // probe owns an oct_res x oct_res HEMISPHERE-octahedral tile (local +Z = anchor normal),
 // .rgb = incident radiance, .a = confidence. header_plane: .xyz = anchor WORLD position,
@@ -117,13 +122,22 @@ layout(set = 0, binding = 6) uniform sampler2D spg_header_aux;
 // WRC atlases for the fallback irradiance query (RGBA16F radiance, RG16F distance moments).
 layout(set = 0, binding = 7) uniform sampler2D wrc_radiance;
 layout(set = 0, binding = 8) uniform sampler2D wrc_distance;
-// Screen-GI output images (INTEGRATE writes these). diffuse_gi_write: .rgb = lighting-space
-// A, .a = confidence. spec_gi_write: .rgb = rough-spec radiance (A3-T1; BRDF applied), .a = variance.
-layout(set = 0, binding = 9, rgba16f) uniform restrict writeonly image2D diffuse_gi_write;
-layout(set = 0, binding = 10, rgba16f) uniform restrict writeonly image2D spec_gi_write;
-// Resolved screen-GI read samplers (DEBUG_GI reads these).
-layout(set = 0, binding = 11) uniform sampler2D diffuse_gi_read;
-layout(set = 0, binding = 12) uniform sampler2D spec_gi_read;
+// Screen-GI READ+WRITE images (the [read_index] set: this frame's buffers). INTEGRATE
+// imageStores this frame's RAW resolve here; TEMPORAL then imageLoads them back ("cur"),
+// blends the reprojected history, and imageStores the accumulated result in place. The
+// `writeonly` qualifier is therefore DROPPED (an imageLoad on a writeonly image is illegal);
+// INTEGRATE still only stores, which is fine for a plain (non-writeonly) storage image.
+// diffuse_gi_rw: .rgb = lighting-space A, .a = confidence/n. spec_gi_rw: .rgb = rough-spec
+// radiance (A3-T1; BRDF applied), .a = variance/n.
+layout(set = 0, binding = 9, rgba16f) uniform restrict image2D diffuse_gi_rw;
+layout(set = 0, binding = 10, rgba16f) uniform restrict image2D spec_gi_rw;
+// GI HISTORY read samplers (the [1 - read_index] set: the previous frame's ACCUMULATED
+// result). TEMPORAL texelFetches these at the reprojected pixel for the 1/n blend; DEBUG_GI
+// binds them to the [read_index] set instead (a separate set in render_resolve_debug) to
+// DISPLAY this frame's resolved output. Different buffers from 9/10 within a given set, so
+// no same-resource sampler+image hazard (verified in run_resolve).
+layout(set = 0, binding = 11) uniform sampler2D diffuse_history;
+layout(set = 0, binding = 12) uniform sampler2D spec_history;
 // Debug dest image (DEBUG_GI writes the raw lighting-space linear value here for the blit).
 layout(set = 0, binding = 13, rgba16f) uniform restrict writeonly image2D dest_image;
 
@@ -314,8 +328,8 @@ void resolve_integrate_main(ivec2 pos) {
 	// gate expects vec3(0) for background pixels, and no probe contributes there).
 	float raw_depth = texelFetch(depth_buffer, pos, 0).r;
 	if (raw_depth <= 0.0) {
-		imageStore(diffuse_gi_write, pos, vec4(0.0));
-		imageStore(spec_gi_write, pos, vec4(0.0));
+		imageStore(diffuse_gi_rw, pos, vec4(0.0));
+		imageStore(spec_gi_rw, pos, vec4(0.0));
 		return;
 	}
 
@@ -324,8 +338,8 @@ void resolve_integrate_main(ivec2 pos) {
 	vec3 enc = texelFetch(normal_roughness_buffer, pos, 0).xyz;
 	vec3 view_normal = enc * 2.0 - 1.0;
 	if (dot(view_normal, view_normal) < 0.0001) {
-		imageStore(diffuse_gi_write, pos, vec4(0.0));
-		imageStore(spec_gi_write, pos, vec4(0.0));
+		imageStore(diffuse_gi_rw, pos, vec4(0.0));
+		imageStore(spec_gi_rw, pos, vec4(0.0));
 		return;
 	}
 	view_normal = normalize(view_normal);
@@ -437,7 +451,7 @@ void resolve_integrate_main(ivec2 pos) {
 		A /= wsum;
 	}
 
-	imageStore(diffuse_gi_write, pos, vec4(A, 1.0)); // lighting space; .a = confidence (1.0 = resolved).
+	imageStore(diffuse_gi_rw, pos, vec4(A, 1.0)); // lighting space; .a = confidence (1.0 = resolved).
 
 	// Rough-spec channel (A3-T1): apply the ENERGY-CONSERVING multi-scatter specular BRDF to the
 	// prefiltered radiance. spec_gi is RADIANCE space (NO demod) -- the env-BRDF factor already
@@ -453,8 +467,149 @@ void resolve_integrate_main(ivec2 pos) {
 		vec3 F0 = mix(vec3(0.04), albedo, metalness); // dielectric 4% -> albedo-tinted for metals.
 		spec = pref * resolve_env_brdf_specular(F0, rough, NoV); // FssEss + FmsEms.
 	}
-	// .a = variance/confidence proxy (1.0 for now; T2/T3 fill a real variance).
-	imageStore(spec_gi_write, pos, vec4(spec, 1.0));
+	// .a: INTEGRATE writes 1.0 (raw); TEMPORAL (T2) overwrites it with the sample-count
+	// fraction n/n_cap -- a confidence proxy that drives the T3 variance-weighted spatial filter.
+	imageStore(spec_gi_rw, pos, vec4(spec, 1.0));
+}
+
+// ---------------------------------------------------------------------------------------
+// TEMPORAL (A3-T2): motion-reprojected history accumulation with rejection.
+//
+// After INTEGRATE writes this frame's RAW resolved GI into the [read_index] rw images (9/10),
+// the TEMPORAL pass runs IN-PLACE on those same images: it imageLoads this frame's value
+// ("cur"), motion-reprojects the PREVIOUS frame's accumulated GI (the history samplers 11/12 =
+// the [1 - read_index] set), rejects bad history on a same-surface depth+normal AND-gate, and
+// blends with a sample-counted 1/n (n-capped) weight, then imageStores the result back. This is
+// the per-pixel analogue of rtgi_spg_accumulate.glsl's REPROJECT+BLEND (the resolve reprojects
+// per screen pixel rather than per probe-atlas texel; the 1/n blend + the in-place storage-image
+// read-modify-write discipline are mirrored from there). DIFFUSE reprojects on surface motion;
+// SPECULAR on a roughness-SELECTED reproject (hard branch, C17). History rejection is depth AND
+// normal (AND mesh-id where available -- this fork's resolve has no mesh-id G-buffer, so depth +
+// normal is the documented fallback), NOT the legacy OR-gate (C11).
+
+// Reconstruct WORLD-space normal at integer pixel `pos` from the CURRENT-frame normal-roughness
+// G-buffer (view-space encoded rgb*2-1, rotated VIEW->WORLD), matching how INTEGRATE builds
+// world_N. Returns false for a background / degenerate-normal texel (no usable surface there).
+bool resolve_world_normal(ivec2 pos, out vec3 world_n) {
+	vec3 enc = texelFetch(normal_roughness_buffer, pos, 0).xyz;
+	vec3 view_normal = enc * 2.0 - 1.0;
+	if (dot(view_normal, view_normal) < 0.0001) {
+		world_n = vec3(0.0);
+		return false;
+	}
+	world_n = normalize(mat3(ubo.inv_view) * normalize(view_normal));
+	return true;
+}
+
+// Reproject validity: accept the history at `prev_pos` for the surface at `cur_pos` ONLY when
+// they lie on the SAME surface. The history G-buffer is the CURRENT-frame G-buffer sampled at
+// prev_pos -- this fork has no prev-frame G-buffer, so this is the standard screen-space
+// reproject validity check (mirrors how rtgi_spg_accumulate.glsl plane-matches its reprojected
+// probe cell against the current header). SAME-SURFACE AND-GATE (C11, NOT an OR-gate):
+//   depth-relative-diff <= history_rejection * tol  AND  dot(normal_cur, normal_prev) > thresh.
+// (Mesh-id would be a third AND term but this fork's resolve has no mesh-id G-buffer wired;
+// depth + normal is the documented fallback.) A background / degenerate prev texel rejects.
+bool resolve_history_valid(ivec2 cur_pos, ivec2 prev_pos) {
+	float cur_raw = texelFetch(depth_buffer, cur_pos, 0).r;
+	float prev_raw = texelFetch(depth_buffer, prev_pos, 0).r;
+	if (cur_raw <= 0.0 || prev_raw <= 0.0) {
+		return false; // current or reprojected texel is background/sky -> no valid history.
+	}
+	// View-space linear depth (-view_pos.z, positive in front) at both pixels, from the same
+	// inv_projection reconstruct INTEGRATE uses for the probe plane match.
+	float cur_depth = -resolve_reconstruct_view_position(cur_pos, cur_raw).z;
+	float prev_depth = -resolve_reconstruct_view_position(prev_pos, prev_raw).z;
+	// Relative depth tolerance, scaled by the history_rejection knob (1.0 -> 5% base, the same
+	// rel-tol family rtgi_spg_accumulate.glsl uses; smaller = stricter, more rejection).
+	float tol = 0.05 * max(pc.history_rejection, 0.0);
+	float depth_rel = abs(prev_depth - cur_depth) / max(cur_depth, 1e-4);
+	if (depth_rel > tol) {
+		return false;
+	}
+	// Same-surface normal cosine (AND with the depth test). ~25 deg, matching the SPG plane match.
+	vec3 cur_n, prev_n;
+	if (!resolve_world_normal(cur_pos, cur_n) || !resolve_world_normal(prev_pos, prev_n)) {
+		return false;
+	}
+	if (dot(cur_n, prev_n) <= 0.906) {
+		return false;
+	}
+	return true; // depth AND normal both agree -> same surface, history is valid.
+}
+
+// SPECULAR reproject (C17): a HARD SELECT on roughness, NEVER a lerp between the two
+// reprojections. Below the rough cutoff (sharp-ish, where the reflection tracks the virtual
+// image) we WOULD reproject on the virtual position (offset toward the reflected hit); a robust
+// virtual-position estimate is not available from the current resolve buffers (no per-pixel hit
+// distance is stored), so the sharp branch reuses the surface reproject as the documented
+// approximation -- but the MECHANISM is a hard branch on roughness, not a blend. At/above the
+// cutoff (broad lobe) the reflection tracks the surface, so we use the surface reproject. The
+// review-graded requirement is the hard branch; both arms returning surface_prev today does not
+// make it a lerp (a future virtual-position estimate slots straight into the sharp arm).
+ivec2 resolve_spec_reproject(ivec2 cur_pos, ivec2 surface_prev, float roughness) {
+	if (roughness < pc.rough_cutoff) {
+		// Sharp domain: virtual-position reproject. No virtual-position estimate available from
+		// the current buffers -> fall back to the surface reproject (documented approximation).
+		return surface_prev;
+	}
+	// Rough domain: the lobe is broad, the reflection tracks the surface -> surface reproject.
+	return surface_prev;
+}
+
+// TEMPORAL: per screen pixel, blend this frame's INTEGRATE output with the motion-reprojected,
+// rejection-gated previous-frame accumulated GI using a sample-counted 1/n (n-capped) weight.
+// Runs IN-PLACE on the [read_index] rw images (imageLoad cur -> blend -> imageStore), reading the
+// [1 - read_index] history via the read samplers (11/12).
+void resolve_temporal_main(ivec2 pos) {
+	vec4 cur_d = imageLoad(diffuse_gi_rw, pos); // this-frame INTEGRATE output (diffuse).
+	vec4 cur_s = imageLoad(spec_gi_rw, pos); // this-frame INTEGRATE output (rough-spec).
+
+	// Per-pixel roughness drives the spec reproject SELECT (C17). Same ORM.g source INTEGRATE uses.
+	float roughness = texelFetch(guide_orm, pos, 0).g;
+
+	float n_cap = max(pc.temporal_n_cap, 1.0);
+
+	// Screen-space surface motion in PIXELS (cur - prev, forward), so the previous pixel is
+	// pos - motion. On the static furnace motion == 0 -> prev == pos (identity reproject), so
+	// TEMPORAL degenerates to a stable in-place accumulate (no drift).
+	vec2 mv = texelFetch(velocity_buffer, pos, 0).xy;
+	ivec2 prev = pos - ivec2(round(mv));
+
+	float n_d = 0.0;
+	float n_s = 0.0;
+	vec3 hist_d = vec3(0.0);
+	vec3 hist_s = vec3(0.0);
+	// frame_index 0 has no history (the buffers were just cleared / are last frame's stale set);
+	// skip reprojection so the first frame is a pure INTEGRATE seed (n -> 1). The bounds guard
+	// keeps the reprojected fetch on-screen (off-screen history is a disocclusion -> reset).
+	if (pc.frame_index > 0u &&
+			all(greaterThanEqual(prev, ivec2(0))) &&
+			prev.x < int(pc.screen_w) && prev.y < int(pc.screen_h)) {
+		// DIFFUSE: reproject on the surface motion. Accept history only on a same-surface match.
+		if (resolve_history_valid(pos, prev)) {
+			vec4 h = texelFetch(diffuse_history, prev, 0);
+			hist_d = h.rgb;
+			n_d = h.a * n_cap; // recover the stored sample count (.a == n / n_cap).
+		}
+		// SPECULAR: reproject on the roughness-SELECTED position (hard branch, C17), then the
+		// SAME same-surface rejection at that reprojected pixel.
+		ivec2 sprev = resolve_spec_reproject(pos, prev, roughness);
+		if (resolve_history_valid(pos, sprev)) {
+			vec4 h = texelFetch(spec_history, sprev, 0);
+			hist_s = h.rgb;
+			n_s = h.a * n_cap;
+		}
+	}
+
+	// Sample-counted 1/n blend (n-capped), mirroring rtgi_spg_accumulate.glsl's BLEND: a fresh /
+	// rejected texel (n == 0 -> nd == 1 -> w == 1) takes cur outright; a converged one leans on
+	// its history. Store the new count back as .a == n / n_cap for next frame.
+	float nd = min(n_d + 1.0, n_cap);
+	float ns = min(n_s + 1.0, n_cap);
+	vec3 od = mix(hist_d, cur_d.rgb, 1.0 / max(nd, 1.0));
+	vec3 os = mix(hist_s, cur_s.rgb, 1.0 / max(ns, 1.0));
+	imageStore(diffuse_gi_rw, pos, vec4(od, nd / n_cap));
+	imageStore(spec_gi_rw, pos, vec4(os, ns / n_cap));
 }
 
 // DEBUG_GI: output the resolve's RAW output -- the channel selected by pc.debug_channel
@@ -466,11 +621,13 @@ void resolve_integrate_main(ivec2 pos) {
 // black out the whole view). This mirrors rtgi_spg_gi_consumer.glsl's debug view, which also
 // outputs raw incident radiance. On the furnace A ~= L (albedo-independent), so the energy
 // gate passes. Reads BOTH the diffuse (11) and spec (12) GI buffers so both stay referenced.
+// (render_resolve_debug binds 11/12 to the [read_index] set, so these sample THIS frame's
+// resolved output -- the TEMPORAL/INTEGRATE result -- not a history buffer.)
 void resolve_debug_gi_main(ivec2 pos) {
 	// Read BOTH the diffuse (11) and spec (12) GI buffers so both stay referenced regardless of
 	// the selected channel (an unreferenced sampler would be stripped from the reflected layout).
-	vec4 diffuse = texelFetch(diffuse_gi_read, pos, 0);
-	vec3 spec = texelFetch(spec_gi_read, pos, 0).rgb;
+	vec4 diffuse = texelFetch(diffuse_history, pos, 0);
+	vec3 spec = texelFetch(spec_history, pos, 0).rgb;
 	// Channel select (A3-T1): 0 = diffuse-only (RESOLVE_GI view), 1 = spec-only (RESOLVE_SPEC
 	// view), else = combined. Diffuse is lighting-space A (no albedo); spec is radiance-space
 	// (BRDF already applied). Written RAW (linear) for the furnace gate.
@@ -482,7 +639,7 @@ void resolve_debug_gi_main(ivec2 pos) {
 	} else {
 		result = diffuse.rgb + spec;
 	}
-	imageStore(dest_image, pos, vec4(result, diffuse.a)); // .a = diffuse confidence (inspection).
+	imageStore(dest_image, pos, vec4(result, diffuse.a)); // .a = post-TEMPORAL sample-count fraction n/n_cap (inspection).
 }
 
 void main() {
@@ -495,11 +652,15 @@ void main() {
 		resolve_integrate_main(pos);
 		return;
 	}
+	if (pc.mode == RESOLVE_MODE_TEMPORAL) {
+		resolve_temporal_main(pos);
+		return;
+	}
 	if (pc.mode == RESOLVE_MODE_DEBUG_GI) {
 		resolve_debug_gi_main(pos);
 		return;
 	}
 
-	// TEMPORAL (1) / SPATIAL (2) land in T2/T3; this shader runs only INTEGRATE + DEBUG_GI.
+	// SPATIAL (2) lands in T3; this shader runs INTEGRATE + TEMPORAL + DEBUG_GI.
 	return;
 }

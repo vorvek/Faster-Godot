@@ -137,6 +137,15 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		RID p_spg_radiance, RID p_spg_header_plane, RID p_spg_header_aux,
 		RID p_wrc_radiance, RID p_wrc_distance,
 		const GiResolveFrameParams &p_frame, const Projection &p_inv_proj, const Transform3D &p_inv_view) {
+	// THE FRAME SWAP (A3-T2): flip read_index ONCE at the TOP of the frame (mirrors
+	// RTGIScreenProbeGather::run_placement). AFTER the flip [read_index] is THIS frame's set
+	// (INTEGRATE writes it, TEMPORAL accumulates in place) and [1 - read_index] is the previous
+	// frame's accumulated result (the history TEMPORAL reprojects + blends). Both ping-pong sets
+	// are allocated together, so either index is valid -- guarding [read_index] after the flip is
+	// sufficient. get_diffuse_gi()/get_spec_gi() return [read_index], which becomes next frame's
+	// history. NO further swap happens this frame.
+	read_index = 1u - read_index;
+
 	// resources_valid is set only at the end of _allocate() (which free_resources()es
 	// first), so it guarantees both ping-pong buffer sets were allocated together;
 	// spot-checking diffuse_gi[read_index] is therefore sufficient.
@@ -155,6 +164,10 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	ERR_FAIL_COND(p_wrc_distance.is_null());
 
 	const Size2i size = cached_render_size;
+
+	// [read_index] is THIS frame's set (INTEGRATE writes it, TEMPORAL accumulates in place);
+	// [prev_index] is the previous frame's accumulated result (TEMPORAL's reproject history).
+	const uint32_t prev_index = 1u - read_index;
 
 	// The reconstruction matrices live in a UBO (the two mat4s alone hit the 128-byte
 	// MAX_PUSH_CONSTANT_SIZE cap). Created once, reused every frame.
@@ -177,14 +190,17 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 
 	// Set 0 declares EVERY binding any mode of rtgi_gi_resolve.glsl uses (one GLSL
 	// shader's set-0 layout must declare all of them): G-buffers (0-1), the material-guide
-	// albedo (2; binding 3 is reserved for velocity in T2 and is NOT declared by the
-	// shader), SPG atlas + headers (4-6), WRC atlases (7-8), the GI write images (9-10),
-	// the GI read samplers (11-12, used by DEBUG_GI), the debug dest image (13), the params
-	// UBO (14), and the material-guide ORM (15). INTEGRATE writes 9-10 and reads 0-2 + 4-8
-	// + 15; the bindings it does not touch (11-13) are pointed at the neutral gi_debug_image
-	// / a pure-read texture below so no GI buffer is both written and sampled in this set.
-	// ONE uniform set drives both modes. The set binds exactly
-	// {0,1,2,4,5,6,7,8,9,10,11,12,13,14,15} (no binding 3).
+	// albedo (2), the velocity buffer (3, A3-T2), SPG atlas + headers (4-6), WRC atlases
+	// (7-8), the GI read+write images (9-10 = [read_index]), the GI HISTORY read samplers
+	// (11-12 = [prev_index]), the debug dest image (13), the params UBO (14), and the
+	// material-guide ORM (15). ONE shared uniform set drives BOTH INTEGRATE and TEMPORAL:
+	// INTEGRATE writes 9-10 and reads 0-2 + 4-8 + 15 (it ignores 3/11/12); TEMPORAL reads
+	// 3 + 11-12 and read-modify-writes 9-10 in place. The set binds exactly
+	// {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}. NO same-resource sampler+image hazard:
+	// [read_index] appears ONLY at 9/10 (image), [prev_index] ONLY at 11/12 (sampler), and
+	// they are DIFFERENT buffers (the ping-pong sets); the debug dest image 13 is the
+	// untouched gi_debug_image. (The DEBUG_GI set in render_resolve_debug is separate: it
+	// binds 11/12 = [read_index] to DISPLAY this frame's resolved output.)
 	LocalVector<RD::Uniform> uniforms;
 	{
 		RD::Uniform u;
@@ -203,14 +219,22 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		uniforms.push_back(u);
 	}
 	// Binding 2: material-guide albedo (A3-T1; INTEGRATE reads it for the rough-spec F0 mix).
-	// Binding 3 (velocity) is reserved for T2 and NOT declared by the shader, so it is not
-	// bound here; p_velocity is accepted in the signature but not bound yet.
 	{
 		RD::Uniform u;
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
 		u.binding = 2;
 		u.append_id(linear_sampler);
 		u.append_id(p_guide_albedo);
+		uniforms.push_back(u);
+	}
+	// Binding 3: velocity buffer (A3-T2; TEMPORAL reprojects the history with it). Now declared
+	// by the shader, so it is bound here from p_velocity. INTEGRATE ignores it.
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 3;
+		u.append_id(linear_sampler);
+		u.append_id(p_velocity);
 		uniforms.push_back(u);
 	}
 	{
@@ -267,18 +291,19 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		u.append_id(spec_gi[read_index]);
 		uniforms.push_back(u);
 	}
-	// DEBUG_GI read samplers (11-12) + debug dest image (13): all UNUSED by INTEGRATE.
-	// Bind 11-12 to a pure-read G-buffer (p_depth) and 13 to gi_debug_image, so that NO
-	// texture is bound as BOTH a sampler and a storage image in this set: the diffuse/spec
-	// buffers INTEGRATE writes (9-10) appear only as images, p_depth only as samplers, and
-	// gi_debug_image only as the (untouched) image 13. That avoids a same-resource
-	// read+write within one descriptor set.
+	// GI HISTORY read samplers (11-12): the PREVIOUS frame's accumulated result = the
+	// [prev_index] ping-pong set. TEMPORAL texelFetches these at the reprojected pixel for the
+	// 1/n blend; INTEGRATE ignores them. They are DIFFERENT buffers from the [read_index] images
+	// at 9/10, so NO texture is bound as BOTH a sampler and a storage image in this set: the
+	// [read_index] buffers appear only as images (9/10), the [prev_index] buffers only as
+	// samplers (11/12), and gi_debug_image only as the (untouched) image 13. That avoids a
+	// same-resource read+write within one descriptor set.
 	{
 		RD::Uniform u;
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
 		u.binding = 11;
 		u.append_id(linear_sampler);
-		u.append_id(p_depth);
+		u.append_id(diffuse_gi[prev_index]);
 		uniforms.push_back(u);
 	}
 	{
@@ -286,7 +311,7 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
 		u.binding = 12;
 		u.append_id(linear_sampler);
-		u.append_id(p_depth);
+		u.append_id(spec_gi[prev_index]);
 		uniforms.push_back(u);
 	}
 	{
@@ -337,14 +362,35 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	push_constant.wrc_grid = MAX(p_frame.wrc_grid, 1u);
 	push_constant.wrc_cascade_count = MAX(p_frame.wrc_cascade_count, 1u);
 	push_constant.wrc_base_spacing = p_frame.wrc_base_spacing;
+	// TEMPORAL (A3-T2) reproject tolerance scale; carried for both dispatches (INTEGRATE ignores
+	// it). temporal_n_cap (set above) is the history responsiveness, also shared by both.
+	push_constant.history_rejection = cached_params.history_rejection;
 
-	RD::get_singleton()->draw_command_begin_label("RTGI Resolve Integrate");
+	// INTEGRATE -> barrier -> TEMPORAL, recorded back-to-back on ONE compute list with the SAME
+	// shared uniform set (mirrors how RTGIScreenProbeGather::run_accumulate records REPROJECT ->
+	// barrier -> BLEND). INTEGRATE writes this frame's RAW resolve into the [read_index] images
+	// (9/10); the barrier fences those writes; TEMPORAL then reads them back in place, blends the
+	// reprojected [prev_index] history (11/12), and stores the accumulated result to 9/10.
+	RD::get_singleton()->draw_command_begin_label("RTGI Resolve Integrate + Temporal");
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
-	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
+	RID resolve_set = uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, resolve_set, 0);
+
+	// INTEGRATE: one thread per screen pixel -> this frame's RAW resolved GI.
+	push_constant.mode = RESOLVE_MODE_INTEGRATE;
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
-	// One thread per screen pixel.
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, size.x, size.y, 1);
+
+	// Barrier so TEMPORAL reads the fully-written INTEGRATE output (not a partial write) when it
+	// imageLoads the [read_index] images in place.
+	RD::get_singleton()->compute_list_add_barrier(compute_list);
+
+	// TEMPORAL: one thread per screen pixel -> motion-reprojected history accumulate, in place.
+	push_constant.mode = RESOLVE_MODE_TEMPORAL;
+	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, size.x, size.y, 1);
+
 	RD::get_singleton()->compute_list_end();
 	RD::get_singleton()->draw_command_end_label();
 }
@@ -377,21 +423,19 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 
 	// Same full set-0 layout as run_resolve (one GLSL shader, one layout). DEBUG_GI reads
 	// binding 11 (diffuse), 12 (spec) and writes 13 (debug dest). The neutral SAMPLER slots
-	// (0,1,2,4-8,15) point at diffuse_gi[read_index] (a read texture, like 11) and the neutral
+	// (0,1,2,3,4-8,15) point at diffuse_gi[read_index] (a read texture, like 11) and the neutral
 	// IMAGE slots (9-10) point at gi_debug_image (the write target, like 13), so NO texture is
 	// bound as both a sampler and a storage image in this set: read textures (diffuse/spec)
 	// appear only as samplers, gi_debug_image only as images. That avoids a same-resource
 	// read+write within one descriptor set. The set provides exactly
-	// {0,1,2,4,5,6,7,8,9,10,11,12,13,14,15} -- the same layout run_resolve provides.
+	// {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15} -- the same layout run_resolve provides.
 	LocalVector<RD::Uniform> uniforms;
 	for (uint32_t b = 0; b <= 8; b++) {
-		// Samplers 0-8 (incl. binding 2, the material-guide albedo) all point at the
-		// resolved-diffuse read texture (neutral; DEBUG_GI does not read them). Binding 3
-		// (velocity, reserved for T2) is NOT in the reflected layout, so it must be skipped
-		// here or the uniform set would not match the shader.
-		if (b == 3u) {
-			continue;
-		}
+		// Samplers 0-8 (incl. binding 2 the material-guide albedo and binding 3 the velocity
+		// buffer) all point at the resolved-diffuse read texture (neutral; DEBUG_GI does not read
+		// them). Binding 3 is now DECLARED by the shader (A3-T2), so it MUST be provided here too
+		// or the uniform set would not match the reflected layout -- it is bound neutrally like the
+		// rest (a read texture on a sampler slot is safe).
 		RD::Uniform u;
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
 		u.binding = b;

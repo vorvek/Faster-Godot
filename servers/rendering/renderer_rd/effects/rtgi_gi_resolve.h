@@ -134,7 +134,7 @@ private:
 		uint32_t wrc_cascade_count;
 		float wrc_base_spacing;
 		uint32_t debug_channel; // DEBUG_GI: 0 = diffuse only, 1 = spec only, else = combined.
-		uint32_t pad0; // Pad to a 16-byte multiple (80 B); matches the GLSL Params block.
+		float history_rejection; // TEMPORAL (T2): depth/normal reproject tolerance scale (was pad0).
 		uint32_t pad1;
 		uint32_t pad2;
 	};
@@ -158,12 +158,16 @@ private:
 	// and bound for the dispatch; freed in free_resources().
 	RID resolve_ubo;
 
-	// Ping-pong screen-GI buffers owned directly by the effect. `read_index` selects
-	// THIS frame's (front) set; `1 - read_index` is the previous frame's. INTEGRATE
-	// writes diffuse_gi[read_index] + spec_gi[read_index]; TEMPORAL/SPATIAL (T2/T3)
-	// ping-pong these. get_diffuse_gi()/get_spec_gi() return the front (read) set.
-	RID diffuse_gi[2]; // RGBA16F: rgb = lighting-space A, a = confidence/variance.
-	RID spec_gi[2]; // RGBA16F: rgb = rough-spec radiance, a = variance.
+	// Ping-pong screen-GI buffers owned directly by the effect. THE FRAME SWAP: run_resolve
+	// flips read_index at its TOP, once per frame (mirrors RTGIScreenProbeGather::run_placement),
+	// so AFTER the flip `[read_index]` is THIS frame's (front) set and `[1 - read_index]` is the
+	// previous frame's ACCUMULATED result (the history TEMPORAL reprojects). INTEGRATE writes
+	// diffuse_gi[read_index] + spec_gi[read_index] (this frame's RAW resolve); TEMPORAL (T2) then
+	// runs IN-PLACE on [read_index] (imageLoad+imageStore the same rw image) blending the
+	// reprojected [1 - read_index] history into it. get_diffuse_gi()/get_spec_gi() return the
+	// front (read) set, which next frame becomes the [1 - read_index] history. SPATIAL (T3) TBD.
+	RID diffuse_gi[2]; // RGBA16F: rgb = lighting-space A, a = temporal sample count n/n_cap (1.0 raw from INTEGRATE; the T3 variance signal).
+	RID spec_gi[2]; // RGBA16F: rgb = rough-spec radiance, a = temporal sample count n/n_cap.
 	uint32_t read_index = 0;
 
 	// Dedicated scratch / debug-dest image (RGBA16F, render size), allocated alongside
