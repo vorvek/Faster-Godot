@@ -3952,6 +3952,30 @@ void RenderingServer::init() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/production/rays_per_frame", PROPERTY_HINT_RANGE, "1024,32768,256"), 12288);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/production/temporal_sample_cap", PROPERTY_HINT_RANGE, "8,256,1"), 48);
 
+	// RTGI Screen Probe Gather (SPG) per-preset tunables. The per-scene
+	// Environment.rtgi_quality_preset selector picks one of these tiers; the
+	// renderer resolves the active tier's six knobs live (no restart) so games can
+	// retune Performance/Balanced/Production globally without recompiling.
+	// Clamp ranges mirror the renderer's CLAMPs in _resolve_spg_params.
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/screen_probe_gather/performance/spacing_f", PROPERTY_HINT_RANGE, "8,32,1"), 24);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/screen_probe_gather/performance/octahedral_resolution", PROPERTY_HINT_RANGE, "4,16,1"), 8);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/screen_probe_gather/performance/dirs_per_probe_per_frame", PROPERTY_HINT_RANGE, "1,16,1"), 2);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/screen_probe_gather/performance/temporal_sample_cap", PROPERTY_HINT_RANGE, "4,64,1"), 24);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/screen_probe_gather/performance/spatial_radius", PROPERTY_HINT_RANGE, "0,2,1"), 1);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/screen_probe_gather/performance/rt_fallback_confidence", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 0.6);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/screen_probe_gather/balanced/spacing_f", PROPERTY_HINT_RANGE, "8,32,1"), 16);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/screen_probe_gather/balanced/octahedral_resolution", PROPERTY_HINT_RANGE, "4,16,1"), 8);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/screen_probe_gather/balanced/dirs_per_probe_per_frame", PROPERTY_HINT_RANGE, "1,16,1"), 4);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/screen_probe_gather/balanced/temporal_sample_cap", PROPERTY_HINT_RANGE, "4,64,1"), 16);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/screen_probe_gather/balanced/spatial_radius", PROPERTY_HINT_RANGE, "0,2,1"), 1);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/screen_probe_gather/balanced/rt_fallback_confidence", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 0.5);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/screen_probe_gather/production/spacing_f", PROPERTY_HINT_RANGE, "8,32,1"), 12);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/screen_probe_gather/production/octahedral_resolution", PROPERTY_HINT_RANGE, "4,16,1"), 8);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/screen_probe_gather/production/dirs_per_probe_per_frame", PROPERTY_HINT_RANGE, "1,16,1"), 6);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/screen_probe_gather/production/temporal_sample_cap", PROPERTY_HINT_RANGE, "4,64,1"), 12);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/screen_probe_gather/production/spatial_radius", PROPERTY_HINT_RANGE, "0,2,1"), 1);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/screen_probe_gather/production/rt_fallback_confidence", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 0.4);
+
 	// OpenGL limits
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/limits/opengl/max_renderable_elements", PROPERTY_HINT_RANGE, "1024,65536,1"), 65536);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/limits/opengl/max_renderable_lights", PROPERTY_HINT_RANGE, "2,256,1"), 32);

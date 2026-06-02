@@ -266,16 +266,29 @@ static RtgiWrc::ClipmapParams _resolve_wrc_params(uint32_t p_preset, uint32_t *r
 	return params;
 }
 
-// Resolves the active Screen Probe Gather (SPG) params for the given quality preset.
-// T1 returns the SpgParams defaults for every preset; T7 wires per-preset project
-// settings (mirroring _resolve_wrc_params's GLOBAL_GET + CLAMP pattern).
+// Resolves the active Screen Probe Gather (SPG) params from the per-preset Project Settings.
+// preset: 1=Performance, 2=Balanced, 3=Production; anything else (incl. 0=Custom) -> Balanced.
+// Each knob is GLOBAL_GET + CLAMPed to the same range the GLOBAL_DEF hint specifies,
+// mirroring _resolve_wrc_params's GLOBAL_GET + CLAMP pattern.
 static RendererRD::RTGIScreenProbeGather::SpgParams _resolve_spg_params(uint32_t p_preset) {
-	// T7 wires per-preset project settings; until then every preset uses defaults.
-	(void)p_preset;
+	const char *prefix;
+	switch (p_preset) {
+		case 1: prefix = "rendering/rtgi/screen_probe_gather/performance/"; break;
+		case 3: prefix = "rendering/rtgi/screen_probe_gather/production/"; break;
+		case 2:
+		default: prefix = "rendering/rtgi/screen_probe_gather/balanced/"; break;
+	}
+	const String base = String(prefix);
 	RendererRD::RTGIScreenProbeGather::SpgParams params;
-	// Keep the per-frame direction budget below the probe's full O*O direction count:
-	// at/above it the rotating scheduler would double-sample some directions and starve
-	// others within a frame, biasing the T3 1/n temporal blend.
+	params.spacing_f = CLAMP(int32_t(GLOBAL_GET(base + "spacing_f")), 8, 32);
+	params.oct_res = CLAMP(int32_t(GLOBAL_GET(base + "octahedral_resolution")), 4, 16);
+	params.dirs_per_probe_per_frame = CLAMP(int32_t(GLOBAL_GET(base + "dirs_per_probe_per_frame")), 1, 16);
+	params.temporal_n_cap = float(CLAMP(int32_t(GLOBAL_GET(base + "temporal_sample_cap")), 4, 64));
+	params.spatial_radius = CLAMP(int32_t(GLOBAL_GET(base + "spatial_radius")), 0, 2);
+	params.rt_fallback_confidence = CLAMP(float(GLOBAL_GET(base + "rt_fallback_confidence")), 0.0f, 1.0f);
+	// Keep the per-frame direction budget below the probe's full O*O direction count so
+	// the rotating scheduler maps each frame's slots to distinct directions (no double-
+	// sampling / starvation that would bias the T3 1/n blend). (Preserved from the stub.)
 	params.dirs_per_probe_per_frame = CLAMP(params.dirs_per_probe_per_frame, 1, params.oct_res * params.oct_res - 1);
 	return params;
 }
