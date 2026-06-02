@@ -28,4 +28,9 @@ vec3 spg_local_to_world(vec3 l, vec3 t, vec3 b, vec3 n) {
 	float len = length(w);
 	return (len > 0.0) ? (w / len) : n;
 }
+// World dir -> local hemisphere coords, given the anchor normal's orthonormal basis
+// (inverse of spg_local_to_world; the basis is orthonormal so the transpose = inverse).
+vec3 spg_world_to_local(vec3 w, vec3 t, vec3 b, vec3 n) {
+	return vec3(dot(w, t), dot(w, b), dot(w, n));
+}
 #endif // RTGI_SPG_INC_H

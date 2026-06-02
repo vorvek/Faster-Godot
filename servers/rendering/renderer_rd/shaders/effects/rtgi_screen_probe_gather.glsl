@@ -4,13 +4,18 @@
 
 #VERSION_DEFINES
 
-// Screen Probe Gather (SPG) compute shader.
+// Screen Probe Gather (SPG) placement compute shader.
 //
 // Places one screen probe per spacing_f x spacing_f tile of the primary-visibility
-// G-buffer (PLACE), and (in later tasks) gathers incident radiance into a per-probe
-// octahedral atlas (ACCUM) and spatially filters it (SPATIAL). A single shader runs
-// these modes selected by the `mode` push-constant; THIS task (A2-T1) implements
-// only PLACE -- ACCUM / SPATIAL are stubbed `return;` and filled in T2..T4.
+// G-buffer (PLACE): one thread per probe finds the nearest valid G-buffer pixel in
+// its tile, reconstructs the WORLD position + normal + screen motion, and writes the
+// probe header. This shader runs ONLY the PLACE pass (mode 0). The temporal
+// accumulate (motion-reproject + 1/n blend of the gather ray results into the
+// radiance atlas, A2-T3) lives in its OWN shader, rtgi_spg_accumulate.glsl: that
+// pass binds a different set of resources (the radiance ping-pong + ray-result
+// SSBO), so a SEPARATE set-0 layout / pipeline keeps each pass binding exactly what
+// it uses (mirrors how the WRC update shader binds all of its declared bindings on
+// every dispatch). The spatial filter (A2-T4) lands later.
 //
 // Coordinate-space contract (verified against rtgi_wrc_gi_consumer.glsl):
 //   * The depth buffer (RB_TEX_DEPTH) holds RAW reverse-Z hyperbolic depth; the
@@ -32,12 +37,13 @@ layout(local_size_x = GROUP_SIZE, local_size_y = GROUP_SIZE, local_size_z = 1) i
 // Full-sphere octahedral encode (vec3_to_oct) for the probe header normal.
 #include "../oct_inc.glsl"
 
-// Mode selectors (match SPG_MODE_PLACE in rtgi_screen_probe_gather.cpp). ACCUM /
-// SPATIAL are added by later tasks.
+// Mode selector (matches SPG_MODE_PLACE in rtgi_screen_probe_gather.cpp). This
+// shader runs only PLACE; the temporal accumulate is a separate shader
+// (rtgi_spg_accumulate.glsl) and the spatial filter lands in T4.
 #define SPG_MODE_PLACE 0u
 
 layout(push_constant, std430) uniform Params {
-	uint mode; // 0 = PLACE (ACCUM / SPATIAL added later).
+	uint mode; // 0 = PLACE (this shader has no other modes).
 	uint grid_w;
 	uint grid_h;
 	uint oct_res;
@@ -163,6 +169,7 @@ void main() {
 		return;
 	}
 
-	// ACCUM / SPATIAL modes are wired in later tasks (T2..T4).
+	// This shader only runs PLACE; the temporal accumulate lives in
+	// rtgi_spg_accumulate.glsl and the spatial filter (T4) lands later.
 	return;
 }

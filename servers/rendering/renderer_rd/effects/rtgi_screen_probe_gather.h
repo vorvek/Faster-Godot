@@ -10,6 +10,7 @@
 #include "core/math/projection.h"
 #include "core/math/transform_3d.h"
 #include "servers/rendering/renderer_rd/shaders/effects/rtgi_screen_probe_gather.glsl.gen.h"
+#include "servers/rendering/renderer_rd/shaders/effects/rtgi_spg_accumulate.glsl.gen.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.h"
 
 namespace RendererRD {
@@ -21,11 +22,14 @@ namespace RendererRD {
 // every frame from the depth + normal-roughness + velocity G-buffers, so its
 // textures are sized from the render (internal) resolution.
 //
-// Structure mirrors RTGIWorldRadianceCache exactly: a single compute shader with
-// a `mode` push-constant, ping-pong RID arrays + read_index, a realloc-guarded
-// ensure_resources(), and an _allocate() that texture_create()s + texture_clear()s
-// the grid textures. THIS task (A2-T1) ships only the PLACE pass; the gather
-// (T2), accumulate (T3) and spatial-filter (T4) modes come later.
+// Structure mirrors RTGIWorldRadianceCache: ping-pong RID arrays + read_index, a
+// realloc-guarded ensure_resources(), and an _allocate() that texture_create()s +
+// texture_clear()s the grid textures. The PLACE pass (mode 0) lives in
+// rtgi_screen_probe_gather.glsl; the temporal accumulate (REPROJECT + BLEND) lives
+// in its OWN shader rtgi_spg_accumulate.glsl with a distinct set-0 layout / pipeline
+// (it binds the radiance ping-pong + ray-result SSBO, which PLACE never touches, so
+// separate shaders keep each pass binding exactly what it uses). The spatial filter
+// (T4) lands later.
 class RTGIScreenProbeGather {
 public:
 	// Per-quality tunables (resolved from per-preset Project Settings in T7; for
@@ -76,6 +80,16 @@ public:
 	// clip->view inverse projection; `p_cam_transform` is the view->world transform.
 	void run_placement(Ref<RenderSceneBuffersRD> p_rb, RID p_depth, RID p_normal_roughness, RID p_velocity, const SpgFrameParams &p_frame, const Projection &p_inv_projection, const Transform3D &p_cam_transform, const Size2i &p_render_size);
 
+	// Record the temporal-accumulate dispatches (A2-T3): a REPROJECT pass over the
+	// whole radiance atlas (motion-reproject + plane-match + re-orient-on-read of the
+	// previous frame's radiance) followed by a BLEND pass over this frame's gather
+	// rays (sample-counted 1/n accumulate into the reprojected history), with a
+	// barrier between. Reads the PREVIOUS (1 - read_index) atlas/headers and writes
+	// the CURRENT (read_index) atlas; performs NO ping-pong swap (the frame swap is
+	// done in run_placement). Must be called AFTER the gather has filled the
+	// ray-result SSBO for this frame. A no-op if resources are invalid.
+	void run_accumulate(const SpgFrameParams &p_frame);
+
 	// Current read (front) grid textures. Valid only after ensure_resources().
 	RID get_header_plane() const { return header_plane[read_index]; } // RGBA32F: xyz = world_pos, w = linear_depth (<= 0 invalid).
 	RID get_header_aux() const { return header_aux[read_index]; } // RGBA16F: xy = oct_normal, zw = screen_motion.
@@ -89,6 +103,8 @@ public:
 	void free_resources();
 
 private:
+	// PLACE-pass push constant (8 x uint32 = 32 B). Matches the std430 `Params` block
+	// in rtgi_screen_probe_gather.glsl EXACTLY.
 	struct PushConstant {
 		uint32_t mode;
 		uint32_t grid_w;
@@ -96,6 +112,29 @@ private:
 		uint32_t oct_res;
 		uint32_t spacing_f;
 		uint32_t frame_index;
+		uint32_t pad0;
+		uint32_t pad1;
+	};
+
+	// Accumulate-pass push constant: 9 x uint32 + 1 x float = 40 B raw, padded with two
+	// uint32 to 48 B (std430 rounds a push-constant block to a multiple of 16, so the
+	// pipeline requires the rounded 48 B). Matches the std430 `Params` block in rtgi_spg_accumulate.glsl
+	// EXACTLY: atlas_width/atlas_height drive the REPROJECT bounds guard; rays_this_frame
+	// the BLEND dispatch; temporal_n_cap the 1/n sample-count weight.
+	struct AccumPushConstant {
+		uint32_t mode;
+		uint32_t grid_w;
+		uint32_t grid_h;
+		uint32_t oct_res;
+		uint32_t spacing_f;
+		uint32_t frame_index;
+		uint32_t atlas_width;
+		uint32_t atlas_height;
+		uint32_t rays_this_frame;
+		float temporal_n_cap;
+		// std430 rounds a push-constant block up to a multiple of 16 bytes, so the
+		// shader's pipeline requires 48 B (40 rounded up). Pad explicitly so
+		// sizeof(AccumPushConstant) == 48 and the dispatch's push-constant matches.
 		uint32_t pad0;
 		uint32_t pad1;
 	};
@@ -118,15 +157,27 @@ private:
 	RID shader_version;
 	RID pipeline;
 
+	// Temporal-accumulate shader/pipeline (A2-T3). A SEPARATE shader from PLACE: its
+	// set-0 layout (radiance ping-pong images + prev/cur headers + ray-result SSBO)
+	// differs from PLACE's (G-buffer samplers + header writes + camera UBO), and a
+	// single GLSL shader cannot declare two different set-0 layouts. Set up in the
+	// constructor exactly like `shader`/`pipeline` above.
+	RtgiSpgAccumulateShaderRD accum_shader;
+	RID accum_shader_version;
+	RID accum_pipeline;
+
 	// Uniform buffer carrying PlaceUBO (the PLACE pass's camera matrices; see above
 	// for why a UBO and not a push constant). Created lazily on first run_placement()
 	// and bound for the dispatch; freed in free_resources().
 	RID place_ubo;
 
-	// Ping-pong grid textures owned directly by the effect. `read_index` selects the
-	// front (read) set; `1 - read_index` is the back (write) set. The ping-pong swap
-	// is introduced by the T3 accumulate; T1's PLACE writes the front set directly
-	// (write index == read_index) so get_header_*() returns what PLACE just wrote.
+	// Ping-pong grid textures owned directly by the effect. `read_index` selects THIS
+	// frame's (current) set; `1 - read_index` is the previous frame's. The frame swap
+	// happens at the START of run_placement (read_index flips there), so within a
+	// frame: placement writes header[read_index]; the gather reads header[read_index]
+	// (via get_header_*()); the accumulate reads radiance/header[1 - read_index]
+	// (previous) and writes radiance[read_index] (current); get_radiance_atlas() ==
+	// radiance[read_index] feeds the debug blit. The accumulate performs NO swap.
 	RID radiance_atlas[2]; // RGBA16F, .rgb = radiance, .a = confidence.
 	RID header_plane[2]; // RGBA32F, .xyz = world_pos, .w = linear_depth (<= 0 invalid).
 	RID header_aux[2]; // RGBA16F, .xy = octahedral world normal, .zw = screen motion.

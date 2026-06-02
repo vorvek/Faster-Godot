@@ -4285,6 +4285,17 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					raytracing->dispatch_probe_update_backend(rt_backend_context, spg_flags, rtgi_spg->get_ray_result_buffer(), sfp.rays_this_frame);
 					rt_state = rt_backend_context.viewport_state;
 				}
+
+				// SPG temporal accumulate (A2-T3): motion-reproject the previous radiance
+				// atlas + plane-match + re-orient-on-read, then fold this frame's gather
+				// rays in with a 1/n sample-counted blend. Runs every SPG-debug frame
+				// regardless of the gather guard above (the REPROJECT pass still carries
+				// history forward when no rays were traced); run_accumulate internally
+				// skips the BLEND when rays_this_frame == 0. The render graph
+				// auto-synchronizes the gather's ray-result SSBO + the placement headers
+				// before this reads them (same resource tracking the WRC accumulate uses).
+				RENDER_TIMESTAMP("RTGI SPG Accumulate");
+				rtgi_spg->run_accumulate(sfp);
 				RD::get_singleton()->draw_command_end_label();
 			}
 
@@ -5566,7 +5577,11 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 		// is still all-zero (the gather lands in T2) -- the blit is wired now so the
 		// view exists; non-black tiles appear once T2+ populates radiance.
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_RADIANCE && rtgi_spg != nullptr && rtgi_spg->get_radiance_atlas().is_valid()) {
-			copy_effects->copy_to_fb_rect(rtgi_spg->get_radiance_atlas(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
+			// Raw linear copy (not LOG_LUMINANCE): the SPG incident radiance is typically
+			// sub-1.0 (e.g. ~0.6 on the uniform furnace), which log2(luminance) would clamp
+			// to black. Matches the WRC-GI consumer view's raw-linear blit so the atlas is
+			// visible/measurable for the furnace validation.
+			copy_effects->copy_to_fb_rect(rtgi_spg->get_radiance_atlas(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_NONE);
 		}
 
 		// SPG_GI is the per-pixel integrate consumer (analogue of the WRC-GI view). The

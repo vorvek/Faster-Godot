@@ -76,6 +76,12 @@ static _ALWAYS_INLINE_ Vector3 local_to_world(Vector3 p_local, Vector3 p_t, Vect
 	return (p_t * p_local.x + p_b * p_local.y + p_n * p_local.z).normalized();
 }
 
+// World dir -> local-hemisphere coords, given the anchor normal's orthonormal
+// basis (inverse of local_to_world; the basis is orthonormal so transpose = inverse).
+static _ALWAYS_INLINE_ Vector3 world_to_local(Vector3 p_w, Vector3 p_t, Vector3 p_b, Vector3 p_n) {
+	return Vector3(p_w.dot(p_t), p_w.dot(p_b), p_w.dot(p_n));
+}
+
 // Bottom-left atlas texel of probe (gx, gy)'s O x O tile (probes laid out as a
 // 2D screen grid; row-major). The in-tile texel offset is added by the caller.
 static _ALWAYS_INLINE_ Point2i atlas_tile_origin(int p_gx, int p_gy, int p_oct_res) {

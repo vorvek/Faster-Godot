@@ -12,19 +12,28 @@
 
 using namespace RendererRD;
 
-// PLACE-pass mode selector (matches SPG_MODE_PLACE in the shader). ACCUM / SPATIAL
-// are added by later tasks; only PLACE is dispatched in T1.
+// Mode selectors. PLACE (0) is the placement shader; REPROJECT (1) + BLEND (2) are
+// the accumulate shader's two modes. These EXACTLY match the SPG_MODE_* defines in
+// the respective GLSL shaders.
 #define SPG_MODE_PLACE 0u
+#define SPG_MODE_REPROJECT 1u
+#define SPG_MODE_BLEND 2u
 
 RTGIScreenProbeGather::RTGIScreenProbeGather() {
 	shader.initialize({ "" });
 	shader_version = shader.version_create();
 	pipeline = RD::get_singleton()->compute_pipeline_create(shader.version_get_shader(shader_version, 0));
+
+	// Temporal-accumulate shader (separate set-0 layout from PLACE; see the header).
+	accum_shader.initialize({ "" });
+	accum_shader_version = accum_shader.version_create();
+	accum_pipeline = RD::get_singleton()->compute_pipeline_create(accum_shader.version_get_shader(accum_shader_version, 0));
 }
 
 RTGIScreenProbeGather::~RTGIScreenProbeGather() {
 	free_resources();
 	shader.version_free(shader_version);
+	accum_shader.version_free(accum_shader_version);
 }
 
 bool RTGIScreenProbeGather::ensure_ray_result_buffer(uint32_t p_rays_per_frame) {
@@ -179,6 +188,12 @@ bool RTGIScreenProbeGather::ensure_resources(Ref<RenderSceneBuffersRD> p_rb, con
 }
 
 void RTGIScreenProbeGather::run_placement(Ref<RenderSceneBuffersRD> p_rb, RID p_depth, RID p_normal_roughness, RID p_velocity, const SpgFrameParams &p_frame, const Projection &p_inv_projection, const Transform3D &p_cam_transform, const Size2i &p_render_size) {
+	// THE FRAME SWAP: flip read_index here, BEFORE writing any headers, so this
+	// frame's placement/gather treat read_index as "current" and the accumulate reads
+	// 1 - read_index as "previous". Both ping-pong sets are allocated together, so the
+	// swapped index is valid the very first frame (it just reads a cleared prev set).
+	read_index = 1u - read_index;
+
 	if (!resources_valid || !header_plane[read_index].is_valid() || !header_aux[read_index].is_valid()) {
 		return;
 	}
@@ -206,9 +221,10 @@ void RTGIScreenProbeGather::run_placement(Ref<RenderSceneBuffersRD> p_rb, RID p_
 	// sampler is required; clamp-to-edge is the safe choice for the unused filtering.
 	RID linear_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 
-	// T1 writes the FRONT (read) set directly: the ping-pong swap is introduced by
-	// the T3 accumulate, so for now write index == read_index and get_header_*()
-	// returns what PLACE just wrote this frame.
+	// Placement writes THIS frame's (current) header set. read_index was already
+	// flipped at the top of this function (the frame swap), so get_header_*() returns
+	// what PLACE writes here, and the accumulate reads the now-previous (1 - read_index)
+	// set against it.
 	const uint32_t write_index = read_index;
 
 	// Set 0: depth + normal-roughness + velocity G-buffers (sampler+texture), the
@@ -287,4 +303,76 @@ void RTGIScreenProbeGather::run_placement(Ref<RenderSceneBuffersRD> p_rb, RID p_
 	// One thread per probe (gx, gy).
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, grid_w, grid_h, 1);
 	RD::get_singleton()->compute_list_end();
+}
+
+void RTGIScreenProbeGather::run_accumulate(const SpgFrameParams &p_frame) {
+	// resources_valid is set only at the end of _allocate() (which free_resources()es
+	// first), so it guarantees all six ping-pong textures + headers were allocated
+	// together; spot-checking radiance_atlas[read_index] is therefore sufficient.
+	if (!resources_valid || !radiance_atlas[read_index].is_valid()) {
+		return;
+	}
+	// The ray-result SSBO is bound unconditionally (the BLEND mode reads it) and is
+	// sized to >= 1 entry by ensure_ray_result_buffer(), so a missing buffer means
+	// run_accumulate() was called before that ran -- bail rather than build an
+	// incomplete descriptor set (mirrors the WRC update guard).
+	ERR_FAIL_COND(!ray_result_buffer.is_valid());
+
+	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
+	ERR_FAIL_NULL(uniform_set_cache);
+	RID shader_rd = accum_shader.version_get_shader(accum_shader_version, 0);
+
+	// read_index is THIS frame's (current) set; 1 - read_index is the previous frame's
+	// (the swap happened in run_placement). The accumulate reads the previous radiance
+	// + headers and writes the current radiance atlas. NO swap here.
+	const uint32_t prev_index = 1u - read_index;
+
+	// Set 0 mirrors rtgi_spg_accumulate.glsl's layout: radiance_prev(0, readonly) +
+	// radiance_cur(1) + header_plane_cur(2) + header_aux_cur(3) + header_plane_prev(4)
+	// + header_aux_prev(5) as storage images, and the gather ray-result SSBO(6).
+	LocalVector<RD::Uniform> uniforms;
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 0, radiance_atlas[prev_index]));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 1, radiance_atlas[read_index]));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 2, header_plane[read_index]));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 3, header_aux[read_index]));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 4, header_plane[prev_index]));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 5, header_aux[prev_index]));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 6, ray_result_buffer));
+
+	AccumPushConstant push_constant;
+	memset(&push_constant, 0, sizeof(AccumPushConstant));
+	push_constant.grid_w = (uint32_t)grid_size.x;
+	push_constant.grid_h = (uint32_t)grid_size.y;
+	push_constant.oct_res = (uint32_t)MAX(cached_params.oct_res, 1);
+	push_constant.spacing_f = (uint32_t)MAX(cached_params.spacing_f, 1);
+	push_constant.frame_index = p_frame.frame_index;
+	push_constant.atlas_width = (uint32_t)atlas_size.x;
+	push_constant.atlas_height = (uint32_t)atlas_size.y;
+	push_constant.rays_this_frame = p_frame.rays_this_frame;
+	push_constant.temporal_n_cap = MAX(cached_params.temporal_n_cap, 1.0f);
+
+	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, accum_pipeline);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
+
+	// REPROJECT: one thread per radiance-atlas texel. Always dispatched -- with zero
+	// motion it is the identity carry (prev_probe == probe, same normal -> re-orient
+	// is identity) the BLEND then accumulates onto; on a disocclusion/miss it resets
+	// the texel to count 0 so BLEND takes a fresh sample.
+	push_constant.mode = SPG_MODE_REPROJECT;
+	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(AccumPushConstant));
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, atlas_size.x, atlas_size.y, 1);
+	RD::get_singleton()->compute_list_add_barrier(compute_list);
+
+	// BLEND: one thread per gather ray (1D dispatch). Each ray maps to a distinct
+	// (probe, dir) atlas texel and folds its radiance into the reprojected history
+	// with a 1/n weight. Skipped when no rays were traced this frame (REPROJECT still
+	// produced the carried-forward atlas the debug blit reads).
+	if (push_constant.rays_this_frame > 0u) {
+		push_constant.mode = SPG_MODE_BLEND;
+		RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(AccumPushConstant));
+		RD::get_singleton()->compute_list_dispatch_threads(compute_list, MAX(push_constant.rays_this_frame, 1u), 1, 1);
+	}
+	RD::get_singleton()->compute_list_end();
+	// NO ping-pong swap: the frame swap is done in run_placement.
 }
