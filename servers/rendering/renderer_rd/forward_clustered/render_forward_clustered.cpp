@@ -266,6 +266,15 @@ static RtgiWrc::ClipmapParams _resolve_wrc_params(uint32_t p_preset, uint32_t *r
 	return params;
 }
 
+// Resolves the active Screen Probe Gather (SPG) params for the given quality preset.
+// T1 returns the SpgParams defaults for every preset; T7 wires per-preset project
+// settings (mirroring _resolve_wrc_params's GLOBAL_GET + CLAMP pattern).
+static RendererRD::RTGIScreenProbeGather::SpgParams _resolve_spg_params(uint32_t p_preset) {
+	// T7 wires per-preset project settings; until then every preset uses defaults.
+	(void)p_preset;
+	return RendererRD::RTGIScreenProbeGather::SpgParams{};
+}
+
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_specular() {
 	ERR_FAIL_NULL(render_buffers);
 
@@ -3105,6 +3114,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	uint32_t wrc_rays_per_frame;
 	float wrc_n_cap;
 	RtgiWrc::ClipmapParams wrc_params = _resolve_wrc_params(rtgi_quality_preset_sel, &wrc_rays_per_frame, &wrc_n_cap);
+	// SPG params (hoisted next to wrc_params so the PLACE dispatch site below reads the
+	// SAME tunables the grid was sized from). T1 returns defaults for every preset.
+	RendererRD::RTGIScreenProbeGather::SpgParams spg_params = _resolve_spg_params(rtgi_quality_preset_sel);
 	if (rt_radiance_probes_only) {
 		if (rtgi_wrc != nullptr && rb.is_valid()) {
 			rtgi_wrc->ensure_resources(rb, wrc_params, (int)rb->get_view_count());
@@ -3112,6 +3124,18 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// atlas (re)allocation inside ensure_resources frees the ray buffer via
 			// free_resources(); re-creating it here keeps binding 107 valid this frame.
 			rtgi_wrc->ensure_ray_result_buffer(wrc_rays_per_frame);
+		}
+		// SPG screen-probe grid. Sized from the internal render size; the gather ray
+		// buffer is ensured AFTER ensure_resources for the same reason as the WRC
+		// (a grid realloc frees the ray buffer). One gather ray per probe per
+		// dirs_per_probe_per_frame slot (T2 consumes this buffer).
+		if (rtgi_spg != nullptr && rb.is_valid()) {
+			rtgi_spg->ensure_resources(rb, spg_params, rb->get_internal_size());
+			// Derive the ray count from the effect's own integer-ceil grid (the single
+			// source of truth) so the SSBO capacity matches the allocated grid exactly.
+			const Size2i spg_grid = rtgi_spg->get_grid_size();
+			const uint32_t spg_rays = (uint32_t)(spg_grid.x * spg_grid.y) * (uint32_t)spg_params.dirs_per_probe_per_frame;
+			rtgi_spg->ensure_ray_result_buffer(MAX(spg_rays, 1u));
 		}
 	}
 	const float *rt_env_params = scene_features.rt ? _rtgi_shader_params_for_environment(p_render_data->environment, rt_env_params_storage) : nullptr;
@@ -3719,6 +3743,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					// G-buffer, so force the normal-roughness prepass when it is active
 					// (radiance-probes mode otherwise leaves it unpopulated).
 					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_WRC_GI ||
+					// SPG (A2) placement reads the world normal from this G-buffer too;
+					// force the prepass when either SPG debug view is active.
+					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_GI ||
+					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_RADIANCE ||
 					scene_state.used_normal_texture) {
 				depth_pass_mode = PASS_MODE_DEPTH_NORMAL_ROUGHNESS;
 			}
@@ -4194,6 +4222,34 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			} else {
 				rb_data->rt_wrc_scroll_valid = false;
 			}
+
+			// SPG (A2) screen-probe placement. A2: SPG is consumed only by its debug
+			// views; A3 promotes it to always-on with the production resolve + production
+			// G-buffer. Gated to run only in radiance-probes mode AND when an SPG debug
+			// view is active, so it costs nothing in normal rendering. rt_state is valid
+			// here (set inside this rt_resources_ready block).
+			const bool spg_debug_active = get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_GI || get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_RADIANCE;
+			if (rt_radiance_probes_only && spg_debug_active && rtgi_spg && rtgi_spg->get_radiance_atlas().is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
+				RD::get_singleton()->draw_command_begin_label("RTGI SPG");
+				RENDER_TIMESTAMP("RTGI SPG Placement");
+				// Velocity is optional: on a static furnace there is no velocity buffer,
+				// so bind a default black texture and motion reads 0 (correct).
+				RID spg_vel = rb->has_velocity_buffer(false) ? rb->get_velocity_buffer(false) : RendererRD::TextureStorage::get_singleton()->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+				RendererRD::RTGIScreenProbeGather::SpgFrameParams sfp;
+				const Size2i spg_size = rb->get_internal_size();
+				// Probe-grid dims + this frame's gather ray count come from the effect's
+				// own integer-ceil grid (single source of truth, cannot drift from the
+				// allocated atlas). rays_this_frame is set now (PLACE ignores it) so the
+				// T2 gather dispatch reads a correct count.
+				const Size2i spg_grid = rtgi_spg->get_grid_size();
+				sfp.grid_w = (uint32_t)spg_grid.x;
+				sfp.grid_h = (uint32_t)spg_grid.y;
+				sfp.rays_this_frame = (uint32_t)(spg_grid.x * spg_grid.y) * (uint32_t)spg_params.dirs_per_probe_per_frame;
+				sfp.frame_index = rt_state ? rt_state->frame_counter : 0;
+				rtgi_spg->run_placement(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), spg_vel, sfp, p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, spg_size);
+				RD::get_singleton()->draw_command_end_label();
+			}
+
 			RD::get_singleton()->draw_command_end_label();
 		}
 
@@ -5464,6 +5520,22 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 			const float wrc_dbg_strength = dbg_pt ? dbg_pt->wrc_strength : 1.0f;
 			const Vector3 wrc_dbg_camera = p_render_data->scene_data->cam_transform.origin;
 			rtgi_wrc->render_gi_debug(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, wrc_dbg_params, wrc_dbg_camera, wrc_dbg_strength, fb, rb->get_internal_size());
+		}
+
+		// Screen Probe Gather (SPG) debug views (A2). RADIANCE blits the per-probe
+		// octahedral radiance atlas (.rgb) log-luminance tonemapped, mirroring the WRC
+		// RADIANCE blit. The atlas is one oct_res x oct_res tile per probe and, in T1,
+		// is still all-zero (the gather lands in T2) -- the blit is wired now so the
+		// view exists; non-black tiles appear once T2+ populates radiance.
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_RADIANCE && rtgi_spg != nullptr && rtgi_spg->get_radiance_atlas().is_valid()) {
+			copy_effects->copy_to_fb_rect(rtgi_spg->get_radiance_atlas(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
+		}
+
+		// SPG_GI is the per-pixel integrate consumer (analogue of the WRC-GI view). The
+		// integrate consumer is built in T5; this empty guarded branch is the documented
+		// scope boundary (the feature genuinely lands in T5), not a band-aid.
+		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_GI) {
+			// T5: render_gi_debug -- per-pixel SPG integrate consumer + blit.
 		}
 	}
 
@@ -8222,6 +8294,7 @@ RenderForwardClustered::RenderForwardClustered() {
 	rtgi_denoise = memnew(RendererRD::RTGIDenoise);
 	rtgi_strc = memnew(RendererRD::RTGISpatioTemporalRadianceCache);
 	rtgi_wrc = memnew(RendererRD::RTGIWorldRadianceCache);
+	rtgi_spg = memnew(RendererRD::RTGIScreenProbeGather);
 	fsr2_effect = memnew(RendererRD::FSR2Effect);
 	ss_effects = memnew(RendererRD::SSEffects);
 	motion_vectors_store = memnew(RendererRD::MotionVectorsStore);
@@ -8256,6 +8329,11 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (rtgi_wrc != nullptr) {
 		memdelete(rtgi_wrc);
 		rtgi_wrc = nullptr;
+	}
+
+	if (rtgi_spg != nullptr) {
+		memdelete(rtgi_spg);
+		rtgi_spg = nullptr;
 	}
 
 	if (rtgi_diffuse_cache != nullptr) {
