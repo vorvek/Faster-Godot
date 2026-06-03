@@ -402,6 +402,10 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, resolve_set, 0);
 
 	// INTEGRATE: one thread per screen pixel -> this frame's RAW resolved GI.
+	// Finer GPU-profiler bracket (A3-T8): the next RENDER_TIMESTAMP ("RTGI Resolve Temporal")
+	// closes this region, so INTEGRATE is a distinct profiler area (mirrors gi.cpp's use of
+	// RENDER_TIMESTAMP around its SDFGI compute sub-stages).
+	RENDER_TIMESTAMP("RTGI Resolve Integrate");
 	push_constant.mode = RESOLVE_MODE_INTEGRATE;
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, size.x, size.y, 1);
@@ -411,6 +415,9 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	RD::get_singleton()->compute_list_add_barrier(compute_list);
 
 	// TEMPORAL: one thread per screen pixel -> motion-reprojected history accumulate, in place.
+	// Finer GPU-profiler bracket (A3-T8): this RENDER_TIMESTAMP ends the INTEGRATE region above;
+	// the SPATIAL label (or compute_list_end when SPATIAL is skipped) closes this one.
+	RENDER_TIMESTAMP("RTGI Resolve Temporal");
 	push_constant.mode = RESOLVE_MODE_TEMPORAL;
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, size.x, size.y, 1);
@@ -434,6 +441,14 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	// after the compute list (a GPU blit; the buffers carry CAN_COPY_FROM/TO). The default (1) is
 	// odd. A third scratch pair is avoided -- [prev] suffices.
 	const uint32_t spatial_iterations = (uint32_t)MAX(cached_params.spatial_iterations, 0);
+	// Finer GPU-profiler bracket (A3-T8): ONE label before the a-trous loop covers all the
+	// SPATIAL iterations as a single profiler area (mirrors gi.cpp, which labels an iterative
+	// jump-flood pass once before its loop). GUARDED by spatial_iterations > 0 -- exactly the
+	// condition that gates the dispatch loop -- so no SPATIAL region is opened when SPATIAL is
+	// skipped (spatial_iterations == 0); in that case compute_list_end closes the TEMPORAL region.
+	if (spatial_iterations > 0) {
+		RENDER_TIMESTAMP("RTGI Resolve Spatial");
+	}
 	uint32_t spatial_src = read_index; // iter 0 reads the TEMPORAL output in [read_index].
 	for (uint32_t it = 0; it < spatial_iterations; it++) {
 		const uint32_t spatial_dst = 1u - spatial_src;
