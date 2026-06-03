@@ -3186,14 +3186,18 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// regardless of the Environment's RT mode so only the WRC probe-ray dispatch runs.
 	bool rt_replaces_opaque = !rt_radiance_probes_only && scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING;
 	const bool rt_hybrid_rtgi = !rt_radiance_probes_only && scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_HYBRID;
-	// RTGI radiance-probes Hybrid BEAUTY path (A3-T4): radiance_probes is selected AND the
-	// Environment's RT mode is HYBRID. rt_hybrid_rtgi is force-FALSE under radiance_probes (see
-	// above), so it cannot gate the radiance-probes composite; this dedicated condition drives the
-	// SPG/guide/resolve chain + the additive GI composite onto the raster-lit frame in plain
-	// (no debug-view, no SSx) Hybrid rendering. Additive only -- the debug-view path keeps using
-	// spg_debug_active untouched.
-	const bool rt_radiance_probes_hybrid = rt_radiance_probes_only && rt_env_params &&
-			(uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_HYBRID;
+	// RTGI radiance-probes composite BEAUTY path (A3-T4/T5): radiance_probes is selected AND the
+	// Environment's RT mode is HYBRID *or* FULL_PATH_TRACING. rt_hybrid_rtgi / rt_replaces_opaque are
+	// both force-FALSE under radiance_probes (see above), so they cannot gate the radiance-probes
+	// composite; this dedicated condition drives the SPG/guide/resolve chain + the additive GI
+	// composite onto the raster-lit frame in plain (no debug-view, no SSx) rendering. Additive only --
+	// the debug-view path keeps using spg_debug_active untouched. (A3-T5) FPT-fast reuses this exact
+	// Hybrid composite (raster primary-direct + probe indirect, no path-trace dispatch); the true
+	// PT-primary-direct FPT under radiance_probes is the A4 sub-project, so for now FPT and HYBRID
+	// behave identically here.
+	const bool rt_radiance_probes_composite = rt_radiance_probes_only && rt_env_params &&
+			((uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_HYBRID ||
+					(uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING);
 	scene_features.rt_replaces_opaque = rt_replaces_opaque;
 	const uint32_t rt_denoiser = rt_env_params ? (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
 	const float rt_resolution_scale_requested = _rtgi_resolution_scale_from_params(rt_env_params);
@@ -3786,12 +3790,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					scene_features.has(SCENE_FEATURE_SSAO) ||
 					using_ssil ||
 					rt_hybrid_rtgi ||
-					// RTGI radiance-probes Hybrid BEAUTY (A3-T4): the SPG placement + the
-					// GI-resolve INTEGRATE reconstruct the world normal from this G-buffer, so a
-					// plain Hybrid furnace (no debug view, no SSx) must still force the
-					// normal-roughness prepass -- otherwise it gets a plain PASS_MODE_DEPTH and the
+					// RTGI radiance-probes composite BEAUTY (A3-T4/T5; Hybrid AND FPT-fast): the SPG
+					// placement + the GI-resolve INTEGRATE reconstruct the world normal from this
+					// G-buffer, so a plain composite furnace (no debug view, no SSx) must still force
+					// the normal-roughness prepass -- otherwise it gets a plain PASS_MODE_DEPTH and the
 					// SPG/resolve/composite chain silently no-ops (no RB_TEX_NORMAL_ROUGHNESS).
-					rt_radiance_probes_hybrid ||
+					rt_radiance_probes_composite ||
 					ce_needs_normal_roughness ||
 					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_NORMAL_BUFFER ||
 					// WRC-GI debug consumer (Task 7a) reads the world normal from this
@@ -4068,14 +4072,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// Material-guide prepass (A3-T1a): under radiance_probes the FPT primary-shading dispatch
 	// that would fill the albedo G-buffer is gated off, so populate the per-pixel albedo+ORM
 	// material guide here for the GI-resolve's upcoming rough-spec F0 + composite remod. Runs
-	// when an SPG-active debug view drives the resolve OR (A3-T4) the radiance-probes Hybrid
-	// BEAUTY composite is active -- the composite reads this guide albedo to remod the resolved
-	// diffuse A (cost-free in plain rendering with neither). SUPPLEMENTAL to the raster depth-normal
-	// prepass (which still fills RB_TEX_NORMAL_ROUGHNESS for SPG + the SPG-active guard); writes
-	// only the guide color attachments and re-establishes the guide FB's own depth from the same
-	// opaque geometry (identical to the raster depth already resolved, so SPG/resolve depth reads
+	// when an SPG-active debug view drives the resolve OR (A3-T4/T5) the radiance-probes composite
+	// BEAUTY path is active (Hybrid AND FPT-fast) -- the composite reads this guide albedo to remod
+	// the resolved diffuse A (cost-free in plain rendering with neither). SUPPLEMENTAL to the raster
+	// depth-normal prepass (which still fills RB_TEX_NORMAL_ROUGHNESS for SPG + the SPG-active guard);
+	// writes only the guide color attachments and re-establishes the guide FB's own depth from the
+	// same opaque geometry (identical to the raster depth already resolved, so SPG/resolve depth reads
 	// are unaffected). POPULATE ONLY -- no consumer is wired here (resolve binding is task T1).
-	if (rt_radiance_probes_only && (spg_debug_active || rt_radiance_probes_hybrid) && rb_data.is_valid()) {
+	if (rt_radiance_probes_only && (spg_debug_active || rt_radiance_probes_composite) && rb_data.is_valid()) {
 		// MANDATORY: SHADER_VERSION_DEPTH_PASS_WITH_MATERIAL lives in SHADER_GROUP_ADVANCED;
 		// without enabling it the DEPTH_PASS_WITH_MATERIAL pipeline isn't compiled and the draw
 		// silently no-ops. Mirrors the rt_path_tracing_fullres_guides DEPTH_MATERIAL path (no-arg:
@@ -4147,12 +4151,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// Shadow pass can change the base uniform set samplers.
 		_update_render_base_uniform_set();
 
-		// RTGI radiance-probes Hybrid: under this render the additive GI composite (see the
-		// "RTGI radiance-probes Hybrid BEAUTY composite" block below, ~render_composite) supplies the
-		// environment-diffuse-indirect. Suppress the raster opaque pass's environment AMBIENT (diffuse)
-		// here so the two don't both apply sky/ambient irradiance (~2x double-count). The gate is a
-		// strict SUBSET of the composite-dispatch gate below: every precondition the composite requires
-		// (radiance-probes Hybrid; no other whole-frame indirect provider SDFGI/VoxelGI/lightmap; a
+		// RTGI radiance-probes composite (A3-T4/T5; Hybrid AND FPT-fast): under this render the additive
+		// GI composite (see the "RTGI radiance-probes composite BEAUTY" block below, ~render_composite)
+		// supplies the environment-diffuse-indirect. Suppress the raster opaque pass's environment AMBIENT
+		// (diffuse) here so the two don't both apply sky/ambient irradiance (~2x double-count). The gate is
+		// a strict SUBSET of the composite-dispatch gate below: every precondition the composite requires
+		// (radiance-probes composite mode; no other whole-frame indirect provider SDFGI/VoxelGI/lightmap; a
 		// valid rtgi_resolve with a resolved diffuse-GI buffer; the NORMAL_ROUGHNESS G-buffer the
 		// resolve/composite read) is folded in here, PLUS one extra term (debug == DISABLED). So
 		// "ambient suppressed" strictly IMPLIES "composite fires": whenever the composite is skipped
@@ -4161,13 +4165,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// extra debug==DISABLED term only narrows the ambient side further (it never suppresses while
 		// the composite fires), so the RTGI debug views' opaque pass is unaffected. The opaque pass is
 		// the only _setup_environment call that receives this; the depth/guide/transparent passes (and
-		// every non-radiance-probes render, plus the not-yet-built radiance-probes FPT path) keep
-		// p_suppress_environment_ambient = false. Direct lights, emission, and the environment
+		// every non-radiance-probes render -- legacy FPT still drives its own PT-replaces-opaque path)
+		// keep p_suppress_environment_ambient = false. Direct lights, emission, and the environment
 		// REFLECTION/specular path are untouched (only the diffuse-ambient flags + .rgb are cleared in
 		// update_ubo; .a and USE_REFLECTION_CUBEMAP are preserved -- the diffuse vs rough-spec
 		// environment overlap is a separate deferred follow-up).
 		const bool suppress_environment_ambient_for_radiance_probes_hybrid =
-				rt_radiance_probes_hybrid &&
+				rt_radiance_probes_composite &&
 				!using_sdfgi && !using_voxelgi && p_render_data->lightmaps->size() == 0 &&
 				get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_DISABLED &&
 				rtgi_resolve != nullptr && rtgi_resolve->get_diffuse_gi().is_valid() &&
@@ -4370,7 +4374,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// fills); A3 later promotes both SPG + resolve to always-on for the composite.
 			// resolve_debug_active / spg_debug_active are hoisted above the depth prepass
 			// (shared with the additive material-guide prepass); see their declaration there.
-			if (rt_radiance_probes_only && (spg_debug_active || rt_radiance_probes_hybrid) && rtgi_spg && rtgi_spg->get_radiance_atlas().is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
+			if (rt_radiance_probes_only && (spg_debug_active || rt_radiance_probes_composite) && rtgi_spg && rtgi_spg->get_radiance_atlas().is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
 				RD::get_singleton()->draw_command_begin_label("RTGI SPG");
 				RENDER_TIMESTAMP("RTGI SPG Placement");
 				// Velocity is optional: on a static furnace there is no velocity buffer,
@@ -4474,17 +4478,19 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				RD::get_singleton()->draw_command_end_label();
 			}
 
-			// RTGI radiance-probes Hybrid BEAUTY composite (A3-T4): additively composite the
-			// resolved indirect GI (albedo * diffuse_A + rough_spec) onto the raster-lit opaque
-			// frame, producing BEAUTY. Runs only in the plain Hybrid path (the SPG/guide/resolve
-			// chain above also widened to rt_radiance_probes_hybrid populated the resolve buffers
-			// + the guide albedo). The dest is get_color_only_fb() -- the SAME internal HDR linear
-			// color FB the opaque pass wrote (and that the legacy additive_blend composited into).
+			// RTGI radiance-probes composite BEAUTY (A3-T4/T5; Hybrid AND FPT-fast): additively
+			// composite the resolved indirect GI (albedo * diffuse_A + rough_spec) onto the raster-lit
+			// opaque frame, producing BEAUTY. Runs in the plain composite path (the SPG/guide/resolve
+			// chain above also gated on rt_radiance_probes_composite populated the resolve buffers
+			// + the guide albedo). FPT-fast reuses this exact Hybrid composite -- raster primary-direct
+			// + probe indirect, no path-trace dispatch (true PT-primary-direct FPT is the A4 sub-project).
+			// The dest is get_color_only_fb() -- the SAME internal HDR linear color FB the opaque pass
+			// wrote (and that the legacy additive_blend composited into).
 			// Step 6 COEXISTENCE: this is a WHOLE-FRAME gate. Mixing probe-GI with SDFGI/VoxelGI/
 			// lightmaps requires PER-PIXEL indirect ownership (which provider owns each pixel) --
 			// a deferred follow-up; for now the composite is skipped whenever any of those other
 			// indirect sources is active (the A3 test scenes have none, so the gate passes).
-			if (rt_radiance_probes_hybrid && rtgi_resolve != nullptr &&
+			if (rt_radiance_probes_composite && rtgi_resolve != nullptr &&
 					rtgi_resolve->get_diffuse_gi().is_valid() &&
 					rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS) &&
 					!using_sdfgi && !using_voxelgi && p_render_data->lightmaps->size() == 0) {
