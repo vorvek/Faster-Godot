@@ -4509,7 +4509,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS) &&
 					!using_sdfgi && !using_voxelgi && p_render_data->lightmaps->size() == 0) {
 				RENDER_TIMESTAMP("RTGI Composite Hybrid");
-				rtgi_resolve->render_composite(rb->get_depth_texture(), rb_data->rt_get_guide_albedo(),
+				rtgi_resolve->render_composite(rb->get_depth_texture(), rb_data->rt_get_guide_albedo(), rb_data->rt_get_guide_orm(),
 						rb->get_internal_size(), rb_data->get_color_only_fb(), p_render_data->scene_data->view_count);
 			}
 

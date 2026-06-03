@@ -118,7 +118,7 @@ public:
 	// (this frame's output). No same-resource sampler+image hazard: read textures only on samplers,
 	// gi_debug_image only on images (same discipline as render_resolve_debug). p_size is the consumed
 	// (internal) size; p_view_count drives the multiview additive blit.
-	void render_composite(RID p_depth, RID p_guide_albedo, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count);
+	void render_composite(RID p_depth, RID p_guide_albedo, RID p_guide_orm, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count);
 
 	void free_resources();
 

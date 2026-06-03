@@ -628,13 +628,14 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 	copy_effects->copy_to_fb_rect(gi_debug_image, p_dest_fb, Rect2i(Point2i(), size), false, false, false, false, RID(), multiview, false, false, false, Rect2(), 1.0, true, CopyEffects::COPY_TO_FB_FLAG_MODE_NONE);
 }
 
-void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count) {
+void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, RID p_guide_orm, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count) {
 	if (!resources_valid || !diffuse_gi[read_index].is_valid() || !spec_gi[read_index].is_valid()) {
 		return;
 	}
 	ERR_FAIL_COND(p_dest_color_fb.is_null());
 	ERR_FAIL_COND(p_depth.is_null());
 	ERR_FAIL_COND(p_guide_albedo.is_null());
+	ERR_FAIL_COND(p_guide_orm.is_null()); // COMPOSITE now reads ORM.b (metallic) for the diffuse remod.
 	// COMPOSITE writes the BEAUTY remod (albedo * diffuse_A + spec) into the dedicated scratch
 	// image (binding 13), then ADDITIVELY blends it onto the raster-lit color FB. gi_debug_image is
 	// the same RGBA16F render-size scratch render_resolve_debug uses.
@@ -659,11 +660,13 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, const Size
 	// hazard discipline: the ONLY images in this set are gi_debug_image (at 9/10/13), and every read
 	// texture is bound only on a sampler -- so no texture is bound as BOTH a sampler and a storage
 	// image. COMPOSITE reads binding 0 (depth, the background mask), 2 (guide albedo, the diffuse
-	// remod), 11 (diffuse_gi[read_index]) and 12 (spec_gi[read_index] = THIS frame's resolved GI),
-	// and writes 13. The departures from the debug layout are exactly: binding 0 = the REAL depth and
-	// binding 2 = the REAL guide albedo (not the neutral diffuse texture). All other sampler slots
-	// (1, 3, 4-8, 15) stay neutral (point at diffuse_gi[read_index], a read texture) since COMPOSITE
-	// ignores them. The set provides exactly {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}.
+	// remod), 15 (guide ORM, the metallic for the diffuse split), 11 (diffuse_gi[read_index]) and 12
+	// (spec_gi[read_index] = THIS frame's resolved GI), and writes 13. The departures from the debug
+	// layout are exactly: binding 0 = the REAL depth, binding 2 = the REAL guide albedo, and binding
+	// 15 = the REAL guide ORM (the diffuse remod multiplies A by albedo * (1 - ORM.b) so metals get
+	// no Lambertian diffuse). All other sampler slots (1, 3, 4-8) stay neutral (point at
+	// diffuse_gi[read_index], a read texture) since COMPOSITE ignores them. The set provides exactly
+	// {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}.
 	LocalVector<RD::Uniform> uniforms;
 	{
 		// Binding 0: the REAL depth buffer (COMPOSITE reads it to mask the background/sky).
@@ -750,14 +753,15 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, const Size
 		uniforms.push_back(u);
 	}
 	{
-		// Binding 15 (material-guide ORM): neutral -- COMPOSITE does not read it (the spec is already
-		// BRDF-applied radiance from INTEGRATE). Points at the resolved-diffuse read texture like the
-		// other neutral samplers (the only images in this set are gi_debug_image at 9/10/13).
+		// Binding 15: the REAL material-guide ORM. COMPOSITE reads ORM.b (metallic) to build the
+		// diffuse albedo (albedo * (1 - metalness)) for the diffuse remod -- metals have no Lambertian
+		// diffuse, so their albedo (which is the spec F0) must not modulate the diffuse irradiance.
+		// (render_resolve_debug keeps this slot neutral; only COMPOSITE needs the real ORM.)
 		RD::Uniform u;
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
 		u.binding = 15;
 		u.append_id(linear_sampler);
-		u.append_id(diffuse_gi[read_index]);
+		u.append_id(p_guide_orm);
 		uniforms.push_back(u);
 	}
 

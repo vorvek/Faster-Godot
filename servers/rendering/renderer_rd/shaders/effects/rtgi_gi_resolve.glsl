@@ -804,10 +804,18 @@ void resolve_debug_gi_main(ivec2 pos) {
 void resolve_composite_main(ivec2 pos) {
 	float raw_depth = texelFetch(depth_buffer, pos, 0).r; // binding 0: real depth (reverse-Z; 0 = sky).
 	vec3 albedo = texelFetch(guide_albedo, pos, 0).rgb; // binding 2: material-guide albedo (linear).
+	// Remod the LIGHTING-SPACE diffuse A by the DIFFUSE albedo, not the raw material albedo. Metals
+	// have NO Lambertian diffuse: their albedo IS the specular F0 (see INTEGRATE's mix(0.04, albedo,
+	// metalness)), so `albedo * A` would falsely inject a diffuse term into metals and over-light
+	// every metal under GI. diffuse_albedo = albedo * (1 - metalness) is the standard PBR split:
+	// unchanged for dielectrics (metalness 0), driven to 0 for metals (metalness 1). spec is already
+	// F0/BRDF-correct from INTEGRATE, so it is added unmodified.
+	float metalness = texelFetch(guide_orm, pos, 0).b; // binding 15 ORM.b = metallic (r=ao, g=rough, a=sss).
+	vec3 diffuse_albedo = albedo * (1.0 - metalness);
 	vec3 A = texelFetch(diffuse_history, pos, 0).rgb; // binding 11 = [read_index] diffuse: lighting-space A.
 	vec3 spec = texelFetch(spec_history, pos, 0).rgb; // binding 12 = [read_index] spec: radiance-space (BRDF applied).
 	// Mask the background so the additive composite does not lift the raster sky/clear color.
-	vec3 indirect = (raw_depth <= 0.0) ? vec3(0.0) : (albedo * A + spec);
+	vec3 indirect = (raw_depth <= 0.0) ? vec3(0.0) : (diffuse_albedo * A + spec);
 	// Sanitize before the additive store (B4): this lands on a PERSISTENT color FB via additive_blend
 	// (dest.rgb += source.rgb), so a single negative or non-finite resolve value would STICK and
 	// permanently corrupt the beauty. Clamp negatives to 0 (the indirect contribution is additive
