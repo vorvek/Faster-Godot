@@ -764,7 +764,14 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	}
 	bool reflections_only = rt_mode == RT_MODE_REFLECTIONS_RT_ONLY;
 	bool raster_owned_primary = (reflections_only || rt_mode == RT_MODE_HYBRID) && total_bounces == 0u;
-	bool hybrid_primary = raster_owned_primary;
+	// WRC probe-update and SPG-gather rays are full path traces that cache WORLD radiance for the GI
+	// probes. They inherit RT_PARAM_MODE (== RT_MODE_HYBRID in a Hybrid frame), but their first hit is
+	// NOT a raster-owned camera primary -- raster shades the camera pixel, not what a probe ray sees.
+	// Treating the probe's first hit as raster-owned drops its first-hit emission (and direct) term, so
+	// emissive-mesh light never enters the cache and emissive-only GI renders black (analytic light
+	// survives only because NEE re-captures it at secondary bounces; a mesh's own Le has no such
+	// re-capture). Exclude the probe-feed dispatches so they shade fully at the first hit.
+	bool hybrid_primary = raster_owned_primary && !rt_wrc_probe_update_mode() && !rt_spg_gather_mode();
 	if (hybrid_primary && (hit_geom.flags & RT_GEOM_FLAG_RASTER_GI_OWNER) != 0u) {
 		ps.packed_bounces_flags = set_primary_raster_gi_owner(ps.packed_bounces_flags);
 	}
