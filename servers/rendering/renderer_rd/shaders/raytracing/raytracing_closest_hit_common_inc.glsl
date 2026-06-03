@@ -266,46 +266,6 @@ void write_primary_hit_velocity(vec3 hit_pos) {
 
 // rtgi_trace_specular_reflected_hit removed (deferred to raygen)
 
-uint rtgi_surface_cache_key(HitData h, MaterialResult m, out uint zero_reason) {
-	zero_reason = RTGI_SURFACE_KEY_REASON_VALID;
-	GeometryData geom = geometries[h.geometry_idx];
-	if ((geom.flags & FLAG_HISTORY_INVALID) != 0u) {
-		zero_reason = RTGI_SURFACE_KEY_REASON_HISTORY_INVALID;
-		return 0u;
-	}
-	if ((geom.flags & FLAG_DEFORMED) != 0u) {
-		zero_reason = RTGI_SURFACE_KEY_REASON_DEFORMED;
-		return 0u;
-	}
-	if ((geom.flags & FLAG_PROCEDURAL) != 0u) {
-		zero_reason = RTGI_SURFACE_KEY_REASON_PROCEDURAL;
-		return 0u;
-	}
-
-	uint key = mix_history_id(0x73726363u, geom.history_id);
-	key = mix_history_id(key, h.geometry_idx);
-
-	ivec3 quantized_position = ivec3(floor(h.hit_pos * 2.0 + vec3(0.5)));
-	key = mix_history_id(key, uint(quantized_position.x));
-	key = mix_history_id(key, uint(quantized_position.y));
-	key = mix_history_id(key, uint(quantized_position.z));
-
-	vec3 normal = normalize(m.normal);
-	uvec3 quantized_normal = uvec3(clamp(floor(normal * 7.0 + vec3(8.0)), vec3(0.0), vec3(15.0)));
-	uvec3 quantized_albedo = uvec3(clamp(floor(clamp(m.albedo, vec3(0.0), vec3(1.0)) * 3.0 + vec3(0.5)), vec3(0.0), vec3(3.0)));
-	uint material_key = quantized_albedo.x | (quantized_albedo.y << 2u) | (quantized_albedo.z << 4u) |
-			(uint(clamp(floor(clamp(m.roughness, 0.0, 1.0) * 5.0 + 0.5), 0.0, 5.0)) << 6u) |
-			(uint(clamp(floor(clamp(m.metalness, 0.0, 1.0) * 2.0 + 0.5), 0.0, 2.0)) << 9u);
-	uint normal_key = quantized_normal.x | (quantized_normal.y << 4u) | (quantized_normal.z << 8u);
-	key = mix_history_id(key, normal_key);
-	key = mix_history_id(key, material_key);
-	if (key == 0u) {
-		zero_reason = RTGI_SURFACE_KEY_REASON_ZERO_KEY;
-		return 0u;
-	}
-	return key;
-}
-
 void write_primary_hit_guides(HitData h, MaterialResult m) {
 	if (get_total_bounces(payload.packed_bounces_flags) != 0u || !is_sample_zero(payload.packed_bounces_flags)) {
 		return;
@@ -464,65 +424,6 @@ void apply_segment_fog(float segment_dist, inout vec3 radiance, inout vec3 throu
 	vec4 fog = fog_process(scene_data_block.data, vertex);
 	radiance += throughput * fog.rgb * fog.a;
 	throughput *= (1.0 - fog.a);
-}
-
-vec3 rtgi_surface_feedback_sample_sky_color(vec3 world_dir) {
-	mat3 camera_basis = mat3(scene_data_block.data.inv_view_matrix);
-	mat3 world_to_sky = scene_data_block.data.radiance_inverse_xform * camera_basis;
-	vec3 sky_dir = world_to_sky * normalize(world_dir);
-	vec2 border = vec2(scene_data_block.data.radiance_border_size,
-			1.0 - scene_data_block.data.radiance_border_size * 2.0);
-	vec2 sky_uv = vec3_to_oct_with_border(sky_dir, border);
-
-	bool background_uses_sky = get_rt_param(RT_PARAM_BACKGROUND_USES_SKY) > 0.5;
-	float sky_lod = float(MAX_ROUGHNESS_LOD);
-	vec3 sky_color = background_uses_sky ?
-			textureLod(sampler2D(radiance_octmap, radiance_sampler), sky_uv, sky_lod).rgb * scene_data_block.data.IBL_exposure_normalization :
-			vec3(get_rt_param(RT_PARAM_BACKGROUND_R), get_rt_param(RT_PARAM_BACKGROUND_G), get_rt_param(RT_PARAM_BACKGROUND_B));
-
-	if ((RT_FLAGS & RT_FLAG_FOG_ENABLED) != 0u) {
-		vec3 fog_color = scene_data_block.data.fog_light_color;
-		if (background_uses_sky && scene_data_block.data.fog_aerial_perspective > 0.0) {
-			vec3 sky_fog = textureLod(sampler2D(radiance_octmap, radiance_sampler), sky_uv, sky_lod).rgb * scene_data_block.data.IBL_exposure_normalization;
-			fog_color = mix(fog_color, sky_fog, scene_data_block.data.fog_aerial_perspective);
-		}
-		sky_color = mix(sky_color, fog_color, scene_data_block.data.fog_sky_affect);
-	}
-
-	return sanitize_payload_vec3(sky_color);
-}
-
-bool rtgi_surface_feedback_sample_sky_visible(vec3 world_pos, vec3 normal, uint rng_state, out vec3 sky_lighting, out float confidence, out float support) {
-	sky_lighting = vec3(0.0);
-	confidence = 0.0;
-	support = 0.0;
-	vec3 normal_n = normalize(normal);
-	vec3 up_dir = vec3(0.0, 1.0, 0.0);
-	vec3 sky_dir = normalize(normal_n + up_dir * 0.65);
-	if (dot(sky_dir, normal_n) <= 0.08) {
-		sky_dir = normal_n;
-	}
-
-	float ndotl = max(dot(normal_n, sky_dir), 0.0);
-	if (ndotl <= 0.04) {
-		return false;
-	}
-
-	uint shadow_rng = rng_state;
-	if (!lights_trace_shadow_ray(offset_ray_origin(world_pos, normal_n), sky_dir, 10000.0, 0xFFFFFFFFu, shadow_rng)) {
-		return false;
-	}
-
-	vec3 sky_color = rtgi_surface_feedback_sample_sky_color(sky_dir);
-	float sky_luma = rt_luminance(sky_color);
-	if (sky_luma <= 0.00025) {
-		return false;
-	}
-
-	sky_lighting = sanitize_payload_vec3(sky_color * ndotl * 0.70);
-	confidence = clamp(0.22 + ndotl * 0.24, 0.0, 0.50);
-	support = clamp(0.28 + ndotl * 0.32, 0.0, 0.62);
-	return true;
 }
 
 /// Converts specular parameter [0..1] to dielectric F0.
