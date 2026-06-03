@@ -294,12 +294,26 @@ static RendererRD::RTGIScreenProbeGather::SpgParams _resolve_spg_params(uint32_t
 }
 
 // Resolves the active RTGI GI-Resolve params from the per-preset Project Settings.
-// T0 STUB: returns the GiResolveParams defaults for every preset (the real per-preset
-// GLOBAL_GET + CLAMP body lands in T7, mirroring _resolve_spg_params). The `p_preset`
-// argument is accepted now so the call site is stable across T0 -> T7.
+// preset: 1=Performance, 2=Balanced, 3=Production; anything else (incl. 0=Custom) -> Balanced.
+// Each knob is GLOBAL_GET + CLAMPed to the same range the GLOBAL_DEF hint specifies,
+// mirroring _resolve_spg_params's GLOBAL_GET + CLAMP pattern (same tier source: the
+// Environment's rtgi_quality_preset carried on the params as p_preset).
 static RendererRD::RTGIGIResolve::GiResolveParams _resolve_gi_resolve_params(uint32_t p_preset) {
-	(void)p_preset;
-	return RendererRD::RTGIGIResolve::GiResolveParams{};
+	const char *prefix;
+	switch (p_preset) {
+		case 1: prefix = "rendering/rtgi/gi_resolve/performance/"; break;
+		case 3: prefix = "rendering/rtgi/gi_resolve/production/"; break;
+		case 2:
+		default: prefix = "rendering/rtgi/gi_resolve/balanced/"; break;
+	}
+	const String base = String(prefix);
+	RendererRD::RTGIGIResolve::GiResolveParams params;
+	params.spatial_iterations = CLAMP(int32_t(GLOBAL_GET(base + "spatial_iterations")), 0, 2);
+	params.temporal_n_cap = float(CLAMP(int32_t(GLOBAL_GET(base + "temporal_sample_cap")), 4, 64));
+	params.rough_spec_roughness_cutoff = CLAMP(float(GLOBAL_GET(base + "rough_spec_roughness_cutoff")), 0.0f, 1.0f);
+	params.rough_spec_enabled = bool(GLOBAL_GET(base + "rough_spec_enabled"));
+	params.history_rejection = CLAMP(float(GLOBAL_GET(base + "history_rejection_strength")), 0.25f, 4.0f);
+	return params;
 }
 
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_specular() {

@@ -3978,6 +3978,27 @@ void RenderingServer::init() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/screen_probe_gather/production/spatial_radius", PROPERTY_HINT_RANGE, "0,2,1"), 1);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/screen_probe_gather/production/rt_fallback_confidence", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 0.4);
 
+	// RTGI GI-Resolve per-preset tunables. The same per-scene
+	// Environment.rtgi_quality_preset selector that picks the SPG tier also picks one
+	// of these tiers; the renderer resolves the active tier's five knobs live (no
+	// restart) so games can retune Performance/Balanced/Production globally without
+	// recompiling. Clamp ranges mirror the renderer's CLAMPs in _resolve_gi_resolve_params.
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/gi_resolve/performance/spatial_iterations", PROPERTY_HINT_RANGE, "0,2,1"), 1);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/gi_resolve/performance/temporal_sample_cap", PROPERTY_HINT_RANGE, "4,64,1"), 12);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/gi_resolve/performance/rough_spec_roughness_cutoff", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 0.6);
+	GLOBAL_DEF(PropertyInfo(Variant::BOOL, "rendering/rtgi/gi_resolve/performance/rough_spec_enabled"), true);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/gi_resolve/performance/history_rejection_strength", PROPERTY_HINT_RANGE, "0.25,4.0,0.05"), 1.0);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/gi_resolve/balanced/spatial_iterations", PROPERTY_HINT_RANGE, "0,2,1"), 1);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/gi_resolve/balanced/temporal_sample_cap", PROPERTY_HINT_RANGE, "4,64,1"), 16);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/gi_resolve/balanced/rough_spec_roughness_cutoff", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 0.5);
+	GLOBAL_DEF(PropertyInfo(Variant::BOOL, "rendering/rtgi/gi_resolve/balanced/rough_spec_enabled"), true);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/gi_resolve/balanced/history_rejection_strength", PROPERTY_HINT_RANGE, "0.25,4.0,0.05"), 1.0);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/gi_resolve/production/spatial_iterations", PROPERTY_HINT_RANGE, "0,2,1"), 2);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/gi_resolve/production/temporal_sample_cap", PROPERTY_HINT_RANGE, "4,64,1"), 12);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/gi_resolve/production/rough_spec_roughness_cutoff", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 0.4);
+	GLOBAL_DEF(PropertyInfo(Variant::BOOL, "rendering/rtgi/gi_resolve/production/rough_spec_enabled"), true);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/gi_resolve/production/history_rejection_strength", PROPERTY_HINT_RANGE, "0.25,4.0,0.05"), 1.25);
+
 	// OpenGL limits
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/limits/opengl/max_renderable_elements", PROPERTY_HINT_RANGE, "1024,65536,1"), 65536);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/limits/opengl/max_renderable_lights", PROPERTY_HINT_RANGE, "2,256,1"), 32);
