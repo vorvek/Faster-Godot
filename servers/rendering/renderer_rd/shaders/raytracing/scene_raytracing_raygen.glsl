@@ -422,26 +422,27 @@ void rt_strc_probe_update_main() {
 // World Radiance Cache probe-update raygen. Task 5b: the WRC probe-ray PRODUCER
 // is structurally identical to the STRC producer (same cubic probe grid, same
 // 8x8 octahedral directions, same scheduler, same full-path-trace + NEE shading),
-// so this body is a copy of rt_strc_probe_update_main() that differs ONLY in the
-// three output-buffer writes (STRC results SSBO -> WRC results SSBO). It reads the
-// SAME RT_PARAM_RTGI_STRC_* slots; the C++ WRC dispatch site fills those slots with
-// the WRC clipmap params so probe-addressing matches the WRC atlas. The WRC's real
-// divergence (octahedral integration, sample-counted accumulate, integrating
-// consumer) lives in Tasks 6/7, NOT here. No WRC atlas sampling / cache feedback:
-// the full path trace already yields ground-truth multi-bounce radiance.
+// so this body mirrors rt_strc_probe_update_main() but reads the WRC's OWN param
+// slots (RT_PARAM_RTGI_WRC_*) and uses the WRC-named scheduler (rt_wrc_select_update_index).
+// The C++ WRC dispatch site fills those slots with the WRC clipmap params so
+// probe-addressing matches the WRC atlas (A3-T9 migrated these off the borrowed
+// STRC slots; values are unchanged, only the slot names/numbers + scheduler name).
+// The WRC's real divergence (octahedral integration, sample-counted accumulate,
+// integrating consumer) lives in Tasks 6/7, NOT here. No WRC atlas sampling / cache
+// feedback: the full path trace already yields ground-truth multi-bounce radiance.
 void rt_wrc_probe_update_main() {
 	uint ray_index = gl_LaunchIDEXT.x;
-	uint ray_count = uint(max(get_rt_param(RT_PARAM_RTGI_STRC_RAYS_PER_FRAME), 0.0));
+	uint ray_count = uint(max(get_rt_param(RT_PARAM_RTGI_WRC_RAYS), 0.0));
 	if (ray_index >= ray_count) {
 		return;
 	}
 
-	uint grid = clamp(uint(get_rt_param(RT_PARAM_RTGI_STRC_GRID_SIZE)), 12u, 32u);
-	uint cascade_count = clamp(uint(get_rt_param(RT_PARAM_RTGI_STRC_CASCADE_COUNT)), 1u, 4u);
+	uint grid = clamp(uint(get_rt_param(RT_PARAM_RTGI_WRC_GRID)), 12u, 32u);
+	uint cascade_count = clamp(uint(get_rt_param(RT_PARAM_RTGI_WRC_CASCADE_COUNT)), 1u, 4u);
 	uint probe_count = cascade_count * grid * grid * grid;
 	uint texel_count = probe_count * 64u;
 	uint frame_index = uint(get_rt_param(RT_PARAM_FRAME_INDEX));
-	uint update_index = texel_count > 0u ? rt_strc_select_update_index(ray_index, max(ray_count, 1u), grid, cascade_count, frame_index) % texel_count : 0u;
+	uint update_index = texel_count > 0u ? rt_wrc_select_update_index(ray_index, max(ray_count, 1u), grid, cascade_count, frame_index) % texel_count : 0u;
 	uint probe_index = update_index >> 6u;
 	uint dir_index = update_index & 63u;
 	uint probes_per_cascade = grid * grid * grid;
@@ -451,7 +452,7 @@ void rt_wrc_probe_update_main() {
 	uint py = (probe / grid) % grid;
 	uint pz = probe / (grid * grid);
 
-	float spacing = max(get_rt_param(RT_PARAM_RTGI_STRC_BASE_PROBE_SPACING), 0.25) * exp2(float(cascade));
+	float spacing = max(get_rt_param(RT_PARAM_RTGI_WRC_BASE_SPACING), 0.25) * exp2(float(cascade));
 	vec3 camera_origin = rt_camera_world_origin();
 	vec3 cascade_center = floor(camera_origin / spacing) * spacing;
 	vec3 probe_local = (vec3(float(px), float(py), float(pz)) + vec3(0.5)) - vec3(float(grid) * 0.5);
@@ -536,17 +537,18 @@ void rt_wrc_probe_update_main() {
 // (ground-truth radiance, identical to the WRC producer's loop) instead. The result is
 // written to the SPG ray-result SSBO; the T3 accumulate folds it into the atlas.
 
-// Fills WrcParams for the WRC radiance query. cascade/grid/spacing come from the STRC
-// param slots (the SPG dispatch's update_uniform_set override fills them with the WRC's
-// clipmap values, exactly as the WRC probe-update pass reuses them); oct_res comes from
+// Fills WrcParams for the WRC radiance query. cascade/grid/spacing come from the WRC's
+// OWN param slots (RT_PARAM_RTGI_WRC_*), which the SPG dispatch's update_uniform_set
+// override fills with the WRC's clipmap values, exactly as the WRC probe-update pass does
+// (A3-T9 migrated these off the borrowed STRC slots; values unchanged). oct_res comes from
 // the dedicated SPG_WRC_OCT_RES param; camera + bias are constants matching the WRC
 // consumer (rtgi_wrc_gi_consumer / render_gi_debug).
 WrcParams spg_make_wrc_params() {
 	WrcParams p;
-	p.cascade_count = int(max(get_rt_param(RT_PARAM_RTGI_STRC_CASCADE_COUNT), 1.0));
-	p.grid = int(max(get_rt_param(RT_PARAM_RTGI_STRC_GRID_SIZE), 1.0));
+	p.cascade_count = int(max(get_rt_param(RT_PARAM_RTGI_WRC_CASCADE_COUNT), 1.0));
+	p.grid = int(max(get_rt_param(RT_PARAM_RTGI_WRC_GRID), 1.0));
 	p.oct_res = int(max(get_rt_param(RT_PARAM_RTGI_SPG_WRC_OCT_RES), 1.0));
-	p.base_spacing = max(get_rt_param(RT_PARAM_RTGI_STRC_BASE_PROBE_SPACING), 0.25);
+	p.base_spacing = max(get_rt_param(RT_PARAM_RTGI_WRC_BASE_SPACING), 0.25);
 	p.camera_pos = rt_camera_world_origin();
 	p.occlusion_bias_spacing = 0.5;
 	p.min_variance = 0.0001;

@@ -13,7 +13,7 @@
 // ============================================================================
 // RT_PARAMS INDICES - Must match RT_PARAM_* in scene_shader_raytracing.h
 // ============================================================================
-// rt_params is a vec4[12] uniform buffer (48 floats total)
+// rt_params is a vec4[13] uniform buffer (52 floats total)
 // Access: rt_params[idx >> 2][idx & 3] or get_rt_param(idx)
 #define RT_PARAM_VIS_MODE 0 // rt_params[0].x - Debug visualization mode (0 = disabled)
 #define RT_PARAM_SAMPLE_COUNT 1 // rt_params[0].y - Samples per pixel
@@ -65,6 +65,16 @@
 #define RT_PARAM_RTGI_SPG_DIRS_PER_FRAME 42 // rt_params[10].z - SPG directions gathered per probe per frame.
 #define RT_PARAM_RTGI_SPG_FALLBACK_CONF 43 // rt_params[10].w - WRC confidence below which the gather traces a ray.
 #define RT_PARAM_RTGI_SPG_WRC_OCT_RES 44 // rt_params[11].x - WRC atlas oct_res for the WRC radiance query.
+// World Radiance Cache (WRC) producer-owned params (indices 45..48). Renderer-internal
+// RT-param slots filled by update_uniform_set's RT_FLAG_WRC_PROBE_UPDATE / RT_FLAG_SPG_GATHER
+// overrides (NOT by the Environment pathtracing-params fill, which only writes indices < 39).
+// These replace the legacy borrow of the STRC grid/cascade/spacing/rays slots by the WRC
+// probe-update + SPG gather producers. Must match the RT_PARAM_RTGI_WRC_* constants in
+// scene_shader_raytracing.h. Backed by rt_params[12] (the 13th vec4).
+#define RT_PARAM_RTGI_WRC_GRID 45 // rt_params[11].y - WRC clipmap probes per axis.
+#define RT_PARAM_RTGI_WRC_CASCADE_COUNT 46 // rt_params[11].z - Active WRC cascades.
+#define RT_PARAM_RTGI_WRC_BASE_SPACING 47 // rt_params[11].w - Cascade 0 spacing in world units.
+#define RT_PARAM_RTGI_WRC_RAYS 48 // rt_params[12].x - WRC probe-update ray budget per frame.
 
 #define RTGI_SAMPLING_ANALYTIC_LIGHTS_BIT 1u
 #define RTGI_SAMPLING_EXPLICIT_EMISSIVE_BIT 2u

@@ -35,10 +35,12 @@ layout(set = 0, binding = 14, std430) readonly buffer GlobalShaderUniformData {
 global_shader_uniforms;
 
 layout(set = 0, binding = 6, std140) uniform RaytracingParams {
-	// 12 vec4s == RT_PARAM_SHADER_FLOAT_COUNT (48) floats. Grown from 10 to 12 to make
-	// room for the Screen Probe Gather (SPG) params (indices 39..44); see the matching
-	// RT_PARAM_SHADER_FLOAT_COUNT in scene_shader_raytracing.h + the rt_ubo static_assert.
-	vec4 rt_params[12];
+	// 13 vec4s == RT_PARAM_SHADER_FLOAT_COUNT (52) floats. Grown from 12 to 13 to make
+	// room for the World Radiance Cache (WRC) producer-owned params (indices 45..48); the
+	// prior growth 10 -> 12 added the Screen Probe Gather (SPG) params (indices 39..44).
+	// See the matching RT_PARAM_SHADER_FLOAT_COUNT in scene_shader_raytracing.h + the
+	// rt_ubo static_assert in render_raytracing.cpp.
+	vec4 rt_params[13];
 	mat4 prev_vp_unjittered;
 mat4 curr_vp_unjittered;
 mat4 inv_projection_unjittered;
@@ -1564,6 +1566,25 @@ uint rt_strc_select_view_biased_update_index(uint ray_index, uint grid, uint cas
 }
 
 uint rt_strc_select_update_index(uint ray_index, uint ray_count, uint grid, uint cascade_count, uint frame_index) {
+	uint active_cascades = clamp(cascade_count, 1u, 4u);
+	uint view_ray_count = rt_strc_view_update_budget(max(ray_count, 1u));
+	if (ray_index < view_ray_count) {
+		return rt_strc_select_view_biased_update_index(ray_index, grid, active_cascades, frame_index);
+	}
+
+	uint background_ray_count = max(ray_count - view_ray_count, 1u);
+	uint background_ray_index = ray_index - view_ray_count;
+	return rt_strc_select_round_robin_update_index(background_ray_index, background_ray_count, grid, active_cascades, frame_index);
+}
+
+// World Radiance Cache probe-update / SPG gather scheduler. WRC-named copy of
+// rt_strc_select_update_index with an IDENTICAL body: it delegates to the same pure
+// scheduler helpers (rt_strc_view_update_budget / rt_strc_select_view_biased_update_index /
+// rt_strc_select_round_robin_update_index), which are functions of their args only (no STRC
+// param-slot reads), so it returns byte-identical update indices. This owns the WRC/SPG
+// scheduler entry point so the STRC scheduler can be deleted later without touching the
+// live WRC/SPG producers.
+uint rt_wrc_select_update_index(uint ray_index, uint ray_count, uint grid, uint cascade_count, uint frame_index) {
 	uint active_cascades = clamp(cascade_count, 1u, 4u);
 	uint view_ray_count = rt_strc_view_update_budget(max(ray_count, 1u));
 	if (ray_index < view_ray_count) {

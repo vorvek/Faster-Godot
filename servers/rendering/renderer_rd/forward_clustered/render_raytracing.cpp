@@ -9722,10 +9722,12 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			float rt_prev_view_rect[4];
 			float rt_jitter[4];
 		} rt_ubo = {};
-		// 48 params + 3 mat4 (48) + 3 vec4 (12) = 108 floats. params[] grew from 40 to 48
-		// (RT_PARAM_SHADER_FLOAT_COUNT) for the SPG params; keep this in lock-step with the
-		// GLSL `vec4 rt_params[12]` declaration in raytracing_common_inc.glsl.
-		static_assert(sizeof(rt_ubo) == 108 * sizeof(float));
+		// 52 params + 3 mat4 (48) + 3 vec4 (12) = 112 floats. params[] grew from 48 to 52
+		// (RT_PARAM_SHADER_FLOAT_COUNT) for the WRC producer-owned params (indices 45..48);
+		// the prior 40 -> 48 growth added the SPG params. Keep this in lock-step with the
+		// GLSL `vec4 rt_params[13]` declaration in raytracing_common_inc.glsl. The brace-init
+		// above zero-fills all params[] (incl. the new WRC slots) just like every other slot.
+		static_assert(sizeof(rt_ubo) == 112 * sizeof(float));
 
 		if (p_render_data && p_render_data->environment.is_valid()) {
 			const RSE::PathtracingParams *env_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
@@ -9742,32 +9744,38 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_RAYS_PER_FRAME] = float(SceneShaderRaytracing::RTGI_STRC_INTERNAL_FALLBACK_RAYS_PER_FRAME);
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT] = SceneShaderRaytracing::RTGI_STRC_INTERNAL_FALLBACK_TEMPORAL_WEIGHT;
 		}
-		// WRC probe-update reuses the STRC grid/cascade/spacing/rays param slots for
-		// probe-addressing, but needs the WRC's own clipmap values (which the WRC atlas
-		// was sized from) rather than the Environment's STRC settings filled above. The
-		// dispatch site channels those values through RTViewportState; override them here
-		// AFTER the Environment fill, gated on the WRC flag so STRC/main dispatches are
-		// byte-identical to before (wrc_grid > 0 is a belt-and-suspenders sentinel).
+		// WRC probe-update needs the WRC's own clipmap values (which the WRC atlas was
+		// sized from) for probe-addressing. A3-T9 moved these off the borrowed STRC slots
+		// onto the WRC producer-owned RT_PARAM_RTGI_WRC_* slots, so the STRC slots are no
+		// longer touched by any radiance_probes path (the STRC effect can be deleted later
+		// without touching this producer). The dispatch site channels these values through
+		// RTViewportState; write them here gated on the WRC flag (wrc_grid > 0 is a
+		// belt-and-suspenders sentinel). Values are unchanged from the prior STRC-slot
+		// borrow, so the WRC producer stays byte-identical.
 		if ((p_rt_flags & SceneShaderRaytracing::RT_FLAG_WRC_PROBE_UPDATE) != 0 && p_state->wrc_grid > 0u) {
-			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_GRID_SIZE] = float(p_state->wrc_grid);
-			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_CASCADE_COUNT] = float(p_state->wrc_cascade_count);
-			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_BASE_PROBE_SPACING] = p_state->wrc_base_spacing;
-			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_RAYS_PER_FRAME] = float(p_state->wrc_rays_per_frame);
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_WRC_GRID] = float(p_state->wrc_grid);
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_WRC_CASCADE_COUNT] = float(p_state->wrc_cascade_count);
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_WRC_BASE_SPACING] = p_state->wrc_base_spacing;
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_WRC_RAYS] = float(p_state->wrc_rays_per_frame);
 		}
-		// SPG gather (A2-T2) reuses (a) the STRC grid/cascade/spacing slots so the WRC
-		// radiance query inside the gather addresses the SAME atlas the WRC was sized from
-		// (mirrors the WRC override above, sourced from the same wrc_* fields the dispatch
-		// site set), AND (b) the dedicated RT_PARAM_RTGI_SPG_* slots for the gather's own
-		// grid/oct/dir budget + WRC-query oct_res. Gated on the SPG flag + spg_grid_w > 0
-		// sentinel so STRC/WRC/main dispatches stay byte-identical.
+		// SPG gather (A2-T2) writes (a) the WRC producer-owned grid/cascade/spacing slots so
+		// the WRC radiance query inside the gather addresses the SAME atlas the WRC was sized
+		// from (mirrors the WRC override above, sourced from the same wrc_* fields the dispatch
+		// site set; A3-T9 migrated these off the borrowed STRC slots, values unchanged), AND
+		// (b) the dedicated RT_PARAM_RTGI_SPG_* slots for the gather's own grid/oct/dir budget
+		// + WRC-query oct_res. Gated on the SPG flag + spg_grid_w > 0 sentinel so STRC/WRC/main
+		// dispatches stay byte-identical.
 		if ((p_rt_flags & SceneShaderRaytracing::RT_FLAG_SPG_GATHER) != 0 && p_state->spg_grid_w > 0u) {
-			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_GRID_SIZE] = float(p_state->wrc_grid);
-			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_CASCADE_COUNT] = float(p_state->wrc_cascade_count);
-			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_BASE_PROBE_SPACING] = p_state->wrc_base_spacing;
-			// Zero the STRC ray budget defensively: the WRC query reads only the STRC
-			// grid/cascade/spacing slots, and a stale nonzero RAYS_PER_FRAME would let the
-			// closest-hit shader sample STRC indirect into the gather's ground-truth rays
-			// should SPG ever run with STRC enabled (mirrors the WRC override's guard).
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_WRC_GRID] = float(p_state->wrc_grid);
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_WRC_CASCADE_COUNT] = float(p_state->wrc_cascade_count);
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_WRC_BASE_SPACING] = p_state->wrc_base_spacing;
+			// Zero the STRC ray budget defensively: this is an STRC *consumer* guard (NOT a
+			// WRC producer feed), unaffected by the A3-T9 producer migration. The gather's
+			// ground-truth ray trace runs the normal closest-hit shader, whose STRC consumer
+			// path keys off RT_PARAM_RTGI_STRC_RAYS_PER_FRAME (slot 33, populated by the
+			// Environment fill above). A stale nonzero value would let the closest-hit shader
+			// fold STRC indirect into the gather's ground-truth rays should SPG ever run with
+			// STRC enabled on the environment; zeroing it keeps the gather byte-identical.
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_RAYS_PER_FRAME] = 0.0f;
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_SPG_GRID_W] = float(p_state->spg_grid_w);
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_SPG_GRID_H] = float(p_state->spg_grid_h);

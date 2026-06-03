@@ -152,11 +152,26 @@ public:
 	static constexpr int RT_PARAM_RTGI_SPG_DIRS_PER_FRAME = 42;
 	static constexpr int RT_PARAM_RTGI_SPG_FALLBACK_CONF = 43;
 	static constexpr int RT_PARAM_RTGI_SPG_WRC_OCT_RES = 44; // WRC atlas oct_res for the WRC query (not in the STRC slots).
-	// Backing UBO float count. GROWN from 40 to 48 (10 -> 12 vec4s) to make room for
-	// the SPG params above (highest index 44). Must stay a multiple of 4 (the GLSL
-	// `vec4 rt_params[]` array length is RT_PARAM_SHADER_FLOAT_COUNT / 4) and must match
-	// the GLSL `rt_params[12]` declaration + the rt_ubo static_assert in render_raytracing.cpp.
-	static constexpr uint32_t RT_PARAM_SHADER_FLOAT_COUNT = 48;
+	// World Radiance Cache (WRC) producer-owned params (indices 45..48). Like the SPG
+	// params above, these are renderer-internal RT-param slots (NOT part of
+	// RSE::PathtracingParamIndex / PT_PARAM_MAX): the WRC probe-update + SPG gather
+	// dispatches fill them directly via update_uniform_set's RT_FLAG_WRC_PROBE_UPDATE /
+	// RT_FLAG_SPG_GATHER overrides. They replace the legacy borrow of the STRC
+	// grid/cascade/spacing/rays slots so the STRC effect/slots can be deleted later
+	// without touching the live WRC/SPG producers. Being >= PT_PARAM_MAX (39) they are
+	// never touched by the Environment fill (pathtracing_params_to_shader_floats only
+	// writes indices < PT_PARAM_MAX), so the C++ override is their sole writer.
+	static constexpr int RT_PARAM_RTGI_WRC_GRID = 45; // Probes per axis (WRC clipmap grid).
+	static constexpr int RT_PARAM_RTGI_WRC_CASCADE_COUNT = 46; // Active WRC cascades.
+	static constexpr int RT_PARAM_RTGI_WRC_BASE_SPACING = 47; // Cascade 0 spacing in world units.
+	static constexpr int RT_PARAM_RTGI_WRC_RAYS = 48; // WRC probe-update ray budget per frame.
+	// Backing UBO float count. GROWN from 48 to 52 (12 -> 13 vec4s) to make room for the
+	// WRC producer-owned params above (highest index 48); the prior growth 40 -> 48
+	// (10 -> 12 vec4s) added the SPG params (indices 39..44). Must stay a multiple of 4
+	// (the GLSL `vec4 rt_params[]` array length is RT_PARAM_SHADER_FLOAT_COUNT / 4) and
+	// must match the GLSL `rt_params[13]` declaration + the rt_ubo static_assert in
+	// render_raytracing.cpp.
+	static constexpr uint32_t RT_PARAM_SHADER_FLOAT_COUNT = 52;
 
 	static constexpr uint32_t RT_MODE_REFLECTIONS_RT_ONLY = 0;
 	static constexpr uint32_t RT_MODE_FULL_PATH_TRACING = 1;
