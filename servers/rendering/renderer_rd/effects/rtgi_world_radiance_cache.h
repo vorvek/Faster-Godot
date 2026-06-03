@@ -37,7 +37,7 @@ struct WRCFrameParams {
 // textures directly (RID members + ping-pong index) rather than the
 // render-buffers scope, since the cache is world-space / view-independent.
 //
-// Structure mirrors RTGISpatioTemporalRadianceCache: a single compute shader
+// Structure: a single compute shader
 // with a `mode` push-constant driving scroll (mode 0) and accumulate (mode 1)
 // dispatches over the atlas, with ping-pong read/write atlases swapped per
 // update. Task 4 ships the structure with EMPTY kernels; the probe-ray update

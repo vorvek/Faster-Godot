@@ -79,9 +79,6 @@ public:
 		RT_FLAG_DEBUG_VIS_ENABLED = (1 << 0),
 		RT_FLAG_FOG_ENABLED = (1 << 2),
 		RT_FLAG_SER_ENABLED = (1 << 3),
-		RT_FLAG_STRC_ENABLED = (1 << 4),
-		RT_FLAG_STRC_PROBE_UPDATE = (1 << 5),
-		RT_FLAG_STRC_INTERNAL_FALLBACK = (1 << 6),
 		RT_FLAG_WRC_PROBE_UPDATE = (1 << 7),
 		RT_FLAG_SPG_GATHER = (1 << 8),
 	};
@@ -91,12 +88,6 @@ public:
 
 	constexpr static uint32_t RT_MAX_BOUNCES_SHIFT = 29;
 	constexpr static uint32_t RT_MAX_BOUNCES_MASK = 0x7;
-
-	constexpr static uint32_t RTGI_STRC_INTERNAL_FALLBACK_CASCADE_COUNT = 3;
-	constexpr static uint32_t RTGI_STRC_INTERNAL_FALLBACK_GRID_SIZE = 16;
-	constexpr static uint32_t RTGI_STRC_INTERNAL_FALLBACK_RAYS_PER_FRAME = 12288;
-	constexpr static float RTGI_STRC_INTERNAL_FALLBACK_BASE_PROBE_SPACING = 1.75f;
-	constexpr static float RTGI_STRC_INTERNAL_FALLBACK_TEMPORAL_WEIGHT = 0.96f;
 
 	// RT pipeline limits (must match GLSL payload/hit attribute struct sizes).
 	// 1: primary/bounce from raygen

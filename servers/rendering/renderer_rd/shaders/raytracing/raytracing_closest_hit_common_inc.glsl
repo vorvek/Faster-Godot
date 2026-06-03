@@ -121,9 +121,6 @@ vec3 apply_normal_map(HitData h, vec3 tangent_space_normal, float normal_map_dep
 
 /// Write NDC depth for primary ray hits (bounce 0, sample 0 only).
 void write_primary_hit_depth(vec3 hit_pos) {
-	if (rt_strc_probe_update_mode()) {
-		return;
-	}
 	if (get_total_bounces(payload.packed_bounces_flags) == 0u && is_sample_zero(payload.packed_bounces_flags)) {
 		mat4 view_mat = transpose(mat4(scene_data_block.data.view_matrix[0],
 				scene_data_block.data.view_matrix[1],
@@ -160,9 +157,6 @@ uint mix_history_id(uint id, uint value) {
 }
 
 void write_primary_hit_history_validity() {
-	if (rt_strc_probe_update_mode()) {
-		return;
-	}
 	if (get_total_bounces(payload.packed_bounces_flags) != 0u || !is_sample_zero(payload.packed_bounces_flags)) {
 		return;
 	}
@@ -207,9 +201,6 @@ mat4 decode_prev_object_to_world(int motion_idx) {
 /// Write motion vectors for primary ray hits (bounce 0, sample 0 only).
 /// Uses unjittered VP matrices matching the raster motion_vectors_store convention.
 void write_primary_hit_velocity(vec3 hit_pos) {
-	if (rt_strc_probe_update_mode()) {
-		return;
-	}
 	if (get_total_bounces(payload.packed_bounces_flags) != 0u || !is_sample_zero(payload.packed_bounces_flags)) {
 		return;
 	}
@@ -316,9 +307,6 @@ uint rtgi_surface_cache_key(HitData h, MaterialResult m, out uint zero_reason) {
 }
 
 void write_primary_hit_guides(HitData h, MaterialResult m) {
-	if (rt_strc_probe_update_mode()) {
-		return;
-	}
 	if (get_total_bounces(payload.packed_bounces_flags) != 0u || !is_sample_zero(payload.packed_bounces_flags)) {
 		return;
 	}
@@ -348,12 +336,6 @@ void write_primary_hit_guides(HitData h, MaterialResult m) {
 
 	vec3 normal = normalize(m.normal);
 	float guide_roughness = clamp(m.roughness, 0.0, 1.0);
-	uint receiver_surface_id = rt_receiver_surface_id(h.hit_pos, normal, guide_roughness, max(m.albedo, vec3(0.0)));
-	uint surface_key_reason = RTGI_SURFACE_KEY_REASON_VALID;
-	uint surface_key = rtgi_surface_cache_key(h, m, surface_key_reason);
-	imageStore(rt_receiver_surface_id_image, pixel, rt_pack_u32_rgba8(receiver_surface_id));
-	imageStore(rt_surface_cache_key_image, pixel, uvec4(surface_key, 0u, 0u, 0u));
-	rtgi_store_surface_key_diagnostic(pixel, surface_key, surface_key_reason, (geometries[h.geometry_idx].flags & (FLAG_DEFORMED | FLAG_HISTORY_INVALID)) == 0u ? 1.0 : 0.0);
 	imageStore(rt_albedo_metalness_image, pixel, vec4(max(m.albedo, vec3(0.0)), clamp(m.metalness, 0.0, 1.0)));
 	imageStore(rt_normal_roughness_image, pixel, vec4(normal * 0.5 + 0.5, guide_roughness));
 	imageStore(rt_viewz_hitdist_image, pixel, vec4(abs(view_pos.z), max(gl_HitTEXT, 0.0), expected_prev_view_z, 0.0));
@@ -371,7 +353,6 @@ void write_primary_hit_guides(HitData h, MaterialResult m) {
 	} else if (vis_mode == RT_VIS_MODE_SPECULAR_REFLECTED_HIT_NORMAL) {
 		imageStore(rt_specular_reflection_direction_image, pixel, vec4(vec3(0.0), specular_risk));
 	}
-	rt_signal_set_primary_confidence(pixel, specular_risk, float(geom_idx & 1023u) / 1023.0, 1.0);
 }
 
 uint rtgi_primary_surface_rng_seed(HitData h, MaterialResult m, uint frame_index) {
@@ -731,20 +712,11 @@ void debug_visualize(
 // SHADE AND BOUNCE
 // ============================================================================
 
-void rt_strc_mark_source_if_probe(inout PathState ps, uint source_flag, vec3 contribution) {
-	if (rt_strc_probe_update_mode() && rt_luminance(sanitize_payload_vec3(contribution)) > 0.0005) {
-		ps.packed_bounces_flags |= source_flag;
-	}
-}
-
 /// Production shading: emissive + NEE direct lighting + BRDF importance sampling + next bounce.
 /// Also handles DLSS-RR G-buffer output on primary ray.
 void shade_and_bounce(HitData h, MaterialResult m) {
 	PathState ps = path_unpack(payload);
 	GeometryData hit_geom = geometries[h.geometry_idx];
-	if (rt_strc_probe_update_mode() && rt_strc_visual_layer_dynamic(hit_geom.layer_mask)) {
-		ps.packed_bounces_flags = set_strc_dynamic_hit(ps.packed_bounces_flags);
-	}
 
 	vec3 V = -gl_WorldRayDirectionEXT;
 
@@ -759,7 +731,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	float sampling_roughness = max(material_roughness, path_min_roughness);
 	uint rtgi_sampling_controls = uint(get_rt_param(RT_PARAM_RTGI_SAMPLING_CONTROLS));
 	uint rt_mode = uint(get_rt_param(RT_PARAM_MODE));
-	if (!rt_strc_probe_update_mode() && total_bounces == 0u && rt_mode == RT_MODE_PATH_TRACED && RT_GET_SAMPLE_COUNT() == 1u) {
+	if (total_bounces == 0u && rt_mode == RT_MODE_PATH_TRACED && RT_GET_SAMPLE_COUNT() == 1u) {
 		ps.rng_state = rtgi_primary_surface_rng_seed(h, m, uint(get_rt_param(RT_PARAM_FRAME_INDEX)));
 	}
 	bool reflections_only = rt_mode == RT_MODE_REFLECTIONS_RT_ONLY;
@@ -804,8 +776,6 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		}
 		vec3 raw_emissive_contribution = ps.throughput * m.emissive * w_bsdf;
 		vec3 emissive_contribution = rt_clamp_path_contribution(raw_emissive_contribution, material_roughness, m.metalness, secondary_emissive, secondary_emissive);
-		rt_strc_mark_source_if_probe(ps, STRC_EMISSIVE_SOURCE_FLAG, emissive_contribution);
-		rt_signal_add_emissive(ivec2(gl_LaunchIDEXT.xy), emissive_contribution, secondary_emissive, rt_signal_clamp_delta(raw_emissive_contribution, emissive_contribution));
 		ps.radiance += emissive_contribution;
 		if (total_bounces == 0u || get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {
 			ps.specular_radiance += emissive_contribution;
@@ -847,11 +817,6 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	// NEE: Next Event Estimation (direct light sampling)
 	// =================================================================
 	path_pack(payload, ps);
-	bool rtgi_surface_feedback_eligible = !hybrid_primary && rt_mode == RT_MODE_PATH_TRACED && total_bounces > 0u && diffuse_bounces > 0u && !rt_strc_probe_update_mode() && material_roughness > 0.35 && m.metalness < 0.55;
-	vec3 rtgi_surface_feedback_lighting = vec3(0.0);
-	float rtgi_surface_feedback_confidence = 0.0;
-	float rtgi_surface_feedback_support = 0.0;
-	uint rtgi_surface_feedback_source_mask = 0u;
 
 	uint rt_light_count = uint(get_rt_param(RT_PARAM_LIGHT_COUNT));
 	if (rt_light_count > 0u && !hybrid_primary && (rtgi_sampling_controls & RTGI_SAMPLING_ANALYTIC_LIGHTS_BIT) != 0u) {
@@ -886,18 +851,6 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		vec3 direct_slot_diffuse = reflections_only ? vec3(0.0) : rt_clamp_path_contribution(raw_direct_slot_diffuse, material_roughness, m.metalness, is_indirect, false);
 		vec3 direct_slot_specular = rt_clamp_path_contribution(raw_direct_slot_specular, material_roughness, m.metalness, is_indirect, false);
 		vec3 direct_slot_total = direct_slot_diffuse + direct_slot_specular;
-		rt_strc_mark_source_if_probe(ps, STRC_DIRECT_SOURCE_FLAG, direct_total);
-		rt_signal_add_direct(ivec2(gl_LaunchIDEXT.xy), reflections_only ? vec3(0.0) : direct_diffuse, direct_specular,
-				(reflections_only ? 0.0 : rt_signal_clamp_delta(raw_direct_diffuse, direct_diffuse)) + rt_signal_clamp_delta(raw_direct_specular, direct_specular));
-		if (rtgi_surface_feedback_eligible && !reflections_only) {
-			vec3 direct_feedback = rtgi_demodulate_surface_feedback(direct_light.diffuse, max(m.albedo, vec3(0.0)), m.metalness);
-			if (rt_luminance(direct_feedback) > 0.0002) {
-				rtgi_surface_feedback_lighting += direct_feedback;
-				rtgi_surface_feedback_confidence = max(rtgi_surface_feedback_confidence, direct_slot_stochastic ? 0.62 : 0.42);
-				rtgi_surface_feedback_support = max(rtgi_surface_feedback_support, direct_slot_stochastic ? 0.72 : 0.48);
-				rtgi_surface_feedback_source_mask |= RTGI_SURFACE_FEEDBACK_SOURCE_DIRECT_BIT;
-			}
-		}
 		if (!is_indirect) {
 			float direct_record_confidence = direct_slot_stochastic ? 1.0 : 0.5;
 			rt_source_candidate_record(ivec2(gl_LaunchIDEXT.xy), 0.25, direct_record_confidence, direct_slot_pdf, direct_slot_total, 0.0, direct_slot_source_key);
@@ -949,85 +902,13 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		vec3 emissive_diffuse = rt_clamp_path_contribution(raw_emissive_diffuse, material_roughness, m.metalness, is_indirect, true);
 		vec3 emissive_specular = rt_clamp_path_contribution(raw_emissive_specular, material_roughness, m.metalness, is_indirect, true);
 		vec3 explicit_emissive_total = reflections_only ? emissive_specular : emissive_diffuse + emissive_specular;
-		rt_strc_mark_source_if_probe(ps, STRC_EMISSIVE_SOURCE_FLAG, explicit_emissive_total);
-		rt_signal_add_explicit_emissive(ivec2(gl_LaunchIDEXT.xy), explicit_emissive_total, emissive_pdf, emissive_weight,
-				(reflections_only ? 0.0 : rt_signal_clamp_delta(raw_emissive_diffuse, emissive_diffuse)) + rt_signal_clamp_delta(raw_emissive_specular, emissive_specular));
 		rt_source_candidate_record(ivec2(gl_LaunchIDEXT.xy), 0.50, emissive_distribution_debug, clamp(emissive_pdf * 64.0, 0.0, 1.0), explicit_emissive_total, 0.0, emissive_source_key);
-		if (rtgi_surface_feedback_eligible && !reflections_only) {
-			vec3 emissive_feedback = rtgi_demodulate_surface_feedback(emissive_light.diffuse, max(m.albedo, vec3(0.0)), m.metalness);
-			if (rt_luminance(emissive_feedback) > 0.0002) {
-				rtgi_surface_feedback_lighting += emissive_feedback;
-				rtgi_surface_feedback_confidence = max(rtgi_surface_feedback_confidence, clamp(emissive_distribution_debug * 0.50 + emissive_weight * 0.35, 0.0, 0.78));
-				rtgi_surface_feedback_support = max(rtgi_surface_feedback_support, clamp(0.35 + emissive_weight * 2.5, 0.0, 0.82));
-				rtgi_surface_feedback_source_mask |= RTGI_SURFACE_FEEDBACK_SOURCE_EMISSIVE_BIT;
-			}
-		}
 		if (total_bounces == 0u) {
 			ps.specular_radiance += emissive_specular;
 		} else if (get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {
 			ps.specular_radiance += explicit_emissive_total;
 		}
 		ps.radiance += explicit_emissive_total;
-	}
-
-	if (!hybrid_primary && rt_mode == RT_MODE_PATH_TRACED && total_bounces > 0u && diffuse_bounces > 0u && !rt_strc_probe_update_mode()) {
-		vec3 cached_lighting = vec3(0.0);
-		float cache_weight = 0.0;
-		uint cache_source = RTGI_SECONDARY_CACHE_SOURCE_NONE;
-		uint cache_rejection = RTGI_SECONDARY_CACHE_REJECTION_NONE;
-		float cache_rejection_detail = 0.0;
-		uint surface_cache_key_reason = RTGI_SURFACE_KEY_REASON_VALID;
-		uint surface_cache_key = rtgi_surface_cache_key(h, m, surface_cache_key_reason);
-		if (rtgi_surface_feedback_eligible && (rt_strc_enabled() || rt_strc_internal_fallback_enabled())) {
-			float strc_feedback_confidence = 0.0;
-			uint strc_feedback_source_mask = 0u;
-			vec3 strc_feedback = rt_strc_sample_irradiance_with_source(h.hit_pos + N * 0.05, N, strc_feedback_confidence, strc_feedback_source_mask);
-			float strc_feedback_weight = smoothstep(0.0004, 0.0060, rt_luminance(strc_feedback)) * clamp(strc_feedback_confidence, 0.0, 1.0);
-			if (strc_feedback_weight > 0.010) {
-				uint strc_feedback_mask = rtgi_surface_feedback_mask_from_strc_mask(strc_feedback_source_mask);
-				if (strc_feedback_mask == 0u) {
-					strc_feedback_mask = RTGI_SURFACE_FEEDBACK_SOURCE_STRC_BIT;
-				}
-				uint strc_surface_source = rtgi_surface_source_from_strc_mask(strc_feedback_source_mask);
-				if (strc_surface_source == RTGI_SURFACE_SOURCE_NONE) {
-					strc_surface_source = RTGI_SURFACE_SOURCE_STRC;
-				}
-				float strc_source_quality = rtgi_surface_source_quality(strc_surface_source);
-				rtgi_surface_feedback_lighting += sanitize_payload_vec3(strc_feedback) * clamp(0.35 + strc_feedback_weight * 0.65, 0.0, 1.0);
-				rtgi_surface_feedback_confidence = max(rtgi_surface_feedback_confidence, clamp(strc_feedback_confidence * mix(0.48, 0.68, strc_source_quality), 0.0, 0.68));
-				rtgi_surface_feedback_support = max(rtgi_surface_feedback_support, clamp(strc_feedback_confidence * mix(0.54, 0.76, strc_source_quality), 0.0, 0.74));
-				rtgi_surface_feedback_source_mask |= strc_feedback_mask;
-			}
-		}
-		if (rtgi_surface_feedback_eligible) {
-			vec3 sky_feedback = vec3(0.0);
-			float sky_feedback_confidence = 0.0;
-			float sky_feedback_support = 0.0;
-			if (rtgi_surface_feedback_sample_sky_visible(h.hit_pos + N * 0.05, N, ps.rng_state, sky_feedback, sky_feedback_confidence, sky_feedback_support)) {
-				rtgi_surface_feedback_lighting += sky_feedback;
-				rtgi_surface_feedback_confidence = max(rtgi_surface_feedback_confidence, sky_feedback_confidence);
-				rtgi_surface_feedback_support = max(rtgi_surface_feedback_support, sky_feedback_support);
-				rtgi_surface_feedback_source_mask |= RTGI_SURFACE_FEEDBACK_SOURCE_SKY_BIT;
-			}
-		}
-		if (rtgi_surface_feedback_eligible) {
-			if (surface_cache_key != 0u) {
-				rtgi_surface_cache_feedback_record(ivec2(gl_LaunchIDEXT.xy), surface_cache_key, N, material_roughness, rtgi_surface_feedback_lighting, rtgi_surface_feedback_confidence, rtgi_surface_feedback_support, rtgi_surface_feedback_source_mask);
-			} else {
-				float feedback_reject_reason = (surface_cache_key_reason == RTGI_SURFACE_KEY_REASON_HISTORY_INVALID || surface_cache_key_reason == RTGI_SURFACE_KEY_REASON_DEFORMED) ? 1.0 : 2.0;
-				rtgi_surface_cache_feedback_reject(ivec2(gl_LaunchIDEXT.xy), feedback_reject_reason);
-			}
-		}
-		if (rtgi_sample_secondary_diffuse_cache(h.hit_pos, N, material_roughness, m.metalness, max(m.albedo, vec3(0.0)), geometries[h.geometry_idx].layer_mask, surface_cache_key, surface_cache_key_reason, 0.25, cached_lighting, cache_weight, cache_source, cache_rejection, cache_rejection_detail)) {
-			vec3 raw_cached_diffuse = ps.throughput * diffuseReflectance * cached_lighting * cache_weight;
-			vec3 cached_diffuse = rt_clamp_path_contribution(raw_cached_diffuse, material_roughness, m.metalness, true, false);
-			ps.radiance += cached_diffuse;
-			rt_signal_add_indirect(ivec2(gl_LaunchIDEXT.xy), cached_diffuse, total_bounces + 1u, DIFFUSE_TYPE, rt_signal_clamp_delta(raw_cached_diffuse, cached_diffuse));
-			rtgi_secondary_cache_source_record(ivec2(gl_LaunchIDEXT.xy), cache_source, cache_weight, rt_luminance(cached_lighting), 0.25);
-			ps.throughput *= 1.0 - cache_weight;
-		} else {
-			rtgi_secondary_cache_rejection_record(ivec2(gl_LaunchIDEXT.xy), cache_rejection, 0.25, cache_rejection_detail, cache_source);
-		}
 	}
 
 	// =================================================================
@@ -1101,49 +982,8 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		next_dir = recovered_dir;
 	}
 
-	if (rtgi_primary_rough_diffuse_sequence && brdfType == DIFFUSE_TYPE && !hybrid_primary) {
-		vec3 strc_guided_dir;
-		float strc_guided_confidence = 0.0;
-		if (rt_strc_guided_diffuse_direction(h.hit_pos + N * 0.05, N, geometries[h.geometry_idx].layer_mask, strc_guided_dir, strc_guided_confidence)) {
-			float rough_weight = smoothstep(0.55, 0.95, material_roughness);
-			float metal_weight = 1.0 - smoothstep(0.05, 0.35, clamp(m.metalness, 0.0, 1.0));
-			float guide_blend = clamp(strc_guided_confidence * rough_weight * metal_weight, 0.0, 0.42);
-			vec3 mixed_dir = normalize(mix(next_dir, strc_guided_dir, guide_blend));
-			if (dot(mixed_dir, h.geometry_normal) > 0.001) {
-				next_dir = mixed_dir;
-			}
-		}
-	}
-
-	if (rtgi_primary_rough_diffuse_sequence && brdfType == DIFFUSE_TYPE && !hybrid_primary) {
-		float rough_weight = smoothstep(0.52, 0.95, material_roughness);
-		float metal_weight = 1.0 - smoothstep(0.08, 0.35, clamp(m.metalness, 0.0, 1.0));
-		imageStore(rt_primary_diffuse_direction_image, ivec2(gl_LaunchIDEXT.xy), vec4(normalize(next_dir), rough_weight * metal_weight));
-	}
-
-	if (!hybrid_primary && rt_mode == RT_MODE_PATH_TRACED && brdfType == DIFFUSE_TYPE && !rt_strc_probe_update_mode()) {
-		vec3 screen_cached_lighting = vec3(0.0);
-		vec3 screen_hit_albedo = vec3(1.0);
-		float screen_cache_weight = 0.0;
-		uint screen_cache_source = RTGI_SECONDARY_CACHE_SOURCE_NONE;
-		uint screen_cache_rejection = RTGI_SECONDARY_CACHE_REJECTION_NONE;
-		float screen_cache_rejection_detail = 0.0;
-		if (rtgi_screen_trace_secondary_diffuse_cache(offset_ray_origin(h.hit_pos, N), next_dir, N, material_roughness, m.metalness, geometries[h.geometry_idx].layer_mask, screen_cached_lighting, screen_hit_albedo, screen_cache_weight, screen_cache_source, screen_cache_rejection, screen_cache_rejection_detail)) {
-			vec3 raw_screen_cached = ps.throughput * brdf_weight * max(screen_hit_albedo, vec3(0.04)) * screen_cached_lighting * screen_cache_weight;
-			vec3 screen_cached = rt_clamp_path_contribution(raw_screen_cached, material_roughness, m.metalness, total_bounces > 0u, false);
-			ps.radiance += screen_cached;
-			rt_signal_add_indirect(ivec2(gl_LaunchIDEXT.xy), screen_cached, total_bounces + 1u, DIFFUSE_TYPE, rt_signal_clamp_delta(raw_screen_cached, screen_cached));
-			rtgi_secondary_cache_source_record(ivec2(gl_LaunchIDEXT.xy), screen_cache_source, screen_cache_weight, rt_luminance(screen_cached_lighting), 0.75);
-			brdf_weight *= 1.0 - screen_cache_weight;
-		} else {
-			rtgi_secondary_cache_rejection_record(ivec2(gl_LaunchIDEXT.xy), screen_cache_rejection, 0.75, screen_cache_rejection_detail, screen_cache_source);
-		}
-	}
-
 	ps.throughput *= brdf_weight;
-	vec3 raw_next_throughput = ps.throughput;
 	ps.throughput = rt_clamp_throughput(ps.throughput, sampling_roughness, m.metalness, total_bounces + 1u);
-	rt_signal_add_indirect(ivec2(gl_LaunchIDEXT.xy), ps.throughput, total_bounces + 1u, brdfType, rt_signal_clamp_delta(raw_next_throughput, ps.throughput));
 
 	if (brdfType == DIFFUSE_TYPE) {
 		ps.packed_bounces_flags = inc_diffuse_bounce(ps.packed_bounces_flags);

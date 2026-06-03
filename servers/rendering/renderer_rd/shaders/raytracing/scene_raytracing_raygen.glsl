@@ -239,9 +239,6 @@ void rtgi_store_empty_raster_guides(ivec2 pixel) {
 	imageStore(rt_depth_image, pixel, vec4(0.0));
 	imageStore(rt_history_validity_image, pixel, vec4(0.0));
 	imageStore(rt_history_id_image, pixel, vec4(0.0));
-	imageStore(rt_receiver_surface_id_image, pixel, vec4(0.0));
-	imageStore(rt_surface_cache_key_image, pixel, uvec4(0u));
-	rtgi_store_surface_key_diagnostic(pixel, 0u, RTGI_SURFACE_KEY_REASON_EMPTY, 0.0);
 	imageStore(rt_normal_roughness_image, pixel, vec4(0.5, 0.5, 1.0, 1.0));
 	imageStore(rt_albedo_metalness_image, pixel, vec4(1.0, 1.0, 1.0, 0.0));
 	imageStore(rt_viewz_hitdist_image, pixel, vec4(65504.0, 65504.0, 0.0, 0.0));
@@ -249,7 +246,6 @@ void rtgi_store_empty_raster_guides(ivec2 pixel) {
 	imageStore(rt_specular_reprojection_image, pixel, vec4(0.0));
 	imageStore(rt_diffuse_radiance_image, pixel, vec4(0.0));
 	imageStore(rt_specular_radiance_image, pixel, vec4(0.0));
-	imageStore(rt_primary_diffuse_direction_image, pixel, vec4(0.0));
 	imageStore(image, pixel, vec4(0.0, 0.0, 0.0, 1.0));
 	rt_store_invalid_primary_velocity(pixel);
 }
@@ -286,7 +282,6 @@ bool rtgi_load_raster_surface(ivec2 visible_pixel, vec2 visible_uv, mat4 inv_vie
 
 void rtgi_store_raster_guides(ivec2 pixel, ivec2 visible_pixel, vec2 visible_uv, float depth, vec3 view_pos, vec3 world_pos, vec3 world_normal, float roughness, vec3 albedo_proxy) {
 	uint history_id = rtgi_raster_history_id(world_pos, world_normal, roughness, albedo_proxy);
-	uint surface_id = rt_receiver_surface_id(world_pos, world_normal, roughness, albedo_proxy);
 	float hit_distance = length(world_pos - rt_camera_world_origin());
 	float specular_risk = smoothstep(0.15, 0.85, 1.0 - roughness);
 
@@ -300,15 +295,11 @@ void rtgi_store_raster_guides(ivec2 pixel, ivec2 visible_pixel, vec2 visible_uv,
 	imageStore(rt_depth_image, pixel, vec4(depth));
 	imageStore(rt_history_validity_image, pixel, vec4(1.0, 0.0, 0.0, 0.0));
 	imageStore(rt_history_id_image, pixel, rtgi_pack_history_id(history_id));
-	imageStore(rt_receiver_surface_id_image, pixel, rt_pack_u32_rgba8(surface_id));
-	imageStore(rt_surface_cache_key_image, pixel, uvec4(0u));
-	rtgi_store_surface_key_diagnostic(pixel, 0u, RTGI_SURFACE_KEY_REASON_RASTER, 0.0);
 	imageStore(rt_normal_roughness_image, pixel, vec4(world_normal * 0.5 + 0.5, roughness));
 	imageStore(rt_albedo_metalness_image, pixel, vec4(albedo_proxy, 0.0));
 	imageStore(rt_viewz_hitdist_image, pixel, vec4(abs(view_pos.z), hit_distance, expected_prev_view_z, 0.0));
 	imageStore(rt_specular_guide_image, pixel, vec4(roughness, 65504.0, specular_risk, 1.0));
 	imageStore(rt_specular_reprojection_image, pixel, vec4(0.0));
-	rt_signal_set_primary_confidence(pixel, specular_risk, float(history_id & 0xFFu) * (1.0 / 255.0), 1.0);
 
 	vec2 prev_uv;
 	if (project_uv_checked(world_pos, prev_vp_unjittered, prev_uv)) {
@@ -318,111 +309,9 @@ void rtgi_store_raster_guides(ivec2 pixel, ivec2 visible_pixel, vec2 visible_uv,
 	}
 }
 
-void rt_strc_probe_update_main() {
-	uint ray_index = gl_LaunchIDEXT.x;
-	uint ray_count = uint(max(get_rt_param(RT_PARAM_RTGI_STRC_RAYS_PER_FRAME), 0.0));
-	if (ray_index >= ray_count) {
-		return;
-	}
-
-	uint grid = clamp(uint(get_rt_param(RT_PARAM_RTGI_STRC_GRID_SIZE)), 12u, 32u);
-	uint cascade_count = clamp(uint(get_rt_param(RT_PARAM_RTGI_STRC_CASCADE_COUNT)), 1u, 4u);
-	uint probe_count = cascade_count * grid * grid * grid;
-	uint texel_count = probe_count * 64u;
-	uint frame_index = uint(get_rt_param(RT_PARAM_FRAME_INDEX));
-	uint update_index = texel_count > 0u ? rt_strc_select_update_index(ray_index, max(ray_count, 1u), grid, cascade_count, frame_index) % texel_count : 0u;
-	uint probe_index = update_index >> 6u;
-	uint dir_index = update_index & 63u;
-	uint probes_per_cascade = grid * grid * grid;
-	uint cascade = min(probe_index / probes_per_cascade, cascade_count - 1u);
-	uint probe = probe_index - cascade * probes_per_cascade;
-	uint px = probe % grid;
-	uint py = (probe / grid) % grid;
-	uint pz = probe / (grid * grid);
-
-	float spacing = max(get_rt_param(RT_PARAM_RTGI_STRC_BASE_PROBE_SPACING), 0.25) * exp2(float(cascade));
-	vec3 camera_origin = rt_camera_world_origin();
-	vec3 cascade_center = floor(camera_origin / spacing) * spacing;
-	vec3 probe_local = (vec3(float(px), float(py), float(pz)) + vec3(0.5)) - vec3(float(grid) * 0.5);
-	vec3 ray_origin = cascade_center + probe_local * spacing;
-
-	vec2 oct_uv = (vec2(float(dir_index & 7u), float((dir_index >> 3u) & 7u)) + vec2(0.5)) / 8.0;
-	vec3 ray_dir = normalize(oct_to_vec3(oct_uv * 2.0 - 1.0));
-
-	PathState ps;
-	ps.radiance = vec3(0.0);
-	ps.specular_radiance = vec3(0.0);
-	ps.throughput = vec3(1.0);
-	ps.packed_bounces_flags = set_sample_zero(0u);
-	ps.rng_state = init_blue_noise_rng(uvec2(ray_index & 255u, (ray_index >> 8u) & 255u), frame_index, dir_index);
-	ps.hit_t = 65504.0;
-	ps.offset_normal = vec3(0.0, 1.0, 0.0);
-	ps.next_ray_dir = ray_dir;
-	ps.pdf_bsdf = 0.0;
-
-	float first_hit_distance = 65504.0;
-	vec3 first_hit_normal = ps.offset_normal;
-	bool first_hit_recorded = false;
-	const uint max_bounces = RT_GET_MAX_BOUNCES();
-	[[dont_unroll]] for (uint bounce = 0u; bounce <= max_bounces; bounce++) {
-		path_pack(payload, ps);
-#ifdef USE_SER
-		hitObjectNV hitObject;
-		hitObjectTraceRayNV(hitObject, tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
-		uint hint = 0;
-		if (hitObjectIsHitNV(hitObject)) {
-			hint = hitObjectGetInstanceIdNV(hitObject);
-		}
-		reorderThreadNV(hitObject, hint, 8);
-		hitObjectExecuteShaderNV(hitObject, 0);
-#else
-		traceRayEXT(tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
-#endif
-		ps = path_unpack(payload);
-		if (!first_hit_recorded) {
-			first_hit_distance = clamp(ps.hit_t, 0.0, 65504.0);
-			first_hit_normal = ps.offset_normal;
-			first_hit_recorded = true;
-		}
-		if (is_path_terminated(ps.packed_bounces_flags)) {
-			break;
-		}
-		vec3 hit_pos = ray_origin + ray_dir * ps.hit_t;
-		ray_origin = offset_ray_origin(hit_pos, ps.offset_normal);
-		ray_dir = ps.next_ray_dir;
-	}
-
-	vec3 radiance = sanitize_payload_vec3(ps.radiance);
-	bool dynamic_hit = has_strc_dynamic_hit(ps.packed_bounces_flags);
-	float radiance_luma = rt_luminance(radiance);
-	uint source_mask = get_strc_source_mask(ps.packed_bounces_flags);
-	if (source_mask == 0u && radiance_luma > 0.0005) {
-		source_mask = STRC_SOURCE_MASK_INDIRECT;
-	}
-	float source_quality = 0.0;
-	if ((source_mask & STRC_SOURCE_MASK_DIRECT) != 0u) {
-		source_quality = max(source_quality, 1.0);
-	}
-	if ((source_mask & STRC_SOURCE_MASK_EMISSIVE) != 0u) {
-		source_quality = max(source_quality, 0.95);
-	}
-	if ((source_mask & STRC_SOURCE_MASK_SKY) != 0u) {
-		source_quality = max(source_quality, 0.80);
-	}
-	if ((source_mask & STRC_SOURCE_MASK_INDIRECT) != 0u) {
-		source_quality = max(source_quality, 0.60);
-	}
-	float radiance_validity = smoothstep(0.0005, 0.0060, radiance_luma);
-	float confidence = radiance_validity * source_quality * (dynamic_hit ? 0.45 : 1.0);
-	rt_strc_probe_ray_results[ray_index].radiance_distance = vec4(radiance, first_hit_distance);
-	rt_strc_probe_ray_results[ray_index].normal_confidence = vec4(first_hit_normal * 0.5 + 0.5, confidence);
-	rt_strc_probe_ray_results[ray_index].metadata = vec4(dynamic_hit ? 1.0 : 0.0, confidence, float(source_mask), float(update_index));
-}
-
 // World Radiance Cache probe-update raygen. Task 5b: the WRC probe-ray PRODUCER
-// is structurally identical to the STRC producer (same cubic probe grid, same
-// 8x8 octahedral directions, same scheduler, same full-path-trace + NEE shading),
-// so this body mirrors rt_strc_probe_update_main() but reads the WRC's OWN param
+// uses a cubic probe grid with 8x8 octahedral directions, a round-robin/view-biased
+// scheduler, and a full-path-trace + NEE shading body. It reads the WRC's OWN param
 // slots (RT_PARAM_RTGI_WRC_*) and uses the WRC-named scheduler (rt_wrc_select_update_index).
 // The C++ WRC dispatch site fills those slots with the WRC clipmap params so
 // probe-addressing matches the WRC atlas (A3-T9 migrated these off the borrowed
@@ -672,10 +561,6 @@ void main() {
 		rt_wrc_probe_update_main();
 		return;
 	}
-	if (rt_strc_probe_update_mode()) {
-		rt_strc_probe_update_main();
-		return;
-	}
 
 	uvec2 pixel = gl_LaunchIDEXT.xy;
 	ivec2 pixel_i = ivec2(pixel);
@@ -704,7 +589,6 @@ void main() {
 	// Accumulate multiple samples per pixel
 	vec3 total_radiance = vec3(0.0);
 	vec3 total_specular_radiance = vec3(0.0);
-	rt_signal_reset(pixel_i);
 
 	const uint max_bounces = RT_GET_MAX_BOUNCES();
 	uint rt_mode = uint(get_rt_param(RT_PARAM_MODE));
@@ -752,12 +636,10 @@ void main() {
 				ps.throughput = specular_weight / max(specular_probability, 1e-4);
 				ps.packed_bounces_flags = inc_total_bounce(ps.packed_bounces_flags);
 				ray_dir = rtgi_sample_rough_specular(u, raster_world_normal, view_dir, raster_roughness);
-				rt_signal_add_indirect(pixel_i, ps.throughput, 1u, RTGI_RAYGEN_BRDF_SPECULAR, 0.0);
 			} else {
 				ps.throughput = raster_albedo_proxy / max(1.0 - specular_probability, 1e-4);
 				ps.packed_bounces_flags = inc_diffuse_bounce(ps.packed_bounces_flags);
 				ray_dir = rtgi_sample_cosine_hemisphere(u, raster_world_normal);
-				rt_signal_add_indirect(pixel_i, ps.throughput, 1u, RTGI_RAYGEN_BRDF_DIFFUSE, 0.0);
 			}
 
 			[[dont_unroll]] for (uint bounce = 1u; bounce <= max_bounces; bounce++) {
@@ -931,12 +813,6 @@ void main() {
 
 	vec3 final_radiance = total_radiance / float(samples_per_pixel);
 	vec3 final_specular = total_specular_radiance / float(samples_per_pixel);
-	float inv_samples = 1.0 / float(samples_per_pixel);
-	imageStore(rt_signal_direct_light_image, pixel_i, imageLoad(rt_signal_direct_light_image, pixel_i) * inv_samples);
-	imageStore(rt_signal_emissive_image, pixel_i, imageLoad(rt_signal_emissive_image, pixel_i) * inv_samples);
-	imageStore(rt_signal_indirect_image, pixel_i, imageLoad(rt_signal_indirect_image, pixel_i) * inv_samples);
-	imageStore(rt_signal_sky_image, pixel_i, imageLoad(rt_signal_sky_image, pixel_i) * inv_samples);
-	imageStore(rt_signal_confidence_image, pixel_i, imageLoad(rt_signal_confidence_image, pixel_i) * vec4(inv_samples, 1.0, 1.0, 1.0));
 	final_radiance *= max(0.0, get_rt_param(RT_PARAM_ENERGY));
 	final_specular *= max(0.0, get_rt_param(RT_PARAM_ENERGY));
 	final_radiance = sanitize_payload_vec3(final_radiance);
@@ -1006,7 +882,7 @@ void main() {
 	// Primary ray miss: write depth, velocity, and DLSS RR defaults (sample 0 only).
 	{
 		uint total_bounces = get_total_bounces(ps.packed_bounces_flags);
-		if (!rt_strc_probe_update_mode() && total_bounces == 0u && is_sample_zero(ps.packed_bounces_flags)) {
+		if (total_bounces == 0u && is_sample_zero(ps.packed_bounces_flags)) {
 			ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
 
 			imageStore(rt_depth_image, pixel, vec4(0.0));
@@ -1023,9 +899,6 @@ void main() {
 				float history_valid = (curr_valid && prev_valid) ? 1.0 : 0.0;
 				imageStore(rt_history_validity_image, pixel, vec4(history_valid, 0.0, 0.0, 0.0));
 				imageStore(rt_history_id_image, pixel, vec4(sky_direction * 0.5 + 0.5, 1.0));
-				imageStore(rt_receiver_surface_id_image, pixel, vec4(0.0));
-				imageStore(rt_surface_cache_key_image, pixel, uvec4(0u));
-				rtgi_store_surface_key_diagnostic(pixel, 0u, RTGI_SURFACE_KEY_REASON_EMPTY, 0.0);
 				imageStore(rt_normal_roughness_image, pixel, vec4(-sky_direction * 0.5 + 0.5, 1.0));
 				imageStore(rt_albedo_metalness_image, pixel, vec4(1.0, 1.0, 1.0, 0.0));
 				imageStore(rt_viewz_hitdist_image, pixel, vec4(65504.0, 65504.0, 0.0, 0.0));
@@ -1038,7 +911,6 @@ void main() {
 				} else if (int(get_rt_param(RT_PARAM_VIS_MODE)) == RT_VIS_MODE_SPECULAR_REFLECTED_HIT_NORMAL) {
 					imageStore(rt_specular_reflection_direction_image, pixel, vec4(0.0));
 				}
-				rt_signal_set_primary_confidence(pixel, 0.0, 1.0, history_valid);
 				if (history_valid > 0.5) {
 					rt_store_primary_velocity(pixel, curr_uv, prev_uv);
 				} else {
@@ -1104,10 +976,6 @@ void main() {
 			uint sky_total_bounces = get_total_bounces(ps.packed_bounces_flags);
 			vec3 sky_contribution = ps.throughput * sky_color;
 			vec3 clamped_sky = sky_total_bounces > 0u ? rt_clamp_path_contribution(sky_contribution, 0.0, 1.0, true, true) : sky_contribution;
-			if (rt_strc_probe_update_mode() && rt_luminance(sanitize_payload_vec3(clamped_sky)) > 0.0005) {
-				ps.packed_bounces_flags = set_strc_sky_source(ps.packed_bounces_flags);
-			}
-			rt_signal_add_sky(ivec2(gl_LaunchIDEXT.xy), clamped_sky, sky_total_bounces > 0u, rt_signal_clamp_delta(sky_contribution, clamped_sky));
 			ps.radiance += clamped_sky;
 			if (sky_total_bounces == 0u || get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {
 				ps.specular_radiance += clamped_sky;
@@ -1120,10 +988,6 @@ void main() {
 	uint sky_total_bounces = get_total_bounces(ps.packed_bounces_flags);
 	vec3 sky_contribution = ps.throughput * sky_color;
 	vec3 clamped_sky = sky_total_bounces > 0u ? rt_clamp_path_contribution(sky_contribution, 0.0, 1.0, true, true) : sky_contribution;
-	if (rt_strc_probe_update_mode() && rt_luminance(sanitize_payload_vec3(clamped_sky)) > 0.0005) {
-		ps.packed_bounces_flags = set_strc_sky_source(ps.packed_bounces_flags);
-	}
-	rt_signal_add_sky(ivec2(gl_LaunchIDEXT.xy), clamped_sky, sky_total_bounces > 0u, rt_signal_clamp_delta(sky_contribution, clamped_sky));
 	ps.radiance += clamped_sky;
 	if (sky_total_bounces == 0u || get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {
 		ps.specular_radiance += clamped_sky;
@@ -1434,11 +1298,6 @@ vec3 rt_orthonormalize_tangent(vec3 world_tangent, vec3 world_normal) {
 void main() {
 	uint geometry_idx = gl_InstanceCustomIndexEXT;
 	GeometryData geom = geometries[geometry_idx];
-
-	if (rt_strc_probe_update_mode() && !rt_strc_visual_layer_visible(geom.layer_mask)) {
-		ignoreIntersectionEXT;
-		return;
-	}
 
 	bool shadow_ray = is_shadow_ray(payload.packed_bounces_flags);
 	if (shadow_ray && (geom.layer_mask & payload.rng_state) == 0u) {

@@ -35,11 +35,8 @@
 #include "servers/rendering/renderer_rd/cluster_builder_rd.h"
 #include "servers/rendering/renderer_rd/effects/fsr2.h"
 #include "servers/rendering/renderer_rd/effects/motion_vectors_store.h"
-#include "servers/rendering/renderer_rd/effects/rtgi_diffuse_cache.h"
-#include "servers/rendering/renderer_rd/effects/rtgi_denoise.h"
 #include "servers/rendering/renderer_rd/effects/rtgi_gi_resolve.h"
 #include "servers/rendering/renderer_rd/effects/rtgi_screen_probe_gather.h"
-#include "servers/rendering/renderer_rd/effects/rtgi_spatiotemporal_radiance_cache.h"
 #include "servers/rendering/renderer_rd/effects/rtgi_world_radiance_cache.h"
 #include "servers/rendering/renderer_rd/effects/ss_effects.h"
 #include "servers/rendering/renderer_rd/effects/taa.h"
@@ -178,10 +175,6 @@ public:
 			RTGI_RECONSTRUCTION_GUIDE_QUALITY_UNSET = 0xffffffffu,
 		};
 		uint32_t rt_reconstruction_guide_quality = RTGI_RECONSTRUCTION_GUIDE_QUALITY_UNSET;
-		uint64_t rt_diffuse_cache_signature = 0;
-		bool rt_diffuse_cache_signature_valid = false;
-		Vector3i rt_strc_probe_origins[4];
-		bool rt_strc_scroll_valid = false;
 		// World Radiance Cache clipmap recenter state (Task 5). The previous frame's
 		// camera position; RtgiWrc::recenter_delta(prev, cur) yields the per-cascade
 		// integer scroll (floor(cur/spacing) - floor(prev/spacing)). Zero-initialized
@@ -233,7 +226,6 @@ public:
 		RID rt_get_specular_guide() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_GUIDE); }
 		RID rt_get_specular_reprojection() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_REPROJECTION); }
 		RID rt_get_specular_reflection_direction() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_REFLECTION_DIRECTION); }
-		RID rt_get_primary_diffuse_direction() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_PRIMARY_DIFFUSE_DIRECTION); }
 		bool rt_has_depth_texture() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH); }
 		RID rt_get_depth_texture() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH); }
 		RID rt_get_depth_texture(uint32_t p_layer) const { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH, p_layer, 0); }
@@ -247,12 +239,6 @@ public:
 		bool rt_has_history_id() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_ID); }
 		RID rt_get_history_id() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_ID); }
 		RID rt_get_prev_history_id() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_ID_PREV); }
-		bool rt_has_receiver_surface_id() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECEIVER_SURFACE_ID); }
-		RID rt_get_receiver_surface_id() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECEIVER_SURFACE_ID); }
-		RID rt_get_prev_receiver_surface_id() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECEIVER_SURFACE_ID_PREV); }
-		bool rt_has_surface_cache_key() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_KEY); }
-		RID rt_get_surface_cache_key() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_KEY); }
-		RID rt_get_surface_cache_diagnostic() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_DIAGNOSTIC); }
 		bool rt_has_taa_history() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_TAA_HISTORY_VALIDITY_PREV) && render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_TAA_HISTORY_ID_PREV); }
 		RID rt_get_taa_prev_history_validity() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_TAA_HISTORY_VALIDITY_PREV); }
 		RID rt_get_taa_prev_history_id() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_TAA_HISTORY_ID_PREV); }
@@ -267,11 +253,6 @@ public:
 		RID rt_get_albedo_metalness() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_ALBEDO_METALNESS); }
 		RID rt_get_viewz_hitdist() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_VIEWZ_HITDIST); }
 		RID rt_get_source_viewz_hitdist_prev() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_VIEWZ_HITDIST_PREV); }
-		RID rt_get_signal_direct_light() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_DIRECT_LIGHT); }
-		RID rt_get_signal_emissive() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_EMISSIVE); }
-		RID rt_get_signal_indirect() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_INDIRECT); }
-		RID rt_get_signal_sky() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_SKY); }
-		RID rt_get_signal_confidence() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_CONFIDENCE); }
 		RID rt_get_source_candidate() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_CANDIDATE); }
 		bool rt_has_source_candidate_history() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_CANDIDATE_PREV); }
 		RID rt_get_source_candidate_prev() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_CANDIDATE_PREV); }
@@ -288,16 +269,6 @@ public:
 		RID rt_get_source_history() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_HISTORY); }
 		RID rt_get_source_temporal_delta() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_TEMPORAL_DELTA); }
 		RID rt_get_source_rejection() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_REJECTION); }
-		RID rt_get_secondary_cache_source() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_SOURCE); }
-		RID rt_get_secondary_cache_rejection() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_REJECTION); }
-		RID rt_get_secondary_cache_surface() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_SURFACE); }
-		RID rt_get_surface_cache_feedback_key() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_KEY); }
-		RID rt_get_surface_cache_feedback_radiance() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_RADIANCE); }
-		RID rt_get_surface_cache_feedback_meta() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_META); }
-		RID rt_get_surface_cache_feedback_stats() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_STATS); }
-		RID rt_get_surface_cache_feedback_diagnostic() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_DIAGNOSTIC); }
-		RID rt_get_diffuse_cache_fallback_rgba16f() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA16F); }
-		RID rt_get_diffuse_cache_fallback_rgba8() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA8); }
 
 		RID get_color_only_fb();
 		RID get_color_pass_fb(uint32_t p_color_pass_flags);
@@ -448,21 +419,17 @@ private:
 	};
 
 	// Screen-space effects are disabled while hardware RTGI is active. Raster GI
-	// sources remain available to Simple RT because Forward+ still owns primary raster.
+	// sources remain available because Forward+ still owns primary raster.
 	constexpr static uint32_t RT_DISABLED_FEATURES =
 			SCENE_FEATURE_SSIL | SCENE_FEATURE_SSR | SCENE_FEATURE_SSAO;
-	constexpr static uint32_t RT_REPLACES_OPAQUE_DISABLED_FEATURES =
-			SCENE_FEATURE_SDFGI | SCENE_FEATURE_VOXELGI;
 
 	struct SceneFeatures {
 		uint32_t raw = 0;
 		bool rt = false;
-		bool rt_replaces_opaque = false;
 
 		void set(uint32_t p_feature) { raw |= p_feature; }
 		uint32_t get() const {
-			uint32_t features = rt ? (raw & ~RT_DISABLED_FEATURES) : raw;
-			return rt_replaces_opaque ? (features & ~RT_REPLACES_OPAQUE_DISABLED_FEATURES) : features;
+			return rt ? (raw & ~RT_DISABLED_FEATURES) : raw;
 		}
 		bool has(uint32_t p_feature) const { return (get() & p_feature) != 0; }
 	};
@@ -940,9 +907,6 @@ private:
 	/* Effects */
 
 	RendererRD::TAA *taa = nullptr;
-	RendererRD::RTGIDiffuseCache *rtgi_diffuse_cache = nullptr;
-	RendererRD::RTGIDenoise *rtgi_denoise = nullptr;
-	RendererRD::RTGISpatioTemporalRadianceCache *rtgi_strc = nullptr;
 	RendererRD::RTGIWorldRadianceCache *rtgi_wrc = nullptr;
 	RendererRD::RTGIScreenProbeGather *rtgi_spg = nullptr;
 	RendererRD::RTGIGIResolve *rtgi_resolve = nullptr;

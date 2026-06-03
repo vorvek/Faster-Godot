@@ -95,11 +95,6 @@ public:
 		RTGI_QUALITY_PRESET_PRODUCTION,
 	};
 
-	enum RTGIPipeline {
-		RTGI_PIPELINE_LEGACY = RSE::RTGI_PIPELINE_LEGACY,
-		RTGI_PIPELINE_RADIANCE_PROBES = RSE::RTGI_PIPELINE_RADIANCE_PROBES,
-	};
-
 	enum RTGIDenoiser {
 		// User-facing serialized values. Keep independent from RSE::PathtracingDenoiser.
 		RTGI_DENOISER_ASVFG_EXPERIMENTAL = 8,
@@ -238,7 +233,6 @@ private:
 	RTGIBackend rtgi_backend = RTGI_BACKEND_VULKAN_GENERIC;
 	RTGIQualityPreset rtgi_quality_preset = RTGI_QUALITY_PRESET_PRODUCTION;
 	RTGIMode rtgi_mode = RTGI_MODE_HYBRID;
-	RTGIPipeline rtgi_pipeline = RTGI_PIPELINE_RADIANCE_PROBES;
 	float rtgi_energy = 1.0;
 	float rtgi_resolution_scale = 0.67f;
 	bool rtgi_disable_in_editor = true;
@@ -480,8 +474,6 @@ public:
 	RTGIQualityPreset get_rtgi_quality_preset() const;
 	void set_rtgi_mode(RTGIMode p_mode);
 	RTGIMode get_rtgi_mode() const;
-	void set_rtgi_pipeline(RTGIPipeline p_pipeline);
-	RTGIPipeline get_rtgi_pipeline() const;
 	void set_rtgi_samples_per_pixel(int p_samples);
 	int get_rtgi_samples_per_pixel() const;
 	void set_rtgi_max_bounces(int p_bounces);
@@ -658,7 +650,6 @@ VARIANT_ENUM_CAST(Environment::ToneMapper)
 VARIANT_ENUM_CAST(Environment::SDFGIYScale)
 VARIANT_ENUM_CAST(Environment::RTGIBackend)
 VARIANT_ENUM_CAST(Environment::RTGIMode)
-VARIANT_ENUM_CAST(Environment::RTGIPipeline)
 VARIANT_ENUM_CAST(Environment::RTGIQualityPreset)
 VARIANT_ENUM_CAST(Environment::RTGIDenoiser)
 VARIANT_ENUM_CAST(Environment::GlowBlendMode)

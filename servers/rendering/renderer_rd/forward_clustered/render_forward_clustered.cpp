@@ -99,55 +99,11 @@ static Vector2 _estimate_rt_overscan_motion_pixels(const RenderDataRD *p_render_
 	return best_velocity;
 }
 
-static uint64_t _rtgi_diffuse_cache_signature_mix(uint64_t p_signature, uint64_t p_value) {
-	return p_signature ^ (p_value + 0x9e3779b97f4a7c15ull + (p_signature << 6) + (p_signature >> 2));
-}
-
-static uint64_t _rtgi_diffuse_cache_signature_mix_float(uint64_t p_signature, float p_value) {
-	union {
-		float f;
-		uint32_t u;
-	} value;
-	value.f = p_value;
-	return _rtgi_diffuse_cache_signature_mix(p_signature, value.u);
-}
-
 static float _rtgi_resolution_scale_from_params(const float *p_rt_env_params) {
 	if (!p_rt_env_params || p_rt_env_params[RSE::PT_PARAM_RTGI_RESOLUTION_SCALE] <= 0.0f) {
 		return 0.67f;
 	}
 	return CLAMP(p_rt_env_params[RSE::PT_PARAM_RTGI_RESOLUTION_SCALE], 0.25f, 1.0f);
-}
-
-static uint64_t _rtgi_diffuse_cache_signature(uint32_t p_rt_flags, RSE::PathtracingBackend p_active_backend, const float *p_rt_env_params, const Size2i &p_size, uint32_t p_view_count) {
-	uint64_t signature = 0xcbf29ce484222325ull;
-	signature = _rtgi_diffuse_cache_signature_mix(signature, p_rt_flags);
-	signature = _rtgi_diffuse_cache_signature_mix(signature, (uint64_t)(uint32_t)p_size.x);
-	signature = _rtgi_diffuse_cache_signature_mix(signature, (uint64_t)(uint32_t)p_size.y);
-	signature = _rtgi_diffuse_cache_signature_mix(signature, p_view_count);
-	signature = _rtgi_diffuse_cache_signature_mix(signature, (uint32_t)p_active_backend);
-
-	if (p_rt_env_params) {
-		signature = _rtgi_diffuse_cache_signature_mix_float(signature, p_rt_env_params[RSE::PT_PARAM_MODE]);
-		signature = _rtgi_diffuse_cache_signature_mix_float(signature, p_rt_env_params[RSE::PT_PARAM_DENOISER_STRENGTH]);
-		signature = _rtgi_diffuse_cache_signature_mix_float(signature, p_rt_env_params[RSE::PT_PARAM_DENOISER_HISTORY_WEIGHT]);
-		signature = _rtgi_diffuse_cache_signature_mix_float(signature, p_rt_env_params[RSE::PT_PARAM_RAY_FIREFLY_SUPPRESSION]);
-		signature = _rtgi_diffuse_cache_signature_mix_float(signature, p_rt_env_params[RSE::PT_PARAM_RAY_MAX_RADIANCE]);
-		signature = _rtgi_diffuse_cache_signature_mix_float(signature, p_rt_env_params[RSE::PT_PARAM_DENOISER_SPLIT_SIGNALS]);
-		signature = _rtgi_diffuse_cache_signature_mix_float(signature, p_rt_env_params[RSE::PT_PARAM_RTGI_SAMPLING_CONTROLS]);
-		signature = _rtgi_diffuse_cache_signature_mix_float(signature, p_rt_env_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED]);
-		signature = _rtgi_diffuse_cache_signature_mix_float(signature, p_rt_env_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES]);
-		signature = _rtgi_diffuse_cache_signature_mix_float(signature, _rtgi_resolution_scale_from_params(p_rt_env_params));
-	}
-
-	return signature != 0 ? signature : 1;
-}
-
-static uint32_t _rtgi_diffuse_cache_max_entries_from_params(const float *p_rt_env_params) {
-	if (!p_rt_env_params || p_rt_env_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES] <= 0.0f) {
-		return 524288u;
-	}
-	return MIN(4194304u, MAX(4096u, (uint32_t)p_rt_env_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES]));
 }
 
 static const float *_rtgi_shader_params_for_environment(RID p_environment, float *r_shader_params) {
@@ -404,8 +360,7 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_clear_textures
 	// NOTE: the material-guide textures (RB_TEX_RT_GUIDE_ALBEDO/NORMAL/ORM/EMISSION/VIEWZ) are
 	// DELIBERATELY NOT freed here (A-fix root cause). They are transient per-frame G-buffers,
 	// repopulated EVERY frame by the material-guide prepass (the PASS_MODE_DEPTH_MATERIAL pass that
-	// fills the guide FB) -- both on the radiance_probes-Hybrid path (the "RTGI Material Guide
-	// Prepass") and the FPT/RT path (the rt_path_tracing_fullres_guides DEPTH_MATERIAL prepass) --
+	// fills the guide FB, i.e. the "RTGI Material Guide Prepass" on the radiance_probes composite path)
 	// and consumed the SAME frame; they carry NO cross-frame history (no PREV variant). This
 	// rt_clear_textures() runs MID-FRAME from rt_ensure_textures() (on a size/incomplete-set/
 	// exportability/format/usage mismatch of the rt_sized_textures, which do NOT include the
@@ -422,7 +377,6 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_clear_textures
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_GUIDE);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_REPROJECTION);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_REFLECTION_DIRECTION);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_PRIMARY_DIFFUSE_DIRECTION);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH_ATTACHMENT);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_VELOCITY);
@@ -430,8 +384,6 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_clear_textures
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_VALIDITY_PREV);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_ID);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HISTORY_ID_PREV);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECEIVER_SURFACE_ID);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECEIVER_SURFACE_ID_PREV);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_TAA_HISTORY_VALIDITY_PREV);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_TAA_HISTORY_ID_PREV);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HYBRID_TAA_HISTORY_VALIDITY_PREV);
@@ -440,11 +392,6 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_clear_textures
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_NORMAL_ROUGHNESS);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_ALBEDO_METALNESS);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_VIEWZ_HITDIST);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_DIRECT_LIGHT);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_EMISSIVE);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_INDIRECT);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_SKY);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_CONFIDENCE);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_CANDIDATE);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_CANDIDATE_PREV);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_CANDIDATE_KEY);
@@ -459,43 +406,15 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::rt_clear_textures
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_DIRECT_RESERVOIR_LIGHTING_PREV);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_NORMAL_ROUGHNESS_PREV);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_VIEWZ_HITDIST_PREV);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_KEY);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_DIAGNOSTIC);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_HISTORY);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_TEMPORAL_DELTA);
 	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_REJECTION);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_SOURCE);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_REJECTION);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_SURFACE);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_KEY);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_RADIANCE);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_META);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_STATS);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_DIAGNOSTIC);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA16F);
-	render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA8);
-	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE);
-	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
-	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
-	render_buffers->clear_context(RB_SCOPE_RTGI_DENOISE_COMPOSITE);
-	render_buffers->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION);
-	render_buffers->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_DIFFUSE);
-	render_buffers->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_DIRECT);
-	render_buffers->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_EMISSIVE);
-	render_buffers->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_INDIRECT);
-	render_buffers->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_SKY);
-	render_buffers->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_SPECULAR);
-	render_buffers->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
-	render_buffers->clear_context(RB_SCOPE_RTGI_STRC);
 	render_buffers->clear_context(SNAME("rtgi_taa"));
 	render_buffers->clear_context(SNAME("rtgi_hybrid_taa"));
 	render_buffers->clear_context(SNAME("rtgi_reconstructed_taa"));
 	render_buffers->clear_context(SNAME("rtgi_hybrid_reconstructed_taa"));
 	render_buffers->clear_context(SNAME("rtgi_reflections_reconstructed_taa"));
 	rt_source_sample_jitter = Vector2();
-	rt_diffuse_cache_signature = 0;
-	rt_diffuse_cache_signature_valid = false;
-	rt_strc_scroll_valid = false;
 	rt_wrc_scroll_valid = false;
 	rt_reconstructed_valid = false;
 }
@@ -521,15 +440,12 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 		RB_TEX_RT_SPECULAR_GUIDE,
 		RB_TEX_RT_SPECULAR_REPROJECTION,
 		RB_TEX_RT_SPECULAR_REFLECTION_DIRECTION,
-		RB_TEX_RT_PRIMARY_DIFFUSE_DIRECTION,
 		RB_TEX_RT_DEPTH,
 		RB_TEX_RT_VELOCITY,
 		RB_TEX_RT_HISTORY_VALIDITY,
 		RB_TEX_RT_HISTORY_VALIDITY_PREV,
 		RB_TEX_RT_HISTORY_ID,
 		RB_TEX_RT_HISTORY_ID_PREV,
-		RB_TEX_RT_RECEIVER_SURFACE_ID,
-		RB_TEX_RT_RECEIVER_SURFACE_ID_PREV,
 		RB_TEX_RT_TAA_HISTORY_VALIDITY_PREV,
 		RB_TEX_RT_TAA_HISTORY_ID_PREV,
 		RB_TEX_RT_HYBRID_TAA_HISTORY_VALIDITY_PREV,
@@ -538,17 +454,10 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 		RB_TEX_RT_NORMAL_ROUGHNESS,
 		RB_TEX_RT_ALBEDO_METALNESS,
 		RB_TEX_RT_VIEWZ_HITDIST,
-		RB_TEX_RT_SIGNAL_DIRECT_LIGHT,
-		RB_TEX_RT_SIGNAL_EMISSIVE,
-		RB_TEX_RT_SIGNAL_INDIRECT,
-		RB_TEX_RT_SIGNAL_SKY,
-		RB_TEX_RT_SIGNAL_CONFIDENCE,
 		RB_TEX_RT_SOURCE_CANDIDATE,
 		RB_TEX_RT_SOURCE_CANDIDATE_PREV,
 		RB_TEX_RT_SOURCE_CANDIDATE_KEY,
 		RB_TEX_RT_SOURCE_CANDIDATE_KEY_PREV,
-		RB_TEX_RT_SURFACE_CACHE_KEY,
-		RB_TEX_RT_SURFACE_CACHE_DIAGNOSTIC,
 		RB_TEX_RT_SOURCE_NORMAL_ROUGHNESS_PREV,
 		RB_TEX_RT_SOURCE_VIEWZ_HITDIST_PREV,
 		RB_TEX_RT_SOURCE_DIRECT_CANDIDATE,
@@ -562,16 +471,6 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 		RB_TEX_RT_SOURCE_HISTORY,
 		RB_TEX_RT_SOURCE_TEMPORAL_DELTA,
 		RB_TEX_RT_SOURCE_REJECTION,
-		RB_TEX_RT_SECONDARY_CACHE_SOURCE,
-		RB_TEX_RT_SECONDARY_CACHE_REJECTION,
-		RB_TEX_RT_SECONDARY_CACHE_SURFACE,
-		RB_TEX_RT_SURFACE_CACHE_FEEDBACK_KEY,
-		RB_TEX_RT_SURFACE_CACHE_FEEDBACK_RADIANCE,
-		RB_TEX_RT_SURFACE_CACHE_FEEDBACK_META,
-		RB_TEX_RT_SURFACE_CACHE_FEEDBACK_STATS,
-		RB_TEX_RT_SURFACE_CACHE_FEEDBACK_DIAGNOSTIC,
-		RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA16F,
-		RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA8,
 	};
 
 	bool has_rt_size_mismatch = false;
@@ -611,23 +510,6 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 	if (rt_texture_exportability_mismatch(RB_TEX_RAYTRACING) ||
 			rt_texture_exportability_mismatch(RB_TEX_RT_DIFFUSE_RADIANCE) ||
 			rt_texture_exportability_mismatch(RB_TEX_RT_SPECULAR_RADIANCE)) {
-		rt_clear_textures();
-		textures_changed = true;
-	}
-
-	auto rt_texture_format_mismatch = [&](const StringName &p_texture_name, RD::DataFormat p_format) {
-		if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, p_texture_name)) {
-			return false;
-		}
-		return render_buffers->get_texture_format(RB_SCOPE_FORWARD_CLUSTERED, p_texture_name).format != p_format;
-	};
-	if (rt_texture_format_mismatch(RB_TEX_RT_SURFACE_CACHE_DIAGNOSTIC, RD::DATA_FORMAT_R8G8B8A8_UNORM) ||
-			rt_texture_format_mismatch(RB_TEX_RT_SECONDARY_CACHE_SOURCE, RD::DATA_FORMAT_R8G8B8A8_UNORM) ||
-			rt_texture_format_mismatch(RB_TEX_RT_SECONDARY_CACHE_REJECTION, RD::DATA_FORMAT_R8G8B8A8_UNORM) ||
-			rt_texture_format_mismatch(RB_TEX_RT_SECONDARY_CACHE_SURFACE, RD::DATA_FORMAT_R8G8B8A8_UNORM) ||
-			rt_texture_format_mismatch(RB_TEX_RT_SURFACE_CACHE_FEEDBACK_META, RD::DATA_FORMAT_R8G8B8A8_UNORM) ||
-			rt_texture_format_mismatch(RB_TEX_RT_SURFACE_CACHE_FEEDBACK_STATS, RD::DATA_FORMAT_R8G8B8A8_UNORM) ||
-			rt_texture_format_mismatch(RB_TEX_RT_SURFACE_CACHE_FEEDBACK_DIAGNOSTIC, RD::DATA_FORMAT_R8G8B8A8_UNORM)) {
 		rt_clear_textures();
 		textures_changed = true;
 	}
@@ -722,17 +604,6 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 				rt_size);
 	}
 
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_PRIMARY_DIFFUSE_DIRECTION)) {
-		RID primary_diffuse_direction = render_buffers->create_texture(
-				RB_SCOPE_FORWARD_CLUSTERED,
-				RB_TEX_RT_PRIMARY_DIFFUSE_DIRECTION,
-				RD::DATA_FORMAT_R16G16B16A16_SFLOAT,
-				usage_bits,
-				RD::TEXTURE_SAMPLES_1,
-				rt_size);
-		RD::get_singleton()->texture_clear(primary_diffuse_direction, Color(0, 0, 0, 0), 0, 1, 0, render_buffers->get_view_count());
-	}
-
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH)) {
 		render_buffers->create_texture(
 				RB_SCOPE_FORWARD_CLUSTERED,
@@ -795,28 +666,6 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 				RD::TEXTURE_SAMPLES_1,
 				rt_size);
 		RD::get_singleton()->texture_clear(prev_history_id, Color(0, 0, 0, 0), 0, 1, 0, render_buffers->get_view_count());
-	}
-
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECEIVER_SURFACE_ID)) {
-		RID receiver_surface_id = render_buffers->create_texture(
-				RB_SCOPE_FORWARD_CLUSTERED,
-				RB_TEX_RT_RECEIVER_SURFACE_ID,
-				RD::DATA_FORMAT_R8G8B8A8_UNORM,
-				usage_bits,
-				RD::TEXTURE_SAMPLES_1,
-				rt_size);
-		RD::get_singleton()->texture_clear(receiver_surface_id, Color(0, 0, 0, 0), 0, 1, 0, render_buffers->get_view_count());
-	}
-
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECEIVER_SURFACE_ID_PREV)) {
-		RID prev_receiver_surface_id = render_buffers->create_texture(
-				RB_SCOPE_FORWARD_CLUSTERED,
-				RB_TEX_RT_RECEIVER_SURFACE_ID_PREV,
-				RD::DATA_FORMAT_R8G8B8A8_UNORM,
-				usage_bits,
-				RD::TEXTURE_SAMPLES_1,
-				rt_size);
-		RD::get_singleton()->texture_clear(prev_receiver_surface_id, Color(0, 0, 0, 0), 0, 1, 0, render_buffers->get_view_count());
 	}
 
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_TAA_HISTORY_VALIDITY_PREV)) {
@@ -904,33 +753,10 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 				rt_size);
 	}
 
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_DIRECT_LIGHT)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_DIRECT_LIGHT, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
-	}
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_EMISSIVE)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_EMISSIVE, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
-	}
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_INDIRECT)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_INDIRECT, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
-	}
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_SKY)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_SKY, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
-	}
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_CONFIDENCE)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_CONFIDENCE, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
-	}
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_CANDIDATE)) {
 		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_CANDIDATE, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
 	}
 	bool source_history_created = false;
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_KEY)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_KEY, RD::DATA_FORMAT_R32_UINT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
-		source_history_created = true;
-	}
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_DIAGNOSTIC)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_DIAGNOSTIC, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
-		source_history_created = true;
-	}
 	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_NORMAL_ROUGHNESS_PREV)) {
 		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_NORMAL_ROUGHNESS_PREV, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
 		source_history_created = true;
@@ -995,46 +821,6 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_REJECTION, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
 		source_history_created = true;
 	}
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_SOURCE)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_SOURCE, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
-		source_history_created = true;
-	}
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_REJECTION)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_REJECTION, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
-		source_history_created = true;
-	}
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_SURFACE)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_SURFACE, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
-		source_history_created = true;
-	}
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_KEY)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_KEY, RD::DATA_FORMAT_R32_UINT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
-		source_history_created = true;
-	}
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_RADIANCE)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_RADIANCE, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
-		source_history_created = true;
-	}
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_META)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_META, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
-		source_history_created = true;
-	}
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_STATS)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_STATS, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
-		source_history_created = true;
-	}
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_DIAGNOSTIC)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_DIAGNOSTIC, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
-		source_history_created = true;
-	}
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA16F)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA16F, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
-		source_history_created = true;
-	}
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA8)) {
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_DIFFUSE_CACHE_FALLBACK_RGBA8, RD::DATA_FORMAT_R8G8B8A8_UNORM, usage_bits, RD::TEXTURE_SAMPLES_1, rt_size);
-		source_history_created = true;
-	}
 	if (source_history_created) {
 		textures_changed = true;
 	}
@@ -1042,8 +828,6 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 		const uint32_t view_count = render_buffers->get_view_count();
 		RD::get_singleton()->texture_clear(rt_get_source_normal_roughness_prev(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
 		RD::get_singleton()->texture_clear(rt_get_source_viewz_hitdist_prev(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
-		RD::get_singleton()->texture_clear(rt_get_surface_cache_key(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
-		RD::get_singleton()->texture_clear(rt_get_surface_cache_diagnostic(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
 		RD::get_singleton()->texture_clear(rt_get_source_candidate_prev(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
 		RD::get_singleton()->texture_clear(rt_get_source_candidate_key(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
 		RD::get_singleton()->texture_clear(rt_get_source_candidate_key_prev(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
@@ -1058,16 +842,6 @@ bool RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_texture
 		RD::get_singleton()->texture_clear(rt_get_source_history(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
 		RD::get_singleton()->texture_clear(rt_get_source_temporal_delta(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
 		RD::get_singleton()->texture_clear(rt_get_source_rejection(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
-		RD::get_singleton()->texture_clear(rt_get_secondary_cache_source(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
-		RD::get_singleton()->texture_clear(rt_get_secondary_cache_rejection(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
-		RD::get_singleton()->texture_clear(rt_get_secondary_cache_surface(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
-		RD::get_singleton()->texture_clear(rt_get_surface_cache_feedback_key(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
-		RD::get_singleton()->texture_clear(rt_get_surface_cache_feedback_radiance(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
-		RD::get_singleton()->texture_clear(rt_get_surface_cache_feedback_meta(), Color(0.5, 0.5, 1.0, 0.0), 0, 1, 0, view_count);
-		RD::get_singleton()->texture_clear(rt_get_surface_cache_feedback_stats(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
-		RD::get_singleton()->texture_clear(rt_get_surface_cache_feedback_diagnostic(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
-		RD::get_singleton()->texture_clear(rt_get_diffuse_cache_fallback_rgba16f(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
-		RD::get_singleton()->texture_clear(rt_get_diffuse_cache_fallback_rgba8(), Color(0, 0, 0, 0), 0, 1, 0, view_count);
 	}
 
 	return textures_changed;
@@ -3129,30 +2903,22 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		scene_features.rt = false;
 	}
 	float rt_env_params_storage[RSE::PT_PARAM_MAX];
-	// Select which RTGI radiance pipeline to build for this viewport. The new
-	// radiance-probes pipeline is developed behind this switch; legacy is the
-	// default and keeps the existing dispatch below completely unchanged.
-	RSE::RTGIPipeline rtgi_pipeline_sel = RSE::RTGI_PIPELINE_LEGACY;
 	// Active WRC quality-preset selector (default Production when no Environment
 	// params are present); resolved into the per-preset clipmap settings below.
 	uint32_t rtgi_quality_preset_sel = 3u;
 	if (scene_features.rt && p_render_data->environment.is_valid()) {
-		const RSE::PathtracingParams *rtgi_pipeline_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
-		if (rtgi_pipeline_params != nullptr) {
-			rtgi_pipeline_sel = rtgi_pipeline_params->rtgi_pipeline;
-			rtgi_quality_preset_sel = rtgi_pipeline_params->rtgi_quality_preset;
+		const RSE::PathtracingParams *rtgi_preset_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
+		if (rtgi_preset_params != nullptr) {
+			rtgi_quality_preset_sel = rtgi_preset_params->rtgi_quality_preset;
 		}
 	}
-	// Radiance-probes (World Radiance Cache) pipeline gating. When selected we keep
-	// the RT acceleration structure + backend context alive (scene_features.rt stays
-	// true so the TLAS builds) but disable every legacy GI consumer; the only WRC GPU
-	// work in Task 5a is the probe-update RAY dispatch wired into the RT block below.
-	const bool rt_radiance_probes_only = scene_features.rt && !is_reflection_probe && rtgi_pipeline_sel == RSE::RTGI_PIPELINE_RADIANCE_PROBES;
-	// Reflection probes have no World Radiance Cache (it is view-independent / built
-	// for the main view only), so when the radiance-probes pipeline is selected we
-	// simply disable RTGI for the probe render, matching the pre-WRC behavior where
-	// the radiance-probes branch unconditionally cleared scene_features.rt.
-	if (is_reflection_probe && rtgi_pipeline_sel == RSE::RTGI_PIPELINE_RADIANCE_PROBES) {
+	// Radiance-probes (World Radiance Cache) is the one unconditional RT-GI pipeline.
+	// We keep the RT acceleration structure + backend context alive (scene_features.rt
+	// stays true so the TLAS builds); the WRC/SPG/GI-resolve dispatches below produce
+	// the GI. Reflection probes have no World Radiance Cache (it is view-independent /
+	// built for the main view only), so RTGI is disabled for the probe render.
+	const bool rt_gi_active = scene_features.rt && !is_reflection_probe;
+	if (is_reflection_probe) {
 		scene_features.rt = false;
 	}
 	// Single clamped ClipmapParams used for BOTH atlas sizing and scroll/dispatch so
@@ -3172,7 +2938,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// GI-Resolve params (A3). Hoisted alongside spg_params for the resolve dispatch site
 	// below. T0 returns defaults for every preset (real per-preset body in T7).
 	RendererRD::RTGIGIResolve::GiResolveParams resolve_params = _resolve_gi_resolve_params(rtgi_quality_preset_sel);
-	if (rt_radiance_probes_only) {
+	if (rt_gi_active) {
 		if (rtgi_wrc != nullptr && rb.is_valid()) {
 			rtgi_wrc->ensure_resources(rb, wrc_params, (int)rb->get_view_count());
 			// IMPORTANT: ensure the ray-result buffer AFTER ensure_resources, because an
@@ -3194,34 +2960,20 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 	}
 	const float *rt_env_params = scene_features.rt ? _rtgi_shader_params_for_environment(p_render_data->environment, rt_env_params_storage) : nullptr;
-	// In radiance-probes mode the path tracer never replaces the opaque pass and the
-	// legacy hybrid/denoise consumers are disabled: the raster opaque pass renders
-	// normally and the WRC produces no displayable GI yet. Force the gating vars off
-	// regardless of the Environment's RT mode so only the WRC probe-ray dispatch runs.
-	bool rt_replaces_opaque = !rt_radiance_probes_only && scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING;
-	const bool rt_hybrid_rtgi = !rt_radiance_probes_only && scene_features.rt && rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_HYBRID;
-	// RTGI radiance-probes composite BEAUTY path (A3-T4/T5): radiance_probes is selected AND the
-	// Environment's RT mode is HYBRID *or* FULL_PATH_TRACING. rt_hybrid_rtgi / rt_replaces_opaque are
-	// both force-FALSE under radiance_probes (see above), so they cannot gate the radiance-probes
-	// composite; this dedicated condition drives the SPG/guide/resolve chain + the additive GI
-	// composite onto the raster-lit frame in plain (no debug-view, no SSx) rendering. Additive only --
-	// the debug-view path keeps using spg_debug_active untouched. (A3-T5) FPT-fast reuses this exact
-	// Hybrid composite (raster primary-direct + probe indirect, no path-trace dispatch); the true
-	// PT-primary-direct FPT under radiance_probes is the A4 sub-project, so for now FPT and HYBRID
-	// behave identically here.
-	const bool rt_radiance_probes_composite = rt_radiance_probes_only && rt_env_params &&
+	// RTGI radiance-probes composite BEAUTY path (A3-T4/T5): active when the Environment's
+	// RT mode is HYBRID *or* FULL_PATH_TRACING. This drives the SPG/guide/resolve chain +
+	// the additive GI composite onto the raster-lit frame in plain (no debug-view, no SSx)
+	// rendering. Additive only -- the debug-view path keeps using spg_debug_active untouched.
+	// (A3-T5) FPT-fast reuses this exact Hybrid composite (raster primary-direct + probe
+	// indirect, no path-trace dispatch); the true PT-primary-direct FPT under radiance_probes
+	// is the A4 sub-project, so for now FPT and HYBRID behave identically here.
+	const bool rt_radiance_probes_composite = rt_gi_active && rt_env_params &&
 			((uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_HYBRID ||
 					(uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING);
-	scene_features.rt_replaces_opaque = rt_replaces_opaque;
 	const uint32_t rt_denoiser = rt_env_params ? (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
-	const float rt_resolution_scale_requested = _rtgi_resolution_scale_from_params(rt_env_params);
-	bool rt_path_tracing_fullres_guides = rt_replaces_opaque && rb_data.is_valid() && rt_resolution_scale_requested < 0.999f && !is_reflection_probe;
 	if (scene_features.rt && rt_denoiser == RSE::PT_DENOISER_NVIDIA) {
 		WARN_PRINT_ONCE(vformat("RTGI denoiser '%s' is not available in the Vulkan renderer yet. Falling back to ASVFG for this viewport without changing the Environment resource.", _rtgi_denoiser_name(rt_denoiser)));
 	}
-	const bool rt_asvfg_denoiser = rt_denoiser == RSE::PT_DENOISER_INTERNAL || rt_denoiser == RSE::PT_DENOISER_NVIDIA;
-	const bool rt_signal_decomposition_denoiser = rt_denoiser == RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-	const bool rt_temporal_denoiser = rt_asvfg_denoiser || rt_signal_decomposition_denoiser;
 
 	static const int texture_multisamples[RSE::VIEWPORT_MSAA_MAX] = { 1, 2, 4, 8 };
 
@@ -3266,13 +3018,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		p_render_data->voxel_gi_count = 0;
 
-		if (!rt_replaces_opaque) {
-			prepare_sdfgi_for_raster();
-		}
+		prepare_sdfgi_for_raster();
 
-		if (!rt_replaces_opaque) {
-			gi.setup_voxel_gi_instances(p_render_data, p_render_data->render_buffers, p_render_data->scene_data->cam_transform, *p_render_data->voxel_gi_instances, p_render_data->voxel_gi_count);
-		}
+		gi.setup_voxel_gi_instances(p_render_data, p_render_data->render_buffers, p_render_data->scene_data->cam_transform, *p_render_data->voxel_gi_instances, p_render_data->voxel_gi_count);
 	} else {
 		ERR_PRINT("No render buffer nor reflection atlas, bug"); // Should never happen!
 		current_cluster_builder = nullptr;
@@ -3292,10 +3040,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	bool using_debug_mvs = get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_MOTION_VECTORS;
 	// Radiance-probes mode uses viewport TAA only (no RT-internal denoise/TAA), so the
 	// legacy GI denoiser + composite never run for the WRC path.
-	bool using_rt_denoise = !is_reflection_probe && !rt_radiance_probes_only && scene_features.rt && rt_temporal_denoiser;
 	bool using_viewport_taa = rb->get_use_taa();
-	bool using_rt_internal_taa = using_rt_denoise;
-	bool using_taa = using_viewport_taa || using_rt_denoise;
+	bool using_taa = using_viewport_taa;
 
 	enum {
 		SCALE_NONE,
@@ -3332,7 +3078,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		motion_vectors_required = true;
 	} else if (ce_needs_motion_vectors) {
 		motion_vectors_required = true;
-	} else if (!is_reflection_probe && (using_viewport_taa || (using_rt_internal_taa && !rt_replaces_opaque))) {
+	} else if (!is_reflection_probe && using_viewport_taa) {
 		motion_vectors_required = true;
 	} else if (!is_reflection_probe && using_upscaling) {
 		motion_vectors_required = true;
@@ -3356,7 +3102,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	Vector<Color> depth_pass_clear;
 	bool using_separate_specular = false;
 	bool reverse_cull = p_render_data->scene_data->cam_transform.basis.determinant() < 0;
-	bool using_motion_pass = rb_data.is_valid() && (using_upscaling || using_viewport_taa || using_rt_internal_taa) && !rt_replaces_opaque;
+	bool using_motion_pass = rb_data.is_valid() && (using_upscaling || using_viewport_taa);
 
 	if (is_reflection_probe) {
 		uint32_t resolution = light_storage->reflection_probe_instance_get_resolution(p_render_data->reflection_probe);
@@ -3392,7 +3138,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 
 		if (p_render_data->environment.is_valid()) {
-			if (!rt_replaces_opaque && environment_get_sdfgi_enabled(p_render_data->environment) && get_debug_draw_mode() != RSE::VIEWPORT_DEBUG_DRAW_UNSHADED) {
+			if (environment_get_sdfgi_enabled(p_render_data->environment) && get_debug_draw_mode() != RSE::VIEWPORT_DEBUG_DRAW_UNSHADED) {
 				scene_features.set(SCENE_FEATURE_SDFGI);
 			}
 			if (environment_get_ssr_enabled(p_render_data->environment)) {
@@ -3410,16 +3156,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			}
 		}
 
-		// Free GPU resources for screen-space effects disabled by raytracing.
-		// SDFGI cleanup is handled by sdfgi_update(); these cover SSIL/SSR/SSAO.
-		// Radiance-probes mode keeps RT alive only to build the AS + run the WRC
-		// probe dispatch; it does NOT replace the raster pass, so preserve the
-		// screen-space effects (matches the pre-WRC behavior where rt was disabled).
-		if (scene_features.rt && !rt_radiance_probes_only) {
-			rb->clear_context(RB_SCOPE_SSIL);
-			rb->clear_context(RB_SCOPE_SSAO);
-			rb->clear_context(RB_SCOPE_SSR);
-		}
+		// Radiance-probes mode keeps RT alive only to build the AS + run the WRC/SPG/
+		// GI-resolve dispatches; it does NOT replace the raster pass, so the screen-space
+		// effects are preserved (no SSIL/SSR/SSAO context clear here).
 
 		if (p_render_data->scene_data->view_count > 1) {
 			color_pass_flags |= COLOR_PASS_FLAG_MULTIVIEW;
@@ -3439,18 +3178,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	bool using_ssil = scene_features.has(SCENE_FEATURE_SSIL);
 	bool using_ssr = scene_features.has(SCENE_FEATURE_SSR);
 	bool using_voxelgi = scene_features.has(SCENE_FEATURE_VOXELGI);
-	bool rt_needs_volumetric_fog = rt_replaces_opaque && rb_data.is_valid() && p_render_data->environment.is_valid() && environment_get_volumetric_fog_enabled(p_render_data->environment);
 
 	p_render_data->scene_data->emissive_exposure_normalization = -1.0;
 
 	RD::get_singleton()->draw_command_begin_label("Render Setup");
 
-	if (!rt_replaces_opaque) {
-		_setup_lightmaps(p_render_data, *p_render_data->lightmaps, p_render_data->scene_data->cam_transform);
-	}
-	if (!rt_replaces_opaque) {
-		_setup_voxelgis(*p_render_data->voxel_gi_instances);
-	}
+	_setup_lightmaps(p_render_data, *p_render_data->lightmaps, p_render_data->scene_data->cam_transform);
+	_setup_voxelgis(*p_render_data->voxel_gi_instances);
 
 	if (scene_features.rt) {
 		p_render_data->scene_data->directional_light_count = _count_directional_lights(p_render_data);
@@ -3481,17 +3215,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RTGIBackendStatus rt_backend_status;
 	RSE::PathtracingBackend rt_path_output_backend = RSE::PT_BACKEND_VULKAN_GENERIC;
 	bool rt_requires_external_resource_exchange = false;
-	bool rt_strc_enabled = false;
-	bool rt_strc_internal_fallback_enabled = false;
-	uint32_t rt_strc_cascade_count = 3;
-	uint32_t rt_strc_grid_size = 24;
-	uint32_t rt_strc_rays_per_frame = 4096;
-	float rt_strc_base_probe_spacing = 1.5f;
-	float rt_strc_temporal_weight = 0.97f;
-	uint32_t rt_strc_static_visual_layers = 0xfffff;
-	uint32_t rt_strc_dynamic_visual_layers = 0xfffff;
-	const bool rt_requested = scene_features.rt;
-	const bool rt_setup_deferred = scene_features.rt && !rt_replaces_opaque;
 	auto invalidate_rt_temporal_history = [&]() {
 		if (!rb_data.is_valid()) {
 			return;
@@ -3506,10 +3229,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		if (rb_data->rt_has_history_id()) {
 			RD::get_singleton()->texture_clear(rb_data->rt_get_history_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 			RD::get_singleton()->texture_clear(rb_data->rt_get_prev_history_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
-		}
-		if (rb_data->rt_has_receiver_surface_id()) {
-			RD::get_singleton()->texture_clear(rb_data->rt_get_receiver_surface_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
-			RD::get_singleton()->texture_clear(rb_data->rt_get_prev_receiver_surface_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 		}
 		if (rb_data->rt_has_taa_history()) {
 			RD::get_singleton()->texture_clear(rb_data->rt_get_taa_prev_history_validity(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
@@ -3538,23 +3257,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->texture_clear(rb_data->rt_get_source_temporal_delta(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 			RD::get_singleton()->texture_clear(rb_data->rt_get_source_rejection(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 		}
-		rb->clear_context(RB_SCOPE_RTGI_DENOISE);
-		rb->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
-		rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
-		rb->clear_context(RB_SCOPE_RTGI_DENOISE_COMPOSITE);
-		rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION);
-		rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_DIFFUSE);
-		rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_DIRECT);
-		rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_EMISSIVE);
-		rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_INDIRECT);
-		rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_SKY);
-		rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_SPECULAR);
-		rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
-		rb->clear_context(RB_SCOPE_RTGI_STRC);
 		rb->clear_context(SNAME("rtgi_reconstructed_taa"));
 		rb->clear_context(SNAME("rtgi_hybrid_reconstructed_taa"));
 		rb->clear_context(SNAME("rtgi_reflections_reconstructed_taa"));
-		rb_data->rt_strc_scroll_valid = false;
 	};
 	auto reject_rt_previous_history = [&]() {
 		if (!rb_data.is_valid()) {
@@ -3565,9 +3270,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 		if (rb_data->rt_has_history_id()) {
 			RD::get_singleton()->texture_clear(rb_data->rt_get_prev_history_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
-		}
-		if (rb_data->rt_has_receiver_surface_id()) {
-			RD::get_singleton()->texture_clear(rb_data->rt_get_prev_receiver_surface_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 		}
 		if (rb_data->rt_has_taa_history()) {
 			RD::get_singleton()->texture_clear(rb_data->rt_get_taa_prev_history_validity(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
@@ -3589,15 +3291,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->texture_clear(rb_data->rt_get_source_rejection(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
 		}
 	};
-	auto clear_path_traced_raster_gi_state = [&]() {
-		scene_state.lightmaps_used = 0;
-		scene_state.voxelgis_used = 0;
-		p_render_data->voxel_gi_count = 0;
-		if (rb->has_custom_data(RB_SCOPE_SDFGI)) {
-			Ref<RendererRD::GI::SDFGI> sdfgi;
-			rb->set_custom_data(RB_SCOPE_SDFGI, sdfgi);
-		}
-	};
 	auto setup_rt_state = [&]() -> bool {
 		if (!scene_features.rt || !rb_data.is_valid() || !raytracing) {
 			return false;
@@ -3615,90 +3308,19 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		rt_requires_external_resource_exchange = rt_backend_capabilities.external_memory && rt_backend_capabilities.external_semaphore;
 		const bool fog_enabled = p_render_data && p_render_data->environment.is_valid() && environment_get_fog_enabled(p_render_data->environment);
 		rt_flags = SceneShaderRaytracing::compute_rt_flags(env_params, fog_enabled);
-		const bool rt_strc_public_enabled = (rt_flags & SceneShaderRaytracing::RT_FLAG_STRC_ENABLED) != 0;
-		rt_strc_cascade_count = env_params ? CLAMP((uint32_t)env_params[RSE::PT_PARAM_RTGI_STRC_CASCADE_COUNT], 1u, 4u) : 3u;
-		rt_strc_grid_size = env_params ? CLAMP((uint32_t)env_params[RSE::PT_PARAM_RTGI_STRC_GRID_SIZE], 12u, 32u) : 28u;
-		rt_strc_rays_per_frame = env_params ? CLAMP((uint32_t)env_params[RSE::PT_PARAM_RTGI_STRC_RAYS_PER_FRAME], 0u, 32768u) : 8192u;
-		rt_strc_base_probe_spacing = env_params ? CLAMP(env_params[RSE::PT_PARAM_RTGI_STRC_BASE_PROBE_SPACING], 0.25f, 8.0f) : 1.25f;
-		rt_strc_temporal_weight = env_params ? CLAMP(env_params[RSE::PT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT], 0.0f, 0.995f) : 0.97f;
-		rt_strc_static_visual_layers = env_params ? ((uint32_t)env_params[RSE::PT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS] & 0xfffff) : 0xfffff;
-		rt_strc_dynamic_visual_layers = env_params ? ((uint32_t)env_params[RSE::PT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS] & 0xfffff) : 0xfffff;
-		const uint32_t rt_strc_layer_mask = rt_strc_static_visual_layers | (rt_strc_dynamic_visual_layers & ~rt_strc_static_visual_layers);
-		rt_strc_internal_fallback_enabled = !rt_strc_public_enabled &&
-				rt_replaces_opaque &&
-				using_rt_denoise &&
-				env_params &&
-				(uint32_t)env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING &&
-				env_params[RSE::PT_PARAM_DENOISER_SPLIT_SIGNALS] > 0.5f &&
-				env_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED] > 0.5f &&
-				rt_strc_rays_per_frame > 0 &&
-				rt_strc_layer_mask != 0u;
-		if (rt_strc_internal_fallback_enabled) {
-			rt_flags |= SceneShaderRaytracing::RT_FLAG_STRC_INTERNAL_FALLBACK;
-			rt_strc_cascade_count = SceneShaderRaytracing::RTGI_STRC_INTERNAL_FALLBACK_CASCADE_COUNT;
-			rt_strc_grid_size = SceneShaderRaytracing::RTGI_STRC_INTERNAL_FALLBACK_GRID_SIZE;
-			rt_strc_rays_per_frame = SceneShaderRaytracing::RTGI_STRC_INTERNAL_FALLBACK_RAYS_PER_FRAME;
-			rt_strc_base_probe_spacing = SceneShaderRaytracing::RTGI_STRC_INTERNAL_FALLBACK_BASE_PROBE_SPACING;
-			rt_strc_temporal_weight = SceneShaderRaytracing::RTGI_STRC_INTERNAL_FALLBACK_TEMPORAL_WEIGHT;
-		}
-		rt_strc_enabled = rt_strc_public_enabled || rt_strc_internal_fallback_enabled;
-		if (rtgi_strc) {
-			uint64_t strc_signature = _rtgi_diffuse_cache_signature_mix(0x727473747263ULL, rt_flags);
-			strc_signature = _rtgi_diffuse_cache_signature_mix(strc_signature, rt_strc_cascade_count);
-			strc_signature = _rtgi_diffuse_cache_signature_mix(strc_signature, rt_strc_grid_size);
-			strc_signature = _rtgi_diffuse_cache_signature_mix_float(strc_signature, rt_strc_base_probe_spacing);
-			strc_signature = _rtgi_diffuse_cache_signature_mix(strc_signature, rt_strc_static_visual_layers);
-			strc_signature = _rtgi_diffuse_cache_signature_mix(strc_signature, rt_strc_dynamic_visual_layers);
-			if (rtgi_strc->ensure_resources(rb, rt_strc_cascade_count, rt_strc_grid_size, MAX(rt_strc_rays_per_frame, 1u), strc_signature)) {
-				rb_data->rt_strc_scroll_valid = false;
-			}
-		}
 
-		float rt_overscan_horizontal = 0.0f;
-		float rt_overscan_vertical = 0.0f;
+		const float rt_overscan_horizontal = 0.0f;
+		const float rt_overscan_vertical = 0.0f;
 		const float rt_resolution_scale = _rtgi_resolution_scale_from_params(env_params);
-		if (rt_replaces_opaque && (using_rt_denoise || using_viewport_taa) && env_params) {
-			rt_overscan_horizontal = env_params[RSE::PT_PARAM_OVERSCAN_HORIZONTAL];
-			rt_overscan_vertical = env_params[RSE::PT_PARAM_OVERSCAN_VERTICAL];
-		}
 		const Vector2 rt_overscan_motion = (rt_overscan_horizontal > 0.0f || rt_overscan_vertical > 0.0f) ? _estimate_rt_overscan_motion_pixels(p_render_data, rb->get_internal_size()) : Vector2();
 		if (rb_data->rt_update_overscan(rb->get_internal_size(), rt_overscan_horizontal, rt_overscan_vertical, rt_overscan_motion, rt_resolution_scale)) {
 			invalidate_rt_temporal_history();
 		} else if (_rt_camera_history_cut_detected(p_render_data)) {
 			reject_rt_previous_history();
-			rb->clear_context(RB_SCOPE_RTGI_DENOISE);
-			rb->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
-			rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
-			rb->clear_context(RB_SCOPE_RTGI_DENOISE_COMPOSITE);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_DIFFUSE);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_DIRECT);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_EMISSIVE);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_INDIRECT);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_SKY);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_SPECULAR);
-			rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
-			rb->clear_context(RB_SCOPE_RTGI_STRC);
-			rb_data->rt_strc_scroll_valid = false;
 		}
 
 		rb_data->rt_ensure_textures(rt_requires_external_resource_exchange);
 		rb_data->rt_set_reconstructed_valid(false);
-
-		if (rt_replaces_opaque && using_rt_denoise && rtgi_diffuse_cache && env_params) {
-			const bool rt_diffuse_cache_enabled = env_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED] > 0.5f;
-			const bool rt_split_signals = env_params[RSE::PT_PARAM_DENOISER_SPLIT_SIGNALS] > 0.5f;
-			const bool rt_history_enabled = env_params[RSE::PT_PARAM_DENOISER_STRENGTH] > 0.001f && env_params[RSE::PT_PARAM_DENOISER_HISTORY_WEIGHT] > 0.001f;
-			if (rt_diffuse_cache_enabled && rt_split_signals && rt_history_enabled) {
-				const uint64_t cache_signature = _rtgi_diffuse_cache_signature(rt_flags, rt_backend_status.active_backend, env_params, rb_data->rt_get_size(), rb->get_view_count());
-				if (!rb_data->rt_diffuse_cache_signature_valid || rb_data->rt_diffuse_cache_signature != cache_signature) {
-					rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
-					rb_data->rt_diffuse_cache_signature = cache_signature;
-					rb_data->rt_diffuse_cache_signature_valid = true;
-				}
-				rtgi_diffuse_cache->ensure_resources(rb, rb_data->rt_get_size(), _rtgi_diffuse_cache_max_entries_from_params(env_params));
-			}
-		}
 
 		if (!raytracing->prepare_backend_frame(p_render_data, rt_flags, rt_backend_context)) {
 			return false;
@@ -3708,10 +3330,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		rt_pipeline = rt_backend_context.pipeline;
 		if (rt_backend_context.radiance_history_invalidated) {
 			reject_rt_previous_history();
-			rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
-			if (rb_data.is_valid()) {
-				rb_data->rt_diffuse_cache_signature_valid = false;
-			}
 			if (rt_state) {
 				rt_state->radiance_history_invalidated = false;
 			}
@@ -3720,66 +3338,17 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		return true;
 	};
 
-	bool rt_setup_ready = false;
-	if (!rt_setup_deferred && scene_features.rt) {
-		rt_setup_ready = setup_rt_state();
-	} else if (!scene_features.rt) {
+	// Radiance-probes defers RT setup to the post-opaque block below; here we only
+	// release stale RT temporal history when RT is inactive for this viewport.
+	if (!scene_features.rt) {
 		invalidate_rt_temporal_history();
 	}
-	if (!rt_setup_deferred && rt_requested && !rt_setup_ready) {
-		ERR_PRINT_ONCE_ED("Failed to initialize raytracing pipeline or uniform set. Falling back to raster opaque rendering for this frame.");
-		scene_features.rt = false;
-		rt_replaces_opaque = false;
-		rt_path_tracing_fullres_guides = false;
-		scene_features.rt_replaces_opaque = false;
-		scene_features.raw &= ~uint32_t(SCENE_FEATURE_DEPTH_RECONSTRUCT);
-		using_rt_denoise = false;
-		using_rt_internal_taa = false;
-		using_taa = using_viewport_taa;
-		using_motion_pass = rb_data.is_valid() && (using_upscaling || using_viewport_taa);
-		if (using_motion_pass) {
-			p_render_data->scene_data->calculate_motion_vectors = true;
-			color_pass_flags |= COLOR_PASS_FLAG_MOTION_VECTORS;
-			scene_shader.enable_advanced_shader_group();
-			global_pipeline_data_required.use_motion_vectors = true;
-		}
-		if (!is_reflection_probe && rb_data.is_valid()) {
-			color_framebuffer = rb_data->get_color_pass_fb(color_pass_flags);
-		}
-		invalidate_rt_temporal_history();
-		using_sdfgi = scene_features.has(SCENE_FEATURE_SDFGI);
-		using_ssil = scene_features.has(SCENE_FEATURE_SSIL);
-		using_ssr = scene_features.has(SCENE_FEATURE_SSR);
-		using_voxelgi = scene_features.has(SCENE_FEATURE_VOXELGI);
-		prepare_sdfgi_for_raster();
-		_setup_lightmaps(p_render_data, *p_render_data->lightmaps, p_render_data->scene_data->cam_transform);
-		_setup_voxelgis(*p_render_data->voxel_gi_instances);
-		depth_prepass_uniform_buffer_index = _setup_environment(p_render_data, is_reflection_probe, screen_size, screen_size, p_default_bg_color, false);
-		_update_render_base_uniform_set();
-	} else if (rt_replaces_opaque && rt_setup_ready) {
-		clear_path_traced_raster_gi_state();
-	}
-	// Path Traced mode normally skips opaque raster work, but a scaled output
-	// needs opaque depth and normal/roughness guides for full-res reconstruction.
-	const bool rt_alpha_only_render_list = rt_replaces_opaque && !rt_path_tracing_fullres_guides;
-	_fill_render_list(RENDER_LIST_OPAQUE, p_render_data, PASS_MODE_COLOR, rt_replaces_opaque ? false : using_sdfgi, rt_replaces_opaque ? false : (using_sdfgi || using_voxelgi), using_motion_pass, false, rt_alpha_only_render_list);
+	// Radiance-probes keeps the raster opaque pass; all render lists are populated.
+	_fill_render_list(RENDER_LIST_OPAQUE, p_render_data, PASS_MODE_COLOR, using_sdfgi, using_sdfgi || using_voxelgi, using_motion_pass, false, false);
 
 	int *render_info = p_render_data->render_info ? p_render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_VISIBLE] : (int *)nullptr;
 
-	if (rt_replaces_opaque) {
-		if (rt_path_tracing_fullres_guides) {
-			// Path Traced mode still needs a full-resolution visibility/material
-			// guide when reconstructing a scaled RT output.
-			render_list[RENDER_LIST_OPAQUE].sort_by_key();
-			render_list[RENDER_LIST_ALPHA].sort_by_reverse_depth_and_priority();
-			_fill_instance_data(RENDER_LIST_OPAQUE, render_info);
-			_fill_instance_data(RENDER_LIST_ALPHA, render_info);
-		} else {
-			// Path Traced path: skip opaque sort/instance data -- TLAS transforms come from
-			render_list[RENDER_LIST_ALPHA].sort_by_reverse_depth_and_priority();
-			_fill_instance_data(RENDER_LIST_ALPHA, render_info);
-		}
-	} else {
+	{
 		// Rasterization path: all lists needed.
 		render_list[RENDER_LIST_OPAQUE].sort_by_key();
 		render_list[RENDER_LIST_MOTION].sort_by_key();
@@ -3793,17 +3362,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RD::get_singleton()->draw_command_end_label();
 
 	if (!is_reflection_probe) {
-		if (rt_path_tracing_fullres_guides) {
-			depth_pass_mode = PASS_MODE_DEPTH_MATERIAL;
-			scene_shader.enable_advanced_shader_group();
-		} else if (using_voxelgi) {
+		if (using_voxelgi) {
 			depth_pass_mode = PASS_MODE_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI;
 		} else if (p_render_data->environment.is_valid()) {
 			if (using_ssr ||
 					using_sdfgi ||
 					scene_features.has(SCENE_FEATURE_SSAO) ||
 					using_ssil ||
-					rt_hybrid_rtgi ||
 					// RTGI radiance-probes composite BEAUTY (A3-T4/T5; Hybrid AND FPT-fast): the SPG
 					// placement + the GI-resolve INTEGRATE reconstruct the world normal from this
 					// G-buffer, so a plain composite furnace (no debug view, no SSx) must still force
@@ -3861,7 +3426,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// Resolve depth prepass feature now that depth_framebuffer is known.
 	{
 		bool force_depth_pre_pass = scene_state.used_opaque_stencil;
-		if (((!rt_replaces_opaque && (force_depth_pre_pass || bool(GLOBAL_GET_CACHED(bool, "rendering/driver/depth_prepass/enable")))) || rt_path_tracing_fullres_guides) &&
+		if ((force_depth_pre_pass || bool(GLOBAL_GET_CACHED(bool, "rendering/driver/depth_prepass/enable"))) &&
 				depth_framebuffer.is_valid()) {
 			scene_features.set(SCENE_FEATURE_DEPTH_PREPASS);
 		}
@@ -3886,9 +3451,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 
 	if (global_surface_data.normal_texture_used && !is_reflection_probe) {
-		rb_data->ensure_normal_roughness_texture();
-	}
-	if (rt_hybrid_rtgi && rb_data.is_valid() && !is_reflection_probe) {
 		rb_data->ensure_normal_roughness_texture();
 	}
 
@@ -4075,12 +3637,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			}
 			RD::get_singleton()->draw_command_end_label();
 		}
-
-		if (rt_path_tracing_fullres_guides) {
-			RENDER_TIMESTAMP("Copy Path Tracing Guide Depth");
-			_render_buffers_ensure_depth_texture(p_render_data);
-			_render_buffers_copy_depth_texture(p_render_data);
-		}
 	}
 
 	// Material-guide prepass (A3-T1a): under radiance_probes the FPT primary-shading dispatch
@@ -4093,11 +3649,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// writes only the guide color attachments and re-establishes the guide FB's own depth from the
 	// same opaque geometry (identical to the raster depth already resolved, so SPG/resolve depth reads
 	// are unaffected). POPULATE ONLY -- no consumer is wired here (resolve binding is task T1).
-	if (rt_radiance_probes_only && (spg_debug_active || rt_radiance_probes_composite) && rb_data.is_valid()) {
+	if (rt_gi_active && (spg_debug_active || rt_radiance_probes_composite) && rb_data.is_valid()) {
 		// MANDATORY: SHADER_VERSION_DEPTH_PASS_WITH_MATERIAL lives in SHADER_GROUP_ADVANCED;
 		// without enabling it the DEPTH_PASS_WITH_MATERIAL pipeline isn't compiled and the draw
-		// silently no-ops. Mirrors the rt_path_tracing_fullres_guides DEPTH_MATERIAL path (no-arg:
-		// DEPTH_MATERIAL has no multiview variant and ERR_FAILs under view_count > 1).
+		// silently no-ops. Uses the no-arg enable_advanced_shader_group (DEPTH_MATERIAL has no
+		// multiview variant and ERR_FAILs under view_count > 1).
 		scene_shader.enable_advanced_shader_group();
 		RID guide_fb = rb_data->rt_ensure_material_guide_framebuffer(rb->get_internal_size());
 		if (guide_fb.is_valid()) {
@@ -4145,8 +3701,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// Declare rp_uniform_set here so it's available for transparent pass later
 	RID rp_uniform_set;
 
-	// Skip opaque pass only when Path Traced mode handles opaque color.
-	if (!rt_replaces_opaque) {
+	// Radiance-probes keeps the raster opaque pass.
+	{
 		RID normal_roughness_views[RendererSceneRender::MAX_RENDER_VIEWS];
 		if (rb_data.is_valid() && rb_data->has_normal_roughness()) {
 			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
@@ -4248,21 +3804,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				RD::get_singleton()->draw_command_end_label();
 			}
 		}
-	} else if (rt_needs_volumetric_fog) {
-		// Path Traced mode skips the raster opaque pass, but volumetric fog
-		// still needs current light buffers, shadows, cluster data, and its
-		// froxel volume before RT color is copied to the visible viewport.
-		_pre_opaque_render(p_render_data, false, false, false, false, nullptr, RID());
 	}
 
-	if (rt_setup_deferred && scene_features.rt) {
+	if (scene_features.rt) {
 		if (!setup_rt_state()) {
 			ERR_PRINT_ONCE_ED("Failed to initialize Simple RT pipeline or uniform set. Rendering raster output without RTGI for this frame.");
 			scene_features.rt = false;
-			scene_features.rt_replaces_opaque = false;
 			scene_features.raw &= ~uint32_t(SCENE_FEATURE_DEPTH_RECONSTRUCT);
-			using_rt_denoise = false;
-			using_rt_internal_taa = false;
 			using_taa = using_viewport_taa;
 			invalidate_rt_temporal_history();
 		}
@@ -4271,20 +3819,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// Execute raytracing if enabled. Simple RT produces an indirect-light
 	// texture; Path Traced mode replaces the opaque/motion vector pass.
 	if (scene_features.rt && rb_data.is_valid() && raytracing) {
-		auto composite_rt_volumetric_fog = [&](uint32_t p_view) {
-			if (!rt_replaces_opaque || !rt_needs_volumetric_fog || !rb->has_custom_data(RB_SCOPE_FOG)) {
-				return;
-			}
-
-			Ref<RendererRD::Fog::VolumetricFog> fog = rb->get_custom_data(RB_SCOPE_FOG);
-			if (fog.is_null() || !fog->fog_map.is_valid()) {
-				return;
-			}
-
-			const float fog_sky_affect = p_render_data->environment.is_valid() ? environment_get_volumetric_fog_sky_affect(p_render_data->environment) : 1.0f;
-			rtgi_denoise->composite_volumetric_fog(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, rb_data->rt_get_viewz_hitdist(), fog->fog_map, rb_data->rt_get_size(), rb_data->rt_get_visible_origin(), rb_data->rt_get_visible_size(), fog->length, fog->spread, fog_sky_affect, fog_use_legacy_blending_get(), p_view);
-		};
-
 		RD::get_singleton()->draw_command_begin_label("Raytracing");
 		RENDER_TIMESTAMP("TLAS Build");
 
@@ -4295,39 +3829,16 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			if (!rt_resources_ready) {
 				ERR_PRINT_ONCE_ED("Failed to reinitialize RTGI after rebuilding render resources. Rendering will continue with RT disabled for this frame.");
 				scene_features.rt = false;
-				scene_features.rt_replaces_opaque = false;
-				rt_replaces_opaque = false;
-				using_rt_denoise = false;
-				using_rt_internal_taa = false;
 				using_taa = using_viewport_taa;
 			}
 		}
 
 		RENDER_TIMESTAMP("Pathtracer");
 
-		// Radiance-probes mode keeps the AS + backend context alive (built by
-		// setup_rt_state() above) but does NOT run the main full-screen GI dispatch.
-		// Instead it runs only the WRC probe-update RAY dispatch below; the legacy
-		// rt_dispatch_ok block (GI texture copies, STRC, denoiser, composite) stays
-		// skipped. rt_dispatch_ok is forced false so none of that legacy work runs,
-		// but the dispatch "failure" disable-RT path must NOT fire here.
-		const RTGIBackendDispatchResult rt_dispatch_result = (!rt_radiance_probes_only && rt_resources_ready) ? raytracing->dispatch_path_trace_backend(rt_backend_context) : RTGI_BACKEND_DISPATCH_SAFE_FAILURE;
-		bool rt_dispatch_ok = rt_dispatch_result == RTGI_BACKEND_DISPATCH_OK;
-		if (!rt_dispatch_ok && !rt_radiance_probes_only) {
-			ERR_PRINT_ONCE_ED(rt_dispatch_result == RTGI_BACKEND_DISPATCH_SAFE_FAILURE ? "Failed to dispatch the active RTGI backend after recovering RTGI output ownership. Rendering will continue with RT disabled for this frame." : "Failed to dispatch the active RTGI backend and recover RTGI output ownership. Rendering will continue with RT disabled for this frame.");
-			scene_features.rt = false;
-			scene_features.rt_replaces_opaque = false;
-			rt_replaces_opaque = false;
-			using_rt_denoise = false;
-			using_rt_internal_taa = false;
-			using_taa = using_viewport_taa;
-			RD::get_singleton()->draw_command_end_label();
-		}
-
-		if (rt_radiance_probes_only) {
+		{
 			// The TLAS/backend context are valid after setup_rt_state() regardless of the
 			// (skipped) main dispatch, so extract rt_state directly and gate the WRC
-			// dispatch on its validity (NOT rt_dispatch_ok, which is false here). This
+			// dispatch on its validity. This
 			// branch always runs in radiance-probes mode so the "Raytracing" draw label
 			// opened above is always balanced, even if resource setup failed this frame.
 			if (rt_resources_ready) {
@@ -4388,7 +3899,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// fills); A3 later promotes both SPG + resolve to always-on for the composite.
 			// resolve_debug_active / spg_debug_active are hoisted above the depth prepass
 			// (shared with the additive material-guide prepass); see their declaration there.
-			if (rt_radiance_probes_only && (spg_debug_active || rt_radiance_probes_composite) && rtgi_spg && rtgi_spg->get_radiance_atlas().is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
+			if ((spg_debug_active || rt_radiance_probes_composite) && rtgi_spg && rtgi_spg->get_radiance_atlas().is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
 				RD::get_singleton()->draw_command_begin_label("RTGI SPG");
 				RENDER_TIMESTAMP("RTGI SPG Placement");
 				// Velocity is optional: on a static furnace there is no velocity buffer,
@@ -4418,14 +3929,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				// the rt_state wrc_* fields (the SPG override addresses the WRC atlas via the
 				// STRC slots, exactly like the WRC probe-update pass).
 				// rt_state IS rt_backend_context.viewport_state, but is null when resources
-				// weren't ready this frame (set at the top of this rt_radiance_probes_only
+				// weren't ready this frame (set at the top of this rt_gi_active
 				// block); gate on it before the dispatch (mirrors the WRC block's rt_state
 				// guard) since the gather writes the rt_state SPG/WRC param fields and the
 				// backend dispatch needs the valid TLAS/context that null signals are absent.
 				if (rt_state && rtgi_spg->get_ray_result_buffer().is_valid() && sfp.rays_this_frame > 0) {
 					RENDER_TIMESTAMP("RTGI SPG Gather");
 					// The ray-result SSBO was already (re)allocated for this frame's ray count
-					// in the rt_radiance_probes_only ensure block above (grow-only); no re-ensure.
+					// in the rt_gi_active ensure block above (grow-only); no re-ensure.
 					rt_state->wrc_grid = (uint32_t)wrc_params.grid;
 					rt_state->wrc_cascade_count = (uint32_t)wrc_params.cascade_count;
 					rt_state->wrc_base_spacing = wrc_params.base_spacing;
@@ -4516,521 +4027,16 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->draw_command_end_label();
 		}
 
-		if (rt_dispatch_ok) {
-			rt_backend_status = raytracing->get_backend_status();
-			rt_path_output_backend = rt_backend_status.active_backend;
-			rt_state = rt_backend_context.viewport_state;
-			bool rt_post_safe = true;
-			Size2i rt_size = rb_data->rt_get_size();
-			if (rt_strc_enabled && !rt_radiance_probes_only && rtgi_strc && rt_state && rt_strc_rays_per_frame > 0 && rtgi_strc->get_ray_result_buffer().is_valid()) {
-				RD::get_singleton()->draw_command_begin_label("RTGI STRC Probe Update");
-				const uint32_t probe_flags = rt_flags | SceneShaderRaytracing::RT_FLAG_STRC_PROBE_UPDATE;
-				const RTGIBackendDispatchResult probe_dispatch_result = raytracing->dispatch_probe_update_backend(rt_backend_context, probe_flags, rtgi_strc->get_ray_result_buffer(), rt_strc_rays_per_frame);
-				if (probe_dispatch_result == RTGI_BACKEND_DISPATCH_OK) {
-					rt_state = rt_backend_context.viewport_state;
-					uint64_t process_strc_signature = _rtgi_diffuse_cache_signature_mix(0x727473747263ULL, rt_flags);
-					process_strc_signature = _rtgi_diffuse_cache_signature_mix(process_strc_signature, rt_strc_cascade_count);
-					process_strc_signature = _rtgi_diffuse_cache_signature_mix(process_strc_signature, rt_strc_grid_size);
-					process_strc_signature = _rtgi_diffuse_cache_signature_mix_float(process_strc_signature, rt_strc_base_probe_spacing);
-					process_strc_signature = _rtgi_diffuse_cache_signature_mix(process_strc_signature, rt_strc_static_visual_layers);
-					process_strc_signature = _rtgi_diffuse_cache_signature_mix(process_strc_signature, rt_strc_dynamic_visual_layers);
-					if (rtgi_strc->ensure_resources(rb, rt_strc_cascade_count, rt_strc_grid_size, MAX(rt_strc_rays_per_frame, 1u), process_strc_signature)) {
-						rb_data->rt_strc_scroll_valid = false;
-					}
-					Vector3i current_probe_origins[4];
-					Vector3i cascade_scroll[4];
-					const Vector3 camera_origin = p_render_data->scene_data->cam_transform.origin;
-					for (uint32_t cascade = 0; cascade < 4; cascade++) {
-						const double spacing = double(rt_strc_base_probe_spacing) * Math::pow(2.0, double(cascade));
-						current_probe_origins[cascade] = Vector3i(
-								Math::floor(camera_origin.x / spacing),
-								Math::floor(camera_origin.y / spacing),
-								Math::floor(camera_origin.z / spacing));
-						cascade_scroll[cascade] = rb_data->rt_strc_scroll_valid ? current_probe_origins[cascade] - rb_data->rt_strc_probe_origins[cascade] : Vector3i();
-					}
-					rtgi_strc->process(rb, rt_strc_cascade_count, rt_strc_grid_size, rt_strc_rays_per_frame, rt_strc_temporal_weight, rt_state->frame_counter, cascade_scroll, rb_data->rt_strc_scroll_valid, 0);
-					for (uint32_t cascade = 0; cascade < 4; cascade++) {
-						rb_data->rt_strc_probe_origins[cascade] = current_probe_origins[cascade];
-					}
-					rb_data->rt_strc_scroll_valid = true;
-				} else {
-					rt_post_safe = probe_dispatch_result == RTGI_BACKEND_DISPATCH_SAFE_FAILURE;
-					rb_data->rt_strc_scroll_valid = false;
-					ERR_PRINT_ONCE_ED(rt_post_safe ? "Failed to dispatch RTGI STRC probe update. Continuing with the path traced frame without updating STRC probes." : "Failed to dispatch RTGI STRC probe update and recover RTGI output ownership. Skipping RT post-processing for this frame.");
-					if (!rt_post_safe) {
-						scene_features.rt = false;
-						scene_features.rt_replaces_opaque = false;
-						rt_replaces_opaque = false;
-						using_rt_denoise = false;
-						using_rt_internal_taa = false;
-						using_taa = using_viewport_taa;
-					}
-				}
-				RD::get_singleton()->draw_command_end_label();
-			}
-
-			if (!rt_post_safe) {
-				RD::get_singleton()->draw_command_end_label();
-			}
-
-			if (rt_post_safe) {
-				RD::get_singleton()->texture_copy(rb_data->rt_get_source_candidate(), rb_data->rt_get_source_candidate_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
-				RD::get_singleton()->texture_copy(rb_data->rt_get_source_candidate_key(), rb_data->rt_get_source_candidate_key_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
-				RD::get_singleton()->texture_copy(rb_data->rt_get_source_direct_candidate(), rb_data->rt_get_source_direct_candidate_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
-				RD::get_singleton()->texture_copy(rb_data->rt_get_source_direct_candidate_key(), rb_data->rt_get_source_direct_candidate_key_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
-				RD::get_singleton()->texture_copy(rb_data->rt_get_source_direct_reservoir(), rb_data->rt_get_source_direct_reservoir_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
-				RD::get_singleton()->texture_copy(rb_data->rt_get_source_direct_reservoir_lighting(), rb_data->rt_get_source_direct_reservoir_lighting_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
-				RD::get_singleton()->texture_copy(rb_data->rt_get_normal_roughness(), rb_data->rt_get_source_normal_roughness_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
-				RD::get_singleton()->texture_copy(rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_source_viewz_hitdist_prev(), Vector3(), Vector3(), Vector3(rt_size.x, rt_size.y, 1), 0, 0, 0, 0);
-
-		RD::get_singleton()->draw_command_end_label();
-
-		// Path Traced mode owns the main depth buffer. Simple RT keeps raster depth
-		// and uses RT depth only for RTGI history rejection.
-		if (rt_replaces_opaque && rb_data.is_valid() && rb_data->rt_has_depth_texture()) {
-			RENDER_TIMESTAMP("Copy RT Depth (R32F -> D32F)");
-			RD::get_singleton()->draw_command_begin_label("Copy RT Depth");
-			RD::TextureFormat depth_format = rb->get_texture_format(RB_SCOPE_BUFFERS, RB_TEX_DEPTH);
-			const Vector2i rt_visible_origin = rb_data->rt_get_visible_origin();
-			const Size2i rt_visible_size = rb_data->rt_get_visible_size();
-			const Size2i internal_size = rb->get_internal_size();
-			const bool depth_can_direct_copy = depth_format.format == RD::DATA_FORMAT_R32_SFLOAT && (depth_format.usage_bits & RD::TEXTURE_USAGE_CAN_COPY_TO_BIT) && rt_visible_size == internal_size;
-			if (depth_can_direct_copy) {
-				for (uint32_t v = 0; v < rb->get_view_count(); v++) {
-					RD::get_singleton()->texture_copy(rb_data->rt_get_depth_texture(), rb->get_depth_texture(), Vector3(rt_visible_origin.x, rt_visible_origin.y, 0), Vector3(), Vector3(rt_visible_size.x, rt_visible_size.y, 1), 0, 0, v, v);
-				}
-				if (!render_list[RENDER_LIST_ALPHA].elements.is_empty()) {
-					RID rt_depth_attachment = rb_data->rt_ensure_depth_attachment();
-					if (rt_depth_attachment.is_valid()) {
-						RID rt_depth_fb = FramebufferCacheRD::get_singleton()->get_cache_multiview(rb->get_view_count(), rt_depth_attachment);
-						const Size2i full_rt_size = rb_data->rt_get_size();
-						const Rect2 source_rect(
-								Vector2((float)rt_visible_origin.x / (float)full_rt_size.x, (float)rt_visible_origin.y / (float)full_rt_size.y),
-								Vector2((float)rt_visible_size.x / (float)full_rt_size.x, (float)rt_visible_size.y / (float)full_rt_size.y));
-						copy_effects->copy_r32f_to_depth_fb(rb_data->rt_get_depth_texture(), rt_depth_fb, Rect2i(0, 0, internal_size.x, internal_size.y), source_rect);
-					}
-				}
-			} else {
-				RID rt_depth_fb = FramebufferCacheRD::get_singleton()->get_cache_multiview(rb->get_view_count(), rb->get_depth_texture());
-				const Size2i full_rt_size = rb_data->rt_get_size();
-				const Rect2 source_rect(
-						Vector2((float)rt_visible_origin.x / (float)full_rt_size.x, (float)rt_visible_origin.y / (float)full_rt_size.y),
-						Vector2((float)rt_visible_size.x / (float)full_rt_size.x, (float)rt_visible_size.y / (float)full_rt_size.y));
-				copy_effects->copy_r32f_to_depth_fb(rb_data->rt_get_depth_texture(), rt_depth_fb, Rect2i(0, 0, internal_size.x, internal_size.y), source_rect);
-			}
-			RD::get_singleton()->draw_command_end_label();
-		}
-
-		auto update_rt_taa_history = [&](bool p_hybrid_taa) {
-			const RID prev_history_validity = p_hybrid_taa ? rb_data->rt_get_hybrid_taa_prev_history_validity() : rb_data->rt_get_taa_prev_history_validity();
-			const RID prev_history_id = p_hybrid_taa ? rb_data->rt_get_hybrid_taa_prev_history_id() : rb_data->rt_get_taa_prev_history_id();
-			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
-				RD::get_singleton()->texture_copy(rb_data->rt_get_history_validity(), prev_history_validity, Vector3(), Vector3(), Vector3(rb_data->rt_get_size().x, rb_data->rt_get_size().y, 1), 0, 0, v, v);
-				RD::get_singleton()->texture_copy(rb_data->rt_get_history_id(), prev_history_id, Vector3(), Vector3(), Vector3(rb_data->rt_get_size().x, rb_data->rt_get_size().y, 1), 0, 0, v, v);
-			}
-		};
-		Vector<StringName> rtgi_reconstruction_scopes;
-		auto reconstruct_rt_texture = [&](const StringName &p_source_texture, const StringName &p_output_texture, bool p_use_target_guides, const Vector<StringName> &p_denoise_scopes) -> bool {
-			const Size2i output_size = rb->get_internal_size();
-			if (rb_data->rt_get_visible_size() == output_size) {
-				rb_data->rt_set_reconstructed_valid(false);
-				return false;
-			}
-			if (!rb_data->rt_ensure_reconstructed(output_size).is_valid()) {
-				rb_data->rt_set_reconstructed_valid(false);
-				return false;
-			}
-
-			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
-				RID target_depth;
-				RID target_normal_roughness;
-				RID target_albedo;
-				RID target_normal;
-				RID target_orm;
-				if (p_use_target_guides && rb_data->has_normal_roughness()) {
-					if (rt_path_tracing_fullres_guides) {
-						if (rb->has_texture(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH)) {
-							target_depth = rb->get_texture_slice(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH, v, 0);
-						}
-					} else {
-						target_depth = rb->get_depth_texture(v);
-					}
-					target_normal_roughness = rb_data->get_normal_roughness(v);
-				}
-				if (p_use_target_guides && rt_path_tracing_fullres_guides && rb_data->rt_has_material_guides()) {
-					if (rb->has_texture(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH)) {
-						target_depth = rb->get_texture_slice(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH, v, 0);
-					}
-					target_albedo = rb_data->rt_get_guide_albedo(v);
-					target_normal = rb_data->rt_get_guide_normal(v);
-					target_orm = rb_data->rt_get_guide_orm(v);
-				}
-				const bool has_material_guides = target_albedo.is_valid() && target_normal.is_valid() && target_orm.is_valid();
-				const bool has_normal_roughness_guides = target_normal_roughness.is_valid() || has_material_guides;
-				const uint32_t guide_quality = _rtgi_classify_reconstruction_guide_quality(target_depth.is_valid(), has_normal_roughness_guides, has_material_guides);
-				rb_data->rt_record_reconstruction_guide_quality(guide_quality);
-				const bool use_target_guides = target_depth.is_valid() && has_normal_roughness_guides;
-				const RID taa_reactivity = rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_TAA_REACTIVITY) ? rb->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_TAA_REACTIVITY, v, 0) : RID();
-				RID signal_confidence = rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_CONFIDENCE) ? rb->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_CONFIDENCE, v, 0) : RID();
-				if (p_source_texture == RB_TEX_RT_DIFFUSE_RADIANCE &&
-						rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SIGNAL_CONFIDENCE) &&
-						rb->get_texture_slice_size(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SIGNAL_CONFIDENCE, 0) == rb_data->rt_get_size()) {
-					signal_confidence = rb->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SIGNAL_CONFIDENCE, v, 0);
-				}
-				RID cache_fill_radiance;
-				RID cache_fill_signal_confidence;
-				if (p_source_texture == RB_TEX_RT_DIFFUSE_RADIANCE &&
-						rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_OUTPUT) &&
-						rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SIGNAL_CONFIDENCE) &&
-						rb->get_texture_slice_size(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_OUTPUT, 0) == rb_data->rt_get_size() &&
-						rb->get_texture_slice_size(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SIGNAL_CONFIDENCE, 0) == rb_data->rt_get_size()) {
-					cache_fill_radiance = rb->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_OUTPUT, v, 0);
-					cache_fill_signal_confidence = rb->get_texture_slice(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SIGNAL_CONFIDENCE, v, 0);
-				}
-				const bool reconstruct_diffuse_irradiance = p_source_texture == RB_TEX_RT_DIFFUSE_RADIANCE;
-				rtgi_denoise->reconstruct(rb, RB_SCOPE_FORWARD_CLUSTERED, p_source_texture, RB_SCOPE_FORWARD_CLUSTERED, p_output_texture, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_TEMP, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_REACTIVITY, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_SIGNAL_CONFIDENCE, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_GUIDE_MISMATCH, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_FILL_SOURCE, p_denoise_scopes, taa_reactivity, signal_confidence, cache_fill_radiance, cache_fill_signal_confidence, rb_data->rt_get_depth_texture(v), rb_data->rt_get_normal_roughness(v), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), target_depth, target_normal_roughness, target_albedo, target_normal, target_orm, rb_data->rt_get_visible_origin(), rb_data->rt_get_visible_size(), rb_data->rt_get_source_sample_jitter(), output_size, use_target_guides, reconstruct_diffuse_irradiance, v);
-			}
-			return true;
-		};
-		auto reconstruct_rt_output = [&](bool p_use_target_guides, const Vector<StringName> &p_denoise_scopes) -> bool {
-			rb_data->rt_reset_reconstruction_guide_quality();
-			if (!reconstruct_rt_texture(RB_TEX_RAYTRACING, RB_TEX_RT_RECONSTRUCTED, p_use_target_guides, p_denoise_scopes)) {
-				return false;
-			}
-			rb_data->rt_set_reconstructed_valid(true);
-			return true;
-		};
-		auto reconstruct_rt_split_output = [&](bool p_use_target_guides, const Vector<StringName> &p_denoise_scopes) -> bool {
-			const Size2i output_size = rb->get_internal_size();
-			if (rb_data->rt_get_visible_size() == output_size || !rt_path_tracing_fullres_guides || !rb_data->rt_has_material_guides()) {
-				return false;
-			}
-			rb_data->rt_reset_reconstruction_guide_quality();
-			if (!reconstruct_rt_texture(RB_TEX_RT_DIFFUSE_RADIANCE, RB_TEX_RT_RECONSTRUCTED_DIFFUSE, p_use_target_guides, p_denoise_scopes)) {
-				return false;
-			}
-			if (!reconstruct_rt_texture(RB_TEX_RT_SPECULAR_RADIANCE, RB_TEX_RT_RECONSTRUCTED_SPECULAR, p_use_target_guides, p_denoise_scopes)) {
-				return false;
-			}
-			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
-				rtgi_denoise->composite_reconstructed_split(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_DIFFUSE, RB_TEX_RT_RECONSTRUCTED_SPECULAR, rb_data->rt_get_guide_albedo(v), rb_data->rt_get_guide_normal(v), rb_data->rt_get_guide_orm(v), RB_TEX_RT_RECONSTRUCTED, output_size, v);
-			}
-			rb_data->rt_set_reconstructed_valid(true);
-			return true;
-		};
-		auto record_rtgi_reconstruction_diagnostics = [&]() {
-			const uint32_t guide_quality = rb_data->rt_get_reconstruction_guide_quality();
-			if (p_render_data->render_info) {
-				p_render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_VISIBLE][RSE::VIEWPORT_RENDER_INFO_RTGI_RECONSTRUCTION_GUIDE_QUALITY] = guide_quality;
-			}
-			const bool expects_full_guides = rt_replaces_opaque && rb_data->rt_get_visible_size() != rb->get_internal_size() && rt_path_tracing_fullres_guides;
-			if (expects_full_guides && guide_quality < RenderBufferDataForwardClustered::RTGI_RECONSTRUCTION_GUIDE_QUALITY_DEPTH_NORMAL_ROUGHNESS_MATERIAL) {
-				WARN_PRINT_ONCE(vformat("Scaled Full Path Tracing RTGI reconstruction is using '%s' guide quality; full-resolution material guides are expected for the quality path.", _rtgi_reconstruction_guide_quality_name(guide_quality)));
-			}
-		};
-		auto stabilize_reconstructed_rt_output = [&](const StringName &p_history_context) {
-			if (!using_rt_internal_taa || !rb_data->rt_is_reconstructed_valid() || !rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_REACTIVITY)) {
-				return;
-			}
-
-			RID velocity_texture = rb->get_velocity_buffer(false);
-			RID reactivity_texture = rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_REACTIVITY);
-			if (!velocity_texture.is_valid() || !reactivity_texture.is_valid()) {
-				return;
-			}
-
-			const Size2i output_size = rb->get_internal_size();
-			RID reconstructed_history_validity;
-			RID reconstructed_prev_history_validity;
-			RID reconstructed_history_id;
-			RID reconstructed_prev_history_id;
-			if (rb_data->rt_has_history_validity() && rb_data->rt_has_history_id() &&
-					rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_HISTORY_VALIDITY) &&
-					rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_HISTORY_VALIDITY_PREV) &&
-					rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_HISTORY_ID) &&
-					rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_HISTORY_ID_PREV)) {
-				for (uint32_t v = 0; v < rb->get_view_count(); v++) {
-					rtgi_denoise->reconstruct_history(rb, rb_data->rt_get_history_validity(), rb_data->rt_get_history_id(), RB_TEX_RT_RECONSTRUCTED_HISTORY_VALIDITY, RB_TEX_RT_RECONSTRUCTED_HISTORY_ID, rb_data->rt_get_visible_origin(), rb_data->rt_get_visible_size(), rb_data->rt_get_source_sample_jitter(), output_size, v);
-				}
-				reconstructed_history_validity = rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_HISTORY_VALIDITY);
-				reconstructed_prev_history_validity = rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_HISTORY_VALIDITY_PREV);
-				reconstructed_history_id = rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_HISTORY_ID);
-				reconstructed_prev_history_id = rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED_HISTORY_ID_PREV);
-			}
-			taa->process_texture_with_rt_history(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_RECONSTRUCTED, p_history_context, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, velocity_texture, p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, true, reconstructed_history_validity, reconstructed_prev_history_validity, reconstructed_history_id, reconstructed_prev_history_id, 0.88f, output_size, rb->get_depth_texture(), reactivity_texture, RB_TEX_RT_RECONSTRUCTED_HISTORY_VALIDITY, RB_TEX_RT_RECONSTRUCTED_HISTORY_VALIDITY_PREV, RB_TEX_RT_RECONSTRUCTED_HISTORY_ID, RB_TEX_RT_RECONSTRUCTED_HISTORY_ID_PREV, RB_TEX_RT_RECONSTRUCTED_REACTIVITY, rb_data->rt_get_reconstructed_signal_confidence(), rb_data->rt_get_reconstructed_moments(), rb_data->rt_get_reconstructed_prev_moments(), rb_data->rt_get_reconstructed_history_meta(), rb_data->rt_get_reconstructed_prev_history_meta(), RB_TEX_RT_RECONSTRUCTED_SIGNAL_CONFIDENCE, RB_TEX_RT_RECONSTRUCTED_MOMENTS, RB_TEX_RT_RECONSTRUCTED_MOMENTS_PREV, RB_TEX_RT_RECONSTRUCTED_HISTORY_META, RB_TEX_RT_RECONSTRUCTED_HISTORY_META_PREV);
-		};
-
-		if (using_rt_denoise && !rt_radiance_probes_only) {
-			RD::get_singleton()->draw_command_begin_label("RT Denoise");
-			RENDER_TIMESTAMP("RT Denoise");
-			const float rt_denoise_strength = CLAMP(rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_STRENGTH] : 0.8f, 0.0f, 1.0f);
-			const float rt_firefly_suppression = CLAMP(rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_FIREFLY_SUPPRESSION] : 1.0f, 0.0f, 1.0f);
-			const float rt_detail_preservation = CLAMP(rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_DETAIL_PRESERVATION] : 1.0f, 0.0f, 1.0f);
-			const bool rt_split_signals = rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_SPLIT_SIGNALS] > 0.5f : true;
-			const bool rt_diffuse_cache_enabled = rt_env_params ? rt_env_params[RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED] > 0.5f : true;
-			const uint32_t rt_diffuse_cache_max_entries = _rtgi_diffuse_cache_max_entries_from_params(rt_env_params);
-			float rt_specular_history_weight = CLAMP(rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_SPECULAR_HISTORY_WEIGHT] : 0.95f, 0.0f, 0.98f);
-			const float rt_specular_spatial_strength = CLAMP(rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_SPECULAR_SPATIAL_STRENGTH] : 1.0f, 0.0f, 1.0f);
-			float rt_history_weight = rt_denoise_strength <= 0.001f ? 0.0f : CLAMP(rt_env_params ? rt_env_params[RSE::PT_PARAM_DENOISER_HISTORY_WEIGHT] : 0.95f, 0.0f, 0.98f);
-			if (rt_denoise_strength <= 0.001f) {
-				rt_specular_history_weight = 0.0f;
-			}
-			if (rt_history_weight > 0.0f && time_step > 0.0) {
-				// Treat the internal RTGI history as a 60 FPS baseline so high-refresh renders keep the same wall-clock decay.
-				rt_history_weight = Math::pow(rt_history_weight, (float)time_step * 60.0f);
-			}
-			if (rt_specular_history_weight > 0.0f && time_step > 0.0) {
-				rt_specular_history_weight = Math::pow(rt_specular_history_weight, (float)time_step * 60.0f);
-			}
-			auto build_rtgi_diagnostic_scopes = [&]() {
-				Vector<StringName> scopes;
-				if (rt_asvfg_denoiser) {
-					if (rt_split_signals) {
-						scopes.push_back(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
-						scopes.push_back(RB_SCOPE_RTGI_DENOISE_SPECULAR);
-						scopes.push_back(RB_SCOPE_RTGI_DENOISE_COMPOSITE);
-					} else {
-						scopes.push_back(RB_SCOPE_RTGI_DENOISE);
-					}
-				} else if (rt_signal_decomposition_denoiser) {
-					scopes.push_back(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_DIFFUSE);
-					scopes.push_back(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_DIRECT);
-					scopes.push_back(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_EMISSIVE);
-					scopes.push_back(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_INDIRECT);
-					scopes.push_back(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_SKY);
-					scopes.push_back(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_SPECULAR);
-				}
-				return scopes;
-			};
-			rtgi_reconstruction_scopes = build_rtgi_diagnostic_scopes();
-			auto compose_rt_taa_reactivity = [&](uint32_t p_view) {
-				RID taa_reactivity = rb->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_TAA_REACTIVITY, p_view, 0);
-				rtgi_denoise->compose_taa_reactivity(rb, rtgi_reconstruction_scopes, rb_data->rt_get_velocity_texture(), rb_data->rt_get_history_validity(), taa_reactivity, rb_data->rt_get_size(), p_view);
-			};
-			if (rt_asvfg_denoiser) {
-				rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION);
-				rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_DIFFUSE);
-				rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_DIRECT);
-				rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_EMISSIVE);
-				rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_INDIRECT);
-				rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_SKY);
-				rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_SPECULAR);
-				if (rt_split_signals) {
-					rb->clear_context(RB_SCOPE_RTGI_DENOISE);
-					if (rt_diffuse_cache_enabled && rt_history_weight > 0.001f && rtgi_diffuse_cache) {
-						const uint64_t cache_signature = _rtgi_diffuse_cache_signature(rt_flags, rt_path_output_backend, rt_env_params, rb_data->rt_get_size(), rb->get_view_count());
-						if (!rb_data->rt_diffuse_cache_signature_valid || rb_data->rt_diffuse_cache_signature != cache_signature) {
-							rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
-							rb_data->rt_diffuse_cache_signature = cache_signature;
-							rb_data->rt_diffuse_cache_signature_valid = true;
-						}
-					} else {
-						rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
-						rb_data->rt_diffuse_cache_signature = 0;
-						rb_data->rt_diffuse_cache_signature_valid = false;
-					}
-				} else {
-					rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
-					rb->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
-					rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
-					rb->clear_context(RB_SCOPE_RTGI_DENOISE_COMPOSITE);
-				}
-			} else if (rt_signal_decomposition_denoiser) {
-				rb->clear_context(RB_SCOPE_RTGI_DENOISE);
-				rb->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
-				rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
-				rb->clear_context(RB_SCOPE_RTGI_DENOISE_COMPOSITE);
-				rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
-				rb_data->rt_diffuse_cache_signature = 0;
-				rb_data->rt_diffuse_cache_signature_valid = false;
-			}
-
-			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
-				if (rt_asvfg_denoiser) {
-					if (rt_split_signals) {
-						rtgi_denoise->capture_noisy(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, RB_SCOPE_RTGI_DENOISE, rb_data->rt_get_size(), v);
-						if (rt_diffuse_cache_enabled && rt_history_weight > 0.001f && rtgi_diffuse_cache) {
-							RD::get_singleton()->draw_command_begin_label("RTGI Diffuse Cache");
-							RENDER_TIMESTAMP("RTGI Diffuse Cache");
-							const Projection rt_inv_view_projection = Projection(p_render_data->scene_data->cam_transform) * p_render_data->scene_data->view_projection[v].inverse();
-							rtgi_diffuse_cache->process(rb, rb_data->rt_get_diffuse_radiance(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rb_data->rt_get_receiver_surface_id(), rb_data->rt_get_prev_receiver_surface_id(), rb_data->rt_get_signal_confidence(), rb_data->rt_get_primary_diffuse_direction(), p_render_data->scene_data->cam_transform.origin, rt_inv_view_projection, rt_strc_enabled, rt_strc_cascade_count, rt_strc_grid_size, rt_strc_base_probe_spacing, rb_data->rt_get_size(), rt_diffuse_cache_max_entries, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_RAW_DIFFUSE, v);
-							RD::get_singleton()->draw_command_end_label();
-						}
-						rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DIFFUSE_RADIANCE, RB_SCOPE_RTGI_DENOISE_DIFFUSE, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), RID(), RID(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight, rt_denoise_strength, rt_firefly_suppression, rt_detail_preservation, false, true, false, rb_data->rt_get_size(), v, 5);
-						const float specular_denoise_strength = rt_denoise_strength * rt_specular_spatial_strength;
-						rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_RADIANCE, RB_SCOPE_RTGI_DENOISE_SPECULAR, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_specular_guide(), rb_data->rt_get_specular_reprojection(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_specular_history_weight, specular_denoise_strength, rt_firefly_suppression, rt_detail_preservation, true, false, false, rb_data->rt_get_size(), v, 5);
-						rtgi_denoise->composite_split(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DIFFUSE_RADIANCE, RB_TEX_RT_SPECULAR_RADIANCE, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_specular_guide(), RB_TEX_RAYTRACING, rt_denoise_strength, rt_firefly_suppression, rt_detail_preservation, rb_data->rt_get_size(), v);
-						const float rt_composite_history_weight = MIN(rt_history_weight, 0.88f);
-						const float rt_composite_denoise_strength = rt_denoise_strength * 0.20f;
-						if (rt_composite_history_weight > 0.001f && rt_composite_denoise_strength > 0.001f) {
-							rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, RB_SCOPE_RTGI_DENOISE_COMPOSITE, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), RID(), RID(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_composite_history_weight, rt_composite_denoise_strength, 0.0f, rt_detail_preservation, false, false, false, rb_data->rt_get_size(), v, 1);
-						}
-						RD::get_singleton()->texture_copy(rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), Vector3(), Vector3(), Vector3(rb_data->rt_get_size().x, rb_data->rt_get_size().y, 1), 0, 0, v, v);
-						RD::get_singleton()->texture_copy(rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), Vector3(), Vector3(), Vector3(rb_data->rt_get_size().x, rb_data->rt_get_size().y, 1), 0, 0, v, v);
-						RD::get_singleton()->texture_copy(rb_data->rt_get_receiver_surface_id(), rb_data->rt_get_prev_receiver_surface_id(), Vector3(), Vector3(), Vector3(rb_data->rt_get_size().x, rb_data->rt_get_size().y, 1), 0, 0, v, v);
-					} else {
-						rtgi_denoise->process(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_history_weight, rt_denoise_strength, rt_firefly_suppression, rt_detail_preservation, rb_data->rt_get_size(), v, 5);
-						RD::get_singleton()->texture_copy(rb_data->rt_get_receiver_surface_id(), rb_data->rt_get_prev_receiver_surface_id(), Vector3(), Vector3(), Vector3(rb_data->rt_get_size().x, rb_data->rt_get_size().y, 1), 0, 0, v, v);
-					}
-					compose_rt_taa_reactivity(v);
-					if (rt_replaces_opaque) {
-						composite_rt_volumetric_fog(v);
-					}
-				} else if (rt_signal_decomposition_denoiser) {
-					const float diffuse_signal_history_weight = rt_history_weight;
-					const float direct_signal_strength = CLAMP(rt_denoise_strength * 0.85f, 0.0f, 1.0f);
-					const float emissive_signal_strength = CLAMP(rt_denoise_strength * 0.75f, 0.0f, 1.0f);
-					const float indirect_signal_strength = CLAMP(rt_denoise_strength, 0.0f, 1.0f);
-					const float sky_signal_strength = CLAMP(rt_denoise_strength * 0.65f, 0.0f, 1.0f);
-					const float specular_denoise_strength = rt_denoise_strength * rt_specular_spatial_strength;
-
-					rtgi_denoise->capture_noisy(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION, rb_data->rt_get_size(), v);
-					rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DIFFUSE_RADIANCE, RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_DIFFUSE, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), RID(), RID(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), diffuse_signal_history_weight, rt_denoise_strength, rt_firefly_suppression, rt_detail_preservation, false, true, false, rb_data->rt_get_size(), v, 5);
-					rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_DIRECT_LIGHT, RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_DIRECT, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), RID(), RID(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), diffuse_signal_history_weight, direct_signal_strength, rt_firefly_suppression, rt_detail_preservation, false, true, false, rb_data->rt_get_size(), v, 4);
-					rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_EMISSIVE, RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_EMISSIVE, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), RID(), RID(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), diffuse_signal_history_weight, emissive_signal_strength, rt_firefly_suppression, rt_detail_preservation, false, true, false, rb_data->rt_get_size(), v, 4);
-					rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_INDIRECT, RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_INDIRECT, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), RID(), RID(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), diffuse_signal_history_weight, indirect_signal_strength, rt_firefly_suppression, rt_detail_preservation, false, true, false, rb_data->rt_get_size(), v, 5);
-					rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_SKY, RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_SKY, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), RID(), RID(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), diffuse_signal_history_weight * 0.85f, sky_signal_strength, rt_firefly_suppression, rt_detail_preservation, false, false, false, rb_data->rt_get_size(), v, 3);
-					rtgi_denoise->process_signal(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_RADIANCE, RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_SPECULAR, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_specular_guide(), rb_data->rt_get_specular_reprojection(), rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), rt_specular_history_weight, specular_denoise_strength, rt_firefly_suppression, rt_detail_preservation, true, false, false, rb_data->rt_get_size(), v, 5);
-					rtgi_denoise->composite_signal_decomposition(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_DIRECT_LIGHT, RB_TEX_RT_SIGNAL_EMISSIVE, RB_TEX_RT_SIGNAL_INDIRECT, RB_TEX_RT_SIGNAL_SKY, RB_TEX_RT_SPECULAR_RADIANCE, RB_TEX_RT_DIFFUSE_RADIANCE, rb_data->rt_get_velocity_texture(), rb_data->rt_get_normal_roughness(), rb_data->rt_get_albedo_metalness(), rb_data->rt_get_specular_guide(), RB_TEX_RAYTRACING, rt_denoise_strength, rt_firefly_suppression, rt_detail_preservation, rb_data->rt_get_size(), v);
-					RD::get_singleton()->texture_copy(rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity(), Vector3(), Vector3(), Vector3(rb_data->rt_get_size().x, rb_data->rt_get_size().y, 1), 0, 0, v, v);
-					RD::get_singleton()->texture_copy(rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id(), Vector3(), Vector3(), Vector3(rb_data->rt_get_size().x, rb_data->rt_get_size().y, 1), 0, 0, v, v);
-					RD::get_singleton()->texture_copy(rb_data->rt_get_receiver_surface_id(), rb_data->rt_get_prev_receiver_surface_id(), Vector3(), Vector3(), Vector3(rb_data->rt_get_size().x, rb_data->rt_get_size().y, 1), 0, 0, v, v);
-					compose_rt_taa_reactivity(v);
-					if (rt_replaces_opaque) {
-						composite_rt_volumetric_fog(v);
-					}
-				}
-			}
-
-			if (rt_replaces_opaque && using_rt_internal_taa) {
-				RD::get_singleton()->draw_command_begin_label("RT TAA (Post Denoise)");
-				taa->process_texture_with_rt_history(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, SNAME("rtgi_taa"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, rb_data->rt_get_velocity_texture(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, false, rb_data->rt_get_history_validity(), rb_data->rt_get_taa_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_taa_prev_history_id(), 0.94f, rb_data->rt_get_size(), rb_data->rt_get_depth_texture(), rb_data->rt_get_taa_reactivity(), RB_TEX_RT_HISTORY_VALIDITY, RB_TEX_RT_TAA_HISTORY_VALIDITY_PREV, RB_TEX_RT_HISTORY_ID, RB_TEX_RT_TAA_HISTORY_ID_PREV, RB_TEX_RT_TAA_REACTIVITY);
-				update_rt_taa_history(false);
-				RD::get_singleton()->draw_command_end_label();
-			}
-
-			if (rt_replaces_opaque) {
-				bool split_reconstructed = false;
-				if (rt_asvfg_denoiser && rt_split_signals) {
-					split_reconstructed = reconstruct_rt_split_output(true, rtgi_reconstruction_scopes);
-				}
-				if (!split_reconstructed) {
-					reconstruct_rt_output(rt_path_tracing_fullres_guides, rtgi_reconstruction_scopes);
-				}
-				record_rtgi_reconstruction_diagnostics();
-				stabilize_reconstructed_rt_output(SNAME("rtgi_reconstructed_taa"));
-				raytracing->copy_output_texture(p_render_data);
-			}
-			RD::get_singleton()->draw_command_end_label();
-		} else if (rt_replaces_opaque && using_viewport_taa) {
-			RD::get_singleton()->draw_command_begin_label("RT TAA");
-			RENDER_TIMESTAMP("RT TAA");
-			rb->clear_context(RB_SCOPE_RTGI_DENOISE);
-			rb->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
-			rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
-			rb->clear_context(RB_SCOPE_RTGI_DENOISE_COMPOSITE);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_DIFFUSE);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_DIRECT);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_EMISSIVE);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_INDIRECT);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_SKY);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_SPECULAR);
-			rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
-			taa->process_texture_with_rt_history(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, SNAME("rtgi_taa"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, rb_data->rt_get_velocity_texture(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, false, rb_data->rt_get_history_validity(), rb_data->rt_get_taa_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_taa_prev_history_id(), 0.94f, rb_data->rt_get_size(), rb_data->rt_get_depth_texture(), RID(), RB_TEX_RT_HISTORY_VALIDITY, RB_TEX_RT_TAA_HISTORY_VALIDITY_PREV, RB_TEX_RT_HISTORY_ID, RB_TEX_RT_TAA_HISTORY_ID_PREV, StringName());
-			update_rt_taa_history(false);
-			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
-				composite_rt_volumetric_fog(v);
-			}
-			reconstruct_rt_output(rt_path_tracing_fullres_guides, rtgi_reconstruction_scopes);
-			record_rtgi_reconstruction_diagnostics();
-			stabilize_reconstructed_rt_output(SNAME("rtgi_reconstructed_taa"));
-			raytracing->copy_output_texture(p_render_data);
-			RD::get_singleton()->draw_command_end_label();
-		} else {
-			RD::get_singleton()->texture_clear(rb_data->rt_get_prev_history_validity(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
-			RD::get_singleton()->texture_clear(rb_data->rt_get_prev_history_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
-			RD::get_singleton()->texture_clear(rb_data->rt_get_prev_receiver_surface_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
-			RD::get_singleton()->texture_clear(rb_data->rt_get_taa_prev_history_validity(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
-			RD::get_singleton()->texture_clear(rb_data->rt_get_taa_prev_history_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
-			RD::get_singleton()->texture_clear(rb_data->rt_get_hybrid_taa_prev_history_validity(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
-			RD::get_singleton()->texture_clear(rb_data->rt_get_hybrid_taa_prev_history_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
-			RD::get_singleton()->texture_clear(rb_data->rt_get_source_candidate_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
-			RD::get_singleton()->texture_clear(rb_data->rt_get_source_candidate_key_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
-			RD::get_singleton()->texture_clear(rb_data->rt_get_source_direct_candidate_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
-			RD::get_singleton()->texture_clear(rb_data->rt_get_source_direct_candidate_key_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
-			RD::get_singleton()->texture_clear(rb_data->rt_get_source_direct_reservoir_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
-			RD::get_singleton()->texture_clear(rb_data->rt_get_source_direct_reservoir_lighting_prev(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
-			rb->clear_context(RB_SCOPE_RTGI_DENOISE);
-			rb->clear_context(RB_SCOPE_RTGI_DENOISE_DIFFUSE);
-			rb->clear_context(RB_SCOPE_RTGI_DENOISE_SPECULAR);
-			rb->clear_context(RB_SCOPE_RTGI_DENOISE_COMPOSITE);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_DIFFUSE);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_DIRECT);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_EMISSIVE);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_INDIRECT);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_SKY);
-			rb->clear_context(RB_SCOPE_RTGI_SIGNAL_DECOMPOSITION_SPECULAR);
-			rb->clear_context(RB_SCOPE_RTGI_DIFFUSE_CACHE);
-			if (rt_replaces_opaque) {
-				for (uint32_t v = 0; v < rb->get_view_count(); v++) {
-					composite_rt_volumetric_fog(v);
-				}
-				reconstruct_rt_output(rt_path_tracing_fullres_guides, rtgi_reconstruction_scopes);
-				record_rtgi_reconstruction_diagnostics();
-				stabilize_reconstructed_rt_output(SNAME("rtgi_reconstructed_taa"));
-				raytracing->copy_output_texture(p_render_data);
-			}
-		}
-
-		if (rt_replaces_opaque) {
-			rb->clear_context(SNAME("taa"));
-			rb->clear_context(SNAME("rtgi_hybrid_taa"));
-		}
-
-		if (!rt_replaces_opaque) {
-			if (rt_hybrid_rtgi && using_rt_internal_taa) {
-				RD::get_singleton()->draw_command_begin_label("Hybrid RTGI TAA (Pre Blend)");
-				RENDER_TIMESTAMP("Hybrid RTGI TAA");
-				taa->process_texture_with_rt_history(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING, SNAME("rtgi_hybrid_taa"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, rb_data->rt_get_velocity_texture(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, false, rb_data->rt_get_history_validity(), rb_data->rt_get_hybrid_taa_prev_history_validity(), rb_data->rt_get_history_id(), rb_data->rt_get_hybrid_taa_prev_history_id(), 0.94f, rb_data->rt_get_size(), rb_data->rt_get_depth_texture(), rb_data->rt_get_taa_reactivity(), RB_TEX_RT_HISTORY_VALIDITY, RB_TEX_RT_HYBRID_TAA_HISTORY_VALIDITY_PREV, RB_TEX_RT_HISTORY_ID, RB_TEX_RT_HYBRID_TAA_HISTORY_ID_PREV, RB_TEX_RT_TAA_REACTIVITY);
-				update_rt_taa_history(true);
-				RD::get_singleton()->draw_command_end_label();
-			} else {
-				rb->clear_context(SNAME("rtgi_hybrid_taa"));
-				RD::get_singleton()->texture_clear(rb_data->rt_get_hybrid_taa_prev_history_validity(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
-				RD::get_singleton()->texture_clear(rb_data->rt_get_hybrid_taa_prev_history_id(), Color(0, 0, 0, 0), 0, 1, 0, rb->get_view_count());
-			}
-
-			if (rt_hybrid_rtgi) {
-				reconstruct_rt_output(true, rtgi_reconstruction_scopes);
-				record_rtgi_reconstruction_diagnostics();
-				stabilize_reconstructed_rt_output(SNAME("rtgi_hybrid_reconstructed_taa"));
-				RD::get_singleton()->draw_command_begin_label("Composite Hybrid RTGI");
-				RENDER_TIMESTAMP("Composite Hybrid RTGI");
-			} else {
-				reconstruct_rt_output(true, rtgi_reconstruction_scopes);
-				record_rtgi_reconstruction_diagnostics();
-				stabilize_reconstructed_rt_output(SNAME("rtgi_reflections_reconstructed_taa"));
-				RD::get_singleton()->draw_command_begin_label("Composite Reflections RT Only");
-				RENDER_TIMESTAMP("Composite Reflections RT Only");
-			}
-			copy_effects->additive_blend(color_only_framebuffer, rb_data->rt_is_reconstructed_valid() ? rb_data->rt_get_reconstructed() : rb_data->rt_get_texture(), p_render_data->scene_data->view_count);
-			RD::get_singleton()->draw_command_end_label();
-		}
-		}
-	}
 	}
 
 	{
-		// Skip color MSAA resolve only when Path Traced mode has already written internal_texture.
-		if (!rt_replaces_opaque && ce_post_opaque_resolved_color) {
+		if (ce_post_opaque_resolved_color) {
 			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
 				RD::get_singleton()->texture_resolve_multisample(rb->get_color_msaa(v), rb->get_internal_texture(v));
 			}
 		}
 
-		if (!rt_replaces_opaque && ce_post_opaque_resolved_depth) {
+		if (ce_post_opaque_resolved_depth) {
 			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
 				resolve_effects->resolve_depth(rb->get_depth_msaa(v), rb->get_depth_texture(v), rb->get_internal_size(), texture_multisamples[msaa]);
 			}
@@ -5063,7 +4069,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		_debug_sdfgi_probes(rb, color_only_framebuffer, p_render_data->scene_data->view_count, cms);
 	}
 
-	if ((draw_sky || draw_sky_fog_only) && !rt_replaces_opaque) {
+	if (draw_sky || draw_sky_fog_only) {
 		RENDER_TIMESTAMP("Render Sky");
 
 		RD::get_singleton()->draw_command_begin_label("Draw Sky");
@@ -5078,9 +4084,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	if (use_msaa) {
 		RENDER_TIMESTAMP("Resolve MSAA");
 
-		// Path Traced mode writes internal_texture directly; Simple RT still uses
-		// the normal raster MSAA target.
-		if (!rt_replaces_opaque && (scene_state.used_screen_texture || using_separate_specular || ce_pre_transparent_resolved_color)) {
+		if (scene_state.used_screen_texture || using_separate_specular || ce_pre_transparent_resolved_color) {
 			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
 				RD::get_singleton()->texture_resolve_multisample(rb->get_color_msaa(v), rb->get_internal_texture(v));
 			}
@@ -5091,7 +4095,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			}
 		}
 
-		if (!rt_replaces_opaque && (scene_state.used_depth_texture || scene_state.used_normal_texture || using_separate_specular || ce_needs_normal_roughness || ce_pre_transparent_resolved_depth)) {
+		if (scene_state.used_depth_texture || scene_state.used_normal_texture || using_separate_specular || ce_needs_normal_roughness || ce_pre_transparent_resolved_depth) {
 			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
 				resolve_effects->resolve_depth(rb->get_depth_msaa(v), rb->get_depth_texture(v), rb->get_internal_size(), texture_multisamples[msaa]);
 			}
@@ -5165,13 +4169,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 			// Path Traced mode writes internal_texture directly; Simple RT still
 			// uses the normal raster MSAA target.
-			if (!rt_replaces_opaque && ce_pre_transparent_resolved_color) {
+			if (ce_pre_transparent_resolved_color) {
 				for (uint32_t v = 0; v < rb->get_view_count(); v++) {
 					RD::get_singleton()->texture_resolve_multisample(rb->get_color_msaa(v), rb->get_internal_texture(v));
 				}
 			}
 
-			if (!rt_replaces_opaque && ce_pre_transparent_resolved_depth) {
+			if (ce_pre_transparent_resolved_depth) {
 				for (uint32_t v = 0; v < rb->get_view_count(); v++) {
 					resolve_effects->resolve_depth(rb->get_depth_msaa(v), rb->get_depth_texture(v), rb->get_internal_size(), texture_multisamples[msaa]);
 				}
@@ -5197,25 +4201,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// Motion vectors should not be overwritten by transparent objects.
 			transparent_color_pass_flags &= ~uint32_t(COLOR_PASS_FLAG_MOTION_VECTORS);
 
-			RID alpha_framebuffer;
-			if (rt_replaces_opaque && rb_data.is_valid()) {
-				int v_count = (transparent_color_pass_flags & COLOR_PASS_FLAG_MULTIVIEW) ? rb->get_view_count() : 1;
-				RID color = rb->get_internal_texture();
-				RID depth = rb->get_depth_texture();
-				if (rb_data->rt_has_depth_attachment()) {
-					RID rt_depth_attachment = rb_data->rt_get_depth_attachment();
-					if (rt_depth_attachment.is_valid()) {
-						depth = rt_depth_attachment;
-					}
-				}
-				if (rb->has_texture(RB_SCOPE_VRS, RB_TEXTURE)) {
-					alpha_framebuffer = FramebufferCacheRD::get_singleton()->get_cache_multiview(v_count, color, depth, rb->get_texture(RB_SCOPE_VRS, RB_TEXTURE));
-				} else {
-					alpha_framebuffer = FramebufferCacheRD::get_singleton()->get_cache_multiview(v_count, color, depth);
-				}
-			} else {
-				alpha_framebuffer = rb_data.is_valid() ? rb_data->get_color_pass_fb(transparent_color_pass_flags) : color_only_framebuffer;
-			}
+			RID alpha_framebuffer = rb_data.is_valid() ? rb_data->get_color_pass_fb(transparent_color_pass_flags) : color_only_framebuffer;
 			RenderListParameters render_list_params(render_list[RENDER_LIST_ALPHA].elements.ptr(), render_list[RENDER_LIST_ALPHA].element_info.ptr(), render_list[RENDER_LIST_ALPHA].elements.size(), reverse_cull, PASS_MODE_COLOR, transparent_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
 			_render_list_with_draw_list(&render_list_params, alpha_framebuffer, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 0.0f, 0u, p_render_data->render_region);
 		}
@@ -5230,16 +4216,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	if (rb_data.is_valid() && use_msaa) {
 		bool resolve_velocity_buffer = (using_taa || using_upscaling || ce_needs_motion_vectors) && rb->has_velocity_buffer(true);
 		for (uint32_t v = 0; v < rb->get_view_count(); v++) {
-			// Path Traced mode writes internal_texture directly; Simple RT still
-			// uses the normal raster MSAA target.
-			if (!rt_replaces_opaque) {
-				RD::get_singleton()->texture_resolve_multisample(rb->get_color_msaa(v), rb->get_internal_texture(v));
-			}
-			if (!rt_replaces_opaque) {
-				resolve_effects->resolve_depth(rb->get_depth_msaa(v), rb->get_depth_texture(v), rb->get_internal_size(), texture_multisamples[msaa]);
-			}
+			RD::get_singleton()->texture_resolve_multisample(rb->get_color_msaa(v), rb->get_internal_texture(v));
+			resolve_effects->resolve_depth(rb->get_depth_msaa(v), rb->get_depth_texture(v), rb->get_internal_size(), texture_multisamples[msaa]);
 
-			if (resolve_velocity_buffer && !rt_replaces_opaque) {
+			if (resolve_velocity_buffer) {
 				RD::get_singleton()->texture_resolve_multisample(rb->get_velocity_buffer(true, v), rb->get_velocity_buffer(false, v));
 			}
 		}
@@ -5393,7 +4373,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 			RD::get_singleton()->draw_command_end_label();
 #endif
-		} else if (using_viewport_taa && !rt_replaces_opaque) {
+		} else if (using_viewport_taa) {
 			RD::get_singleton()->draw_command_begin_label("TAA");
 			RENDER_TIMESTAMP("TAA");
 			taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far);
@@ -5506,15 +4486,8 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 	{
 		Size2i rtsize = texture_storage->render_target_get_size(render_target);
 		RID fb = texture_storage->render_target_get_rd_framebuffer(render_target);
-		const StringName rtgi_debug_scope = rb->has_texture(RB_SCOPE_RTGI_DENOISE_DIFFUSE, RB_TEX_RTGI_DENOISE_VARIANCE) ? RB_SCOPE_RTGI_DENOISE_DIFFUSE : RB_SCOPE_RTGI_DENOISE;
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_NOISY || get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_RAW_RADIANCE) {
-			if (rb->has_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_NOISY)) {
-				copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DENOISE, RB_TEX_RTGI_DENOISE_NOISY), fb, Rect2(Vector2(), rtsize), false, false);
-			} else if (rb->has_texture(rtgi_debug_scope, RB_TEX_RTGI_DENOISE_NOISY)) {
-				copy_effects->copy_to_fb_rect(rb->get_texture(rtgi_debug_scope, RB_TEX_RTGI_DENOISE_NOISY), fb, Rect2(Vector2(), rtsize), false, false);
-			} else if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_RAW_RADIANCE && rb_data->rt_has_texture()) {
-				copy_effects->copy_to_fb_rect(rb_data->rt_get_texture(), fb, Rect2(Vector2(), rtsize), false, false);
-			}
+		if ((get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_NOISY || get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_RAW_RADIANCE) && rb_data->rt_has_texture()) {
+			copy_effects->copy_to_fb_rect(rb_data->rt_get_texture(), fb, Rect2(Vector2(), rtsize), false, false);
 		}
 
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_NORMAL_ROUGHNESS && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_NORMAL_ROUGHNESS)) {
@@ -5531,18 +4504,6 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_MOTION_VECTORS && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_VELOCITY) && rb_data->rt_has_depth_texture()) {
 			debug_effects->draw_motion_vectors(rb_data->rt_get_velocity_texture(), rb_data->rt_get_depth_texture(), fb, p_render_data->scene_data->cam_projection, p_render_data->scene_data->cam_transform, p_render_data->scene_data->prev_cam_projection, p_render_data->scene_data->prev_cam_transform, rb_data->rt_get_size());
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_VARIANCE && rb->has_texture(rtgi_debug_scope, RB_TEX_RTGI_DENOISE_VARIANCE)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(rtgi_debug_scope, RB_TEX_RTGI_DENOISE_VARIANCE), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_HISTORY_LENGTH && rb->has_texture(rtgi_debug_scope, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(rtgi_debug_scope, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH), fb, Rect2(Vector2(), rtsize), false, true);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_REJECTION && rb->has_texture(rtgi_debug_scope, RB_TEX_RTGI_DENOISE_REJECTION)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(rtgi_debug_scope, RB_TEX_RTGI_DENOISE_REJECTION), fb, Rect2(Vector2(), rtsize), false, true);
 		}
 
 		if ((get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_FINAL || get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_DENOISED_RADIANCE) && rb_data->rt_has_texture()) {
@@ -5569,22 +4530,6 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 			copy_effects->copy_to_fb_rect(rb_data->rt_get_reconstructed_fill_source(), fb, Rect2(Vector2(), rtsize), false, false);
 		}
 
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_DIFFUSE_NOISY && rb->has_texture(RB_SCOPE_RTGI_DENOISE_DIFFUSE, RB_TEX_RTGI_DENOISE_NOISY)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DENOISE_DIFFUSE, RB_TEX_RTGI_DENOISE_NOISY), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_NOISY && rb->has_texture(RB_SCOPE_RTGI_DENOISE_SPECULAR, RB_TEX_RTGI_DENOISE_NOISY)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DENOISE_SPECULAR, RB_TEX_RTGI_DENOISE_NOISY), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_DIFFUSE_FINAL && rb->has_texture(RB_SCOPE_RTGI_DENOISE_DIFFUSE, RB_TEX_RTGI_DENOISE_HISTORY) && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DIFFUSE_RADIANCE)) {
-			copy_effects->copy_to_fb_rect(rb_data->rt_get_diffuse_radiance(), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_FINAL && rb->has_texture(RB_SCOPE_RTGI_DENOISE_SPECULAR, RB_TEX_RTGI_DENOISE_HISTORY) && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_RADIANCE)) {
-			copy_effects->copy_to_fb_rect(rb_data->rt_get_specular_radiance(), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_GUIDE && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_GUIDE)) {
 			copy_effects->copy_to_fb_rect(rb_data->rt_get_specular_guide(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
 		}
@@ -5601,34 +4546,6 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 			copy_effects->copy_to_fb_rect(rb_data->rt_get_specular_reflection_direction(), fb, Rect2(Vector2(), rtsize), false, false);
 		}
 
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_HISTORY_LENGTH && rb->has_texture(RB_SCOPE_RTGI_DENOISE_SPECULAR, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DENOISE_SPECULAR, RB_TEX_RTGI_DENOISE_HISTORY_LENGTH), fb, Rect2(Vector2(), rtsize), false, true);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REJECTION && rb->has_texture(RB_SCOPE_RTGI_DENOISE_SPECULAR, RB_TEX_RTGI_DENOISE_REJECTION)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DENOISE_SPECULAR, RB_TEX_RTGI_DENOISE_REJECTION), fb, Rect2(Vector2(), rtsize), false, true);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_DIRECT_LIGHT && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_DIRECT_LIGHT)) {
-			copy_effects->copy_to_fb_rect(rb_data->rt_get_signal_direct_light(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_EMISSIVE && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_EMISSIVE)) {
-			copy_effects->copy_to_fb_rect(rb_data->rt_get_signal_emissive(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_INDIRECT && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_INDIRECT)) {
-			copy_effects->copy_to_fb_rect(rb_data->rt_get_signal_indirect(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_SKY && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_SKY)) {
-			copy_effects->copy_to_fb_rect(rb_data->rt_get_signal_sky(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_CONFIDENCE && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SIGNAL_CONFIDENCE)) {
-			copy_effects->copy_to_fb_rect(rb_data->rt_get_signal_confidence(), fb, Rect2(Vector2(), rtsize), false, true);
-		}
-
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_CANDIDATE && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_CANDIDATE)) {
 			copy_effects->copy_to_fb_rect(rb_data->rt_get_source_candidate(), fb, Rect2(Vector2(), rtsize), false, false);
 		}
@@ -5643,106 +4560,6 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_REJECTION && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_REJECTION)) {
 			copy_effects->copy_to_fb_rect(rb_data->rt_get_source_rejection(), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SECONDARY_CACHE_SOURCE && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_SOURCE)) {
-			copy_effects->copy_to_fb_rect(rb_data->rt_get_secondary_cache_source(), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SECONDARY_CACHE_REJECTION && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_REJECTION)) {
-			copy_effects->copy_to_fb_rect(rb_data->rt_get_secondary_cache_rejection(), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SECONDARY_CACHE_SURFACE && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SECONDARY_CACHE_SURFACE)) {
-			copy_effects->copy_to_fb_rect(rb_data->rt_get_secondary_cache_surface(), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SURFACE_FEEDBACK && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_FEEDBACK_DIAGNOSTIC)) {
-			copy_effects->copy_to_fb_rect(rb_data->rt_get_surface_cache_feedback_diagnostic(), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SURFACE_KEY && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SURFACE_CACHE_DIAGNOSTIC)) {
-			copy_effects->copy_to_fb_rect(rb_data->rt_get_surface_cache_diagnostic(), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_RAW_DIFFUSE && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RAW)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_RAW), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_HIT_CONFIDENCE && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_DIAGNOSTIC)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_DIAGNOSTIC), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_AGE && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_AGE)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_AGE), fb, Rect2(Vector2(), rtsize), false, true);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_REJECTION && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_REJECTION)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_REJECTION), fb, Rect2(Vector2(), rtsize), false, true);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_FILTERED_DIFFUSE && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_OUTPUT)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_OUTPUT), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_SPG_RADIANCE && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_RADIANCE)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_RADIANCE), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_SPG_CONFIDENCE && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_RADIANCE)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_RADIANCE), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_ALPHA_TO_LUMINANCE);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_SPG_STATS && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_STATS)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_STATS), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_SPG_PLANE_QUALITY && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_STATS)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_STATS), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_ALPHA_TO_LUMINANCE);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_SPG_VISIBILITY && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_VISIBILITY)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_VISIBILITY), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_SPG_REJECTION && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REJECTION)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REJECTION), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_SPG_REFINEMENT && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINEMENT_MASK)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINEMENT_MASK), fb, Rect2(Vector2(), rtsize), false, false);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_CACHE_SPG_REFINED_CONFIDENCE && rb->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_RADIANCE)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_RADIANCE), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_ALPHA_TO_LUMINANCE);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_STRC_RADIANCE && rb->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_RADIANCE_DEBUG)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_RADIANCE_DEBUG), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_STRC_CONFIDENCE && rb->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_CONFIDENCE_DEBUG)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_CONFIDENCE_DEBUG), fb, Rect2(Vector2(), rtsize), false, true);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_STRC_UPDATES && rb->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_UPDATES_DEBUG)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_UPDATES_DEBUG), fb, Rect2(Vector2(), rtsize), false, true);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_STRC_VISIBILITY && rb->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_VISIBILITY_DEBUG)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_VISIBILITY_DEBUG), fb, Rect2(Vector2(), rtsize), false, true);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_STRC_AGE && rb->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_AGE_DEBUG)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_AGE_DEBUG), fb, Rect2(Vector2(), rtsize), false, true);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_STRC_VARIANCE && rb->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_VARIANCE_DEBUG)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_VARIANCE_DEBUG), fb, Rect2(Vector2(), rtsize), false, true);
-		}
-
-		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_STRC_REJECTION && rb->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_REJECTION_DEBUG)) {
-			copy_effects->copy_to_fb_rect(rb->get_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_REJECTION_DEBUG), fb, Rect2(Vector2(), rtsize), false, true);
 		}
 
 		// World Radiance Cache (WRC) debug views. Unlike STRC (which keeps dedicated
@@ -8583,9 +7400,6 @@ RenderForwardClustered::RenderForwardClustered() {
 	_update_global_pipeline_data_requirements_from_project();
 
 	taa = memnew(RendererRD::TAA);
-	rtgi_diffuse_cache = memnew(RendererRD::RTGIDiffuseCache);
-	rtgi_denoise = memnew(RendererRD::RTGIDenoise);
-	rtgi_strc = memnew(RendererRD::RTGISpatioTemporalRadianceCache);
 	rtgi_wrc = memnew(RendererRD::RTGIWorldRadianceCache);
 	rtgi_spg = memnew(RendererRD::RTGIScreenProbeGather);
 	rtgi_resolve = memnew(RendererRD::RTGIGIResolve);
@@ -8610,16 +7424,6 @@ RenderForwardClustered::~RenderForwardClustered() {
 		taa = nullptr;
 	}
 
-	if (rtgi_denoise != nullptr) {
-		memdelete(rtgi_denoise);
-		rtgi_denoise = nullptr;
-	}
-
-	if (rtgi_strc != nullptr) {
-		memdelete(rtgi_strc);
-		rtgi_strc = nullptr;
-	}
-
 	if (rtgi_wrc != nullptr) {
 		memdelete(rtgi_wrc);
 		rtgi_wrc = nullptr;
@@ -8633,11 +7437,6 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (rtgi_resolve != nullptr) {
 		memdelete(rtgi_resolve);
 		rtgi_resolve = nullptr;
-	}
-
-	if (rtgi_diffuse_cache != nullptr) {
-		memdelete(rtgi_diffuse_cache);
-		rtgi_diffuse_cache = nullptr;
 	}
 
 	if (fsr2_effect) {

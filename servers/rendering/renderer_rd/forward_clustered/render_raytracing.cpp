@@ -1229,7 +1229,7 @@ static uint64_t _rt_history_mix_color(uint64_t p_hash, const Color &p_color) {
 }
 
 static uint64_t _rt_radiance_signature(uint32_t p_rt_flags, RID p_environment, RID p_camera_attributes, const float p_rt_params[SceneShaderRaytracing::RT_PARAM_SHADER_FLOAT_COUNT], const Color &p_background_color, bool p_background_uses_sky, const RT_LightData *p_light_data, uint32_t p_light_count) {
-	const uint32_t signature_rt_flags = p_rt_flags & ~uint32_t(SceneShaderRaytracing::RT_FLAG_STRC_PROBE_UPDATE);
+	const uint32_t signature_rt_flags = p_rt_flags;
 	uint64_t signature = _rt_history_mix(0x727472616469616eULL, signature_rt_flags);
 	signature = _rt_history_mix_rid(signature, p_environment);
 	signature = _rt_history_mix_rid(signature, p_camera_attributes);
@@ -9736,14 +9736,6 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			}
 		}
 		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_BACKEND] = float(active_backend);
-		if ((p_rt_flags & SceneShaderRaytracing::RT_FLAG_STRC_INTERNAL_FALLBACK) != 0) {
-			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_ENABLED] = 0.0f;
-			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_CASCADE_COUNT] = float(SceneShaderRaytracing::RTGI_STRC_INTERNAL_FALLBACK_CASCADE_COUNT);
-			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_GRID_SIZE] = float(SceneShaderRaytracing::RTGI_STRC_INTERNAL_FALLBACK_GRID_SIZE);
-			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_BASE_PROBE_SPACING] = SceneShaderRaytracing::RTGI_STRC_INTERNAL_FALLBACK_BASE_PROBE_SPACING;
-			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_RAYS_PER_FRAME] = float(SceneShaderRaytracing::RTGI_STRC_INTERNAL_FALLBACK_RAYS_PER_FRAME);
-			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT] = SceneShaderRaytracing::RTGI_STRC_INTERNAL_FALLBACK_TEMPORAL_WEIGHT;
-		}
 		// WRC probe-update needs the WRC's own clipmap values (which the WRC atlas was
 		// sized from) for probe-addressing. A3-T9 moved these off the borrowed STRC slots
 		// onto the WRC producer-owned RT_PARAM_RTGI_WRC_* slots, so the STRC slots are no
@@ -9769,14 +9761,6 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_WRC_GRID] = float(p_state->wrc_grid);
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_WRC_CASCADE_COUNT] = float(p_state->wrc_cascade_count);
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_WRC_BASE_SPACING] = p_state->wrc_base_spacing;
-			// Zero the STRC ray budget defensively: this is an STRC *consumer* guard (NOT a
-			// WRC producer feed), unaffected by the A3-T9 producer migration. The gather's
-			// ground-truth ray trace runs the normal closest-hit shader, whose STRC consumer
-			// path keys off RT_PARAM_RTGI_STRC_RAYS_PER_FRAME (slot 33, populated by the
-			// Environment fill above). A stale nonzero value would let the closest-hit shader
-			// fold STRC indirect into the gather's ground-truth rays should SPG ever run with
-			// STRC enabled on the environment; zeroing it keeps the gather byte-identical.
-			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_STRC_RAYS_PER_FRAME] = 0.0f;
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_SPG_GRID_W] = float(p_state->spg_grid_w);
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_SPG_GRID_H] = float(p_state->spg_grid_h);
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_SPG_OCT_RES] = float(p_state->spg_oct_res);
@@ -10050,225 +10034,6 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		uniforms.push_back(u);
 	}
 
-	// Binding 77: RT receiver surface identity for diffuse GI cache reuse.
-	{
-		RD::Uniform u;
-		u.binding = 77;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, rb_data->rt_get_receiver_surface_id());
-		uniforms.push_back(u);
-	}
-
-	auto get_rtgi_diffuse_cache_texture = [&](const StringName &p_texture_name, RID p_fallback) {
-		if (p_render_data && p_render_data->render_buffers.is_valid() && p_render_data->render_buffers->has_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, p_texture_name)) {
-			return p_render_data->render_buffers->get_texture(RB_SCOPE_RTGI_DIFFUSE_CACHE, p_texture_name);
-		}
-		return p_fallback;
-	};
-	RID rtgi_diffuse_cache_fallback_rgba16f = rb_data->rt_get_diffuse_cache_fallback_rgba16f();
-	RID rtgi_diffuse_cache_fallback_rgba8 = rb_data->rt_get_diffuse_cache_fallback_rgba8();
-
-	// Bindings 78-81: previous-frame receiver diffuse cache, sampled by secondary diffuse path hits.
-	{
-		RD::Uniform u;
-		u.binding = 78;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_RADIANCE, rtgi_diffuse_cache_fallback_rgba16f));
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 79;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_META, rtgi_diffuse_cache_fallback_rgba16f));
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 80;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_STATS, rtgi_diffuse_cache_fallback_rgba16f));
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 81;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_HISTORY_ID, rtgi_diffuse_cache_fallback_rgba8));
-		uniforms.push_back(u);
-	}
-
-	// Binding 82: primary rough diffuse direction for directional screen-probe reconstruction.
-	{
-		RD::Uniform u;
-		u.binding = 82;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, rb_data->rt_get_primary_diffuse_direction());
-		uniforms.push_back(u);
-	}
-
-	// Bindings 83-87: previous-frame directional screen-probe gather atlas for secondary diffuse cache queries.
-	{
-		RD::Uniform u;
-		u.binding = 83;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_RADIANCE, rtgi_diffuse_cache_fallback_rgba16f));
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 84;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_META, rtgi_diffuse_cache_fallback_rgba16f));
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 85;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_HISTORY_ID, rtgi_diffuse_cache_fallback_rgba8));
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 86;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_STATS, rtgi_diffuse_cache_fallback_rgba16f));
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 87;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_VISIBILITY, rtgi_diffuse_cache_fallback_rgba16f));
-		uniforms.push_back(u);
-	}
-
-	// Bindings 88-93: refined directional screen-probe gather atlas for risky secondary diffuse cache queries.
-	{
-		RD::Uniform u;
-		u.binding = 88;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINEMENT_MASK, rtgi_diffuse_cache_fallback_rgba8));
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 89;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_RADIANCE, rtgi_diffuse_cache_fallback_rgba16f));
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 90;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_META, rtgi_diffuse_cache_fallback_rgba16f));
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 91;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_STATS, rtgi_diffuse_cache_fallback_rgba16f));
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 92;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_VISIBILITY, rtgi_diffuse_cache_fallback_rgba16f));
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 93;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SPG_REFINED_HISTORY_ID, rtgi_diffuse_cache_fallback_rgba8));
-		uniforms.push_back(u);
-	}
-
-	// Binding 96: current primary surface-key guide for the next diffuse surface-cache update.
-	{
-		RD::Uniform u;
-		u.binding = 96;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, rb_data->rt_get_surface_cache_key());
-		uniforms.push_back(u);
-	}
-
-	// Bindings 97-100: persistent surface-space diffuse cache for stable offscreen secondary GI reuse.
-	{
-		RD::Uniform u;
-		u.binding = 97;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_RADIANCE, rtgi_diffuse_cache_fallback_rgba16f));
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 98;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_META, rtgi_diffuse_cache_fallback_rgba16f));
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 99;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_STATS, rtgi_diffuse_cache_fallback_rgba16f));
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 100;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, get_rtgi_diffuse_cache_texture(RB_TEX_RTGI_DIFFUSE_CACHE_SURFACE_HISTORY_ID, rtgi_diffuse_cache_fallback_rgba8));
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 101;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, rb_data->rt_get_surface_cache_diagnostic());
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 102;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, rb_data->rt_get_secondary_cache_surface());
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 103;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, rb_data->rt_get_surface_cache_feedback_key());
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 104;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, rb_data->rt_get_surface_cache_feedback_radiance());
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 105;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, rb_data->rt_get_surface_cache_feedback_meta());
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 106;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, rb_data->rt_get_surface_cache_feedback_stats());
-		uniforms.push_back(u);
-	}
-
 	// Binding 31: Visible viewport velocity output for path-traced mode.
 	{
 		Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
@@ -10341,53 +10106,6 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		u.binding = 63;
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
 		add_uniform_id(u, rb_data->rt_get_specular_reprojection());
-		uniforms.push_back(u);
-	}
-
-	// Bindings 64-66 and 75: RTGI spatio-temporal radiance cache.
-	{
-		RID irradiance = rb_data->rt_get_diffuse_radiance();
-		if (p_render_data && p_render_data->render_buffers.is_valid() && p_render_data->render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_IRRADIANCE)) {
-			irradiance = p_render_data->render_buffers->get_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_IRRADIANCE);
-		}
-		RD::Uniform u;
-		u.binding = 64;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, irradiance);
-		uniforms.push_back(u);
-	}
-	{
-		RID distance = rb_data->rt_get_diffuse_radiance();
-		if (p_render_data && p_render_data->render_buffers.is_valid() && p_render_data->render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_DISTANCE)) {
-			distance = p_render_data->render_buffers->get_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_DISTANCE);
-		}
-		RD::Uniform u;
-		u.binding = 65;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, distance);
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 66;
-		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-		if (owner->rtgi_strc && owner->rtgi_strc->get_ray_result_buffer().is_valid()) {
-			add_uniform_id(u, owner->rtgi_strc->get_ray_result_buffer());
-		} else {
-			// Writable binding: must use the read-write default (see binding 107).
-			add_uniform_id(u, default_rw_storage_buffer);
-		}
-		uniforms.push_back(u);
-	}
-	{
-		RID metadata = rb_data->rt_get_diffuse_radiance();
-		if (p_render_data && p_render_data->render_buffers.is_valid() && p_render_data->render_buffers->has_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_METADATA)) {
-			metadata = p_render_data->render_buffers->get_texture(RB_SCOPE_RTGI_STRC, RB_TEX_RTGI_STRC_METADATA);
-		}
-		RD::Uniform u;
-		u.binding = 75;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, metadata);
 		uniforms.push_back(u);
 	}
 
@@ -10555,42 +10273,6 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		uniforms.push_back(u);
 	}
 
-	// Bindings 39-43: RTGI source-signal audit outputs.
-	{
-		RD::Uniform u;
-		u.binding = 39;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, rb_data->rt_get_signal_direct_light());
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 40;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, rb_data->rt_get_signal_emissive());
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 41;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, rb_data->rt_get_signal_indirect());
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 42;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, rb_data->rt_get_signal_sky());
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 43;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, rb_data->rt_get_signal_confidence());
-		uniforms.push_back(u);
-	}
 	{
 		RD::Uniform u;
 		u.binding = 45;
@@ -10666,20 +10348,6 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		u.binding = 55;
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
 		add_uniform_id(u, rb_data->rt_get_source_rejection());
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 94;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, rb_data->rt_get_secondary_cache_source());
-		uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 95;
-		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		add_uniform_id(u, rb_data->rt_get_secondary_cache_rejection());
 		uniforms.push_back(u);
 	}
 	{
