@@ -427,6 +427,7 @@ void LightStorage::light_area_set_normalize_energy(RID p_light, bool p_enabled) 
 	ERR_FAIL_NULL(light);
 
 	light->area_normalize_energy = p_enabled;
+	light->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_LIGHT);
 }
 
 bool LightStorage::light_area_get_normalize_energy(RID p_light) const {
