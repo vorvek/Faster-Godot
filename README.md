@@ -143,6 +143,13 @@ The short index is in [CHANGES_FROM_OFFICIAL.md](CHANGES_FROM_OFFICIAL.md).
 Each larger change links to a focused document under [docs](docs/) with the
 code scope, pros, and cons.
 
+Beyond narrowing the engine for speed, the fork also ports select newer
+upstream features back onto the 4.6.3 base. The largest so far is Godot 4.7's
+LTC-based **AreaLight3D** — a rectangular area light (diffuse, specular,
+textured, and soft PCSS shadows) that also contributes to VoxelGI, SDFGI,
+volumetric fog, and baked lightmaps in the Forward+/Vulkan path. See
+[docs/arealight3d.md](docs/arealight3d.md).
+
 ## License
 
 Faster-Godot fork code keeps Godot's original MIT/Expat license terms. Bundled
