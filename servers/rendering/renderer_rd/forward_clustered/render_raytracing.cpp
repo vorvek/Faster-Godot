@@ -10233,6 +10233,19 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		add_combined(110, nearest_sampler, spg_header_aux);
 		add_combined(111, linear_sampler, wrc_radiance);
 		add_combined(112, linear_sampler, wrc_distance);
+
+		// 113/114/115: raw material-guide albedo + ORM + emission (the same RB_TEX_RT_GUIDE_*
+		// the FPT composite/prepass produce). The FPT-fast primary-direct path point-samples these
+		// (full-res, 1:1 with the launch) to build the NEE material from real reflectance instead of
+		// the hue-proxy albedo, and to add first-hit emission (115) for directly-visible emitters.
+		// NEAREST samplers (texelFetch). Fall back to default-black when the guides are not yet
+		// allocated; only the primary-direct dispatch ever samples them.
+		RID guide_albedo = rb_data->rt_get_guide_albedo().is_valid() ? rb_data->rt_get_guide_albedo() : default_black;
+		RID guide_orm = rb_data->rt_get_guide_orm().is_valid() ? rb_data->rt_get_guide_orm() : default_black;
+		RID guide_emission = rb_data->rt_get_guide_emission().is_valid() ? rb_data->rt_get_guide_emission() : default_black;
+		add_combined(113, nearest_sampler, guide_albedo);
+		add_combined(114, nearest_sampler, guide_orm);
+		add_combined(115, nearest_sampler, guide_emission);
 	}
 
 	// Binding 60: RTGI specular reflection-direction diagnostic output.

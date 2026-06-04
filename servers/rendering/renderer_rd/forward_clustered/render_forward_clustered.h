@@ -221,6 +221,7 @@ public:
 		RID rt_get_guide_normal(uint32_t p_layer) const { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_NORMAL, p_layer, 0); }
 		RID rt_get_guide_orm() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_ORM); }
 		RID rt_get_guide_orm(uint32_t p_layer) const { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_ORM, p_layer, 0); }
+		RID rt_get_guide_emission() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_EMISSION); }
 		RID rt_get_diffuse_radiance() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DIFFUSE_RADIANCE); }
 		RID rt_get_specular_radiance() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_RADIANCE); }
 		RID rt_get_specular_guide() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_GUIDE); }
