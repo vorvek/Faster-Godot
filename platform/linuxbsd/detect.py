@@ -222,6 +222,10 @@ def configure(env: "SConsEnvironment"):
     env.Append(CCFLAGS=["-ffunction-sections", "-fdata-sections"])
     env.Append(LINKFLAGS=["-Wl,--gc-sections"])
     env.Append(CCFLAGS=["-fno-semantic-interposition"])
+    # GATED (WS1 Task 5): smaller dynamic symbol table + better inlining. Expected safe because
+    # GDExtension entry points are extern-C exports, but MUST be validated by loading a real
+    # GDExtension against a hidden-visibility Linux build before relying on it.
+    env.Append(CCFLAGS=["-fvisibility=hidden", "-fvisibility-inlines-hidden"])
 
     ## Dependencies
 
