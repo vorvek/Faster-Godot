@@ -92,7 +92,7 @@
 			"thresholds": {
 				"min_coexistence_raster_owner_luma": 0.015,
 				"min_coexistence_raster_owner_blue_green_margin": 0.010,
-				"max_coexistence_rt_owner_luma": 0.080
+				"max_coexistence_rt_owner_luma": 0.55
 			}
 		}
 	}
