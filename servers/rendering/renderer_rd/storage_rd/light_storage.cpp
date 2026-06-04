@@ -169,6 +169,14 @@ void LightStorage::spot_light_initialize(RID p_light) {
 	_light_initialize(p_light, RS::LIGHT_SPOT);
 }
 
+RID LightStorage::area_light_allocate() {
+	return light_owner.allocate_rid();
+}
+
+void LightStorage::area_light_initialize(RID p_light) {
+	_light_initialize(p_light, RS::LIGHT_AREA);
+}
+
 void LightStorage::light_free(RID p_rid) {
 	light_set_projector(p_rid, RID()); //clear projector
 
@@ -395,6 +403,58 @@ RS::LightDirectionalShadowMode LightStorage::light_directional_get_shadow_mode(R
 	ERR_FAIL_NULL_V(light, RS::LIGHT_DIRECTIONAL_SHADOW_ORTHOGONAL);
 
 	return light->directional_shadow_mode;
+}
+
+void LightStorage::light_area_set_size(RID p_light, const Vector2 &p_size) {
+	Light *light = light_owner.get_or_null(p_light);
+	ERR_FAIL_NULL(light);
+
+	light->area_size = p_size.maxf(0.0f);
+	// The range in which objects are illuminated changes, so the z-range of the shadow map needs to adjust accordingly.
+	light->version++;
+	light->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_LIGHT);
+}
+
+Vector2 LightStorage::light_area_get_size(RID p_light) const {
+	const Light *light = light_owner.get_or_null(p_light);
+	ERR_FAIL_NULL_V(light, Vector2(1, 1));
+
+	return light->area_size;
+}
+
+void LightStorage::light_area_set_normalize_energy(RID p_light, bool p_enabled) {
+	Light *light = light_owner.get_or_null(p_light);
+	ERR_FAIL_NULL(light);
+
+	light->area_normalize_energy = p_enabled;
+}
+
+bool LightStorage::light_area_get_normalize_energy(RID p_light) const {
+	const Light *light = light_owner.get_or_null(p_light);
+	ERR_FAIL_NULL_V(light, true);
+
+	return light->area_normalize_energy;
+}
+
+void LightStorage::light_area_set_texture(RID p_light, RID p_texture) {
+	Light *light = light_owner.get_or_null(p_light);
+	ERR_FAIL_NULL(light);
+
+	if (light->area_texture == p_texture) {
+		return;
+	}
+
+	// NOTE: not yet wired to the area-light atlas (Task 9); for now just store the RID.
+	light->area_texture = p_texture;
+
+	light->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_LIGHT);
+}
+
+RID LightStorage::light_area_get_texture(RID p_light) const {
+	const Light *light = light_owner.get_or_null(p_light);
+	ERR_FAIL_NULL_V(light, RID());
+
+	return light->area_texture;
 }
 
 uint32_t LightStorage::light_get_max_sdfgi_cascade(RID p_light) {
