@@ -438,6 +438,7 @@ bool LightStorage::light_area_get_normalize_energy(RID p_light) const {
 }
 
 void LightStorage::light_area_set_texture(RID p_light, RID p_texture) {
+	TextureStorage *texture_storage = TextureStorage::get_singleton();
 	Light *light = light_owner.get_or_null(p_light);
 	ERR_FAIL_NULL(light);
 
@@ -445,8 +446,17 @@ void LightStorage::light_area_set_texture(RID p_light, RID p_texture) {
 		return;
 	}
 
-	// NOTE: not yet wired to the area-light atlas (Task 9); for now just store the RID.
+	ERR_FAIL_COND(p_texture.is_valid() && !texture_storage->owns_texture(p_texture));
+
+	if (light->area_texture.is_valid()) {
+		texture_storage->texture_remove_from_area_light_atlas(light->area_texture);
+	}
+
 	light->area_texture = p_texture;
+
+	if (light->area_texture.is_valid()) {
+		texture_storage->texture_add_to_area_light_atlas(light->area_texture);
+	}
 
 	light->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_LIGHT);
 }
