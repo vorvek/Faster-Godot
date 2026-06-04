@@ -1218,6 +1218,7 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 	RID light_accum_tex;
 	RID light_accum_tex2;
 	RID light_environment_tex;
+	RID area_light_atlas_tex;
 	RID shadowmask_tex;
 	RID shadowmask_tex2;
 
@@ -1231,6 +1232,7 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 	rd->free_rid(light_accum_tex2);      \
 	rd->free_rid(light_accum_tex);       \
 	rd->free_rid(light_environment_tex); \
+	rd->free_rid(area_light_atlas_tex);  \
 	if (p_bake_shadowmask) {             \
 		rd->free_rid(shadowmask_tex);    \
 		rd->free_rid(shadowmask_tex2);   \
@@ -1319,6 +1321,21 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 #ifdef DEBUG_TEXTURES
 			panorama_tex->save_exr("res://0_panorama.exr", false);
 #endif
+		}
+
+		// area lights
+		{
+			RD::TextureFormat tformat;
+			tformat.width = area_light_atlas.size.width;
+			tformat.height = area_light_atlas.size.height;
+			tformat.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_CAN_UPDATE_BIT;
+			tformat.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
+			tformat.mipmaps = area_light_atlas.mipmap_count;
+
+			// now fill mipmap with data from Vector<Ref<Image>> area_light_atlas.images
+			Vector<Vector<uint8_t>> tdata;
+			tdata.push_back(area_light_atlas.atlas_data);
+			area_light_atlas_tex = rd->texture_create(tformat, RD::TextureView(), tdata);
 		}
 	}
 
@@ -1823,6 +1840,14 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 				u.append_id(shadowmask_tex);
 				uniforms.push_back(u);
 			}
+
+			{
+				RD::Uniform u;
+				u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+				u.binding = 6;
+				u.append_id(area_light_atlas_tex);
+				uniforms.push_back(u);
+			}
 		}
 
 		RID light_uniform_set = rd->uniform_set_create(uniforms, compute_shader_primary, 1);
@@ -1938,6 +1963,14 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 				u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
 				u.binding = 5;
 				u.append_id(light_environment_tex);
+				uniforms.push_back(u);
+			}
+
+			{
+				RD::Uniform u;
+				u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+				u.binding = 6;
+				u.append_id(area_light_atlas_tex);
 				uniforms.push_back(u);
 			}
 		}
@@ -2061,6 +2094,14 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 				u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
 				u.binding = 2;
 				u.append_id(light_environment_tex);
+				uniforms.push_back(u);
+			}
+
+			{
+				RD::Uniform u;
+				u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+				u.binding = 6;
+				u.append_id(area_light_atlas_tex);
 				uniforms.push_back(u);
 			}
 		}
