@@ -5445,6 +5445,14 @@
 			Internal buffer is drawn instead of regular scene so you can see the per-pixel output that will be used by post-processing effects.
 			[b]Note:[/b] Only supported when using the Forward+ or Mobile rendering methods.
 		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_CLUSTER_AREA_LIGHTS" value="27" enum="ViewportDebugDraw">
+			Draws the [AreaLight3D] cluster. Clustering determines where lights are positioned in screen-space, which allows the engine to only process these portions of the screen for lighting.
+			[b]Note:[/b] Only supported when using the Forward+ rendering method.
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_AREA_LIGHT_ATLAS" value="28" enum="ViewportDebugDraw">
+			Draws the atlas used by [AreaLight3D] nodes in the upper left quadrant of the [Viewport].
+			[b]Note:[/b] Only supported when using the Forward+ rendering method.
+		</constant>
 		<constant name="VIEWPORT_VRS_DISABLED" value="0" enum="ViewportVRSMode">
 			Variable rate shading is disabled.
 		</constant>
