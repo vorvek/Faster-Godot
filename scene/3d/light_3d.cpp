@@ -790,5 +790,9 @@ AreaLight3D::~AreaLight3D() {
 	ERR_FAIL_NULL(RenderingServer::get_singleton());
 	if (light.is_valid()) {
 		RenderingServer::get_singleton()->free_rid(light);
+		// Null the RID so the base ~Light3D() does not free it a second time.
+		// (This fork's Light3D::~Light3D() frees without nulling; the early free
+		// here, needed for area_texture RID ordering, would otherwise double-free.)
+		light = RID();
 	}
 }
