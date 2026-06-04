@@ -875,6 +875,8 @@ public:
 	bool prepare_backend_frame(const RenderDataRD *p_render_data, uint32_t p_rt_flags, RTGIBackendFrameContext &r_context);
 	RTGIBackendDispatchResult dispatch_path_trace_backend(RTGIBackendFrameContext &r_context);
 	RTGIBackendDispatchResult dispatch_probe_update_backend(RTGIBackendFrameContext &p_context, uint32_t p_probe_flags, RID p_probe_output_buffer, uint32_t p_ray_count);
+	// A4: full-screen FPT primary-direct dispatch that coexists with the probe dispatches.
+	RTGIBackendDispatchResult dispatch_primary_direct_backend(RTGIBackendFrameContext &p_context, uint32_t p_primary_direct_flags);
 
 	void copy_output_texture(const RenderDataRD *p_render_data);
 	void free_viewport_state(RenderSceneBuffersRD *p_render_buffers);

@@ -118,7 +118,14 @@ public:
 	// (this frame's output). No same-resource sampler+image hazard: read textures only on samplers,
 	// gi_debug_image only on images (same discipline as render_resolve_debug). p_size is the consumed
 	// (internal) size; p_view_count drives the multiview additive blit.
-	void render_composite(RID p_depth, RID p_guide_albedo, RID p_guide_orm, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count);
+	//
+	// A4: when p_fpt_primary_color is valid (radiance_probes-FPT), the composite is REPLACE
+	// rather than additive: the per-pixel path-traced primary-direct color (rt_get_texture, written
+	// by the FPT primary-direct dispatch) overwrites p_dest_color_fb first (discarding the raster
+	// opaque), THEN the resolved probe indirect (gi_debug_image) is added on top -> opaque =
+	// primary-direct + probe indirect. Background pixels carry the primary-direct's sky-on-miss (the
+	// indirect is masked to 0 there). RID() (Hybrid) keeps the additive-onto-raster path unchanged.
+	void render_composite(RID p_depth, RID p_guide_albedo, RID p_guide_orm, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count, RID p_fpt_primary_color = RID());
 
 	void free_resources();
 

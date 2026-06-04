@@ -628,7 +628,7 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 	copy_effects->copy_to_fb_rect(gi_debug_image, p_dest_fb, Rect2i(Point2i(), size), false, false, false, false, RID(), multiview, false, false, false, Rect2(), 1.0, true, CopyEffects::COPY_TO_FB_FLAG_MODE_NONE);
 }
 
-void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, RID p_guide_orm, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count) {
+void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, RID p_guide_orm, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count, RID p_fpt_primary_color) {
 	if (!resources_valid || !diffuse_gi[read_index].is_valid() || !spec_gi[read_index].is_valid()) {
 		return;
 	}
@@ -779,13 +779,25 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, RID p_guid
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, size.x, size.y, 1);
 	RD::get_singleton()->compute_list_end();
 
-	// ADDITIVELY blend the composited indirect GI onto the raster-lit color FB: merge_specular's
-	// SPECULAR_MERGE_ADDITIVE_ADD path (dest.rgb += source.rgb), linear additive. This lands the
-	// indirect-at-primary on top of the DIRECT light the opaque pass already wrote. Background pixels
-	// were masked to 0 in the shader, so the raster sky/clear color is untouched.
 	CopyEffects *copy_effects = CopyEffects::get_singleton();
 	ERR_FAIL_NULL(copy_effects);
-	copy_effects->additive_blend(p_dest_color_fb, gi_debug_image, p_view_count);
+	if (p_fpt_primary_color.is_valid()) {
+		// A4 FPT REPLACE: opaque = per-pixel path-traced primary-direct + probe indirect. First
+		// overwrite the dest with the primary-direct color (rt_get_texture, written by the FPT
+		// primary-direct dispatch this frame) -- discarding the raster opaque, which FPT does not
+		// use -- then additively add the resolved indirect (gi_debug_image, masked to 0 on the
+		// background so the primary-direct's sky-on-miss survives there). The draw graph orders the
+		// blit after the primary-direct dispatch's write (RAW on rt_get_texture).
+		copy_effects->copy_to_fb_rect(p_fpt_primary_color, p_dest_color_fb, Rect2i(Point2i(), size));
+		copy_effects->additive_blend(p_dest_color_fb, gi_debug_image, p_view_count);
+	} else {
+		// Hybrid: ADDITIVELY blend the composited indirect GI onto the raster-lit color FB:
+		// merge_specular's SPECULAR_MERGE_ADDITIVE_ADD path (dest.rgb += source.rgb), linear
+		// additive. This lands the indirect-at-primary on top of the DIRECT light the opaque pass
+		// already wrote. Background pixels were masked to 0 in the shader, so the raster sky/clear
+		// color is untouched.
+		copy_effects->additive_blend(p_dest_color_fb, gi_debug_image, p_view_count);
+	}
 
 	RD::get_singleton()->draw_command_end_label();
 }

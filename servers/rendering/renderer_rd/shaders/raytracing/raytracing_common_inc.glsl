@@ -8,6 +8,7 @@ layout(constant_id = 0) const uint RT_FLAGS = 0u;
 #define RT_FLAG_FOG_ENABLED (1u << 2)
 #define RT_FLAG_WRC_PROBE_UPDATE (1u << 7)
 #define RT_FLAG_SPG_GATHER (1u << 8)
+#define RT_FLAG_PRIMARY_DIRECT (1u << 9)
 
 #define RT_SAMPLE_COUNT_SHIFT 21u
 #define RT_SAMPLE_COUNT_MASK 0xFFu
@@ -56,6 +57,13 @@ bool rt_wrc_probe_update_mode() {
 
 bool rt_spg_gather_mode() {
 	return (RT_FLAGS & RT_FLAG_SPG_GATHER) != 0u;
+}
+
+// A4: the full-screen FPT primary-direct dispatch (FULL_PATH_TRACING only). Indirect
+// bounces are capped to 0 so the camera ray does primary hit (NEE direct + emissive)
+// + sky-on-miss only; the resolved probe indirect is added at the composite.
+bool rt_primary_direct_mode() {
+	return (RT_FLAGS & RT_FLAG_PRIMARY_DIRECT) != 0u;
 }
 
 #ifndef RT_STAGE_ANY_HIT

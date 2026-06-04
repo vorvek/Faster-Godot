@@ -590,7 +590,11 @@ void main() {
 	vec3 total_radiance = vec3(0.0);
 	vec3 total_specular_radiance = vec3(0.0);
 
-	const uint max_bounces = RT_GET_MAX_BOUNCES();
+	// A4: the FPT primary-direct dispatch caps indirect bounces to 0 (primary hit ->
+	// NEE direct + emissive + sky-on-miss). rt_primary_direct_mode() is only ever set on
+	// the FULL_PATH_TRACING full-screen dispatch (the `else` branch below), so capping
+	// here cannot affect the HYBRID branch (it never runs with the flag set).
+	const uint max_bounces = rt_primary_direct_mode() ? 0u : RT_GET_MAX_BOUNCES();
 	uint rt_mode = uint(get_rt_param(RT_PARAM_MODE));
 
 	// TODO: when we have a spp > 0 the first raycast is always identical,
@@ -762,6 +766,17 @@ void main() {
 		}
 
 		if (sample0_has_hit) {
+			// A4: write the path-traced primary depth (reverse-Z; sky/miss = 0 via the miss shader)
+			// so the FPT composite's background mask is consistent with THIS rt_color's visibility.
+			// The else (path-traced) branch otherwise never wrote rt_depth on hits -- only the HYBRID
+			// raster-guide store + the miss shader did -- leaving a stale depth that mismatched the PT
+			// primary at silhouettes (the composite then added probe indirect onto a pixel the PT
+			// primary had escaped to sky -> over-bright, an energy-bound violation). The composite only
+			// tests depth > 0 for "is geometry", so the exact projected value is not critical.
+			vec4 sample0_clip = curr_vp_unjittered * vec4(sample0_hit_pos, 1.0);
+			float sample0_depth = sample0_clip.w > 0.0 ? clamp(sample0_clip.z / sample0_clip.w, 0.0, 1.0) : 0.0;
+			imageStore(rt_depth_image, pixel_i, vec4(sample0_depth));
+
 			vec4 normal_roughness = imageLoad(rt_normal_roughness_image, pixel_i);
 			vec3 normal = normalize(normal_roughness.xyz * 2.0 - 1.0);
 			float guide_roughness = normal_roughness.w;

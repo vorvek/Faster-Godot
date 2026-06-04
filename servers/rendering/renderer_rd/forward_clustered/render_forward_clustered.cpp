@@ -2970,6 +2970,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	const bool rt_radiance_probes_composite = rt_gi_active && rt_env_params &&
 			((uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_HYBRID ||
 					(uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING);
+	// A4: true radiance_probes-FPT (FULL_PATH_TRACING only). Drives the extra full-screen
+	// primary-direct path-trace dispatch that coexists with the WRC/SPG probe dispatches.
+	// HYBRID never sets this, so its proven path is byte-unchanged.
+	const bool rt_radiance_probes_fpt = rt_radiance_probes_composite &&
+			(uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING;
 	const uint32_t rt_denoiser = rt_env_params ? (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
 	if (scene_features.rt && rt_denoiser == RSE::PT_DENOISER_NVIDIA) {
 		WARN_PRINT_ONCE(vformat("RTGI denoiser '%s' is not available in the Vulkan renderer yet. Falling back to ASVFG for this viewport without changing the Environment resource.", _rtgi_denoiser_name(rt_denoiser)));
@@ -4003,14 +4008,39 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				RD::get_singleton()->draw_command_end_label();
 			}
 
+			// A4: true radiance_probes-FPT primary-direct dispatch (FULL_PATH_TRACING only). Trace a
+			// full-screen primary-direct path (NEE direct + emissive + sky-on-miss, indirect bounces
+			// capped to 0 via RT_FLAG_PRIMARY_DIRECT) that COEXISTS with the WRC/SPG probe dispatches
+			// recorded above. The A4 coexistence fix is that dispatch_primary_direct_backend REUSES
+			// the already-built per-frame viewport_state/TLAS instead of re-preparing the frame: the
+			// deleted T5-era attempt re-prepared (rebuilding the in-flight TLAS, which build_tlas does
+			// not frame-cache), corrupting the probe dispatches recorded against it -> zeroed gather +
+			// GPU hang. The pd uniform set additionally binds the probe ray-result buffers (107/108)
+			// to the default RW buffer so this full-screen dispatch declares no phantom probe-buffer
+			// dependency in the draw graph (a complementary correctness measure). Runs after the
+			// resolve (the probe gather is complete), writing the RT color texture the FPT
+			// replace-composite consumes (T6). HYBRID never sets rt_radiance_probes_fpt, so its proven
+			// raster-primary + additive composite path is byte-unchanged.
+			if (rt_radiance_probes_fpt && rt_state) {
+				RENDER_TIMESTAMP("RTGI FPT Primary-Direct");
+				RD::get_singleton()->draw_command_begin_label("RTGI FPT Primary-Direct");
+				const uint32_t pd_flags = rt_flags | SceneShaderRaytracing::RT_FLAG_PRIMARY_DIRECT;
+				raytracing->dispatch_primary_direct_backend(rt_backend_context, pd_flags);
+				rt_state = rt_backend_context.viewport_state;
+				RD::get_singleton()->draw_command_end_label();
+			}
+
 			// RTGI radiance-probes composite BEAUTY (A3-T4/T5; Hybrid AND FPT-fast): additively
 			// composite the resolved indirect GI (albedo * diffuse_A + rough_spec) onto the raster-lit
 			// opaque frame, producing BEAUTY. Runs in the plain composite path (the SPG/guide/resolve
 			// chain above also gated on rt_radiance_probes_composite populated the resolve buffers
-			// + the guide albedo). FPT-fast reuses this exact Hybrid composite -- raster primary-direct
-			// + probe indirect, no path-trace dispatch (true PT-primary-direct FPT is the A4 sub-project).
-			// The dest is get_color_only_fb() -- the SAME internal HDR linear color FB the opaque pass
-			// wrote (and that the legacy additive_blend composited into).
+			// + the guide albedo). The dest is get_color_only_fb() -- the SAME internal HDR linear color
+			// FB the opaque pass wrote (and that the legacy additive_blend composited into).
+			// A4: in FULL_PATH_TRACING the composite is REPLACE -- the per-pixel path-traced
+			// primary-direct color (rt_get_texture, from the FPT primary-direct dispatch above)
+			// overwrites the raster opaque, then the probe indirect is added on top, so FPT beauty =
+			// PT primary-direct + probe indirect (distinct from Hybrid's raster-primary + additive).
+			// HYBRID passes RID() -> the proven additive-onto-raster path, byte-unchanged.
 			// Step 6 COEXISTENCE: this is a WHOLE-FRAME gate. Mixing probe-GI with SDFGI/VoxelGI/
 			// lightmaps requires PER-PIXEL indirect ownership (which provider owns each pixel) --
 			// a deferred follow-up; for now the composite is skipped whenever any of those other
@@ -4019,9 +4049,18 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					rtgi_resolve->get_diffuse_gi().is_valid() &&
 					rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS) &&
 					!using_sdfgi && !using_voxelgi && p_render_data->lightmaps->size() == 0) {
-				RENDER_TIMESTAMP("RTGI Composite Hybrid");
-				rtgi_resolve->render_composite(rb->get_depth_texture(), rb_data->rt_get_guide_albedo(), rb_data->rt_get_guide_orm(),
-						rb->get_internal_size(), rb_data->get_color_only_fb(), p_render_data->scene_data->view_count);
+				const RID fpt_primary_color = (rt_radiance_probes_fpt && rb_data->rt_has_texture()) ? rb_data->rt_get_texture() : RID();
+				// A4: the composite masks the indirect to 0 on background pixels via the depth (raw
+				// reverse-Z, sky == 0). For FPT the background is defined by the PATH-TRACE primary
+				// visibility (rt_get_depth_texture: real depth on hit, 0 on sky-miss), NOT the raster
+				// coverage -- at silhouettes the PT center-sample and raster coverage disagree, and
+				// masking on the raster depth would add indirect onto pixels the PT primary escaped to
+				// sky (over-bright, an energy-bound violation). Using the PT depth keeps the mask
+				// consistent with the primary-direct rt_color the composite is replacing onto.
+				const RID composite_depth = (rt_radiance_probes_fpt && rb_data->rt_has_depth_texture()) ? rb_data->rt_get_depth_texture() : rb->get_depth_texture();
+				RENDER_TIMESTAMP(rt_radiance_probes_fpt ? "RTGI Composite FPT" : "RTGI Composite Hybrid");
+				rtgi_resolve->render_composite(composite_depth, rb_data->rt_get_guide_albedo(), rb_data->rt_get_guide_orm(),
+						rb->get_internal_size(), rb_data->get_color_only_fb(), p_render_data->scene_data->view_count, fpt_primary_color);
 			}
 
 			RD::get_singleton()->draw_command_end_label();
