@@ -5468,7 +5468,11 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 			RD::Uniform u;
 			u.binding = 20;
 			u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-			u.append_id(RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(RendererRD::TextureStorage::get_singleton()->area_light_atlas_get_texture()));
+			// area_light_atlas_get_texture() already returns an RD texture (like the
+			// decal atlas at binding 9), so bind it directly — do NOT wrap in
+			// texture_get_rd_texture() (that expects a Texture2D storage RID and
+			// would return an invalid RID, breaking the whole set-0 uniform set).
+			u.append_id(RendererRD::TextureStorage::get_singleton()->area_light_atlas_get_texture());
 			uniforms.push_back(u);
 		}
 
