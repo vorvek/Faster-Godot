@@ -2,3 +2,4 @@
 *.log
 _capture.gd
 _capture.tscn
+*.uid
