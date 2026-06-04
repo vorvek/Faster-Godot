@@ -217,6 +217,11 @@ def configure(env: "SConsEnvironment"):
             )
 
     env.Append(CCFLAGS=["-pipe"])
+    # Faster-Godot: dead-section elimination (needs the per-section split to be effective) and
+    # direct intra-binary references instead of PLT indirection. Behavior-preserving.
+    env.Append(CCFLAGS=["-ffunction-sections", "-fdata-sections"])
+    env.Append(LINKFLAGS=["-Wl,--gc-sections"])
+    env.Append(CCFLAGS=["-fno-semantic-interposition"])
 
     ## Dependencies
 
