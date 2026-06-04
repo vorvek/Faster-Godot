@@ -1,0 +1,347 @@
+name: Release 4.6.3b Faster-Godot
+
+on:
+  push:
+    branches:
+      - vorvek/release-4.6.3b-actions
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_VERSION: 4.6.3b
+  RELEASE_TAG: faster-godot-4.6.3b
+  RELEASE_TITLE: Faster-Godot 4.6.3b
+  SOURCE_REF: 3c78f5ffe517416ded4e400ea7df6dfc36ab915f
+  SCONS_BASE: arch=x86_64 faster_godot=yes production=yes tests=no optimize=speed lto=full debug_symbols=no verbose=no warnings=no werror=no progress=no
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  linux:
+    name: Linux ${{ matrix.label }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: standard editor
+            id: linux-standard-editor
+            mono: false
+            package: editor
+          - label: standard templates
+            id: linux-standard-templates
+            mono: false
+            package: templates
+          - label: .NET editor
+            id: linux-mono-editor
+            mono: true
+            package: editor
+          - label: .NET templates
+            id: linux-mono-templates
+            mono: true
+            package: templates
+
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            libx11-dev \
+            libxcursor-dev \
+            libxinerama-dev \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libasound2-dev \
+            libpulse-dev \
+            libudev-dev \
+            libxi-dev \
+            libxrandr-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            libdbus-1-dev \
+            libfontconfig-dev \
+            libspeechd-dev \
+            libdecor-0-dev \
+            libvulkan-dev \
+            wayland-protocols \
+            libwayland-bin \
+            zip
+
+      - name: Setup Python and SCons
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install SCons
+        shell: bash
+        run: |
+          python -m pip install scons==4.10.1
+          scons --version
+
+      - name: Setup .NET
+        if: matrix.mono
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.100
+
+      - name: Build Linux asset
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mono_arg=()
+          mono_suffix=""
+          template_dir="standard"
+          if [[ "${{ matrix.mono }}" == "true" ]]; then
+            mono_arg=(module_mono_enabled=yes)
+            mono_suffix=".mono"
+            template_dir="mono"
+          fi
+
+          mkdir -p release/templates/${template_dir}
+
+          if [[ "${{ matrix.package }}" == "editor" ]]; then
+            scons platform=linuxbsd target=editor "${mono_arg[@]}" $SCONS_BASE
+            editor_bin="bin/godot.linuxbsd.editor.x86_64.faster_godot${mono_suffix}"
+            if [[ "${{ matrix.mono }}" == "true" ]]; then
+              "${editor_bin}" --headless --generate-mono-glue ./modules/mono/glue
+              ./modules/mono/build_scripts/build_assemblies.py --godot-output-dir=./bin --godot-platform=linuxbsd --no-deprecated --werror
+              package_dir="release/Faster-Godot_v${RELEASE_VERSION}_mono_linux_x86_64"
+              mkdir -p "${package_dir}"
+              strip "${editor_bin}"
+              cp "${editor_bin}" "${package_dir}/Faster-Godot_v${RELEASE_VERSION}_mono_linux.x86_64"
+              cp -R bin/GodotSharp "${package_dir}/GodotSharp"
+              (cd release && zip -9 -r "Faster-Godot_v${RELEASE_VERSION}_mono_linux_x86_64.zip" "Faster-Godot_v${RELEASE_VERSION}_mono_linux_x86_64")
+            else
+              strip "${editor_bin}"
+              cp "${editor_bin}" "release/Faster-Godot_v${RELEASE_VERSION}_linux.x86_64"
+              (cd release && zip -9 "Faster-Godot_v${RELEASE_VERSION}_linux.x86_64.zip" "Faster-Godot_v${RELEASE_VERSION}_linux.x86_64")
+            fi
+          else
+            scons platform=linuxbsd target=template_debug "${mono_arg[@]}" $SCONS_BASE
+            scons platform=linuxbsd target=template_release "${mono_arg[@]}" $SCONS_BASE
+            strip "bin/godot.linuxbsd.template_debug.x86_64.faster_godot${mono_suffix}"
+            strip "bin/godot.linuxbsd.template_release.x86_64.faster_godot${mono_suffix}"
+            cp "bin/godot.linuxbsd.template_debug.x86_64.faster_godot${mono_suffix}" "release/templates/${template_dir}/linux_debug.x86_64"
+            cp "bin/godot.linuxbsd.template_release.x86_64.faster_godot${mono_suffix}" "release/templates/${template_dir}/linux_release.x86_64"
+            chmod +x "release/templates/${template_dir}/linux_debug.x86_64" "release/templates/${template_dir}/linux_release.x86_64"
+          fi
+
+      - name: Upload Linux asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.id }}
+          path: release/
+          retention-days: 14
+
+  windows:
+    name: Windows ${{ matrix.label }}
+    runs-on: windows-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: standard editor
+            id: windows-standard-editor
+            mono: false
+            package: editor
+          - label: standard templates
+            id: windows-standard-templates
+            mono: false
+            package: templates
+          - label: .NET editor
+            id: windows-mono-editor
+            mono: true
+            package: editor
+          - label: .NET templates
+            id: windows-mono-templates
+            mono: true
+            package: templates
+
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Setup Python and SCons
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install SCons
+        shell: pwsh
+        run: |
+          python -m pip install scons==4.10.1
+          scons --version
+
+      - name: Setup .NET
+        if: matrix.mono
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.100
+
+      - name: Build Windows asset
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $sconsBase = $env:SCONS_BASE -split ' '
+          $monoArg = @()
+          $monoSuffix = ""
+          $templateDir = "standard"
+          if ("${{ matrix.mono }}" -eq "true") {
+            $monoArg = @("module_mono_enabled=yes")
+            $monoSuffix = ".mono"
+            $templateDir = "mono"
+          }
+
+          New-Item -ItemType Directory -Force "release\templates\$templateDir" | Out-Null
+
+          if ("${{ matrix.package }}" -eq "editor") {
+            scons platform=windows target=editor @monoArg @sconsBase
+            if ("${{ matrix.mono }}" -eq "true") {
+              $editorBin = "bin\godot.windows.editor.x86_64.faster_godot.mono.exe"
+              $editorConsole = "bin\godot.windows.editor.x86_64.faster_godot.mono.console.exe"
+              & $editorConsole --headless --generate-mono-glue .\modules\mono\glue
+              python .\modules\mono\build_scripts\build_assemblies.py --godot-output-dir=.\bin --godot-platform=windows --no-deprecated --werror
+              $packageDir = "release\Faster-Godot_v${env:RELEASE_VERSION}_mono_win64"
+              New-Item -ItemType Directory -Force $packageDir | Out-Null
+              Copy-Item $editorBin "$packageDir\Faster-Godot_v${env:RELEASE_VERSION}_mono_win64.exe"
+              Copy-Item $editorConsole "$packageDir\Faster-Godot_v${env:RELEASE_VERSION}_mono_win64_console.exe"
+              Copy-Item bin\GodotSharp "$packageDir\GodotSharp" -Recurse
+              Compress-Archive -Path "$packageDir\*" -DestinationPath "release\Faster-Godot_v${env:RELEASE_VERSION}_mono_win64.zip" -CompressionLevel Optimal -Force
+            } else {
+              $packageDir = "release\Faster-Godot_v${env:RELEASE_VERSION}_win64"
+              New-Item -ItemType Directory -Force $packageDir | Out-Null
+              Copy-Item bin\godot.windows.editor.x86_64.faster_godot.exe "$packageDir\Faster-Godot_v${env:RELEASE_VERSION}_win64.exe"
+              Copy-Item bin\godot.windows.editor.x86_64.faster_godot.console.exe "$packageDir\Faster-Godot_v${env:RELEASE_VERSION}_win64_console.exe"
+              Compress-Archive -Path "$packageDir\*" -DestinationPath "release\Faster-Godot_v${env:RELEASE_VERSION}_win64.exe.zip" -CompressionLevel Optimal -Force
+            }
+          } else {
+            scons platform=windows target=template_debug @monoArg @sconsBase
+            scons platform=windows target=template_release @monoArg @sconsBase
+            Copy-Item "bin\godot.windows.template_debug.x86_64.faster_godot$monoSuffix.exe" "release\templates\$templateDir\windows_debug_x86_64.exe"
+            Copy-Item "bin\godot.windows.template_debug.x86_64.faster_godot$monoSuffix.console.exe" "release\templates\$templateDir\windows_debug_x86_64.console.exe"
+            Copy-Item "bin\godot.windows.template_release.x86_64.faster_godot$monoSuffix.exe" "release\templates\$templateDir\windows_release_x86_64.exe"
+            Copy-Item "bin\godot.windows.template_release.x86_64.faster_godot$monoSuffix.console.exe" "release\templates\$templateDir\windows_release_x86_64.console.exe"
+          }
+
+          Remove-Item bin\*.exp, bin\*.lib, bin\*.pdb -ErrorAction SilentlyContinue
+
+      - name: Upload Windows asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.id }}
+          path: release/
+          retention-days: 14
+
+  package:
+    name: Package release assets
+    runs-on: ubuntu-22.04
+    needs: [linux, windows]
+    timeout-minutes: 30
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout release source for archive
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          submodules: recursive
+          path: source
+          persist-credentials: false
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: downloaded
+          merge-multiple: true
+
+      - name: Build final release asset set
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p release standard mono
+          find downloaded -type f -name '*.zip' -not -path '*/templates/*' -exec cp {} release/ \;
+          find downloaded -type f -path '*/templates/standard/*' -exec cp {} standard/ \;
+          find downloaded -type f -path '*/templates/mono/*' -exec cp {} mono/ \;
+          test -f standard/linux_debug.x86_64
+          test -f standard/linux_release.x86_64
+          test -f standard/windows_debug_x86_64.exe
+          test -f standard/windows_release_x86_64.exe
+          test -f mono/linux_debug.x86_64
+          test -f mono/linux_release.x86_64
+          test -f mono/windows_debug_x86_64.exe
+          test -f mono/windows_release_x86_64.exe
+          echo "4.6.3.stable" > standard/version.txt
+          echo "4.6.3.stable.mono" > mono/version.txt
+          chmod +x standard/linux_debug.x86_64 standard/linux_release.x86_64
+          chmod +x mono/linux_debug.x86_64 mono/linux_release.x86_64
+          (cd standard && zip -9 -r "../release/Faster-Godot_v${RELEASE_VERSION}_export_templates.tpz" .)
+          (cd mono && zip -9 -r "../release/Faster-Godot_v${RELEASE_VERSION}_mono_export_templates.tpz" .)
+          tar --exclude-vcs --transform "s#^source#faster-godot-${RELEASE_VERSION}-source#" -czf "release/faster-godot-${RELEASE_VERSION}-source.tar.gz" source
+          (cd release && find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%P\0' | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          cat > release_notes.md <<'EOF'
+          Faster-Godot 4.6.3b is the follow-up to the currently published 4.6.3-faster release.
+
+          Changes since 4.6.3-faster:
+
+          - Tuned Forward+/Vulkan and RTGI hot paths: cached RT uniform sets, deduplicated RT buffer dependencies, guarded unchanged RT light-buffer uploads, reduced TLAS/data-buffer churn, and added RTGI counters for candidate/selection/rebuild visibility.
+          - Optimized animation/skinning CPU paths with `StringName` playback lookups and a bulk 3D skeleton bone upload path, reducing per-bone RenderingServer command overhead in skinned-character scenes.
+          - Reduced SceneTree hot-path allocation churn by reusing process and group-call snapshot buffers while preserving mutation semantics.
+          - Improved audio decode performance with bulk MP3 frame buffering.
+          - Marked the fork's faster desktop target in public docs: Windows/Linux Forward+ use, AVX2/FMA/F16C/POPCNT x86_64 only, Vulkan-only rendering, and XR/VR outside the fork target.
+          - Audited RTGI denoising against NVIDIA's Godot path tracing branch and NRD guide-buffer expectations. Streamline/DLSS/NRD SDK imports remain deferred vendor-dependency work; the current internal temporal RT denoiser remains the shipped path.
+          - Release packaging now produces Windows/Linux x86_64 normal and .NET editors, normal and .NET export templates, SHA256 sums, and a source `tar.gz` archive.
+
+          Validation:
+
+          - RTGI particle-death smoke test passed on the faster Windows editor build.
+          - RTGI-off benchmark was run at 1920x1080 with VSync disabled and uncapped frame rate on AMD Ryzen 9 9950X3D, 48 GB DDR5-6000, and NVIDIA RTX 4080 SUPER.
+          - The current validation stress scene includes 26 active character bodies, 24 spawned skinned enemy bodies, basic AI/raycasts/movement/attack attempts/scripted deaths, 26 Skeleton3D nodes, 672 MeshInstance3D nodes, 1 omni light, about 1.3K rendered objects, about 2.87M rendered primitives, and 24 particle systems validated after the benchmark window.
+          - Five-run RTGI-off average against official Godot 4.6.3: 448.46 FPS official, 548.98 FPS Faster-Godot, +22.413% FPS. Process time averaged 3.46 ms official and 3.14 ms Faster-Godot. Draw-call counts are recorded only as scene context, not as a batching improvement claim.
+          EOF
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: release/*
+          retention-days: 14
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release delete "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}"
+          fi
+          gh release create "${RELEASE_TAG}" release/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${SOURCE_REF}" \
+            --title "${RELEASE_TITLE}" \
+            --notes-file release_notes.md \
+            --latest
