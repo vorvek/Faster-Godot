@@ -312,7 +312,7 @@ bool rtgi_load_raster_surface(ivec2 visible_pixel, mat4 inv_view, out float dept
 	return true;
 }
 
-void rtgi_store_raster_guides(ivec2 pixel, ivec2 visible_pixel, vec2 visible_uv, float depth, vec3 view_pos, vec3 world_pos, vec3 world_normal, float roughness, vec3 albedo_proxy) {
+void rtgi_store_raster_guides(ivec2 pixel, vec2 visible_uv, float depth, vec3 view_pos, vec3 world_pos, vec3 world_normal, float roughness, vec3 albedo_proxy) {
 	uint history_id = rtgi_raster_history_id(world_pos, world_normal, roughness, albedo_proxy);
 	float hit_distance = length(world_pos - rt_camera_world_origin());
 	float specular_risk = smoothstep(0.15, 0.85, 1.0 - roughness);
@@ -634,8 +634,6 @@ void main() {
 	ivec2 visible_pixel_i = pixel_i - ivec2(round(rt_current_origin()));
 	ivec2 visible_size_i = ivec2(round(rt_visible_size()));
 	bool pixel_in_visible = all(greaterThanEqual(visible_pixel_i, ivec2(0))) && all(lessThan(visible_pixel_i, visible_size_i));
-	ivec2 raster_size_i = max(ivec2(round(scene_data_block.data.viewport_size)), ivec2(1));
-	ivec2 raster_pixel_i = clamp(ivec2(floor(in_uv * vec2(raster_size_i))), ivec2(0), raster_size_i - ivec2(1));
 	uvec2 rng_pixel = pixel_in_visible ? uvec2(visible_pixel_i) : pixel + uvec2(131071u, 524287u);
 	vec2 d = in_uv * 2.0 - 1.0;
 
@@ -673,7 +671,7 @@ void main() {
 			return;
 		}
 		// Store raster guides so rt_depth_image (== the FPT composite mask) holds THIS surface's depth.
-		rtgi_store_raster_guides(pixel_i, visible_pixel_i, in_uv, rdepth, rview_pos, rworld_pos, rworld_normal, rroughness, ralbedo_proxy);
+		rtgi_store_raster_guides(pixel_i, in_uv, rdepth, rview_pos, rworld_pos, rworld_normal, rroughness, ralbedo_proxy);
 
 		// Raw material from the guide G-buffer (Change 1). guide_albedo.rgb = linear albedo;
 		// ORM packing is r=ao, g=roughness, b=metallic, a=sss (the rtgi_gi_resolve convention).
@@ -796,7 +794,7 @@ void main() {
 			return;
 		}
 
-		rtgi_store_raster_guides(pixel_i, raster_pixel_i, in_uv, raster_depth, raster_view_pos, raster_world_pos, raster_world_normal, raster_roughness, raster_albedo_proxy);
+		rtgi_store_raster_guides(pixel_i, in_uv, raster_depth, raster_view_pos, raster_world_pos, raster_world_normal, raster_roughness, raster_albedo_proxy);
 
 		vec3 view_dir = normalize(rt_camera_world_origin() - raster_world_pos);
 		float specular_probability = clamp(mix(0.08, 0.82, smoothstep(0.10, 0.90, 1.0 - raster_roughness)), 0.05, 0.90);
