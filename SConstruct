@@ -958,6 +958,8 @@ if env.msvc:
 
     if env["optimize"].startswith("speed"):
         env["OPTIMIZELEVEL"] = "/O2"
+        if not methods.using_clang(env):
+            env.AppendUnique(CCFLAGS=["/Ob3"])  # Faster-Godot: aggressive inlining (VS2019+, MSVC only).
         env.AppendUnique(LINKFLAGS=["/OPT:REF"])
         if env["optimize"] == "speed_trace":
             env.AppendUnique(LINKFLAGS=["/OPT:NOICF"])

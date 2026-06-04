@@ -353,6 +353,9 @@ def configure_msvc(env: "SConsEnvironment"):
     env.AppendUnique(CCFLAGS=["/Gd", "/GR", "/nologo"])
     env.AppendUnique(CCFLAGS=["/utf-8"])  # Force to use Unicode encoding.
     env.AppendUnique(CCFLAGS=["/bigobj"])  # Support big objects.
+    # Faster-Godot: function-level linking (/Gy) + global-data optimization (/Gw) let the
+    # linker drop/fold unreferenced functions and globals via /OPT:REF,ICF. Behavior-preserving.
+    env.AppendUnique(CCFLAGS=["/Gy", "/Gw"])
 
     env.AppendUnique(
         CPPDEFINES=[
