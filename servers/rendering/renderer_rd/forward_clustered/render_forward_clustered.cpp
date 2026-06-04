@@ -2975,6 +2975,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// HYBRID never sets this, so its proven path is byte-unchanged.
 	const bool rt_radiance_probes_fpt = rt_radiance_probes_composite &&
 			(uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING;
+	// T4: FPT deep-path reference oracle (FULL_PATH_TRACING only; opt-in Environment.rtgi_fpt_reference,
+	// serialized into repurposed slot 28). When set, the FPT dispatch drops RT_FLAG_PRIMARY_DIRECT so the
+	// raygen runs the deep camera-ray path tracer at the full bounce budget, and the probe/GI composite is
+	// bypassed -- beauty becomes the raw deep path-traced color (NO probe indirect), an A/B reference for
+	// FPT-fast. Default false leaves the proven FPT-fast (guide-surface NEE primary + probe indirect) path.
+	// rt_radiance_probes_fpt already implies rt_env_params != nullptr (via rt_radiance_probes_composite),
+	// so index the param array directly -- matching the sibling rt_radiance_probes_fpt above.
+	const bool rt_fpt_reference = rt_radiance_probes_fpt &&
+			rt_env_params[RSE::PT_PARAM_RTGI_FPT_REFERENCE] > 0.5f;
 	const uint32_t rt_denoiser = rt_env_params ? (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
 	if (scene_features.rt && rt_denoiser == RSE::PT_DENOISER_NVIDIA) {
 		WARN_PRINT_ONCE(vformat("RTGI denoiser '%s' is not available in the Vulkan renderer yet. Falling back to ASVFG for this viewport without changing the Environment resource.", _rtgi_denoiser_name(rt_denoiser)));
@@ -3853,7 +3862,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			} else {
 				rt_state = nullptr;
 			}
-			if (rt_resources_ready && rt_state && rtgi_wrc && rtgi_wrc->get_ray_result_buffer().is_valid()) {
+			// T4 oracle: the WRC/SPG probe dispatches only feed the (now-bypassed) probe-indirect
+			// composite, so skip them for the deep-path reference -- UNLESS a probe debug view is active
+			// (spg_debug_active, hoisted above the depth prepass), which still needs the probes populated.
+			// The ray-result buffer *ensure* blocks above are NOT skipped, so the deep dispatch's uniform
+			// set still binds valid buffers (107/108).
+			if (rt_resources_ready && rt_state && rtgi_wrc && rtgi_wrc->get_ray_result_buffer().is_valid() && (!rt_fpt_reference || spg_debug_active)) {
 				RD::get_singleton()->draw_command_begin_label("RTGI WRC Probe Update");
 				RENDER_TIMESTAMP("RTGI WRC Probe Update");
 				const uint32_t wrc_flags = rt_flags | SceneShaderRaytracing::RT_FLAG_WRC_PROBE_UPDATE;
@@ -3904,7 +3918,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// fills); A3 later promotes both SPG + resolve to always-on for the composite.
 			// resolve_debug_active / spg_debug_active are hoisted above the depth prepass
 			// (shared with the additive material-guide prepass); see their declaration there.
-			if ((spg_debug_active || rt_radiance_probes_composite) && rtgi_spg && rtgi_spg->get_radiance_atlas().is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
+			// T4 oracle: drop the composite-driven SPG/resolve work for the deep-path reference (the
+			// composite it feeds is bypassed), but keep it for probe debug views (spg_debug_active).
+			if ((spg_debug_active || (rt_radiance_probes_composite && !rt_fpt_reference)) && rtgi_spg && rtgi_spg->get_radiance_atlas().is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
 				RD::get_singleton()->draw_command_begin_label("RTGI SPG");
 				RENDER_TIMESTAMP("RTGI SPG Placement");
 				// Velocity is optional: on a static furnace there is no velocity buffer,
@@ -4024,7 +4040,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			if (rt_radiance_probes_fpt && rt_state) {
 				RENDER_TIMESTAMP("RTGI FPT Primary-Direct");
 				RD::get_singleton()->draw_command_begin_label("RTGI FPT Primary-Direct");
-				const uint32_t pd_flags = rt_flags | SceneShaderRaytracing::RT_FLAG_PRIMARY_DIRECT;
+				// T4 oracle: when rt_fpt_reference is set, OMIT RT_FLAG_PRIMARY_DIRECT so the raygen falls
+				// through to the deep camera-ray path tracer (full RT_GET_MAX_BOUNCES bounces packed in
+				// rt_flags), writing the deep-path beauty the oracle composite blits below. Otherwise keep
+				// PRIMARY_DIRECT for the normal FPT-fast guide-surface NEE primary (indirect bounces == 0).
+				const uint32_t pd_flags = rt_flags | (rt_fpt_reference ? 0u : SceneShaderRaytracing::RT_FLAG_PRIMARY_DIRECT);
 				raytracing->dispatch_primary_direct_backend(rt_backend_context, pd_flags);
 				rt_state = rt_backend_context.viewport_state;
 				RD::get_singleton()->draw_command_end_label();
@@ -4045,7 +4065,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// lightmaps requires PER-PIXEL indirect ownership (which provider owns each pixel) --
 			// a deferred follow-up; for now the composite is skipped whenever any of those other
 			// indirect sources is active (the A3 test scenes have none, so the gate passes).
-			if (rt_radiance_probes_composite && rtgi_resolve != nullptr &&
+			// T4 oracle: beauty = the raw deep path-traced color, with NO probe indirect. The probe
+			// dispatches + composite were skipped above (rt_fpt_reference gate), so just blit the
+			// deep-path RT color (written by the no-PRIMARY_DIRECT dispatch above) over the internal
+			// color FB the opaque pass wrote -- the probe-indirect composite is fully bypassed. This is
+			// the A/B reference the FPT-fast composite (the else-branch below) is measured against.
+			if (rt_fpt_reference && rb_data->rt_has_texture()) {
+				RENDER_TIMESTAMP("RTGI Composite FPT Reference (deep-path passthrough)");
+				copy_effects->copy_to_fb_rect(rb_data->rt_get_texture(), rb_data->get_color_only_fb(), Rect2(Vector2(), rb->get_internal_size()), false, false);
+			} else if (rt_radiance_probes_composite && rtgi_resolve != nullptr &&
 					rtgi_resolve->get_diffuse_gi().is_valid() &&
 					rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS) &&
 					!using_sdfgi && !using_voxelgi && p_render_data->lightmaps->size() == 0) {

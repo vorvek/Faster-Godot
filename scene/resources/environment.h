@@ -233,6 +233,8 @@ private:
 	RTGIBackend rtgi_backend = RTGI_BACKEND_VULKAN_GENERIC;
 	RTGIQualityPreset rtgi_quality_preset = RTGI_QUALITY_PRESET_PRODUCTION;
 	RTGIMode rtgi_mode = RTGI_MODE_HYBRID;
+	// FPT deep-path A/B reference oracle (FULL_PATH_TRACING only). Default false keeps FPT-fast.
+	bool rtgi_fpt_reference = false;
 	float rtgi_energy = 1.0;
 	float rtgi_resolution_scale = 0.67f;
 	bool rtgi_disable_in_editor = true;
@@ -474,6 +476,8 @@ public:
 	RTGIQualityPreset get_rtgi_quality_preset() const;
 	void set_rtgi_mode(RTGIMode p_mode);
 	RTGIMode get_rtgi_mode() const;
+	void set_rtgi_fpt_reference(bool p_enabled);
+	bool get_rtgi_fpt_reference() const;
 	void set_rtgi_samples_per_pixel(int p_samples);
 	int get_rtgi_samples_per_pixel() const;
 	void set_rtgi_max_bounces(int p_bounces);

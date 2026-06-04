@@ -850,7 +850,10 @@ enum PathtracingParamIndex {
 	PT_PARAM_RTGI_SAMPLING_CONTROLS = 25,
 	// Compatibility alias for the RTGI diffuse cache toggle. Index 11 was previously reserved in the generic RT table.
 	PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED = 11,
-	PT_PARAM_RTGI_STRC_ENABLED = 28,
+	// Slot 28 repurposed (post-T11): the STRC-enabled toggle that used to live here is
+	// inert (no GLSL reader; C++ STRC gating reads the Environment member directly), so the
+	// slot now carries the FPT deep-path reference oracle bool (C++-read only; no shader reader).
+	PT_PARAM_RTGI_FPT_REFERENCE = 28,
 	PT_PARAM_RTGI_STRC_STRENGTH = 29,
 	PT_PARAM_RTGI_STRC_CASCADE_COUNT = 30,
 	PT_PARAM_RTGI_STRC_GRID_SIZE = 31,
@@ -875,6 +878,10 @@ struct PathtracingParams {
 	float energy = 1.0f;
 	float resolution_scale = 0.67f;
 	uint32_t mode = 2;
+	// FPT deep-path reference oracle. When true (FULL_PATH_TRACING only) the renderer runs
+	// the deep camera-ray path tracer at the full bounce budget with NO probe/GI indirect, as
+	// an A/B reference for FPT-fast. Default false keeps FPT-fast. Serialized into slot 28.
+	bool fpt_reference = false;
 	// CPU-side quality-preset selector (mirrors Environment::RTGIQualityPreset:
 	// 0=Custom,1=Performance,2=Balanced,3=Production). It is read directly off the
 	// struct on the CPU (the renderer resolves the matching per-preset Project
@@ -982,8 +989,10 @@ inline void pathtracing_params_to_shader_floats(const PathtracingParams &p_param
 	if (p_count > PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED) {
 		r_params[PT_PARAM_RTGI_DIFFUSE_CACHE_ENABLED] = p_params.diffuse_cache_enabled ? 1.0f : 0.0f;
 	}
-	if (p_count > PT_PARAM_RTGI_STRC_ENABLED) {
-		r_params[PT_PARAM_RTGI_STRC_ENABLED] = p_params.strc_enabled ? 1.0f : 0.0f;
+	if (p_count > PT_PARAM_RTGI_FPT_REFERENCE) {
+		// Slot 28 repurposed from the post-T11-inert STRC-enabled toggle to the FPT deep-path
+		// reference oracle (the renderer reads this slot; nothing reads it as STRC anymore).
+		r_params[PT_PARAM_RTGI_FPT_REFERENCE] = p_params.fpt_reference ? 1.0f : 0.0f;
 	}
 	if (p_count > PT_PARAM_RTGI_STRC_STRENGTH) {
 		r_params[PT_PARAM_RTGI_STRC_STRENGTH] = p_params.strc_strength;
