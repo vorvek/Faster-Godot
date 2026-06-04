@@ -238,3 +238,30 @@ public:
 
 	SpotLight3D();
 };
+
+class AreaLight3D : public Light3D {
+	GDCLASS(AreaLight3D, Light3D);
+
+private:
+	Vector2 area_size;
+	Ref<Texture2D> area_texture;
+	bool area_normalize_energy = true;
+
+protected:
+	static void _bind_methods();
+
+public:
+	void set_area_size(const Vector2 &p_size);
+	Vector2 get_area_size() const;
+
+	void set_area_texture(const Ref<Texture2D> &p_texture);
+	Ref<Texture2D> get_area_texture() const;
+
+	void set_area_normalize_energy(bool p_enable);
+	bool is_area_normalizing_energy() const;
+
+	PackedStringArray get_configuration_warnings() const override;
+
+	AreaLight3D();
+	~AreaLight3D();
+};
