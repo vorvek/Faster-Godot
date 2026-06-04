@@ -256,13 +256,39 @@ void rtgi_store_empty_raster_guides(ivec2 pixel) {
 	rt_store_invalid_primary_velocity(pixel);
 }
 
-bool rtgi_load_raster_surface(ivec2 visible_pixel, vec2 visible_uv, mat4 inv_view, out float depth, out vec3 view_pos, out vec3 world_pos, out vec3 world_normal, out float roughness, out vec3 albedo_proxy) {
-	depth = texelFetch(sampler2D(raster_depth_texture, raster_nearest_sampler), visible_pixel, 0).r;
+// Map an RT-internal (resolution_scale) pixel to its texel in a FULL-raster-resolution G-buffer
+// (raster depth/normal/color AND the material-guide albedo/orm/emission). Those textures are allocated
+// at rb->get_internal_size() while the FPT-fast primary dispatch runs at the smaller RT-internal size,
+// so reading them at the RT pixel directly samples the wrong texel at resolution_scale < 1 (it reads the
+// top-left RT-sized corner of the full-res G-buffer). Uses the UNJITTERED RT pixel center -- the
+// per-sample raygen jitter (in rt_current_visible_uv) is a camera-ray sampling offset, not a G-buffer
+// address; folding it in (amplified by 1/scale) would only risk landing on a neighbouring texel.
+// At resolution_scale == 1 the RT and raster grids coincide 1:1 so this mapping is the identity (the
+// furnace + §6 Hybrid gates run there and stay byte-unchanged); it only does real work at scale < 1.
+ivec2 rtgi_visible_to_raster_pixel(ivec2 visible_pixel, ivec2 raster_size) {
+	vec2 visible_uv = (vec2(visible_pixel) + vec2(0.5)) / rt_visible_size();
+	return clamp(ivec2(floor(visible_uv * vec2(raster_size))), ivec2(0), raster_size - ivec2(1));
+}
+
+bool rtgi_load_raster_surface(ivec2 visible_pixel, mat4 inv_view, out float depth, out vec3 view_pos, out vec3 world_pos, out vec3 world_normal, out float roughness, out vec3 albedo_proxy) {
+	// Index + reconstruct in the FULL-res raster texture's OWN texel space (texel center over textureSize),
+	// mirroring rtgi_gi_resolve.glsl's resolve_reconstruct_view_position. The original FPT-fast path
+	// indexed the full-res depth with the smaller RT-visible pixel, reconstructing positions OUTSIDE the
+	// geometry at resolution_scale < 1 -> the NEE shadow ray (originating here) self-occluded -> the
+	// far/grazing wall rendered black (white_room green wall). resolution_scale == 1 (the furnace gates)
+	// hid it: one RT texel maps 1:1 to one raster texel there, so the mis-index had no effect.
+	ivec2 raster_size = textureSize(sampler2D(raster_depth_texture, raster_nearest_sampler), 0);
+	ivec2 raster_pixel = rtgi_visible_to_raster_pixel(visible_pixel, raster_size);
+	depth = texelFetch(sampler2D(raster_depth_texture, raster_nearest_sampler), raster_pixel, 0).r;
 	if (depth <= 0.000001) {
 		return false;
 	}
 
-	vec4 view_h = scene_data_block.data.inv_projection_matrix * vec4(visible_uv * 2.0 - 1.0, depth, 1.0);
+	// Reconstruct at the chosen full-res texel's own center (matching its depth), mirroring
+	// rtgi_gi_resolve.glsl's resolve_reconstruct_view_position so the position is consistent with the
+	// depth that was sampled.
+	vec2 recon_uv = (vec2(raster_pixel) + vec2(0.5)) / vec2(raster_size);
+	vec4 view_h = scene_data_block.data.inv_projection_matrix * vec4(recon_uv * 2.0 - 1.0, depth, 1.0);
 	if (any(isnan(view_h)) || any(isinf(view_h)) || abs(view_h.w) <= 1e-6) {
 		return false;
 	}
@@ -272,7 +298,7 @@ bool rtgi_load_raster_surface(ivec2 visible_pixel, vec2 visible_uv, mat4 inv_vie
 		return false;
 	}
 
-	vec4 raster_normal_roughness = texelFetch(sampler2D(raster_normal_roughness_texture, raster_nearest_sampler), visible_pixel, 0);
+	vec4 raster_normal_roughness = texelFetch(sampler2D(raster_normal_roughness_texture, raster_nearest_sampler), raster_pixel, 0);
 	world_normal = rtgi_decode_raster_world_normal(raster_normal_roughness, inv_view);
 	vec3 view_dir = normalize(rt_camera_world_origin() - world_pos);
 	if (dot(world_normal, view_dir) < 0.0) {
@@ -280,7 +306,7 @@ bool rtgi_load_raster_surface(ivec2 visible_pixel, vec2 visible_uv, mat4 inv_vie
 	}
 	roughness = rtgi_decode_raster_roughness(raster_normal_roughness.a);
 
-	vec3 raster_color = sanitize_payload_vec3(texelFetch(sampler2D(raster_color_texture, raster_nearest_sampler), visible_pixel, 0).rgb);
+	vec3 raster_color = sanitize_payload_vec3(texelFetch(sampler2D(raster_color_texture, raster_nearest_sampler), raster_pixel, 0).rgb);
 	float max_channel = max(max(raster_color.r, raster_color.g), raster_color.b);
 	albedo_proxy = clamp(raster_color / max(max_channel, 1.0), vec3(0.04), vec3(1.0));
 	return true;
@@ -630,7 +656,11 @@ void main() {
 		float rdepth;
 		vec3 rview_pos, rworld_pos, rworld_normal, ralbedo_proxy;
 		float rroughness;
-		bool hit = pixel_in_visible && rtgi_load_raster_surface(visible_pixel_i, in_uv, inv_view,
+		// Pass the RT visible pixel; rtgi_load_raster_surface maps it into the FULL-res raster G-buffers
+		// (the guide reads below do the same via rtgi_visible_to_raster_pixel). Indexing those full-res
+		// textures with the RT pixel directly mis-sampled them at rtgi_resolution_scale < 1, which pushed
+		// the NEE surface outside the geometry (far-wall self-shadowing -> black white_room green wall).
+		bool hit = pixel_in_visible && rtgi_load_raster_surface(visible_pixel_i, inv_view,
 				rdepth, rview_pos, rworld_pos, rworld_normal, rroughness, ralbedo_proxy);
 		if (!hit) {
 			// Background: write the sky along the primary camera ray; empty guides (rt_depth=0)
@@ -648,8 +678,15 @@ void main() {
 		// Raw material from the guide G-buffer (Change 1). guide_albedo.rgb = linear albedo;
 		// ORM packing is r=ao, g=roughness, b=metallic, a=sss (the rtgi_gi_resolve convention).
 		// Metalness is ORM.b (NOT albedo.a -- the resolve reads metalness from ORM.b).
-		vec3 guide_alb = texelFetch(rt_guide_albedo_tex, pixel_i, 0).rgb;
-		vec4 guide_orm = texelFetch(rt_guide_orm_tex, pixel_i, 0);
+		// The guide G-buffers are at the FULL raster resolution (rb->get_internal_size()), so they MUST be
+		// indexed with the mapped raster pixel, NOT the RT pixel_i -- otherwise at resolution_scale < 1 the
+		// material is read from the wrong texel (e.g. the white back wall instead of the green side wall),
+		// shading the surface with the wrong albedo. Same full-res G-buffer family as the depth above.
+		// The guide G-buffers share the raster depth's full internal_size, so this reproduces the
+		// raster_pixel computed inside rtgi_load_raster_surface (the shared-size invariant is relied upon).
+		ivec2 guide_pixel = rtgi_visible_to_raster_pixel(visible_pixel_i, textureSize(rt_guide_albedo_tex, 0));
+		vec3 guide_alb = texelFetch(rt_guide_albedo_tex, guide_pixel, 0).rgb;
+		vec4 guide_orm = texelFetch(rt_guide_orm_tex, guide_pixel, 0);
 		MaterialProperties brdf_mat;
 		brdf_mat.baseColor = guide_alb;
 		brdf_mat.metalness = clamp(guide_orm.b, 0.0, 1.0);
@@ -716,7 +753,7 @@ void main() {
 		// ~80x L). Analytic-light direct (above) does NOT double-count -- the probes gather analytic
 		// lights' bounced/indirect contribution, not the abstract lights, so primary direct + probe
 		// indirect is additive there. Emission is added pre-energy-scale to match the deep path.
-		radiance += texelFetch(rt_guide_emission_tex, pixel_i, 0).rgb;
+		radiance += texelFetch(rt_guide_emission_tex, guide_pixel, 0).rgb;
 
 		radiance *= max(0.0, get_rt_param(RT_PARAM_ENERGY));
 		specular *= max(0.0, get_rt_param(RT_PARAM_ENERGY));
@@ -752,7 +789,7 @@ void main() {
 		vec3 raster_world_normal;
 		float raster_roughness;
 		vec3 raster_albedo_proxy;
-		bool raster_hit_valid = pixel_in_visible && rtgi_load_raster_surface(raster_pixel_i, in_uv, inv_view, raster_depth, raster_view_pos, raster_world_pos, raster_world_normal, raster_roughness, raster_albedo_proxy);
+		bool raster_hit_valid = pixel_in_visible && rtgi_load_raster_surface(visible_pixel_i, inv_view, raster_depth, raster_view_pos, raster_world_pos, raster_world_normal, raster_roughness, raster_albedo_proxy);
 
 		if (!raster_hit_valid) {
 			rtgi_store_empty_raster_guides(pixel_i);
