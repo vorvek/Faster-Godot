@@ -269,6 +269,9 @@
 		<member name="rtgi_explicit_emissive_sampling_enabled" type="bool" setter="set_rtgi_explicit_emissive_sampling_enabled" getter="is_rtgi_explicit_emissive_sampling_enabled" default="true">
 			If [code]true[/code], directly samples bounded emissive surface candidates during RTGI tracing.
 		</member>
+		<member name="rtgi_fpt_reference" type="bool" setter="set_rtgi_fpt_reference" getter="get_rtgi_fpt_reference" default="false">
+			If [code]true[/code] and [member rtgi_mode] is [constant RTGI_MODE_FULL_PATH_TRACING], renders the full deep path-traced beauty (all ray bounces, no probe/GI indirect) as an A/B reference for the default FPT-fast mode. Has no effect in other RTGI modes.
+		</member>
 		<member name="rtgi_diffuse_radiance_cache_enabled" type="bool" setter="set_rtgi_diffuse_radiance_cache_enabled" getter="is_rtgi_diffuse_radiance_cache_enabled" default="true">
 			If [code]true[/code], enables the screen-space diffuse radiance cache before ASVFG denoising. The cache reuses valid diffuse history and rejects it when guides or radiance change.
 		</member>

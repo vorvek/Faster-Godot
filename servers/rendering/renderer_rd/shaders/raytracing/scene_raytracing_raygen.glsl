@@ -30,6 +30,12 @@ layout(set = 0, binding = 0, rgba16f) uniform image2D image;
 layout(set = 0, binding = 1) uniform accelerationStructureEXT tlas;
 layout(set = 0, binding = 61) uniform texture2D rt_blue_noise_texture;
 layout(set = 0, binding = 62) uniform sampler rt_blue_noise_sampler;
+// Sky radiance octmap (bindings 7/8, same SET 0 the miss/closest-hit stages declare).
+// The FPT-fast primary-direct path samples this directly for its background-on-miss, so
+// the sky it writes matches the miss-shader sky (no camera-ray trace needed). Bound in
+// update_uniform_set unconditionally, so declaring it here is safe for all dispatches.
+layout(set = 0, binding = 7) uniform texture2D rt_primary_radiance_octmap;
+layout(set = 0, binding = 8) uniform sampler rt_primary_radiance_sampler;
 
 layout(location = 0) rayPayloadEXT PathPayload payload;
 
@@ -250,13 +256,39 @@ void rtgi_store_empty_raster_guides(ivec2 pixel) {
 	rt_store_invalid_primary_velocity(pixel);
 }
 
-bool rtgi_load_raster_surface(ivec2 visible_pixel, vec2 visible_uv, mat4 inv_view, out float depth, out vec3 view_pos, out vec3 world_pos, out vec3 world_normal, out float roughness, out vec3 albedo_proxy) {
-	depth = texelFetch(sampler2D(raster_depth_texture, raster_nearest_sampler), visible_pixel, 0).r;
+// Map an RT-internal (resolution_scale) pixel to its texel in a FULL-raster-resolution G-buffer
+// (raster depth/normal/color AND the material-guide albedo/orm/emission). Those textures are allocated
+// at rb->get_internal_size() while the FPT-fast primary dispatch runs at the smaller RT-internal size,
+// so reading them at the RT pixel directly samples the wrong texel at resolution_scale < 1 (it reads the
+// top-left RT-sized corner of the full-res G-buffer). Uses the UNJITTERED RT pixel center -- the
+// per-sample raygen jitter (in rt_current_visible_uv) is a camera-ray sampling offset, not a G-buffer
+// address; folding it in (amplified by 1/scale) would only risk landing on a neighbouring texel.
+// At resolution_scale == 1 the RT and raster grids coincide 1:1 so this mapping is the identity (the
+// furnace + §6 Hybrid gates run there and stay byte-unchanged); it only does real work at scale < 1.
+ivec2 rtgi_visible_to_raster_pixel(ivec2 visible_pixel, ivec2 raster_size) {
+	vec2 visible_uv = (vec2(visible_pixel) + vec2(0.5)) / rt_visible_size();
+	return clamp(ivec2(floor(visible_uv * vec2(raster_size))), ivec2(0), raster_size - ivec2(1));
+}
+
+bool rtgi_load_raster_surface(ivec2 visible_pixel, mat4 inv_view, out float depth, out vec3 view_pos, out vec3 world_pos, out vec3 world_normal, out float roughness, out vec3 albedo_proxy) {
+	// Index + reconstruct in the FULL-res raster texture's OWN texel space (texel center over textureSize),
+	// mirroring rtgi_gi_resolve.glsl's resolve_reconstruct_view_position. The original FPT-fast path
+	// indexed the full-res depth with the smaller RT-visible pixel, reconstructing positions OUTSIDE the
+	// geometry at resolution_scale < 1 -> the NEE shadow ray (originating here) self-occluded -> the
+	// far/grazing wall rendered black (white_room green wall). resolution_scale == 1 (the furnace gates)
+	// hid it: one RT texel maps 1:1 to one raster texel there, so the mis-index had no effect.
+	ivec2 raster_size = textureSize(sampler2D(raster_depth_texture, raster_nearest_sampler), 0);
+	ivec2 raster_pixel = rtgi_visible_to_raster_pixel(visible_pixel, raster_size);
+	depth = texelFetch(sampler2D(raster_depth_texture, raster_nearest_sampler), raster_pixel, 0).r;
 	if (depth <= 0.000001) {
 		return false;
 	}
 
-	vec4 view_h = scene_data_block.data.inv_projection_matrix * vec4(visible_uv * 2.0 - 1.0, depth, 1.0);
+	// Reconstruct at the chosen full-res texel's own center (matching its depth), mirroring
+	// rtgi_gi_resolve.glsl's resolve_reconstruct_view_position so the position is consistent with the
+	// depth that was sampled.
+	vec2 recon_uv = (vec2(raster_pixel) + vec2(0.5)) / vec2(raster_size);
+	vec4 view_h = scene_data_block.data.inv_projection_matrix * vec4(recon_uv * 2.0 - 1.0, depth, 1.0);
 	if (any(isnan(view_h)) || any(isinf(view_h)) || abs(view_h.w) <= 1e-6) {
 		return false;
 	}
@@ -266,7 +298,7 @@ bool rtgi_load_raster_surface(ivec2 visible_pixel, vec2 visible_uv, mat4 inv_vie
 		return false;
 	}
 
-	vec4 raster_normal_roughness = texelFetch(sampler2D(raster_normal_roughness_texture, raster_nearest_sampler), visible_pixel, 0);
+	vec4 raster_normal_roughness = texelFetch(sampler2D(raster_normal_roughness_texture, raster_nearest_sampler), raster_pixel, 0);
 	world_normal = rtgi_decode_raster_world_normal(raster_normal_roughness, inv_view);
 	vec3 view_dir = normalize(rt_camera_world_origin() - world_pos);
 	if (dot(world_normal, view_dir) < 0.0) {
@@ -274,13 +306,13 @@ bool rtgi_load_raster_surface(ivec2 visible_pixel, vec2 visible_uv, mat4 inv_vie
 	}
 	roughness = rtgi_decode_raster_roughness(raster_normal_roughness.a);
 
-	vec3 raster_color = sanitize_payload_vec3(texelFetch(sampler2D(raster_color_texture, raster_nearest_sampler), visible_pixel, 0).rgb);
+	vec3 raster_color = sanitize_payload_vec3(texelFetch(sampler2D(raster_color_texture, raster_nearest_sampler), raster_pixel, 0).rgb);
 	float max_channel = max(max(raster_color.r, raster_color.g), raster_color.b);
 	albedo_proxy = clamp(raster_color / max(max_channel, 1.0), vec3(0.04), vec3(1.0));
 	return true;
 }
 
-void rtgi_store_raster_guides(ivec2 pixel, ivec2 visible_pixel, vec2 visible_uv, float depth, vec3 view_pos, vec3 world_pos, vec3 world_normal, float roughness, vec3 albedo_proxy) {
+void rtgi_store_raster_guides(ivec2 pixel, vec2 visible_uv, float depth, vec3 view_pos, vec3 world_pos, vec3 world_normal, float roughness, vec3 albedo_proxy) {
 	uint history_id = rtgi_raster_history_id(world_pos, world_normal, roughness, albedo_proxy);
 	float hit_distance = length(world_pos - rt_camera_world_origin());
 	float specular_risk = smoothstep(0.15, 0.85, 1.0 - roughness);
@@ -552,6 +584,40 @@ void rt_spg_gather_main() {
 	rt_spg_ray_results[ray_index].probe_dir = vec4(float(probe_linear), float(dir_index), 0.0, 0.0);
 }
 
+// Evaluate the background sky for a world-space ray direction, mirroring the miss-shader
+// sky term (octmap lookup + IBL exposure, or the flat background color, then the same fog
+// blend) so the FPT-fast primary-direct background-on-miss matches what the miss path
+// would have written for the same direction. No camera-ray trace required.
+vec3 rt_primary_eval_sky(vec3 world_ray_dir) {
+	mat3 camera_basis = mat3(scene_data_block.data.inv_view_matrix);
+	mat3 world_to_sky = scene_data_block.data.radiance_inverse_xform * camera_basis;
+	vec3 sky_dir = world_to_sky * world_ray_dir;
+
+	vec2 border = vec2(scene_data_block.data.radiance_border_size,
+			1.0 - scene_data_block.data.radiance_border_size * 2.0);
+	vec2 sky_uv = vec3_to_oct_with_border(sky_dir, border);
+
+	bool background_uses_sky = get_rt_param(RT_PARAM_BACKGROUND_USES_SKY) > 0.5;
+	vec3 sky_color;
+	if (background_uses_sky) {
+		sky_color = textureLod(sampler2D(rt_primary_radiance_octmap, rt_primary_radiance_sampler), sky_uv, 0.0).rgb;
+		sky_color *= scene_data_block.data.IBL_exposure_normalization;
+	} else {
+		sky_color = vec3(get_rt_param(RT_PARAM_BACKGROUND_R), get_rt_param(RT_PARAM_BACKGROUND_G), get_rt_param(RT_PARAM_BACKGROUND_B));
+	}
+
+	if ((RT_FLAGS & RT_FLAG_FOG_ENABLED) != 0u) {
+		vec3 fog_color = scene_data_block.data.fog_light_color;
+		if (background_uses_sky && scene_data_block.data.fog_aerial_perspective > 0.0) {
+			vec3 sky_fog = textureLod(sampler2D(rt_primary_radiance_octmap, rt_primary_radiance_sampler), sky_uv, 1.0).rgb;
+			sky_fog *= scene_data_block.data.IBL_exposure_normalization;
+			fog_color = mix(fog_color, sky_fog, scene_data_block.data.fog_aerial_perspective);
+		}
+		sky_color = mix(sky_color, fog_color, scene_data_block.data.fog_sky_affect);
+	}
+	return sanitize_payload_vec3(sky_color);
+}
+
 void main() {
 	if (rt_spg_gather_mode()) {
 		rt_spg_gather_main();
@@ -568,8 +634,6 @@ void main() {
 	ivec2 visible_pixel_i = pixel_i - ivec2(round(rt_current_origin()));
 	ivec2 visible_size_i = ivec2(round(rt_visible_size()));
 	bool pixel_in_visible = all(greaterThanEqual(visible_pixel_i, ivec2(0))) && all(lessThan(visible_pixel_i, visible_size_i));
-	ivec2 raster_size_i = max(ivec2(round(scene_data_block.data.viewport_size)), ivec2(1));
-	ivec2 raster_pixel_i = clamp(ivec2(floor(in_uv * vec2(raster_size_i))), ivec2(0), raster_size_i - ivec2(1));
 	uvec2 rng_pixel = pixel_in_visible ? uvec2(visible_pixel_i) : pixel + uvec2(131071u, 524287u);
 	vec2 d = in_uv * 2.0 - 1.0;
 
@@ -582,6 +646,123 @@ void main() {
 	vec4 origin = inv_view * vec4(0.0, 0.0, 0.0, 1.0);
 	vec4 direction = inv_view * vec4(normalize(target.xyz), 0);
 
+	if (rt_primary_direct_mode()) {
+		// FPT-fast primary: raster-surface visibility + PT NEE direct (no camera-ray trace).
+		// Visibility == the FPT composite's depth mask by construction (we write the raster
+		// guide depth into rt_depth_image, exactly as the HYBRID branch does). The material
+		// comes from the raw guide G-buffers (Change 1 bindings 113/114), NOT the hue-proxy.
+		float rdepth;
+		vec3 rview_pos, rworld_pos, rworld_normal, ralbedo_proxy;
+		float rroughness;
+		// Pass the RT visible pixel; rtgi_load_raster_surface maps it into the FULL-res raster G-buffers
+		// (the guide reads below do the same via rtgi_visible_to_raster_pixel). Indexing those full-res
+		// textures with the RT pixel directly mis-sampled them at rtgi_resolution_scale < 1, which pushed
+		// the NEE surface outside the geometry (far-wall self-shadowing -> black white_room green wall).
+		bool hit = pixel_in_visible && rtgi_load_raster_surface(visible_pixel_i, inv_view,
+				rdepth, rview_pos, rworld_pos, rworld_normal, rroughness, ralbedo_proxy);
+		if (!hit) {
+			// Background: write the sky along the primary camera ray; empty guides (rt_depth=0)
+			// so the FPT composite masks indirect here (matches the miss-shader background).
+			rtgi_store_empty_raster_guides(pixel_i);
+			vec3 sky_color = rt_primary_eval_sky(direction.xyz);
+			imageStore(image, pixel_i, vec4(sky_color, 1.0));
+			imageStore(rt_diffuse_radiance_image, pixel_i, vec4(sky_color, 1.0));
+			imageStore(rt_specular_radiance_image, pixel_i, vec4(0.0));
+			return;
+		}
+		// Store raster guides so rt_depth_image (== the FPT composite mask) holds THIS surface's depth.
+		rtgi_store_raster_guides(pixel_i, in_uv, rdepth, rview_pos, rworld_pos, rworld_normal, rroughness, ralbedo_proxy);
+
+		// Raw material from the guide G-buffer (Change 1). guide_albedo.rgb = linear albedo;
+		// ORM packing is r=ao, g=roughness, b=metallic, a=sss (the rtgi_gi_resolve convention).
+		// Metalness is ORM.b (NOT albedo.a -- the resolve reads metalness from ORM.b).
+		// The guide G-buffers are at the FULL raster resolution (rb->get_internal_size()), so they MUST be
+		// indexed with the mapped raster pixel, NOT the RT pixel_i -- otherwise at resolution_scale < 1 the
+		// material is read from the wrong texel (e.g. the white back wall instead of the green side wall),
+		// shading the surface with the wrong albedo. Same full-res G-buffer family as the depth above.
+		// The guide G-buffers share the raster depth's full internal_size, so this reproduces the
+		// raster_pixel computed inside rtgi_load_raster_surface (the shared-size invariant is relied upon).
+		ivec2 guide_pixel = rtgi_visible_to_raster_pixel(visible_pixel_i, textureSize(rt_guide_albedo_tex, 0));
+		vec3 guide_alb = texelFetch(rt_guide_albedo_tex, guide_pixel, 0).rgb;
+		vec4 guide_orm = texelFetch(rt_guide_orm_tex, guide_pixel, 0);
+		MaterialProperties brdf_mat;
+		brdf_mat.baseColor = guide_alb;
+		brdf_mat.metalness = clamp(guide_orm.b, 0.0, 1.0);
+		brdf_mat.roughness = clamp(guide_orm.g, 0.0, 1.0);
+		brdf_mat.dielectricF0 = 0.16 * 0.5 * 0.5; // == specular_to_f0(0.5) = default 4% dielectric F0.
+		brdf_mat.emissive = vec3(0.0);
+		brdf_mat.transmissivness = 0.0;
+		brdf_mat.opacity = 1.0;
+
+		vec3 N = rworld_normal;
+		vec3 V = normalize(rt_camera_world_origin() - rworld_pos);
+		uint rng = init_blue_noise_rng(rng_pixel, uint(get_rt_param(RT_PARAM_FRAME_INDEX)), 0u);
+		uint rtgi_sampling_controls = uint(get_rt_param(RT_PARAM_RTGI_SAMPLING_CONTROLS));
+		float pd_roughness = brdf_mat.roughness;
+		float pd_metalness = brdf_mat.metalness;
+
+		vec3 radiance = vec3(0.0);
+		vec3 specular = vec3(0.0);
+
+		// NEE direct lighting (throughput = 1, is_indirect = false), mirroring the closest-hit
+		// primary call at raytracing_closest_hit_common_inc.glsl:739-771. Shadow visibility is
+		// the RT shadow ray traced inside lights_evaluate_direct_lighting_split via the payload.
+		uint pd_light_count = uint(get_rt_param(RT_PARAM_LIGHT_COUNT));
+		if (pd_light_count > 0u && (rtgi_sampling_controls & RTGI_SAMPLING_ANALYTIC_LIGHTS_BIT) != 0u) {
+			uint d_source_key = 0u;
+			uint d_slot_source_key = 0u;
+			float d_slot_pdf = 0.0;
+			RTDirectLighting d_slot_light = rt_direct_lighting_zero();
+			bool d_slot_stochastic = false;
+			float d_slot_reservoir_m = 0.0;
+			float d_slot_reservoir_weight_sum = 0.0;
+			float d_slot_target = 0.0;
+			bool d_slot_temporal_accepted = false;
+			bool d_slot_spatial_accepted = false;
+			uint d_slot_temporal_reject = RT_SOURCE_REJECT_PREV_UV;
+			uint d_slot_spatial_reject = RT_SOURCE_REJECT_PREV_UV;
+			uint d_slot_visibility_failures = 0u;
+			// receiver_layer_mask = all-layers: the raster-surface primary carries no geometry index
+			// (unlike the closest-hit's geometries[h.geometry_idx].layer_mask), so no per-layer shadow
+			// culling is applied at the FPT primary -- conservative (all lights shadow all surfaces).
+			// The d_slot_* reservoir out-params below are populated but NOT recorded back into the
+			// ReSTIR direct-light reservoir (the closest-hit's rt_source_*_candidate_record): the FPT
+			// primary-direct therefore gets no temporal/spatial ReSTIR reuse (it resamples each frame).
+			// The evaluator's reject logic keeps this CORRECT (a stale/unwritten reservoir is rejected
+			// -> fresh sample), so it is a convergence/noise optimization for many-light scenes, left as
+			// a follow-up (negligible for the few-light validation scenes; furnace/white_room/Cornell pass).
+			RTDirectLighting direct_light = lights_evaluate_direct_lighting_split(
+					rworld_pos, rworld_normal, N, V, brdf_mat, rng, /*is_indirect=*/false, /*receiver_layer_mask=*/0xFFFFFFFFu, pd_light_count,
+					d_source_key, d_slot_source_key, d_slot_pdf, d_slot_light, d_slot_stochastic,
+					d_slot_reservoir_m, d_slot_reservoir_weight_sum, d_slot_target,
+					d_slot_temporal_accepted, d_slot_spatial_accepted, d_slot_temporal_reject,
+					d_slot_spatial_reject, d_slot_visibility_failures);
+			vec3 direct_diffuse = rt_clamp_path_contribution(direct_light.diffuse, pd_roughness, pd_metalness, false, false);
+			vec3 direct_specular = rt_clamp_path_contribution(direct_light.specular, pd_roughness, pd_metalness, false, false);
+			radiance += direct_diffuse + direct_specular;
+			specular += direct_specular;
+		}
+		// First-hit emission: a directly-visible emissive surface shows its own Le (the guide
+		// emission G-buffer, binding 115), exactly as the Hybrid raster opaque pass does.
+		// The emissive AREA-LIGHT NEE that the closest-hit does is DELIBERATELY OMITTED at the
+		// primary here: the WRC/SPG probes already gather emissive surfaces as part of the unified
+		// environment-indirect (see the rtgi-hybrid-gi-model + the A3 emissive-mesh fix), so doing
+		// emissive NEE at the primary too DOUBLE-COUNTS the emitter (it blew the emissive furnace to
+		// ~80x L). Analytic-light direct (above) does NOT double-count -- the probes gather analytic
+		// lights' bounced/indirect contribution, not the abstract lights, so primary direct + probe
+		// indirect is additive there. Emission is added pre-energy-scale to match the deep path.
+		radiance += texelFetch(rt_guide_emission_tex, guide_pixel, 0).rgb;
+
+		radiance *= max(0.0, get_rt_param(RT_PARAM_ENERGY));
+		specular *= max(0.0, get_rt_param(RT_PARAM_ENERGY));
+		radiance = sanitize_payload_vec3(radiance);
+		specular = min(sanitize_payload_vec3(specular), radiance);
+		imageStore(image, pixel_i, vec4(radiance, 1.0));
+		imageStore(rt_diffuse_radiance_image, pixel_i, vec4(max(radiance - specular, vec3(0.0)), 1.0));
+		imageStore(rt_specular_radiance_image, pixel_i, vec4(specular, 1.0));
+		return;
+	}
+
 	// Sample count from specialization constant, frame index from uniform
 	const uint samples_per_pixel = RT_GET_SAMPLE_COUNT();
 	uint frame_index = uint(get_rt_param(RT_PARAM_FRAME_INDEX));
@@ -590,11 +771,10 @@ void main() {
 	vec3 total_radiance = vec3(0.0);
 	vec3 total_specular_radiance = vec3(0.0);
 
-	// A4: the FPT primary-direct dispatch caps indirect bounces to 0 (primary hit ->
-	// NEE direct + emissive + sky-on-miss). rt_primary_direct_mode() is only ever set on
-	// the FULL_PATH_TRACING full-screen dispatch (the `else` branch below), so capping
-	// here cannot affect the HYBRID branch (it never runs with the flag set).
-	const uint max_bounces = rt_primary_direct_mode() ? 0u : RT_GET_MAX_BOUNCES();
+	// Reached only when NOT primary-direct: the rt_primary_direct_mode() FPT-fast path returns
+	// above (guide-surface NEE), so this is the HYBRID branch or the deep-path/oracle else-branch
+	// (REFLECTIONS / FULL_PATH_TRACING reference), both of which want the full bounce budget.
+	const uint max_bounces = RT_GET_MAX_BOUNCES();
 	uint rt_mode = uint(get_rt_param(RT_PARAM_MODE));
 
 	// TODO: when we have a spp > 0 the first raycast is always identical,
@@ -607,14 +787,14 @@ void main() {
 		vec3 raster_world_normal;
 		float raster_roughness;
 		vec3 raster_albedo_proxy;
-		bool raster_hit_valid = pixel_in_visible && rtgi_load_raster_surface(raster_pixel_i, in_uv, inv_view, raster_depth, raster_view_pos, raster_world_pos, raster_world_normal, raster_roughness, raster_albedo_proxy);
+		bool raster_hit_valid = pixel_in_visible && rtgi_load_raster_surface(visible_pixel_i, inv_view, raster_depth, raster_view_pos, raster_world_pos, raster_world_normal, raster_roughness, raster_albedo_proxy);
 
 		if (!raster_hit_valid) {
 			rtgi_store_empty_raster_guides(pixel_i);
 			return;
 		}
 
-		rtgi_store_raster_guides(pixel_i, raster_pixel_i, in_uv, raster_depth, raster_view_pos, raster_world_pos, raster_world_normal, raster_roughness, raster_albedo_proxy);
+		rtgi_store_raster_guides(pixel_i, in_uv, raster_depth, raster_view_pos, raster_world_pos, raster_world_normal, raster_roughness, raster_albedo_proxy);
 
 		vec3 view_dir = normalize(rt_camera_world_origin() - raster_world_pos);
 		float specular_probability = clamp(mix(0.08, 0.82, smoothstep(0.10, 0.90, 1.0 - raster_roughness)), 0.05, 0.90);
@@ -766,17 +946,11 @@ void main() {
 		}
 
 		if (sample0_has_hit) {
-			// A4: write the path-traced primary depth (reverse-Z; sky/miss = 0 via the miss shader)
-			// so the FPT composite's background mask is consistent with THIS rt_color's visibility.
-			// The else (path-traced) branch otherwise never wrote rt_depth on hits -- only the HYBRID
-			// raster-guide store + the miss shader did -- leaving a stale depth that mismatched the PT
-			// primary at silhouettes (the composite then added probe indirect onto a pixel the PT
-			// primary had escaped to sky -> over-bright, an energy-bound violation). The composite only
-			// tests depth > 0 for "is geometry", so the exact projected value is not critical.
-			vec4 sample0_clip = curr_vp_unjittered * vec4(sample0_hit_pos, 1.0);
-			float sample0_depth = sample0_clip.w > 0.0 ? clamp(sample0_clip.z / sample0_clip.w, 0.0, 1.0) : 0.0;
-			imageStore(rt_depth_image, pixel_i, vec4(sample0_depth));
-
+			// This (else) branch is now ONLY the deep-path oracle / REFLECTIONS path: FPT-fast
+			// primary visibility is handled by the rt_primary_direct_mode() block above (raster
+			// surface + the matching rt_depth_image guide store). The A4 sample-0 depth write that
+			// previously lived here is removed -- it only existed to make the PT primary's depth
+			// mask consistent with rt_color, which the guide-surface primary now does by construction.
 			vec4 normal_roughness = imageLoad(rt_normal_roughness_image, pixel_i);
 			vec3 normal = normalize(normal_roughness.xyz * 2.0 - 1.0);
 			float guide_roughness = normal_roughness.w;

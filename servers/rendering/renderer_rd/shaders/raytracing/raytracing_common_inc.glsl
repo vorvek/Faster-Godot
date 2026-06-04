@@ -323,6 +323,17 @@ layout(set = 0, binding = 110) uniform sampler2D rt_spg_header_aux;
 layout(set = 0, binding = 111) uniform sampler2D rt_wrc_radiance_for_spg;
 layout(set = 0, binding = 112) uniform sampler2D rt_wrc_distance_for_spg;
 
+// 113/114 = raw material-guide G-buffers (the SAME RB_TEX_RT_GUIDE_ALBEDO/ORM the FPT
+// composite + gi_resolve consume), bound for the FPT-fast primary-direct path so it can
+// build the NEE material from real reflectance instead of the hue-proxy albedo. Combined
+// NEAREST samplers (full-res, 1:1 with the launch -> point texelFetch). guide_albedo: .rgb
+// = linear albedo (.a unused). guide_orm: r=ao, g=roughness, b=metallic, a=sss (the packing
+// the material-guide prepass writes and rtgi_gi_resolve reads). Both fall back to a default
+// when not yet allocated; only the primary-direct dispatch ever samples them.
+layout(set = 0, binding = 113) uniform sampler2D rt_guide_albedo_tex;
+layout(set = 0, binding = 114) uniform sampler2D rt_guide_orm_tex;
+layout(set = 0, binding = 115) uniform sampler2D rt_guide_emission_tex;
+
 mat4 rt_camera_inv_view_matrix() {
 	mat4 inv_view = transpose(mat4(scene_data_block.data.inv_view_matrix[0],
 			scene_data_block.data.inv_view_matrix[1],

@@ -73,4 +73,42 @@ TEST_CASE("[SceneTree][Environment] RTGI backend selection exposes only Vulkan G
 	CHECK_EQ(params.backend, RSE::PT_BACKEND_VULKAN_GENERIC);
 }
 
+TEST_CASE("[SceneTree][Environment] RTGI FPT reference oracle round-trips") {
+	Ref<Environment> environment;
+	environment.instantiate();
+
+	// Default is the FPT-fast path (guide-surface NEE primary + probe indirect); the
+	// deep-path A/B reference oracle is opt-in.
+	CHECK_FALSE(environment->get_rtgi_fpt_reference());
+
+	RenderingServer *rendering_server = RenderingServer::get_singleton();
+	REQUIRE(rendering_server != nullptr);
+
+	RSE::PathtracingParams params = rendering_server->environment_get_pathtracing_params(environment->get_rid());
+	CHECK_FALSE(params.fpt_reference);
+
+	// Enabling the oracle must round-trip through the serialized pathtracing params
+	// (the renderer reads it from the param array, not the Environment object) and
+	// land in repurposed slot 28 (PT_PARAM_RTGI_FPT_REFERENCE) when packed to floats.
+	environment->set_rtgi_fpt_reference(true);
+	CHECK(environment->get_rtgi_fpt_reference());
+
+	params = rendering_server->environment_get_pathtracing_params(environment->get_rid());
+	CHECK(params.fpt_reference);
+
+	float packed[RSE::PT_PARAM_MAX] = {};
+	RSE::pathtracing_params_to_shader_floats(params, packed, RSE::PT_PARAM_MAX);
+	CHECK(packed[RSE::PT_PARAM_RTGI_FPT_REFERENCE] == 1.0f);
+
+	// Disabling restores the FPT-fast default and the slot-28 serialization clears.
+	environment->set_rtgi_fpt_reference(false);
+	CHECK_FALSE(environment->get_rtgi_fpt_reference());
+
+	params = rendering_server->environment_get_pathtracing_params(environment->get_rid());
+	CHECK_FALSE(params.fpt_reference);
+
+	RSE::pathtracing_params_to_shader_floats(params, packed, RSE::PT_PARAM_MAX);
+	CHECK(packed[RSE::PT_PARAM_RTGI_FPT_REFERENCE] == 0.0f);
+}
+
 } // namespace TestEnvironment

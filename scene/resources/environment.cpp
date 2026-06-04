@@ -914,6 +914,17 @@ Environment::RTGIMode Environment::get_rtgi_mode() const {
 	return rtgi_mode;
 }
 
+void Environment::set_rtgi_fpt_reference(bool p_enabled) {
+	// Deep-path A/B reference oracle. Not part of any quality-preset bundle (like rtgi_mode,
+	// it does not mark the preset Custom), so just re-serialize the pathtracing params.
+	rtgi_fpt_reference = p_enabled;
+	_update_pathtracing();
+}
+
+bool Environment::get_rtgi_fpt_reference() const {
+	return rtgi_fpt_reference;
+}
+
 void Environment::set_rtgi_samples_per_pixel(int p_samples) {
 	set_pathtracing_samples_per_pixel(p_samples);
 }
@@ -1240,6 +1251,7 @@ void Environment::_update_pathtracing() {
 	params.energy = rtgi_energy;
 	params.resolution_scale = rtgi_resolution_scale;
 	params.mode = (uint32_t)rtgi_mode;
+	params.fpt_reference = rtgi_fpt_reference;
 	params.rtgi_quality_preset = (uint32_t)rtgi_quality_preset;
 	params.overscan_horizontal = rtgi_overscan_horizontal;
 	params.overscan_vertical = rtgi_overscan_vertical;
@@ -2118,6 +2130,8 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_rtgi_quality_preset"), &Environment::get_rtgi_quality_preset);
 	ClassDB::bind_method(D_METHOD("set_rtgi_mode", "mode"), &Environment::set_rtgi_mode);
 	ClassDB::bind_method(D_METHOD("get_rtgi_mode"), &Environment::get_rtgi_mode);
+	ClassDB::bind_method(D_METHOD("set_rtgi_fpt_reference", "enabled"), &Environment::set_rtgi_fpt_reference);
+	ClassDB::bind_method(D_METHOD("get_rtgi_fpt_reference"), &Environment::get_rtgi_fpt_reference);
 	ClassDB::bind_method(D_METHOD("set_rtgi_samples_per_pixel", "samples"), &Environment::set_rtgi_samples_per_pixel);
 	ClassDB::bind_method(D_METHOD("get_rtgi_samples_per_pixel"), &Environment::get_rtgi_samples_per_pixel);
 	ClassDB::bind_method(D_METHOD("set_rtgi_max_bounces", "bounces"), &Environment::set_rtgi_max_bounces);
@@ -2188,6 +2202,7 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_backend", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR), "set_rtgi_backend", "get_rtgi_backend");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_quality_preset", PROPERTY_HINT_ENUM, "Custom,Performance,Balanced,Production"), "set_rtgi_quality_preset", "get_rtgi_quality_preset");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_mode", PROPERTY_HINT_ENUM, "Reflections RT Only,Full Scene Path-Traced GI,Hybrid RTGI"), "set_rtgi_mode", "get_rtgi_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_fpt_reference"), "set_rtgi_fpt_reference", "get_rtgi_fpt_reference");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_samples_per_pixel", PROPERTY_HINT_RANGE, "1,16,1"), "set_rtgi_samples_per_pixel", "get_rtgi_samples_per_pixel");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_max_bounces", PROPERTY_HINT_RANGE, "1,8,1"), "set_rtgi_max_bounces", "get_rtgi_max_bounces");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_energy", PROPERTY_HINT_RANGE, "0,16,0.01,or_greater"), "set_rtgi_energy", "get_rtgi_energy");

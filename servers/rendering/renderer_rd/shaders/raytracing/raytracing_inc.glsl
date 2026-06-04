@@ -44,7 +44,7 @@
 #define RT_PARAM_RTGI_SAMPLING_CONTROLS 25 // rt_params[6].y - Bitfield for analytic/emissive sampling controls
 #define RT_PARAM_EMISSIVE_CANDIDATE_COUNT 26 // rt_params[6].z - Renderer-selected emissive candidate count
 #define RT_PARAM_EMISSIVE_CANDIDATE_TOTAL_WEIGHT 27 // rt_params[6].w - Sum of emissive candidate selection weights
-#define RT_PARAM_RTGI_STRC_ENABLED 28 // rt_params[7].x - World-space STRC/DDGI enabled
+#define RT_PARAM_RTGI_FPT_REFERENCE 28 // rt_params[7].x - FPT deep-path reference oracle (C++-read only; no shader reader)
 #define RT_PARAM_RTGI_STRC_STRENGTH 29 // rt_params[7].y - STRC contribution strength
 #define RT_PARAM_RTGI_STRC_CASCADE_COUNT 30 // rt_params[7].z - Active camera-centered cascades
 #define RT_PARAM_RTGI_STRC_GRID_SIZE 31 // rt_params[7].w - Probes per axis
