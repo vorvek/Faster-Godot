@@ -625,6 +625,11 @@ void LightStorage::free_light_data() {
 		spot_light_buffer = RID();
 	}
 
+	if (area_light_buffer.is_valid()) {
+		RD::get_singleton()->free_rid(area_light_buffer);
+		area_light_buffer = RID();
+	}
+
 	if (directional_lights != nullptr) {
 		memdelete_arr(directional_lights);
 		directional_lights = nullptr;
@@ -640,6 +645,11 @@ void LightStorage::free_light_data() {
 		spot_lights = nullptr;
 	}
 
+	if (area_lights != nullptr) {
+		memdelete_arr(area_lights);
+		area_lights = nullptr;
+	}
+
 	if (omni_light_sort != nullptr) {
 		memdelete_arr(omni_light_sort);
 		omni_light_sort = nullptr;
@@ -648,6 +658,11 @@ void LightStorage::free_light_data() {
 	if (spot_light_sort != nullptr) {
 		memdelete_arr(spot_light_sort);
 		spot_light_sort = nullptr;
+	}
+
+	if (area_light_sort != nullptr) {
+		memdelete_arr(area_light_sort);
+		area_light_sort = nullptr;
 	}
 }
 
@@ -661,6 +676,9 @@ void LightStorage::set_max_lights(const uint32_t p_max_lights) {
 	spot_lights = memnew_arr(LightData, max_lights);
 	spot_light_buffer = RD::get_singleton()->storage_buffer_create(light_buffer_size);
 	spot_light_sort = memnew_arr(LightInstanceDepthSort, max_lights);
+	area_lights = memnew_arr(LightData, max_lights);
+	area_light_buffer = RD::get_singleton()->storage_buffer_create(light_buffer_size);
+	area_light_sort = memnew_arr(LightInstanceDepthSort, max_lights);
 	//defines += "\n#define MAX_LIGHT_DATA_STRUCTS " + itos(max_lights) + "\n";
 
 	max_directional_lights = RendererSceneRender::MAX_DIRECTIONAL_LIGHTS;
@@ -680,6 +698,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 
 	omni_light_count = 0;
 	spot_light_count = 0;
+	area_light_count = 0;
 
 	r_directional_light_soft_shadows = false;
 
@@ -872,7 +891,29 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				spot_light_count++;
 			} break;
 			case RS::LIGHT_AREA: {
-				continue;
+				if (area_light_count >= max_lights) {
+					continue;
+				}
+
+				Transform3D light_transform = light_instance->transform;
+				const real_t distance = p_camera_transform.origin.distance_to(light_transform.origin);
+
+				if (light->distance_fade) {
+					const float fade_begin = light->distance_fade_begin;
+					const float fade_length = light->distance_fade_length;
+
+					if (distance > fade_begin) {
+						if (distance > fade_begin + fade_length) {
+							// Out of range, don't draw this light to improve performance.
+							continue;
+						}
+					}
+				}
+
+				area_light_sort[area_light_count].light_instance = light_instance;
+				area_light_sort[area_light_count].light = light;
+				area_light_sort[area_light_count].depth = distance;
+				area_light_count++;
 			} break;
 		}
 
@@ -889,20 +930,49 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		sorter.sort(spot_light_sort, spot_light_count);
 	}
 
+	if (area_light_count) {
+		SortArray<LightInstanceDepthSort> sorter;
+		sorter.sort(area_light_sort, area_light_count);
+	}
+
 	bool using_forward_ids = forward_id_storage->uses_forward_ids();
 
-	for (uint32_t i = 0; i < (omni_light_count + spot_light_count); i++) {
-		uint32_t index = (i < omni_light_count) ? i : i - (omni_light_count);
-		LightData &light_data = (i < omni_light_count) ? omni_lights[index] : spot_lights[index];
-		RS::LightType type = (i < omni_light_count) ? RS::LIGHT_OMNI : RS::LIGHT_SPOT;
-		LightInstance *light_instance = (i < omni_light_count) ? omni_light_sort[index].light_instance : spot_light_sort[index].light_instance;
-		Light *light = (i < omni_light_count) ? omni_light_sort[index].light : spot_light_sort[index].light;
-		real_t distance = (i < omni_light_count) ? omni_light_sort[index].depth : spot_light_sort[index].depth;
+	for (uint32_t i = 0; i < (omni_light_count + spot_light_count + area_light_count); i++) {
+		uint32_t index;
+		LightData *light_data_ptr;
+		RS::LightType type;
+		LightInstance *light_instance;
+		Light *light;
+		real_t distance;
+
+		if (i >= omni_light_count + spot_light_count) {
+			index = i - (omni_light_count + spot_light_count);
+			light_data_ptr = &area_lights[index];
+			type = RS::LIGHT_AREA;
+			light_instance = area_light_sort[index].light_instance;
+			light = area_light_sort[index].light;
+			distance = area_light_sort[index].depth;
+		} else if (i >= omni_light_count) {
+			index = i - (omni_light_count);
+			light_data_ptr = &spot_lights[index];
+			type = RS::LIGHT_SPOT;
+			light_instance = spot_light_sort[index].light_instance;
+			light = spot_light_sort[index].light;
+			distance = spot_light_sort[index].depth;
+		} else {
+			index = i;
+			light_data_ptr = &omni_lights[index];
+			type = RS::LIGHT_OMNI;
+			light_instance = omni_light_sort[index].light_instance;
+			light = omni_light_sort[index].light;
+			distance = omni_light_sort[index].depth;
+		}
 
 		if (using_forward_ids) {
 			forward_id_storage->map_forward_id(type == RS::LIGHT_OMNI ? RendererRD::FORWARD_ID_TYPE_OMNI_LIGHT : RendererRD::FORWARD_ID_TYPE_SPOT_LIGHT, light_instance->forward_id, index, light_instance->last_pass);
 		}
 
+		LightData &light_data = *light_data_ptr;
 		Transform3D light_transform = light_instance->transform;
 
 		float sign = light->negative ? -1 : 1;
@@ -940,6 +1010,8 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 			// Convert from Luminous Power to Luminous Intensity
 			if (type == RS::LIGHT_OMNI) {
 				energy *= 1.0 / (Math::PI * 4.0);
+			} else if (type == RS::LIGHT_AREA) {
+				energy *= 1.0 / (Math::PI * 2.0);
 			} else {
 				// Spot Lights are not physically accurate, Luminous Intensity should change in relation to the cone angle.
 				// We make this assumption to keep them easy to control.
@@ -983,6 +1055,29 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		float spot_angle = light->param[RS::LIGHT_PARAM_SPOT_ANGLE];
 		light_data.cos_spot_angle = Math::cos(Math::deg_to_rad(spot_angle));
 
+		Vector2 area_size = light->area_size;
+		if (type == RS::LIGHT_AREA) {
+			Vector3 area_vec_a = inverse_transform.basis.xform(light_transform.basis.xform(Vector3(1, 0, 0))).normalized() * area_size.x;
+			Vector3 area_vec_b = inverse_transform.basis.xform(light_transform.basis.xform(Vector3(0, 1, 0))).normalized() * area_size.y;
+
+			light_data.area_width[0] = area_vec_a.x;
+			light_data.area_width[1] = area_vec_a.y;
+			light_data.area_width[2] = area_vec_a.z;
+
+			light_data.area_height[0] = area_vec_b.x;
+			light_data.area_height[1] = area_vec_b.y;
+			light_data.area_height[2] = area_vec_b.z;
+			light_data.inv_spot_attenuation = 1.0 / (radius + area_size.length() / 2.0); // center range
+
+			if (light->area_normalize_energy) {
+				// normalization to make larger lights output same amount of light as smaller lights with same energy
+				float surface_area = area_size.x * area_size.y;
+				light_data.color[0] /= surface_area;
+				light_data.color[1] /= surface_area;
+				light_data.color[2] /= surface_area;
+			}
+		}
+
 		light_data.mask = light->cull_mask;
 
 		light_data.atlas_rect[0] = 0;
@@ -992,7 +1087,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 
 		RID projector = light->projector;
 
-		if (projector.is_valid()) {
+		if (projector.is_valid() && type != RS::LIGHT_AREA) {
 			Rect2 rect = texture_storage->decal_atlas_get_texture_rect(projector);
 
 			if (type == RS::LIGHT_SPOT) {
@@ -1011,6 +1106,17 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 			light_data.projector_rect[1] = 0;
 			light_data.projector_rect[2] = 0;
 			light_data.projector_rect[3] = 0;
+		}
+
+		RID area_texture = light->area_texture;
+		if (area_texture.is_valid() && type == RS::LIGHT_AREA) {
+			Rect2 rect = texture_storage->area_light_atlas_get_texture_rect(area_texture);
+			light_data.projector_rect[0] = rect.position.x;
+			light_data.projector_rect[1] = rect.position.y;
+			light_data.projector_rect[2] = rect.size.width;
+			light_data.projector_rect[3] = rect.size.height;
+			Size2i texture_size = (rect.size * texture_storage->area_light_atlas_get_size()).ceil();
+			light_data.cos_spot_angle = MIN(Math::floor(Math::log2(MAX(MIN(texture_size.x, texture_size.y), 1.0f))), texture_storage->area_light_atlas_get_mipmaps()) - 1.0f; // max mipmaps
 		}
 
 		const bool needs_shadow =
@@ -1098,7 +1204,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		light_instance->cull_mask = light->cull_mask;
 
 		// hook for subclass to do further processing.
-		RendererSceneRenderRD::get_singleton()->setup_added_light(type, light_transform, radius, spot_angle, Vector2());
+		RendererSceneRenderRD::get_singleton()->setup_added_light(type, light_transform, radius, spot_angle, area_size);
 
 		r_positional_light_count++;
 	}
@@ -1110,6 +1216,10 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 
 	if (spot_light_count) {
 		RD::get_singleton()->buffer_update(spot_light_buffer, 0, sizeof(LightData) * spot_light_count, spot_lights);
+	}
+
+	if (area_light_count) {
+		RD::get_singleton()->buffer_update(area_light_buffer, 0, sizeof(LightData) * area_light_count, area_lights);
 	}
 
 	if (r_directional_light_count) {
