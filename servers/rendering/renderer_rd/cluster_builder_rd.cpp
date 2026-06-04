@@ -539,6 +539,7 @@ void ClusterBuilderRD::bake_cluster() {
 					case ELEMENT_TYPE_SPOT_LIGHT: {
 						return p_element.has_wide_spot_angle ? CLUSTER_VOLUME_SPHERE : CLUSTER_VOLUME_CONE;
 					}
+					case ELEMENT_TYPE_AREA_LIGHT:
 					case ELEMENT_TYPE_DECAL:
 					case ELEMENT_TYPE_REFLECTION_PROBE: {
 						return CLUSTER_VOLUME_BOX;
