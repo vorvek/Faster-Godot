@@ -1,0 +1,36 @@
+[gd_scene load_steps=5 format=3]
+
+[sub_resource type="PlaneMesh" id="Plane_1"]
+size = Vector2(12, 12)
+
+[sub_resource type="StandardMaterial3D" id="Mat_1"]
+albedo_color = Color(0.8, 0.8, 0.8, 1)
+roughness = 0.4
+
+[sub_resource type="BoxMesh" id="Box_1"]
+
+[sub_resource type="Environment" id="Env_1"]
+background_mode = 1
+ambient_light_source = 0
+
+[node name="Root" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env_1")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.866, 0.5, 0, -0.5, 0.866, 0, 4, 7)
+
+[node name="Floor" type="MeshInstance3D" parent="."]
+mesh = SubResource("Plane_1")
+surface_material_override/0 = SubResource("Mat_1")
+
+[node name="Box" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5, 0.5, 0)
+mesh = SubResource("Box_1")
+surface_material_override/0 = SubResource("Mat_1")
+
+[node name="AreaLight3D" type="AreaLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 3, 0)
+light_energy = 5.0
+area_size = Vector2(3, 1.5)

@@ -1,0 +1,14 @@
+; Minimal project to validate / visually compare AreaLight3D rendering.
+; Forward+ (Vulkan). See README.md for the stock-4.7 parity procedure.
+config_version=5
+
+[application]
+config/name="arealight_parity"
+run/main_scene="res://parity.tscn"
+
+[rendering]
+renderer/rendering_method="forward_plus"
+
+[debug]
+file_logging/enable_file_logging=true
+settings/stdout/verbose_stdout=true
