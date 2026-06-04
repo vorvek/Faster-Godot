@@ -5434,10 +5434,43 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 				ltc.lut2_texture = RS::get_singleton()->texture_2d_create(lut2_image);
 			}
 		}
-		// NOTE: the LTC LUT textures (ltc.lut1_texture/lut2_texture) and the
-		// area-light buffer + atlas are bound into this set in Task 8, together,
-		// at free slots after the shader declares them (R2). Binding them here
-		// before the shader declares them would break the base uniform set.
+		// Area lights (LTC). Bound at the next free contiguous set-0 slots (17-20),
+		// matching the shader declarations in scene_forward_clustered_inc.glsl.
+		// The lazy ltc.lut1_texture/lut2_texture creation above runs first so the
+		// LUT textures are valid here.
+		{
+			RD::Uniform u;
+			u.binding = 17;
+			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+			u.append_id(RendererRD::LightStorage::get_singleton()->get_area_light_buffer());
+			uniforms.push_back(u);
+		}
+
+		{
+			RD::Uniform u;
+			u.binding = 18;
+			u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+			u.append_id(RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RSE::CanvasItemTextureFilter::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CanvasItemTextureRepeat::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED));
+			u.append_id(RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut1_texture));
+			uniforms.push_back(u);
+		}
+
+		{
+			RD::Uniform u;
+			u.binding = 19;
+			u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+			u.append_id(RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RSE::CanvasItemTextureFilter::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CanvasItemTextureRepeat::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED));
+			u.append_id(RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut2_texture));
+			uniforms.push_back(u);
+		}
+
+		{
+			RD::Uniform u;
+			u.binding = 20;
+			u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+			u.append_id(RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(RendererRD::TextureStorage::get_singleton()->area_light_atlas_get_texture()));
+			uniforms.push_back(u);
+		}
 
 		render_base_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, scene_shader.default_shader_rd, SCENE_UNIFORM_SET);
 	}
