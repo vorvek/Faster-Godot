@@ -1211,6 +1211,22 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 					light_data.soft_shadow_scale *= RendererSceneRenderRD::get_singleton()->shadows_quality_radius_get(); // Only use quality radius for PCF
 				}
 				light_data.shadow_bias *= light_data.soft_shadow_scale;
+			} else if (type == RS::LIGHT_AREA) {
+				// Area lights use a single-paraboloid shadow (the shader reads
+				// shadow_matrix + atlas_rect; no dual-paraboloid direction offset
+				// because `direction` holds the area quad normal).
+				Transform3D proj = (inverse_transform * light_transform).inverse();
+
+				RendererRD::MaterialStorage::store_transform(proj, light_data.shadow_matrix);
+
+				if (size > 0.0 && light_data.soft_shadow_scale > 0.0) {
+					// Only enable PCSS-like soft shadows if blurring is enabled.
+					// Otherwise, performance would decrease with no visual difference.
+					light_data.soft_shadow_size = size;
+				} else {
+					light_data.soft_shadow_size = 0.0;
+					light_data.soft_shadow_scale *= RendererSceneRenderRD::get_singleton()->shadows_quality_radius_get(); // Only use quality radius for PCF
+				}
 			}
 		} else {
 			light_data.shadow_opacity = 0.0;
