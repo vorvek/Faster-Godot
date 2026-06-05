@@ -509,8 +509,14 @@ static void _xess_driver_callback(RDD *p_driver, RDD::CommandBufferID p_command_
 	execute_params.depthTexture = _xess_make_image_view_info(data->depth, data->internal_size, VK_IMAGE_ASPECT_DEPTH_BIT);
 	execute_params.responsivePixelMaskTexture = _xess_make_image_view_info(data->reactive, data->internal_size, VK_IMAGE_ASPECT_COLOR_BIT);
 	execute_params.outputTexture = _xess_make_image_view_info(data->output, data->target_size, VK_IMAGE_ASPECT_COLOR_BIT);
+	// Jitter offset in pixels, range [-0.5, 0.5], in the SAME convention the engine already feeds
+	// FSR2 (fsr2.cpp passes jitterOffset = (jitter.x, jitter.y) unmodified, and FSR2 converges a
+	// static frame to ~0). A prior negation of Y here mis-aligned every jittered frame, so XeSS
+	// could not settle a still image; a frozen-camera sign sweep confirmed (+x, +y) is the lowest
+	// frame-to-frame delta. (XeSS still settles less tightly than FSR2 on a still frame, a separate
+	// sub-pixel/disocclusion convention difference tracked for a later pass.)
 	execute_params.jitterOffsetX = data->jitter.x;
-	execute_params.jitterOffsetY = -data->jitter.y;
+	execute_params.jitterOffsetY = data->jitter.y;
 	execute_params.exposureScale = 1.0f;
 	execute_params.resetHistory = data->reset_history ? 1 : 0;
 	execute_params.inputWidth = uint32_t(data->internal_size.x);
