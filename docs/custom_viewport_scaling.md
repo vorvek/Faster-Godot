@@ -26,7 +26,7 @@ We have integrated three new high-performance, GPU-powered spatial upscaling mod
 ### Vendor Temporal Upscalers
 * **Identifier**: `SCALING_3D_MODE_XESS`.
 * **Purpose**: Public per-Viewport entry point for Intel XeSS temporal super resolution.
-* **Current behavior**: XeSS dispatches through Intel's native Vulkan SDK path when the SDK is enabled and available at runtime. Unavailable backends fall back to FSR 2.2 and print a one-time warning. XeSS Vulkan SR is Intel-only by default for safety on non-Intel GPUs; set `GODOT_FORCE_XESS_VULKAN_ON_NON_INTEL=1` for debug runs.
+* **Current behavior**: XeSS dispatches through Intel's native Vulkan SDK path on any GPU that supports it. At startup the engine runs the XeSS Vulkan handshake and enables the instance and device extensions and features the runtime requires, so the cross-vendor DP4a path works on non-Intel GPUs alongside the XMX path on Arc. If `libxess` is absent or the GPU lacks a required capability, XeSS reports unavailable and the viewport falls back to FSR 2.2 with a one-time warning. Set `GODOT_DISABLE_XESS_VULKAN=1` to skip the handshake for debugging.
 
 ---
 
