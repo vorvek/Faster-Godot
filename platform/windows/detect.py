@@ -489,6 +489,23 @@ def configure_msvc(env: "SConsEnvironment"):
             env.AppendUnique(LINKFLAGS=["/LTCG"])
         env.AppendUnique(ARFLAGS=["/LTCG"])
 
+    ## PGO (clang only; composes with ThinLTO)
+
+    if env["pgo"] != "off":
+        if not env["use_llvm"]:
+            print("PGO requires the LLVM toolchain. Use `use_llvm=yes`.")
+            sys.exit(255)
+        if env["pgo"] in ("cs-generate", "use"):
+            if not env["pgo_data"] or not os.path.isfile(env["pgo_data"]):
+                print("pgo=%s requires pgo_data= to point at an existing .profdata file." % env["pgo"])
+                sys.exit(255)
+        if env["pgo"] == "generate":
+            env.AppendUnique(CCFLAGS=["-fprofile-generate"])
+        elif env["pgo"] == "cs-generate":
+            env.AppendUnique(CCFLAGS=["-fprofile-use=" + env["pgo_data"], "-fcs-profile-generate"])
+        elif env["pgo"] == "use":
+            env.AppendUnique(CCFLAGS=["-fprofile-use=" + env["pgo_data"]])
+
     env.Append(LINKFLAGS=["/NATVIS:platform\\windows\\godot.natvis"])
 
     if env["use_asan"]:
