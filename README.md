@@ -114,7 +114,7 @@ Rapier's Rust dependencies are vendored in `thirdparty/rapier_2d/vendor` and
 Use `module_rapier_2d_enabled=no` only for builds that deliberately omit real
 2D physics from this fork.
 
-Windows optimized release template (clang + ThinLTO — the shipped toolchain).
+Windows optimized release template (clang + ThinLTO, the shipped toolchain).
 Install LLVM so `clang-cl`, `lld-link`, and `llvm-lib` are on `PATH` ahead of any
 mingw LLVM, then build with `use_llvm=yes lto=thin`:
 
@@ -137,7 +137,7 @@ scons platform=windows target=editor arch=x86_64 production=yes tests=no optimiz
 python .\modules\mono\build_scripts\build_assemblies.py --godot-output-dir=.\bin --godot-platform=windows --werror --no-deprecated
 ```
 
-Linux optimized release template (clang + ThinLTO — the shipped toolchain; needs
+Linux optimized release template (clang + ThinLTO, the shipped toolchain; needs
 `clang` and `lld`):
 
 ```bash
@@ -155,7 +155,7 @@ code scope, pros, and cons.
 
 Beyond narrowing the engine for speed, the fork also ports select newer
 upstream features back onto the 4.6.3 base. The largest so far is Godot 4.7's
-LTC-based **AreaLight3D** — a rectangular area light (diffuse, specular,
+LTC-based **AreaLight3D**, a rectangular area light (diffuse, specular,
 textured, and soft PCSS shadows) that also contributes to VoxelGI, SDFGI,
 volumetric fog, and baked lightmaps in the Forward+/Vulkan path. See
 [docs/arealight3d.md](docs/arealight3d.md).
