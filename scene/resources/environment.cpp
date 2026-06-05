@@ -733,64 +733,28 @@ void Environment::_mark_rtgi_quality_preset_custom() {
 	bool matches_preset = pathtracing_samples_per_pixel == 1 &&
 			rtgi_denoiser == RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION &&
 			pathtracing_denoiser == RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION &&
-			rtgi_denoiser_split_signals &&
 			rtgi_analytic_light_sampling_enabled &&
 			rtgi_explicit_emissive_sampling_enabled &&
-			rtgi_diffuse_radiance_cache_enabled &&
-			rtgi_strc_enabled &&
-			Math::is_equal_approx(rtgi_denoiser_firefly_suppression, 1.0f) &&
-			Math::is_equal_approx(rtgi_denoiser_detail_preservation, 1.0f) &&
-			Math::is_equal_approx(rtgi_denoiser_specular_spatial_strength, 1.0f) &&
-			Math::is_equal_approx(rtgi_ray_firefly_suppression, 0.85f) &&
-			rtgi_strc_cascade_count == 3 &&
-			Math::is_equal_approx(rtgi_strc_temporal_weight, 0.97f) &&
-			Math::is_equal_approx(rtgi_overscan_horizontal, 0.0f) &&
-			Math::is_equal_approx(rtgi_overscan_vertical, 0.0f) &&
-			rtgi_strc_static_visual_layers == 0xfffff &&
-			rtgi_strc_dynamic_visual_layers == 0xfffff;
+			Math::is_equal_approx(rtgi_ray_firefly_suppression, 0.85f);
 
 	switch (rtgi_quality_preset) {
 		case RTGI_QUALITY_PRESET_PERFORMANCE:
 			matches_preset = matches_preset &&
 					pathtracing_max_bounces == 3 &&
 					Math::is_equal_approx(rtgi_resolution_scale, 0.5f) &&
-					Math::is_equal_approx(rtgi_denoiser_strength, 0.85f) &&
-					Math::is_equal_approx(rtgi_denoiser_history_weight, 0.94f) &&
-					Math::is_equal_approx(rtgi_denoiser_specular_history_weight, 0.90f) &&
-					Math::is_equal_approx(rtgi_ray_max_radiance, 32.0f) &&
-					rtgi_diffuse_radiance_cache_max_entries == 131072 &&
-					Math::is_equal_approx(rtgi_strc_strength, 0.65f) &&
-					rtgi_strc_grid_size == 20 &&
-					Math::is_equal_approx(rtgi_strc_base_probe_spacing, 1.75f) &&
-					rtgi_strc_rays_per_frame == 2048;
+					Math::is_equal_approx(rtgi_ray_max_radiance, 32.0f);
 			break;
 		case RTGI_QUALITY_PRESET_BALANCED:
 			matches_preset = matches_preset &&
 					pathtracing_max_bounces == 3 &&
 					Math::is_equal_approx(rtgi_resolution_scale, 0.67f) &&
-					Math::is_equal_approx(rtgi_denoiser_strength, 0.90f) &&
-					Math::is_equal_approx(rtgi_denoiser_history_weight, 0.95f) &&
-					Math::is_equal_approx(rtgi_denoiser_specular_history_weight, 0.90f) &&
-					Math::is_equal_approx(rtgi_ray_max_radiance, 32.0f) &&
-					rtgi_diffuse_radiance_cache_max_entries == 262144 &&
-					Math::is_equal_approx(rtgi_strc_strength, 0.70f) &&
-					rtgi_strc_grid_size == 24 &&
-					Math::is_equal_approx(rtgi_strc_base_probe_spacing, 1.5f) &&
-					rtgi_strc_rays_per_frame == 4096;
+					Math::is_equal_approx(rtgi_ray_max_radiance, 32.0f);
 			break;
 		case RTGI_QUALITY_PRESET_PRODUCTION:
 			matches_preset = matches_preset &&
 					pathtracing_max_bounces == 4 &&
 					Math::is_equal_approx(rtgi_resolution_scale, 0.67f) &&
-					Math::is_equal_approx(rtgi_denoiser_strength, 0.90f) &&
-					Math::is_equal_approx(rtgi_denoiser_history_weight, 0.95f) &&
-					Math::is_equal_approx(rtgi_denoiser_specular_history_weight, 0.92f) &&
-					Math::is_equal_approx(rtgi_ray_max_radiance, 48.0f) &&
-					rtgi_diffuse_radiance_cache_max_entries == 524288 &&
-					Math::is_equal_approx(rtgi_strc_strength, 0.75f) &&
-					rtgi_strc_grid_size == 28 &&
-					Math::is_equal_approx(rtgi_strc_base_probe_spacing, 1.25f) &&
-					rtgi_strc_rays_per_frame == 8192;
+					Math::is_equal_approx(rtgi_ray_max_radiance, 48.0f);
 			break;
 		case RTGI_QUALITY_PRESET_CUSTOM:
 		default:
@@ -812,62 +776,26 @@ void Environment::_apply_rtgi_quality_preset(RTGIQualityPreset p_preset) {
 	pathtracing_samples_per_pixel = 1;
 	rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
 	pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-	rtgi_denoiser_split_signals = true;
 	rtgi_analytic_light_sampling_enabled = true;
 	rtgi_explicit_emissive_sampling_enabled = true;
-	rtgi_diffuse_radiance_cache_enabled = true;
-	rtgi_strc_enabled = true;
-	rtgi_denoiser_firefly_suppression = 1.0f;
-	rtgi_denoiser_detail_preservation = 1.0f;
-	rtgi_denoiser_specular_spatial_strength = 1.0f;
 	rtgi_ray_firefly_suppression = 0.85f;
-	rtgi_strc_cascade_count = 3;
-	rtgi_strc_temporal_weight = 0.97f;
-	rtgi_overscan_horizontal = 0.0f;
-	rtgi_overscan_vertical = 0.0f;
-	rtgi_strc_static_visual_layers = 0xfffff;
-	rtgi_strc_dynamic_visual_layers = 0xfffff;
 
 	switch (p_preset) {
 		case RTGI_QUALITY_PRESET_PERFORMANCE:
 			pathtracing_max_bounces = 3;
 			rtgi_resolution_scale = 0.5f;
-			rtgi_denoiser_strength = 0.85f;
-			rtgi_denoiser_history_weight = 0.94f;
-			rtgi_denoiser_specular_history_weight = 0.90f;
 			rtgi_ray_max_radiance = 32.0f;
-			rtgi_diffuse_radiance_cache_max_entries = 131072;
-			rtgi_strc_strength = 0.65f;
-			rtgi_strc_grid_size = 20;
-			rtgi_strc_base_probe_spacing = 1.75f;
-			rtgi_strc_rays_per_frame = 2048;
 			break;
 		case RTGI_QUALITY_PRESET_BALANCED:
 			pathtracing_max_bounces = 3;
 			rtgi_resolution_scale = 0.67f;
-			rtgi_denoiser_strength = 0.90f;
-			rtgi_denoiser_history_weight = 0.95f;
-			rtgi_denoiser_specular_history_weight = 0.90f;
 			rtgi_ray_max_radiance = 32.0f;
-			rtgi_diffuse_radiance_cache_max_entries = 262144;
-			rtgi_strc_strength = 0.70f;
-			rtgi_strc_grid_size = 24;
-			rtgi_strc_base_probe_spacing = 1.5f;
-			rtgi_strc_rays_per_frame = 4096;
 			break;
 		case RTGI_QUALITY_PRESET_PRODUCTION:
 		default:
 			pathtracing_max_bounces = 4;
 			rtgi_resolution_scale = 0.67f;
-			rtgi_denoiser_strength = 0.90f;
-			rtgi_denoiser_history_weight = 0.95f;
-			rtgi_denoiser_specular_history_weight = 0.92f;
 			rtgi_ray_max_radiance = 48.0f;
-			rtgi_diffuse_radiance_cache_max_entries = 524288;
-			rtgi_strc_strength = 0.75f;
-			rtgi_strc_grid_size = 28;
-			rtgi_strc_base_probe_spacing = 1.25f;
-			rtgi_strc_rays_per_frame = 8192;
 			break;
 	}
 }
@@ -969,76 +897,6 @@ bool Environment::is_rtgi_disabled_in_editor() const {
 	return rtgi_disable_in_editor;
 }
 
-void Environment::set_rtgi_denoiser_strength(float p_strength) {
-	rtgi_denoiser_strength = CLAMP(p_strength, 0.0f, 1.0f);
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-float Environment::get_rtgi_denoiser_strength() const {
-	return rtgi_denoiser_strength;
-}
-
-void Environment::set_rtgi_denoiser_history_weight(float p_weight) {
-	rtgi_denoiser_history_weight = CLAMP(p_weight, 0.0f, 0.98f);
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-float Environment::get_rtgi_denoiser_history_weight() const {
-	return rtgi_denoiser_history_weight;
-}
-
-void Environment::set_rtgi_denoiser_firefly_suppression(float p_suppression) {
-	rtgi_denoiser_firefly_suppression = CLAMP(p_suppression, 0.0f, 1.0f);
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-float Environment::get_rtgi_denoiser_firefly_suppression() const {
-	return rtgi_denoiser_firefly_suppression;
-}
-
-void Environment::set_rtgi_denoiser_detail_preservation(float p_preservation) {
-	rtgi_denoiser_detail_preservation = CLAMP(p_preservation, 0.0f, 1.0f);
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-float Environment::get_rtgi_denoiser_detail_preservation() const {
-	return rtgi_denoiser_detail_preservation;
-}
-
-void Environment::set_rtgi_denoiser_split_signals(bool p_enabled) {
-	rtgi_denoiser_split_signals = p_enabled;
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-bool Environment::is_rtgi_denoiser_split_signals_enabled() const {
-	return rtgi_denoiser_split_signals;
-}
-
-void Environment::set_rtgi_denoiser_specular_history_weight(float p_weight) {
-	rtgi_denoiser_specular_history_weight = CLAMP(p_weight, 0.0f, 0.98f);
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-float Environment::get_rtgi_denoiser_specular_history_weight() const {
-	return rtgi_denoiser_specular_history_weight;
-}
-
-void Environment::set_rtgi_denoiser_specular_spatial_strength(float p_strength) {
-	rtgi_denoiser_specular_spatial_strength = CLAMP(p_strength, 0.0f, 1.0f);
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-float Environment::get_rtgi_denoiser_specular_spatial_strength() const {
-	return rtgi_denoiser_specular_spatial_strength;
-}
-
 void Environment::set_rtgi_ray_firefly_suppression(float p_suppression) {
 	rtgi_ray_firefly_suppression = CLAMP(p_suppression, 0.0f, 1.0f);
 	_mark_rtgi_quality_preset_custom();
@@ -1079,96 +937,6 @@ bool Environment::is_rtgi_explicit_emissive_sampling_enabled() const {
 	return rtgi_explicit_emissive_sampling_enabled;
 }
 
-void Environment::set_rtgi_diffuse_radiance_cache_enabled(bool p_enabled) {
-	rtgi_diffuse_radiance_cache_enabled = p_enabled;
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-bool Environment::is_rtgi_diffuse_radiance_cache_enabled() const {
-	return rtgi_diffuse_radiance_cache_enabled;
-}
-
-void Environment::set_rtgi_diffuse_radiance_cache_max_entries(int p_entries) {
-	rtgi_diffuse_radiance_cache_max_entries = CLAMP(p_entries, 4096, 4194304);
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-int Environment::get_rtgi_diffuse_radiance_cache_max_entries() const {
-	return rtgi_diffuse_radiance_cache_max_entries;
-}
-
-void Environment::set_rtgi_strc_enabled(bool p_enabled) {
-	rtgi_strc_enabled = p_enabled;
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-bool Environment::is_rtgi_strc_enabled() const {
-	return rtgi_strc_enabled;
-}
-
-void Environment::set_rtgi_strc_strength(float p_strength) {
-	rtgi_strc_strength = CLAMP(p_strength, 0.0f, 1.0f);
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-float Environment::get_rtgi_strc_strength() const {
-	return rtgi_strc_strength;
-}
-
-void Environment::set_rtgi_strc_cascade_count(int p_count) {
-	rtgi_strc_cascade_count = CLAMP(p_count, 1, 4);
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-int Environment::get_rtgi_strc_cascade_count() const {
-	return rtgi_strc_cascade_count;
-}
-
-void Environment::set_rtgi_strc_grid_size(int p_size) {
-	rtgi_strc_grid_size = CLAMP(p_size, 12, 32);
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-int Environment::get_rtgi_strc_grid_size() const {
-	return rtgi_strc_grid_size;
-}
-
-void Environment::set_rtgi_strc_base_probe_spacing(float p_spacing) {
-	rtgi_strc_base_probe_spacing = CLAMP(p_spacing, 0.25f, 8.0f);
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-float Environment::get_rtgi_strc_base_probe_spacing() const {
-	return rtgi_strc_base_probe_spacing;
-}
-
-void Environment::set_rtgi_strc_rays_per_frame(int p_rays) {
-	rtgi_strc_rays_per_frame = CLAMP(p_rays, 0, 32768);
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-int Environment::get_rtgi_strc_rays_per_frame() const {
-	return rtgi_strc_rays_per_frame;
-}
-
-void Environment::set_rtgi_strc_temporal_weight(float p_weight) {
-	rtgi_strc_temporal_weight = CLAMP(p_weight, 0.0f, 0.995f);
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-float Environment::get_rtgi_strc_temporal_weight() const {
-	return rtgi_strc_temporal_weight;
-}
-
 void Environment::set_rtgi_wrc_strength(float p_strength) {
 	// Artistic multiplier applied to the World Radiance Cache irradiance. Orthogonal
 	// to the quality preset (it does not change the clipmap sizing), so unlike the
@@ -1179,46 +947,6 @@ void Environment::set_rtgi_wrc_strength(float p_strength) {
 
 float Environment::get_rtgi_wrc_strength() const {
 	return rtgi_wrc_strength;
-}
-
-void Environment::set_rtgi_overscan_horizontal(float p_overscan) {
-	rtgi_overscan_horizontal = CLAMP(p_overscan, 0.0f, 0.25f);
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-float Environment::get_rtgi_overscan_horizontal() const {
-	return rtgi_overscan_horizontal;
-}
-
-void Environment::set_rtgi_overscan_vertical(float p_overscan) {
-	rtgi_overscan_vertical = CLAMP(p_overscan, 0.0f, 0.25f);
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-float Environment::get_rtgi_overscan_vertical() const {
-	return rtgi_overscan_vertical;
-}
-
-void Environment::set_rtgi_strc_static_visual_layers(uint32_t p_layers) {
-	rtgi_strc_static_visual_layers = p_layers & 0xfffff;
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-uint32_t Environment::get_rtgi_strc_static_visual_layers() const {
-	return rtgi_strc_static_visual_layers;
-}
-
-void Environment::set_rtgi_strc_dynamic_visual_layers(uint32_t p_layers) {
-	rtgi_strc_dynamic_visual_layers = p_layers & 0xfffff;
-	_mark_rtgi_quality_preset_custom();
-	_update_pathtracing();
-}
-
-uint32_t Environment::get_rtgi_strc_dynamic_visual_layers() const {
-	return rtgi_strc_dynamic_visual_layers;
 }
 
 void Environment::set_rtgi_denoiser(RTGIDenoiser p_denoiser) {
@@ -1253,32 +981,12 @@ void Environment::_update_pathtracing() {
 	params.mode = (uint32_t)rtgi_mode;
 	params.fpt_reference = rtgi_fpt_reference;
 	params.rtgi_quality_preset = (uint32_t)rtgi_quality_preset;
-	params.overscan_horizontal = rtgi_overscan_horizontal;
-	params.overscan_vertical = rtgi_overscan_vertical;
 	params.backend = (RSE::PathtracingBackend)rtgi_backend;
-	params.denoiser_strength = rtgi_denoiser_strength;
-	params.denoiser_history_weight = rtgi_denoiser_history_weight;
-	params.denoiser_firefly_suppression = rtgi_denoiser_firefly_suppression;
-	params.denoiser_detail_preservation = rtgi_denoiser_detail_preservation;
-	params.diffuse_cache_enabled = rtgi_diffuse_radiance_cache_enabled;
-	params.diffuse_cache_max_entries = (uint32_t)rtgi_diffuse_radiance_cache_max_entries;
 	params.ray_firefly_suppression = rtgi_ray_firefly_suppression;
 	params.ray_max_radiance = rtgi_ray_max_radiance;
-	params.denoiser_split_signals = rtgi_denoiser_split_signals;
-	params.denoiser_specular_history_weight = rtgi_denoiser_specular_history_weight;
-	params.denoiser_specular_spatial_strength = rtgi_denoiser_specular_spatial_strength;
 	params.analytic_light_sampling = rtgi_analytic_light_sampling_enabled;
 	params.explicit_emissive_sampling = rtgi_explicit_emissive_sampling_enabled;
-	params.strc_enabled = rtgi_strc_enabled;
-	params.strc_strength = rtgi_strc_strength;
-	params.strc_cascade_count = (uint32_t)rtgi_strc_cascade_count;
-	params.strc_grid_size = (uint32_t)rtgi_strc_grid_size;
-	params.strc_base_probe_spacing = rtgi_strc_base_probe_spacing;
-	params.strc_rays_per_frame = (uint32_t)rtgi_strc_rays_per_frame;
-	params.strc_temporal_weight = rtgi_strc_temporal_weight;
 	params.wrc_strength = rtgi_wrc_strength;
-	params.strc_static_visual_layers = rtgi_strc_static_visual_layers;
-	params.strc_dynamic_visual_layers = rtgi_strc_dynamic_visual_layers;
 	RS::get_singleton()->environment_set_pathtracing_params(environment, params);
 }
 
@@ -2142,20 +1850,6 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_rtgi_resolution_scale"), &Environment::get_rtgi_resolution_scale);
 	ClassDB::bind_method(D_METHOD("set_rtgi_disable_in_editor", "disabled"), &Environment::set_rtgi_disable_in_editor);
 	ClassDB::bind_method(D_METHOD("is_rtgi_disabled_in_editor"), &Environment::is_rtgi_disabled_in_editor);
-	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser_strength", "strength"), &Environment::set_rtgi_denoiser_strength);
-	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser_strength"), &Environment::get_rtgi_denoiser_strength);
-	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser_history_weight", "weight"), &Environment::set_rtgi_denoiser_history_weight);
-	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser_history_weight"), &Environment::get_rtgi_denoiser_history_weight);
-	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser_firefly_suppression", "suppression"), &Environment::set_rtgi_denoiser_firefly_suppression);
-	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser_firefly_suppression"), &Environment::get_rtgi_denoiser_firefly_suppression);
-	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser_detail_preservation", "preservation"), &Environment::set_rtgi_denoiser_detail_preservation);
-	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser_detail_preservation"), &Environment::get_rtgi_denoiser_detail_preservation);
-	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser_split_signals", "enabled"), &Environment::set_rtgi_denoiser_split_signals);
-	ClassDB::bind_method(D_METHOD("is_rtgi_denoiser_split_signals_enabled"), &Environment::is_rtgi_denoiser_split_signals_enabled);
-	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser_specular_history_weight", "weight"), &Environment::set_rtgi_denoiser_specular_history_weight);
-	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser_specular_history_weight"), &Environment::get_rtgi_denoiser_specular_history_weight);
-	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser_specular_spatial_strength", "strength"), &Environment::set_rtgi_denoiser_specular_spatial_strength);
-	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser_specular_spatial_strength"), &Environment::get_rtgi_denoiser_specular_spatial_strength);
 	ClassDB::bind_method(D_METHOD("set_rtgi_ray_firefly_suppression", "suppression"), &Environment::set_rtgi_ray_firefly_suppression);
 	ClassDB::bind_method(D_METHOD("get_rtgi_ray_firefly_suppression"), &Environment::get_rtgi_ray_firefly_suppression);
 	ClassDB::bind_method(D_METHOD("set_rtgi_ray_max_radiance", "radiance"), &Environment::set_rtgi_ray_max_radiance);
@@ -2164,34 +1858,8 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_rtgi_analytic_light_sampling_enabled"), &Environment::is_rtgi_analytic_light_sampling_enabled);
 	ClassDB::bind_method(D_METHOD("set_rtgi_explicit_emissive_sampling_enabled", "enabled"), &Environment::set_rtgi_explicit_emissive_sampling_enabled);
 	ClassDB::bind_method(D_METHOD("is_rtgi_explicit_emissive_sampling_enabled"), &Environment::is_rtgi_explicit_emissive_sampling_enabled);
-	ClassDB::bind_method(D_METHOD("set_rtgi_diffuse_radiance_cache_enabled", "enabled"), &Environment::set_rtgi_diffuse_radiance_cache_enabled);
-	ClassDB::bind_method(D_METHOD("is_rtgi_diffuse_radiance_cache_enabled"), &Environment::is_rtgi_diffuse_radiance_cache_enabled);
-	ClassDB::bind_method(D_METHOD("set_rtgi_diffuse_radiance_cache_max_entries", "entries"), &Environment::set_rtgi_diffuse_radiance_cache_max_entries);
-	ClassDB::bind_method(D_METHOD("get_rtgi_diffuse_radiance_cache_max_entries"), &Environment::get_rtgi_diffuse_radiance_cache_max_entries);
-	ClassDB::bind_method(D_METHOD("set_rtgi_strc_enabled", "enabled"), &Environment::set_rtgi_strc_enabled);
-	ClassDB::bind_method(D_METHOD("is_rtgi_strc_enabled"), &Environment::is_rtgi_strc_enabled);
-	ClassDB::bind_method(D_METHOD("set_rtgi_strc_strength", "strength"), &Environment::set_rtgi_strc_strength);
-	ClassDB::bind_method(D_METHOD("get_rtgi_strc_strength"), &Environment::get_rtgi_strc_strength);
-	ClassDB::bind_method(D_METHOD("set_rtgi_strc_cascade_count", "count"), &Environment::set_rtgi_strc_cascade_count);
-	ClassDB::bind_method(D_METHOD("get_rtgi_strc_cascade_count"), &Environment::get_rtgi_strc_cascade_count);
-	ClassDB::bind_method(D_METHOD("set_rtgi_strc_grid_size", "size"), &Environment::set_rtgi_strc_grid_size);
-	ClassDB::bind_method(D_METHOD("get_rtgi_strc_grid_size"), &Environment::get_rtgi_strc_grid_size);
-	ClassDB::bind_method(D_METHOD("set_rtgi_strc_base_probe_spacing", "spacing"), &Environment::set_rtgi_strc_base_probe_spacing);
-	ClassDB::bind_method(D_METHOD("get_rtgi_strc_base_probe_spacing"), &Environment::get_rtgi_strc_base_probe_spacing);
-	ClassDB::bind_method(D_METHOD("set_rtgi_strc_rays_per_frame", "rays"), &Environment::set_rtgi_strc_rays_per_frame);
-	ClassDB::bind_method(D_METHOD("get_rtgi_strc_rays_per_frame"), &Environment::get_rtgi_strc_rays_per_frame);
-	ClassDB::bind_method(D_METHOD("set_rtgi_strc_temporal_weight", "weight"), &Environment::set_rtgi_strc_temporal_weight);
-	ClassDB::bind_method(D_METHOD("get_rtgi_strc_temporal_weight"), &Environment::get_rtgi_strc_temporal_weight);
 	ClassDB::bind_method(D_METHOD("set_rtgi_wrc_strength", "strength"), &Environment::set_rtgi_wrc_strength);
 	ClassDB::bind_method(D_METHOD("get_rtgi_wrc_strength"), &Environment::get_rtgi_wrc_strength);
-	ClassDB::bind_method(D_METHOD("set_rtgi_overscan_horizontal", "overscan"), &Environment::set_rtgi_overscan_horizontal);
-	ClassDB::bind_method(D_METHOD("get_rtgi_overscan_horizontal"), &Environment::get_rtgi_overscan_horizontal);
-	ClassDB::bind_method(D_METHOD("set_rtgi_overscan_vertical", "overscan"), &Environment::set_rtgi_overscan_vertical);
-	ClassDB::bind_method(D_METHOD("get_rtgi_overscan_vertical"), &Environment::get_rtgi_overscan_vertical);
-	ClassDB::bind_method(D_METHOD("set_rtgi_strc_static_visual_layers", "layers"), &Environment::set_rtgi_strc_static_visual_layers);
-	ClassDB::bind_method(D_METHOD("get_rtgi_strc_static_visual_layers"), &Environment::get_rtgi_strc_static_visual_layers);
-	ClassDB::bind_method(D_METHOD("set_rtgi_strc_dynamic_visual_layers", "layers"), &Environment::set_rtgi_strc_dynamic_visual_layers);
-	ClassDB::bind_method(D_METHOD("get_rtgi_strc_dynamic_visual_layers"), &Environment::get_rtgi_strc_dynamic_visual_layers);
 	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser", "denoiser"), &Environment::set_rtgi_denoiser);
 	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser"), &Environment::get_rtgi_denoiser);
 	ClassDB::bind_method(D_METHOD("set_rtgi_debug_mode", "mode"), &Environment::set_rtgi_debug_mode);
@@ -2208,31 +1876,11 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_energy", PROPERTY_HINT_RANGE, "0,16,0.01,or_greater"), "set_rtgi_energy", "get_rtgi_energy");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_resolution_scale", PROPERTY_HINT_RANGE, "0.25,1,0.01"), "set_rtgi_resolution_scale", "get_rtgi_resolution_scale");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_disable_in_editor"), "set_rtgi_disable_in_editor", "is_rtgi_disabled_in_editor");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_strength", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_denoiser_strength", "get_rtgi_denoiser_strength");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_history_weight", PROPERTY_HINT_RANGE, "0,0.98,0.001"), "set_rtgi_denoiser_history_weight", "get_rtgi_denoiser_history_weight");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_firefly_suppression", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_denoiser_firefly_suppression", "get_rtgi_denoiser_firefly_suppression");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_detail_preservation", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_denoiser_detail_preservation", "get_rtgi_denoiser_detail_preservation");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_denoiser_split_signals"), "set_rtgi_denoiser_split_signals", "is_rtgi_denoiser_split_signals_enabled");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_specular_history_weight", PROPERTY_HINT_RANGE, "0,0.98,0.001"), "set_rtgi_denoiser_specular_history_weight", "get_rtgi_denoiser_specular_history_weight");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_denoiser_specular_spatial_strength", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_denoiser_specular_spatial_strength", "get_rtgi_denoiser_specular_spatial_strength");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_ray_firefly_suppression", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_ray_firefly_suppression", "get_rtgi_ray_firefly_suppression");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_ray_max_radiance", PROPERTY_HINT_RANGE, "0,4096,0.1,or_greater"), "set_rtgi_ray_max_radiance", "get_rtgi_ray_max_radiance");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_analytic_light_sampling_enabled"), "set_rtgi_analytic_light_sampling_enabled", "is_rtgi_analytic_light_sampling_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_explicit_emissive_sampling_enabled"), "set_rtgi_explicit_emissive_sampling_enabled", "is_rtgi_explicit_emissive_sampling_enabled");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_diffuse_radiance_cache_enabled"), "set_rtgi_diffuse_radiance_cache_enabled", "is_rtgi_diffuse_radiance_cache_enabled");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_diffuse_radiance_cache_max_entries", PROPERTY_HINT_RANGE, "4096,4194304,1024,or_greater"), "set_rtgi_diffuse_radiance_cache_max_entries", "get_rtgi_diffuse_radiance_cache_max_entries");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_strc_enabled"), "set_rtgi_strc_enabled", "is_rtgi_strc_enabled");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_strc_strength", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_rtgi_strc_strength", "get_rtgi_strc_strength");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_strc_cascade_count", PROPERTY_HINT_RANGE, "1,4,1"), "set_rtgi_strc_cascade_count", "get_rtgi_strc_cascade_count");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_strc_grid_size", PROPERTY_HINT_RANGE, "12,32,1"), "set_rtgi_strc_grid_size", "get_rtgi_strc_grid_size");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_strc_base_probe_spacing", PROPERTY_HINT_RANGE, "0.25,8,0.01"), "set_rtgi_strc_base_probe_spacing", "get_rtgi_strc_base_probe_spacing");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_strc_rays_per_frame", PROPERTY_HINT_RANGE, "0,32768,1"), "set_rtgi_strc_rays_per_frame", "get_rtgi_strc_rays_per_frame");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_strc_temporal_weight", PROPERTY_HINT_RANGE, "0,0.995,0.001"), "set_rtgi_strc_temporal_weight", "get_rtgi_strc_temporal_weight");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_wrc_strength", PROPERTY_HINT_RANGE, "0,8,0.01"), "set_rtgi_wrc_strength", "get_rtgi_wrc_strength");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_horizontal", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_horizontal", "get_rtgi_overscan_horizontal");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_overscan_vertical", PROPERTY_HINT_RANGE, "0,0.25,0.001"), "set_rtgi_overscan_vertical", "get_rtgi_overscan_vertical");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_strc_static_visual_layers", PROPERTY_HINT_LAYERS_3D_RENDER), "set_rtgi_strc_static_visual_layers", "get_rtgi_strc_static_visual_layers");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_strc_dynamic_visual_layers", PROPERTY_HINT_LAYERS_3D_RENDER), "set_rtgi_strc_dynamic_visual_layers", "get_rtgi_strc_dynamic_visual_layers");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "ASVFG (Experimental):8,Internal Signal Decomposition:14,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_debug_mode", PROPERTY_HINT_ENUM, "Disabled,Mirror Reflection,Geometry Normals,Final Normals,Normal Map,Tangent,Bitangent,UV,Albedo,ORM,Diffuse Albedo,Specular Albedo,Normal+Roughness,Specular Hit Dist,Metalness,Roughness,View Normals,Diffuse+Specular,Fresnel F0,Front/Back Face,Depth,Emissive,BRDF Rejection,Normal Deviation,Specular Reflection Direction,Specular Reflected Hit Distance,Specular Reflected Hit Normal"), "set_rtgi_debug_mode", "get_rtgi_debug_mode");
 

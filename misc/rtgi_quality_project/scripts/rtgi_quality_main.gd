@@ -21,12 +21,6 @@ var _explicit_emissive_sampling := true
 var _diffuse_cache := true
 var _diffuse_cache_max_entries := 262144
 var _strc_enabled := true
-var _strc_strength := 0.70
-var _strc_cascade_count := 3
-var _strc_grid_size := 24
-var _strc_base_probe_spacing := 1.5
-var _strc_rays_per_frame := 4096
-var _strc_temporal_weight := 0.97
 var _warmup_frames := 120
 var _output_dir := DEFAULT_OUTPUT_DIR
 var _debug_view := "beauty"
@@ -116,18 +110,6 @@ func _parse_args() -> void:
 			_diffuse_cache_max_entries = clampi(arg.trim_prefix("--rtgi-diffuse-cache-max-entries=").to_int(), 4096, 4194304)
 		elif arg.begins_with("--rtgi-strc-enabled="):
 			_strc_enabled = not (arg.trim_prefix("--rtgi-strc-enabled=").to_lower() in ["0", "false", "off", "disabled"])
-		elif arg.begins_with("--rtgi-strc-strength="):
-			_strc_strength = clampf(arg.trim_prefix("--rtgi-strc-strength=").to_float(), 0.0, 1.0)
-		elif arg.begins_with("--rtgi-strc-cascade-count="):
-			_strc_cascade_count = clampi(arg.trim_prefix("--rtgi-strc-cascade-count=").to_int(), 1, 4)
-		elif arg.begins_with("--rtgi-strc-grid-size="):
-			_strc_grid_size = clampi(arg.trim_prefix("--rtgi-strc-grid-size=").to_int(), 12, 32)
-		elif arg.begins_with("--rtgi-strc-base-probe-spacing="):
-			_strc_base_probe_spacing = clampf(arg.trim_prefix("--rtgi-strc-base-probe-spacing=").to_float(), 0.25, 8.0)
-		elif arg.begins_with("--rtgi-strc-rays-per-frame="):
-			_strc_rays_per_frame = clampi(arg.trim_prefix("--rtgi-strc-rays-per-frame=").to_int(), 0, 32768)
-		elif arg.begins_with("--rtgi-strc-temporal-weight="):
-			_strc_temporal_weight = clampf(arg.trim_prefix("--rtgi-strc-temporal-weight=").to_float(), 0.0, 0.995)
 		elif arg.begins_with("--rtgi-warmup-frames="):
 			_warmup_frames = max(1, arg.trim_prefix("--rtgi-warmup-frames=").to_int())
 		elif arg.begins_with("--rtgi-reference-spp="):
@@ -194,26 +176,10 @@ func _build_scene() -> void:
 	env.rtgi_max_bounces = 3
 	env.rtgi_energy = 1.0
 	env.rtgi_denoiser = Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL
-	env.rtgi_denoiser_strength = _denoise_strength
-	env.rtgi_denoiser_history_weight = _history_weight
-	env.rtgi_denoiser_firefly_suppression = _firefly_suppression
-	env.rtgi_denoiser_detail_preservation = _detail_preservation
-	env.rtgi_denoiser_split_signals = _split_signals
-	env.rtgi_denoiser_specular_history_weight = _specular_history_weight
-	env.rtgi_denoiser_specular_spatial_strength = _specular_spatial_strength
 	env.rtgi_ray_firefly_suppression = _ray_firefly_suppression
 	env.rtgi_ray_max_radiance = _ray_max_radiance
 	env.rtgi_analytic_light_sampling_enabled = _analytic_light_sampling
 	env.rtgi_explicit_emissive_sampling_enabled = _explicit_emissive_sampling
-	env.rtgi_diffuse_radiance_cache_enabled = _diffuse_cache
-	env.rtgi_diffuse_radiance_cache_max_entries = _diffuse_cache_max_entries
-	env.rtgi_strc_enabled = _strc_enabled
-	env.rtgi_strc_strength = _strc_strength
-	env.rtgi_strc_cascade_count = _strc_cascade_count
-	env.rtgi_strc_grid_size = _strc_grid_size
-	env.rtgi_strc_base_probe_spacing = _strc_base_probe_spacing
-	env.rtgi_strc_rays_per_frame = _strc_rays_per_frame
-	env.rtgi_strc_temporal_weight = _strc_temporal_weight
 	_environment = env
 
 	var world_environment := WorldEnvironment.new()
@@ -2059,15 +2025,10 @@ func _capture_comparison_grid(base_name: String) -> void:
 		_environment.rtgi_samples_per_pixel = config["spp"]
 		_environment.rtgi_denoiser = config["denoiser"]
 		_environment.rtgi_max_bounces = config["max_bounces"]
-		_environment.rtgi_denoiser_split_signals = config["split_signals"]
 		_environment.rtgi_analytic_light_sampling_enabled = config["analytic_light_sampling"]
 		_environment.rtgi_explicit_emissive_sampling_enabled = config["explicit_emissive_sampling"]
-		_environment.rtgi_diffuse_radiance_cache_max_entries = config.get("diffuse_cache_max_entries", _diffuse_cache_max_entries)
 		_environment.rtgi_ray_firefly_suppression = config["ray_firefly_suppression"]
 		_environment.rtgi_ray_max_radiance = config["ray_max_radiance"]
-		_environment.rtgi_strc_enabled = config.get("strc_enabled", _strc_enabled)
-		_environment.rtgi_strc_static_visual_layers = config.get("strc_static_layers", 1048575)
-		_environment.rtgi_strc_dynamic_visual_layers = config.get("strc_dynamic_layers", 1048575)
 		_apply_debug_view("beauty")
 		for frame in range(comparison_warmup):
 			await _wait_render_frame()

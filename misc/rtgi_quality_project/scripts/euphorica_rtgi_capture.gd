@@ -12,19 +12,10 @@ const RTGI_KNOB_STAGES = {
 	"rtgi_energy": "RTGI composite energy",
 	"rtgi_resolution_scale": "RTGI trace resolution scale and full-resolution reconstruction",
 	"rtgi_denoiser": "RTGI denoise dispatch",
-	"rtgi_denoiser_strength": "RTGI temporal, spatial, composite, blotch stabilization",
-	"rtgi_denoiser_history_weight": "RTGI temporal accumulation",
-	"rtgi_denoiser_firefly_suppression": "RTGI temporal, prefilter, composite, split composite",
-	"rtgi_denoiser_detail_preservation": "RTGI spatial/composite detail guards",
-	"rtgi_denoiser_split_signals": "RT diffuse/specular split denoise",
-	"rtgi_denoiser_specular_history_weight": "RTGI specular temporal accumulation",
-	"rtgi_denoiser_specular_spatial_strength": "RTGI specular spatial strength",
 	"rtgi_ray_firefly_suppression": "RT ray/path contribution clamp",
 	"rtgi_ray_max_radiance": "RT ray/path contribution clamp",
 	"rtgi_analytic_light_sampling_enabled": "RTGI analytic direct source sampling",
 	"rtgi_explicit_emissive_sampling_enabled": "RTGI explicit emissive source sampling",
-	"rtgi_diffuse_radiance_cache_enabled": "RTGI pre-ASVFG diffuse radiance cache",
-	"rtgi_diffuse_radiance_cache_max_entries": "RTGI diffuse cache GPU memory budget",
 	"rtgi_debug_mode": "RT raygen debug visualization",
 }
 
@@ -660,29 +651,11 @@ func _apply_environment(test_case: Dictionary, env: Environment) -> void:
 	env.rtgi_samples_per_pixel = int(test_case.get("spp", 1))
 	env.rtgi_max_bounces = int(test_case.get("max_bounces", 3))
 	env.rtgi_denoiser = int(test_case.get("denoiser", Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL))
-	env.rtgi_denoiser_strength = test_case["denoise"]
-	env.rtgi_denoiser_history_weight = test_case["history"]
 	env.rtgi_resolution_scale = float(test_case.get("rtgi_resolution_scale", _base_rtgi_resolution_scale))
-	env.rtgi_denoiser_firefly_suppression = float(test_case.get("firefly_suppression", 1.0))
-	env.rtgi_denoiser_detail_preservation = float(test_case.get("detail_preservation", 1.0))
-	env.rtgi_denoiser_split_signals = bool(test_case.get("split_signals", true))
-	env.rtgi_denoiser_specular_history_weight = test_case["history"]
-	env.rtgi_denoiser_specular_spatial_strength = float(test_case.get("specular_spatial_strength", 1.0))
 	env.rtgi_ray_firefly_suppression = float(test_case.get("ray_firefly_suppression", 0.85))
 	env.rtgi_ray_max_radiance = float(test_case.get("ray_max_radiance", 32.0))
 	env.rtgi_analytic_light_sampling_enabled = bool(test_case.get("analytic_light_sampling", true))
 	env.rtgi_explicit_emissive_sampling_enabled = bool(test_case.get("explicit_emissive_sampling", true))
-	env.rtgi_diffuse_radiance_cache_enabled = bool(test_case.get("diffuse_cache", _diffuse_cache))
-	env.rtgi_diffuse_radiance_cache_max_entries = int(test_case.get("diffuse_cache_max_entries", _diffuse_cache_max_entries))
-	env.rtgi_strc_static_visual_layers = int(test_case.get("strc_static_layers", _strc_static_layers))
-	env.rtgi_strc_dynamic_visual_layers = int(test_case.get("strc_dynamic_layers", _strc_dynamic_layers))
-	if _strc_override != "" and _strc_override != "default":
-		env.rtgi_strc_enabled = _strc_override == "on"
-		env.rtgi_strc_strength = _strc_strength
-		env.rtgi_strc_rays_per_frame = _strc_rays_per_frame
-		env.rtgi_strc_grid_size = _strc_grid_size
-		env.rtgi_strc_base_probe_spacing = _strc_base_probe_spacing
-		env.rtgi_strc_temporal_weight = _strc_temporal_weight
 	env.rtgi_debug_mode = int(test_case.get("debug_mode", Environment.RT_DEBUG_DISABLED))
 	if test_case.get("no_glow_fog", false):
 		env.glow_enabled = false

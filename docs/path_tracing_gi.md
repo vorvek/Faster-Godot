@@ -30,29 +30,14 @@ The feature is exposed on `Environment`, so it appears through the same
 - `rtgi_energy`
 - `rtgi_resolution_scale`
 - `rtgi_disable_in_editor`
-- `rtgi_denoiser_strength`
-- `rtgi_denoiser_history_weight`
-- `rtgi_denoiser_firefly_suppression`
-- `rtgi_denoiser_detail_preservation`
 - `rtgi_ray_firefly_suppression`
 - `rtgi_ray_max_radiance`
-- `rtgi_overscan_horizontal`
-- `rtgi_overscan_vertical`
 - `rtgi_denoiser`
   - `ASVFG (Experimental)`
   - `NVIDIA`
   - `AMD`
   - `Intel`
   - `None`
-- `rtgi_strc_enabled`
-- `rtgi_strc_strength`
-- `rtgi_strc_cascade_count`
-- `rtgi_strc_grid_size`
-- `rtgi_strc_base_probe_spacing`
-- `rtgi_strc_rays_per_frame`
-- `rtgi_strc_temporal_weight`
-- `rtgi_strc_static_visual_layers`
-- `rtgi_strc_dynamic_visual_layers`
 - RTGI debug draw modes for noisy input, guides, motion vectors, variance,
   history length, rejection mask, and final denoised output.
 
@@ -67,8 +52,8 @@ The feature is exposed on `Environment`, so it appears through the same
   - `Vulkan Generic`: uses the current built-in Vulkan ray tracing
     implementation. This is the only exposed backend.
 - `rtgi_quality_preset`
-  - Applies named quality bundles for sampling, denoising, cache, STRC, and
-    reconstruction controls. It does not change `rtgi_mode`; selecting
+  - Applies named quality bundles for the probe and denoise settings that the
+    renderer resolves per tier. It does not change `rtgi_mode`; selecting
     `Full Scene Path-Traced GI` remains an explicit mode choice.
 - `rtgi_mode`
   - `Reflections RT Only`: keeps the normal Forward+ raster path and raster GI
@@ -104,27 +89,6 @@ The feature is exposed on `Environment`, so it appears through the same
   - Disables RTGI only for editor viewport previews. This lets authored scenes
     keep RTGI enabled for the running project and exported builds without
     making normal editor navigation pay the RTGI cost. The default is `true`.
-- `rtgi_denoiser_strength`
-  - Controls the RTGI denoiser's current-frame spatial filtering,
-    variance cleanup, broad blotch stabilization, and firefly suppression.
-    Higher values hide more 1 SPP speckles, but can soften texture-driven
-    indirect lighting and small dynamic light changes. The default is `0.90`.
-    Lower values preserve more detail and response while leaving more raw RT
-    noise.
-- `rtgi_denoiser_history_weight`
-  - Controls valid previous-frame radiance reuse in the temporal denoiser.
-    Higher values improve stability on static surfaces; lower values reduce
-    ghosting and response lag. `0.0` disables temporal RTGI radiance reuse, and
-    `rtgi_denoiser_strength = 0.0` also forces history off.
-- `rtgi_denoiser_firefly_suppression`
-  - Controls additional isolated bright-pixel suppression. Raise it for dark
-    1 SPP scenes with unsupported sparkles; lower it when small emissives,
-    sparse highlights, or thin bright details are being clipped too strongly.
-- `rtgi_denoiser_detail_preservation`
-  - Controls albedo-detail protection in the broad rough-surface cleanup
-    stages. Raise it when brick, stone, patterned floors, or other textured
-    surfaces get flattened at high denoiser strength; lower it if textured
-    surfaces keep too much residual grain.
 - `rtgi_ray_firefly_suppression`
   - Applies a biased linear-HDR contribution clamp before the RTGI denoiser.
     It affects direct-light samples, secondary emissive/sky hits, and secondary
@@ -136,11 +100,6 @@ The feature is exposed on `Environment`, so it appears through the same
   - Sets the approximate luminance limit used by the pre-denoiser ray clamp.
     `0.0` disables this source-side clamp. The default is conservative and is
     intended to stop extreme path samples rather than flatten authored lighting.
-- `rtgi_overscan_horizontal` and `rtgi_overscan_vertical`
-  - Add an opt-in RTGI render margin around the visible viewport. The values are
-    fractions of the visible viewport size. Higher values can reduce edge
-    speckles from newly revealed pixels while moving, but increase RT cost and
-    do not add samples to the interior of the image.
 - `rtgi_denoiser`
   - `ASVFG (Experimental)`: uses the built-in GPU ASVFG denoiser. It is a
     vendor-neutral RD effect with guided stabilization, moment, variance, and
@@ -162,21 +121,6 @@ The feature is exposed on `Environment`, so it appears through the same
   - `None`: disables the RT denoiser so the raw sampled RT result is visible.
     This is useful for debugging sample distribution, material hits, and TLAS
     coverage, but it is expected to show more noise.
-- `rtgi_strc_*`
-  - Controls the spatiotemporal RTGI radiance cache used for rough secondary
-    diffuse paths. The static and dynamic visual layer masks select which
-    render layers participate in STRC probe updates and cache sampling; objects
-    outside both masks are ignored by STRC. Layers present in both masks are
-    treated as static, while dynamic-only layers are traced into the cache with
-    lower temporal confidence so they refresh more aggressively. STRC probe
-    updates store bounced radiance separately from first-hit visibility distance
-    so probe occlusion stays tied to the surface seen from the probe, not the
-    last segment of the bounced path. Low-confidence STRC hits now contribute
-    partially and let the residual path continue instead of terminating every
-    cache hit outright. The Euphorica capture harness pins STRC to static
-    visual layer `1` and dynamic layer `0` by default, so world geometry can
-    seed the world-radiance prior without character layers contaminating the
-    probe history during Path Tracing stability checks.
 
 ## Backend Capability Contract
 
@@ -389,10 +333,8 @@ ORM, emission, and view-Z guide outputs; reconstruction currently uses the
 full-resolution depth plus material normal and true ORM roughness so it no
 longer depends on the packed raster normal/roughness alpha used by the regular
 Forward+ guide buffer. The RTGI denoiser consumes the scaled guides directly on
-the GPU and uses
-previous-frame radiance history controlled by
-`rtgi_denoiser_history_weight`. Fast movement and disocclusion favor
-current-frame samples through guide-based rejection.
+the GPU and reuses previous-frame radiance history. Fast movement and
+disocclusion favor current-frame samples through guide-based rejection.
 
 When split-signal ASVFG is active, the pre-ASVFG diffuse radiance cache runs
 before diffuse denoising. It demodulates the primary surface albedo out of the
