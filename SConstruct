@@ -535,8 +535,6 @@ if env["enable_xess"]:
         for include_path in [
             os.path.join(xess_path, "inc"),
             os.path.join(xess_path, "inc", "xess"),
-            os.path.join(xess_path, "inc", "xess_fg"),
-            os.path.join(xess_path, "inc", "xell"),
         ]:
             if os.path.isdir(include_path):
                 xess_include_paths.append(include_path)
@@ -551,17 +549,11 @@ if env["enable_xess"]:
         else:
             print_warning("XeSS was enabled, but xess_vk.h was not found in xess_sdk_path.")
 
-        if os.path.isfile(os.path.join(xess_path, "inc", "xess_fg", "efg_swapchain_d3d12.h")):
-            env.AppendUnique(CPPDEFINES=["XESS_FG_D3D12_HEADERS_PRESENT"])
         xess_runtime_libs = collect_vendor_upscaler_runtime_libs(
             xess_path,
             [
                 "libxess.dll",
-                "libxell.dll",
-                "libxess_fg.dll",
                 "libxess.so",
-                "libxell.so",
-                "libxess_fg.so",
             ],
         )
         if xess_runtime_libs:
