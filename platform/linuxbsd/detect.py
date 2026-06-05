@@ -226,6 +226,9 @@ def configure(env: "SConsEnvironment"):
     # GDExtension entry points are extern-C exports, but MUST be validated by loading a real
     # GDExtension against a hidden-visibility Linux build before relying on it.
     env.Append(CCFLAGS=["-fvisibility=hidden", "-fvisibility-inlines-hidden"])
+    if env["use_llvm"] and env["linker"] == "lld":
+        # Faster-Godot WS2: identical-code folding (lld-only; deferred from WS1, which had no lld/gold).
+        env.Append(LINKFLAGS=["-Wl,--icf=safe"])
 
     ## Dependencies
 
