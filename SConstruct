@@ -183,6 +183,16 @@ opts.Add(
         "lto", "Link-time optimization (production builds)", "none", ["none", "auto", "thin", "full"], ignorecase=2
     )
 )
+opts.Add(
+    EnumVariable(
+        "pgo",
+        "Profile-guided optimization stage (clang only): off, generate (IR instrument), cs-generate (context-sensitive instrument, needs pgo_data), use (apply pgo_data)",
+        "off",
+        ["off", "generate", "cs-generate", "use"],
+        ignorecase=2,
+    )
+)
+opts.Add(("pgo_data", "Path to the merged .profdata consumed by pgo=cs-generate and pgo=use", ""))
 opts.Add(BoolVariable("production", "Set defaults to build Godot for use in production", False))
 opts.Add(BoolVariable("threads", "Enable threading support", True))
 
