@@ -230,6 +230,26 @@ def configure(env: "SConsEnvironment"):
         # Faster-Godot: identical-code folding (lld-only; enabled here because this build's linker is lld).
         env.Append(LINKFLAGS=["-Wl,--icf=safe"])
 
+    # PGO (clang only; composes with ThinLTO). The clang driver runs the link, so the
+    # profile flags go on LINKFLAGS too, which pulls in the profile runtime.
+    if env["pgo"] != "off":
+        if not env["use_llvm"]:
+            print_error("PGO requires the LLVM toolchain. Use `use_llvm=yes`.")
+            sys.exit(255)
+        if env["pgo"] in ("cs-generate", "use"):
+            if not env["pgo_data"] or not os.path.isfile(env["pgo_data"]):
+                print_error("pgo=%s requires pgo_data= to point at an existing .profdata file." % env["pgo"])
+                sys.exit(255)
+        if env["pgo"] == "generate":
+            env.Append(CCFLAGS=["-fprofile-generate"], LINKFLAGS=["-fprofile-generate"])
+        elif env["pgo"] == "cs-generate":
+            env.Append(
+                CCFLAGS=["-fprofile-use=" + env["pgo_data"], "-fcs-profile-generate"],
+                LINKFLAGS=["-fprofile-use=" + env["pgo_data"], "-fcs-profile-generate"],
+            )
+        elif env["pgo"] == "use":
+            env.Append(CCFLAGS=["-fprofile-use=" + env["pgo_data"]], LINKFLAGS=["-fprofile-use=" + env["pgo_data"]])
+
     ## Dependencies
 
     if env["use_sowrap"]:
