@@ -2985,6 +2985,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// so index the param array directly -- matching the sibling rt_radiance_probes_fpt above.
 	const bool rt_fpt_reference = rt_radiance_probes_fpt &&
 			rt_env_params[RSE::PT_PARAM_RTGI_FPT_REFERENCE] > 0.5f;
+	if (rt_fpt_reference) {
+		// The deep-path oracle is a brute-force ground-truth path tracer meant for A/B validation,
+		// not gameplay. It is single-sample-per-frame, so it looks noisy, boils under temporal
+		// upscalers (FSR2/XeSS), and is far slower than the real-time path. Warn once so it is not
+		// mistaken for the production Full Path Tracing mode.
+		WARN_PRINT_ONCE("RTGI Full Path Tracing is running the deep-path reference oracle (Environment.rtgi_fpt_reference is enabled). This is a ground-truth path tracer for A/B validation: it traces one sample per frame, so it is noisy, unstable under temporal upscalers, and much slower than the real-time path. Set rtgi_fpt_reference to false for the production FPT-fast mode (analytic-light primary plus probe indirect).");
+	}
 	const uint32_t rt_denoiser = rt_env_params ? (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
 	if (scene_features.rt && rt_denoiser == RSE::PT_DENOISER_NVIDIA) {
 		WARN_PRINT_ONCE(vformat("RTGI denoiser '%s' is not available in the Vulkan renderer yet. Falling back to ASVFG for this viewport without changing the Environment resource.", _rtgi_denoiser_name(rt_denoiser)));
