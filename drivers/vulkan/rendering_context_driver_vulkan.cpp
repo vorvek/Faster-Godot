@@ -45,6 +45,10 @@
 
 #include <vk_enum_string_helper.h>
 
+#ifdef XESS_VK_HEADERS_PRESENT
+#include "drivers/vulkan/xess_vulkan_loader.h"
+#endif
+
 #if defined(VK_TRACK_DRIVER_MEMORY)
 /*************************************************/
 // Driver memory tracking
@@ -461,6 +465,24 @@ Error RenderingContextDriverVulkan::_initialize_instance_extensions() {
 		_register_requested_instance_extension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, false);
 	}
 
+#ifdef XESS_VK_HEADERS_PRESENT
+	// XeSS requires a set of instance extensions and a minimum API version to be enabled
+	// before vkCreateInstance. Register them as optional; if any is unsupported, XeSS is
+	// later marked unavailable and the renderer falls back to FSR2.
+	{
+		Vector<CharString> xess_instance_extensions;
+		uint32_t xess_min_api = 0;
+		if (XessVulkanLoader::get_required_instance_extensions(xess_instance_extensions, xess_min_api)) {
+			xess_required_min_api_version = xess_min_api;
+			for (const CharString &extension_name : xess_instance_extensions) {
+				if (!requested_instance_extensions.has(extension_name)) {
+					_register_requested_instance_extension(extension_name, false);
+				}
+			}
+		}
+	}
+#endif
+
 	// Load instance extensions that are available.
 	uint32_t instance_extension_count = 0;
 	VkResult err = vkEnumerateInstanceExtensionProperties(nullptr, &instance_extension_count, nullptr);
@@ -498,6 +520,23 @@ Error RenderingContextDriverVulkan::_initialize_instance_extensions() {
 			}
 		}
 	}
+
+#ifdef XESS_VK_HEADERS_PRESENT
+	// Record whether every XeSS-required instance extension was actually enabled. The device
+	// stage and the capability gate consult this.
+	{
+		Vector<CharString> xess_instance_extensions;
+		uint32_t ignored_min_api = 0;
+		bool xess_ready = XessVulkanLoader::get_required_instance_extensions(xess_instance_extensions, ignored_min_api);
+		for (const CharString &extension_name : xess_instance_extensions) {
+			if (!enabled_instance_extension_names.has(extension_name)) {
+				xess_ready = false;
+				break;
+			}
+		}
+		XessVulkanLoader::set_instance_ready(xess_ready);
+	}
+#endif
 
 	return OK;
 }
@@ -707,6 +746,14 @@ Error RenderingContextDriverVulkan::_initialize_instance() {
 	// version, devices can still support newer versions of Vulkan. The exception is when we're on Vulkan 1.0, we should not set this
 	// to anything but 1.0. Note that this value is only used by validation layers to warn us about version issues.
 	uint32_t application_api_version = instance_api_version == VK_API_VERSION_1_0 ? VK_API_VERSION_1_0 : VK_API_VERSION_1_2;
+
+#ifdef XESS_VK_HEADERS_PRESENT
+	// XeSS may need a newer API version than Godot otherwise targets. Only raise it when the
+	// instance actually supports that version.
+	if (xess_required_min_api_version > application_api_version && xess_required_min_api_version <= instance_api_version) {
+		application_api_version = xess_required_min_api_version;
+	}
+#endif
 
 	CharString cs = GLOBAL_GET("application/config/name").operator String().utf8();
 	VkApplicationInfo app_info = {};

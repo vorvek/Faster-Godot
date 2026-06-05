@@ -101,6 +101,8 @@ private:
 	uint32_t instance_api_version = VK_API_VERSION_1_0;
 	HashMap<CharString, bool> requested_instance_extensions;
 	HashSet<CharString> enabled_instance_extension_names;
+	// Minimum VkApplicationInfo.apiVersion required by XeSS, 0 when XeSS is not in use.
+	uint32_t xess_required_min_api_version = 0;
 	TightLocalVector<Device> driver_devices;
 	TightLocalVector<VkPhysicalDevice> physical_devices;
 	TightLocalVector<DeviceQueueFamilies> device_queue_families;
