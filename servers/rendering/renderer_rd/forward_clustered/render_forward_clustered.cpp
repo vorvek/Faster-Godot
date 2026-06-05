@@ -3755,9 +3755,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// REFLECTION/specular path are untouched (only the diffuse-ambient flags + .rgb are cleared in
 		// update_ubo; .a and USE_REFLECTION_CUBEMAP are preserved -- the diffuse vs rough-spec
 		// environment overlap is a separate deferred follow-up).
+		// A baked LightmapGI no longer blocks suppression: the opaque pass now skips the lightmap
+		// contribution (SCENE_DATA_FLAGS_SUPPRESS_LIGHTMAP, set in update_ubo whenever this is true) so
+		// the RTGI radiance-probes composite is the sole diffuse-indirect provider with a lightmap
+		// present, just as it already is for the environment ambient. SDFGI/VoxelGI still block it
+		// (they overwrite ambient_light in the shader and would need per-pixel ownership to coexist).
 		const bool suppress_environment_ambient_for_radiance_probes_hybrid =
 				rt_radiance_probes_composite &&
-				!using_sdfgi && !using_voxelgi && p_render_data->lightmaps->size() == 0 &&
+				!using_sdfgi && !using_voxelgi &&
 				get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_DISABLED &&
 				rtgi_resolve != nullptr && rtgi_resolve->get_diffuse_gi().is_valid() &&
 				rb_data.is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS);
@@ -4077,7 +4082,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			} else if (rt_radiance_probes_composite && rtgi_resolve != nullptr &&
 					rtgi_resolve->get_diffuse_gi().is_valid() &&
 					rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS) &&
-					!using_sdfgi && !using_voxelgi && p_render_data->lightmaps->size() == 0) {
+					!using_sdfgi && !using_voxelgi) {
 				const RID fpt_primary_color = (rt_radiance_probes_fpt && rb_data->rt_has_texture()) ? rb_data->rt_get_texture() : RID();
 				// A4: the composite masks the indirect to 0 on background pixels via the depth (raw
 				// reverse-Z, sky == 0). For FPT the background is defined by the PATH-TRACE primary

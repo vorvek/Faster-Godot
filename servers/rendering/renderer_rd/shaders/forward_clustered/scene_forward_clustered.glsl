@@ -1801,7 +1801,11 @@ void fragment_shader(in SceneData scene_data) {
 #ifdef USE_LIGHTMAP
 
 	//lightmap
-	if (bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP_CAPTURE)) { //has lightmap capture
+	// SUPPRESS_LIGHTMAP: the RTGI radiance-probes composite is the diffuse-indirect provider this
+	// frame, so skip the baked lightmap contribution to ambient_light (it would double-count).
+	if (bool(scene_data.flags & SCENE_DATA_FLAGS_SUPPRESS_LIGHTMAP)) {
+		// no baked-lightmap ambient; RTGI composites the indirect.
+	} else if (bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP_CAPTURE)) { //has lightmap capture
 		uint index = instances.data[instance_index].gi_offset;
 
 		// The world normal.

@@ -247,12 +247,16 @@ void RenderSceneDataRD::update_ubo(RID p_uniform_buffer, RS::ViewportDebugDraw p
 	// USE_REFLECTION_CUBEMAP flag is not modified -- the environment REFLECTION/specular path is a
 	// deliberate, untouched separate concern here (the GI rough-spec is gated to rough>=cutoff and
 	// sharp reflections remain raster-provided; that diffuse-vs-rough-spec overlap is a separate
-	// follow-up). Direct lights, emission, and SDFGI/VoxelGI/lightmap ambient are unaffected: this
-	// caller only requests suppression when none of those other indirect providers is active (the GI
-	// composite gate requires the same), and those providers overwrite ambient_light in the shader
-	// rather than reading these env-ambient flags.
+	// follow-up). Direct lights and emission are unaffected. SDFGI/VoxelGI ambient are still
+	// unaffected: this caller only requests suppression when neither of those whole-frame providers
+	// is active, and they overwrite ambient_light in the shader rather than reading these flags. The
+	// baked LightmapGI, by contrast, ADDS to ambient_light directly, so the RTGI radiance-probes
+	// composite (which now coexists with a baked lightmap) would double-count against it. Set
+	// SCENE_DATA_FLAGS_SUPPRESS_LIGHTMAP so the opaque pass skips the lightmap contribution and the
+	// RTGI composite is the sole diffuse-indirect provider.
 	if (p_suppress_environment_ambient) {
 		ubo.flags &= ~(SCENE_DATA_FLAGS_USE_AMBIENT_LIGHT | SCENE_DATA_FLAGS_USE_AMBIENT_CUBEMAP);
+		ubo.flags |= SCENE_DATA_FLAGS_SUPPRESS_LIGHTMAP;
 		ubo.ambient_light_color_energy[0] = 0.0;
 		ubo.ambient_light_color_energy[1] = 0.0;
 		ubo.ambient_light_color_energy[2] = 0.0;

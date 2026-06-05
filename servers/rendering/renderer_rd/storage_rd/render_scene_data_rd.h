@@ -118,6 +118,10 @@ private:
 		SCENE_DATA_FLAGS_USE_UV2_MATERIAL = 1 << 5,
 		SCENE_DATA_FLAGS_USE_PANCAKE_SHADOWS = 1 << 6,
 		SCENE_DATA_FLAGS_IN_SHADOW_PASS = 1 << 7, // Only used by Forward+ renderer.
+		// When set, the opaque pass skips the baked LightmapGI contribution to ambient_light, so the
+		// RTGI radiance-probes composite can be the sole diffuse-indirect provider without a ~2x
+		// double-count. Set together with the env-ambient suppression (see update_ubo). Forward+ only.
+		SCENE_DATA_FLAGS_SUPPRESS_LIGHTMAP = 1 << 8,
 		SCENE_DATA_FLAGS_MAX
 	};
 

@@ -364,6 +364,14 @@ contribution before additive blending. `Full Path Tracing` routes full lighting
 through the ray tracing path and disables incompatible screen-space or baked GI
 contributions for that view.
 
+A baked `LightmapGI` does not disable RTGI. When `Hybrid RTGI` or `Full Path
+Tracing` composites, RTGI owns the diffuse indirect for the view, and the opaque
+pass skips the baked lightmap's contribution to ambient light so the two do not
+add up to a doubled result. Direct lighting, emission, and the environment
+specular path keep their raster values. `SDFGI` and `VoxelGI` still take
+precedence when active, since blending them against RTGI per pixel needs
+ownership tracking that does not exist yet.
+
 The path-traced Forward+ flow denoises the opaque RT result before transparent
 rendering. Transparent particles and other alpha overlay instances are kept out
 of the TLAS and rendered as the normal Forward+ transparent pass after RT
