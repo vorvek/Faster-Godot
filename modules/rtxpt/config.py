@@ -44,8 +44,3 @@ def configure(env):
     if nrd_path and os.path.isdir(nrd_path):
         env.Append(CPPPATH=[os.path.join(nrd_path, "include")])
         env.Append(CPPDEFINES=["RTGI_NRD_SDK_HEADERS_PRESENT"])
-
-    streamline_path = env.get("streamline_sdk_path", "")
-    if streamline_path and os.path.isdir(streamline_path):
-        env.Append(CPPPATH=[os.path.join(streamline_path, "include")])
-        env.Append(CPPDEFINES=["RTGI_STREAMLINE_SDK_HEADERS_PRESENT"])
