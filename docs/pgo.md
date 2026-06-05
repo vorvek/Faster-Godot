@@ -75,4 +75,61 @@ This is not measured for runtime perf or binary size, for the same reason as the
 
 ## Profile-guided optimization (PGO)
 
-Not yet implemented. PGO is clang-only, so it builds on the clang toolchain above. The measurement ladder and benchmark corpus are kept as local tooling under `misc/pgo/`, outside the shipped tree.
+PGO is an opt-in build path that layers on top of the clang and ThinLTO templates above. It is clang-only, off by default, and changes nothing about the standard build: every flag is gated behind `pgo != off`, so the MSVC editor, the GCC build, and the plain clang and ThinLTO templates emit identical flags to before. It targets the CPU-bound part of the frame, where profile-driven block layout and inlining help most.
+
+The path uses instrumentation PGO plus a context-sensitive second pass (CSPGO). The first pass instruments and trains to learn which functions and branches are hot; the second pass re-instruments after inlining, using the first profile, to capture call-context-specific behavior the first pass cannot see. Both profiles merge into one, and that profile feeds the final ThinLTO build, so the cross-translation-unit inlining and the profile reinforce each other.
+
+### The opt-in surface
+
+Two SCons options drive it:
+
+| option | values | meaning |
+|---|---|---|
+| `pgo` | `off` (default), `generate`, `cs-generate`, `use` | the stage: instrument, context-sensitive instrument, or apply |
+| `pgo_data` | path | the merged `.profdata` consumed by `cs-generate` and `use` |
+
+`generate` emits `-fprofile-generate`. `cs-generate` emits `-fprofile-use=<pgo_data> -fcs-profile-generate`. `use` emits `-fprofile-use=<pgo_data>`. A non-clang build with `pgo != off` is a hard error, since PGO here is meaningless without clang. The instrumented binary writes its raw profile wherever `LLVM_PROFILE_FILE` points at run time, so there is no build-time output path to manage. On Windows the profile runtime links automatically through `lld-link`; no extra library is needed.
+
+### The two-phase build
+
+A release builder runs five stages, with `llvm-profdata` merging the raw counters between them:
+
+```
+# 1. instrument
+scons ... use_llvm=yes pgo=generate lto=none
+# 2. train: run the workload with LLVM_PROFILE_FILE set, then
+llvm-profdata merge -output=pass1.profdata <raw>/*.profraw
+# 3. context-sensitive instrument
+scons ... use_llvm=yes pgo=cs-generate pgo_data=pass1.profdata lto=none
+# 4. train again, then merge the context-sensitive counters with the first profile
+llvm-profdata merge -output=combined.profdata <raw>/cs-*.profraw pass1.profdata
+# 5. optimize
+scons ... use_llvm=yes pgo=use pgo_data=combined.profdata lto=thin production=yes
+```
+
+The instrumented builds skip LTO, because the profile matches functions by a content hash computed at compile time, so an instrument-without-LTO then apply-with-ThinLTO flow is sound and keeps the instrumented binaries quick to build and run. The training workload is a set of CPU-bound scenes that exercise the GDScript VM, physics, animation, particles, canvas, and resource loading. A held-out pair of scenes is deliberately excluded from training so it can measure how well the profile generalizes.
+
+### Measured: PGO vs no PGO (template vs template, same config, RTX 4080 SUPER)
+
+Both binaries are `template_release production optimize=speed use_llvm lto=thin`, built identically except for the profile. A negative delta means PGO is faster. Each value is the per-scene primary-metric median, low-variance scenes measured across repeats.
+
+| scene | metric | clang+ThinLTO | + PGO | delta |
+|---|---|---:|---:|---:|
+| particles | cpu_render | 0.041 | 0.031 | -24.4% |
+| heldout_3d (held out) | cpu_render | 0.163 | 0.126 | -22.7% |
+| forward_plus_3d | cpu_render | 0.275 | 0.227 | -17.6% |
+| animation | wall | 0.364 | 0.307 | -15.7% |
+| resource_loading | wall | 2.188 | 1.880 | -14.1% |
+| physics_light | wall | 0.228 | 0.199 | -12.7% |
+| gdscript_logic | wall | 1.365 | 1.192 | -12.7% |
+| physics | wall | 0.486 | 0.426 | -12.3% |
+| canvas_2d | cpu_render | 0.375 | 0.299 | -20.3% |
+| heldout_logic (held out) | wall | 1.218 | 1.182 | -3.0% |
+
+On the CPU-bound corpus, PGO cuts per-frame CPU work by roughly 12 to 16% on the logic, physics, animation, and resource scenes, and more on the render-submission scenes. These scenes isolate CPU subsystems, so this is the CPU-side gain rather than a whole-frame number: a partly GPU-bound title sees a smaller aggregate gain, weighted by how CPU-bound its frame is. The profiled binary is also smaller, 65 MB against 77 MB, from the hot and cold splitting the profile drives.
+
+The held-out scenes show where the gain generalizes. The render-bound held-out scene tracks the trained render scenes closely, at -22.7%, so the render and traversal gains transfer to unseen content. The script-bound held-out scene gains only -3.0%, against -12.7% for its trained sibling: the interpreter dispatch ordering PGO learns is partly specific to the opcode mix it trained on, so script-heavy code far from the training corpus keeps less of the win. Nothing measured regressed.
+
+### Profiles and regeneration
+
+The raw and merged profile data is local tooling, never shipped, and not in the repository. A profile is tied to the clang major version it was generated with (currently 22) and to the corpus it trained on. Regenerate it after an LLVM major-version bump or a material change to the training scenes, by rerunning the two-phase build above; a stale profile degrades to a warning and a weaker result rather than a wrong one.
