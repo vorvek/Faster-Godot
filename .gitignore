@@ -151,6 +151,10 @@ cppcheck-cppcheck-build-dir/
 *.gcda
 *.gcno
 
+# Clang PGO profile data (pgo=generate/use)
+*.profraw
+*.profdata
+
 # Geany
 *.geany
 .geanyprj
