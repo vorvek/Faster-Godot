@@ -4063,6 +4063,37 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				RD::get_singleton()->draw_command_end_label();
 			}
 
+			// A4 FPT-fast: temporally stabilize the per-frame-stochastic primary-direct color BEFORE the
+			// composite blits it, so the final no-upscaler image is stable (the primary boils otherwise: the NEE soft-
+			// shadow / area-light sampling re-seeds every frame from the frame index). RTGIFPTStabilize
+			// reprojects the previous accumulated color, accepts it on a same-surface depth + normal
+			// gate read from the rt guides, firefly-clamps the current sample, and 1/n-blends -- the
+			// per-pixel analogue of the GI resolve's temporal accumulate. FPT-ONLY: rt_radiance_probes_fpt
+			// is never set in Hybrid, so the Hybrid composite stays byte-identical. The deep-path oracle
+			// (rt_fpt_reference) is excluded so its raw beauty stays un-stabilized. Multiview is not
+			// handled (single-layer ping-pong) -> falls through to the raw RT color, no crash.
+			// Gate OUT the temporal upscalers (FSR2/XeSS/MetalFX): pre-averaging the primary fights an upscaler's own
+			// jittered accumulation (they converge the deterministic raster primary but not a pre-averaged
+			// path-traced one -- a structural upscaler-lock limitation tracked separately), so under a
+			// jittered upscaler the composite uses the raw RT color. Native TAA is NOT gated out: it
+			// converges the stabilized primary fine (measured); the no-upscaler path benefits most.
+			const bool fpt_stabilize_ok = scale_type != SCALE_FSR2 && scale_type != SCALE_VENDOR && scale_type != SCALE_MFX;
+			RID rt_stabilized_primary;
+			if (fpt_stabilize_ok && rt_radiance_probes_fpt && !rt_fpt_reference && rt_state && rtgi_primary_stabilize != nullptr &&
+					rb_data->rt_has_texture() && rb_data->rt_has_history_validity() &&
+					p_render_data->scene_data->view_count == 1) {
+				RENDER_TIMESTAMP("RTGI FPT Stabilize");
+				const Size2i fpt_rt_size = rb_data->rt_get_size();
+				rtgi_primary_stabilize->ensure_resources(fpt_rt_size);
+				RendererRD::RTGIFPTStabilize::StabilizeParams fpt_sp;
+				rtgi_primary_stabilize->run_stabilize(rb_data->rt_get_texture(), rb_data->rt_get_velocity_texture(),
+						rb_data->rt_get_history_validity(), rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_normal_roughness(),
+						fpt_rt_size, rt_state->frame_counter, false, fpt_sp);
+				if (rtgi_primary_stabilize->has_stable()) {
+					rt_stabilized_primary = rtgi_primary_stabilize->get_stable();
+				}
+			}
+
 			// RTGI radiance-probes composite BEAUTY (A3-T4/T5; Hybrid AND FPT-fast): additively
 			// composite the resolved indirect GI (albedo * diffuse_A + rough_spec) onto the raster-lit
 			// opaque frame, producing BEAUTY. Runs in the plain composite path (the SPG/guide/resolve
@@ -4090,7 +4121,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					rtgi_resolve->get_diffuse_gi().is_valid() &&
 					rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS) &&
 					!using_sdfgi && !using_voxelgi) {
-				const RID fpt_primary_color = (rt_radiance_probes_fpt && rb_data->rt_has_texture()) ? rb_data->rt_get_texture() : RID();
+				// Prefer the temporally-stabilized primary-direct color (accumulated just above) so the
+				// final no-upscaler image is stable; fall back to the raw RT color when stabilization did
+				// not run (multiview, or the stabilizer has no buffer yet). Hybrid passes RID() either way.
+				const RID fpt_primary_color = (rt_radiance_probes_fpt && rb_data->rt_has_texture())
+						? (rt_stabilized_primary.is_valid() ? rt_stabilized_primary : rb_data->rt_get_texture())
+						: RID();
 				// A4: the composite masks the indirect to 0 on background pixels via the depth (raw
 				// reverse-Z, sky == 0). For FPT the background is defined by the PATH-TRACE primary
 				// visibility (rt_get_depth_texture: real depth on hit, 0 on sky-miss), NOT the raster
@@ -7511,6 +7547,7 @@ RenderForwardClustered::RenderForwardClustered() {
 	rtgi_wrc = memnew(RendererRD::RTGIWorldRadianceCache);
 	rtgi_spg = memnew(RendererRD::RTGIScreenProbeGather);
 	rtgi_resolve = memnew(RendererRD::RTGIGIResolve);
+	rtgi_primary_stabilize = memnew(RendererRD::RTGIFPTStabilize);
 	fsr2_effect = memnew(RendererRD::FSR2Effect);
 	ss_effects = memnew(RendererRD::SSEffects);
 	motion_vectors_store = memnew(RendererRD::MotionVectorsStore);
@@ -7545,6 +7582,11 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (rtgi_resolve != nullptr) {
 		memdelete(rtgi_resolve);
 		rtgi_resolve = nullptr;
+	}
+
+	if (rtgi_primary_stabilize != nullptr) {
+		memdelete(rtgi_primary_stabilize);
+		rtgi_primary_stabilize = nullptr;
 	}
 
 	if (fsr2_effect) {

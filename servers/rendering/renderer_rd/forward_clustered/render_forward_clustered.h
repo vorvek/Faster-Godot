@@ -35,6 +35,7 @@
 #include "servers/rendering/renderer_rd/cluster_builder_rd.h"
 #include "servers/rendering/renderer_rd/effects/fsr2.h"
 #include "servers/rendering/renderer_rd/effects/motion_vectors_store.h"
+#include "servers/rendering/renderer_rd/effects/rtgi_fpt_stabilize.h"
 #include "servers/rendering/renderer_rd/effects/rtgi_gi_resolve.h"
 #include "servers/rendering/renderer_rd/effects/rtgi_screen_probe_gather.h"
 #include "servers/rendering/renderer_rd/effects/rtgi_world_radiance_cache.h"
@@ -916,6 +917,9 @@ private:
 	RendererRD::RTGIWorldRadianceCache *rtgi_wrc = nullptr;
 	RendererRD::RTGIScreenProbeGather *rtgi_spg = nullptr;
 	RendererRD::RTGIGIResolve *rtgi_resolve = nullptr;
+	// FPT-fast primary-direct temporal stabilizer (FULL_PATH_TRACING only). Accumulates the
+	// stochastic primary-direct color before the composite so the upscaler can converge it.
+	RendererRD::RTGIFPTStabilize *rtgi_primary_stabilize = nullptr;
 	RendererRD::FSR2Effect *fsr2_effect = nullptr;
 	RendererRD::SSEffects *ss_effects = nullptr;
 

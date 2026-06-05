@@ -323,6 +323,21 @@ denoise, so they remain visible without contributing to RT GI, shadows, or
 reflections. This avoids particle-driven TLAS spikes and black RT speckle from
 billboard particle geometry.
 
+Full Path Tracing shades the directly visible surface with a next-event-estimation
+direct term whose soft-shadow and area-light samples are reseeded every frame, so
+its primary color changes from frame to frame even when the camera is still. When no
+temporal upscaler is active, a dedicated pass accumulates that primary color
+before the composite. It reprojects the previous accumulated value with the RT velocity
+guide, accepts it only on a same-surface depth and normal test read from the current
+guides, clamps fireflies against the local neighborhood, and blends with a
+sample-counted weight. On a still camera this brought the frame-to-frame luminance
+change of the path-traced primary down by about four times in our test scene. The blend
+rejects a sudden drop to near-black so a sub-native sampling miss on a grazing surface
+cannot leave a persistent dark patch. The pass is limited to the no-upscaler path. FSR2,
+XeSS, and MetalFX run their own jittered temporal accumulation. That accumulation settles
+a deterministic raster primary, but a pre-averaged path-traced primary works against it, so
+under those upscalers the composite keeps the raw path-traced color and lets them accumulate it.
+
 RTGI writes noisy radiance, depth, velocity, normal/roughness,
 albedo/metalness, view-Z, hit-distance, validity, and history ID guides at the
 scaled RT texture size. Hybrid RTGI maps those scaled GI pixels back onto the
@@ -873,3 +888,9 @@ PDF/weight accounting.
   count, denoising settings, and GPU class.
 - Transparent particles are raster-only in this implementation; they do not
   contribute to RT GI, shadows, or reflections.
+- Full Path Tracing under a temporal upscaler (FSR2, XeSS, MetalFX) still shows
+  residual temporal instability. The upscaler does not settle onto the per-frame
+  stochastic path-traced primary the way it settles onto a deterministic raster
+  primary, so the no-upscaler primary accumulator is gated off under those upscalers.
+  The no-upscaler path is stable, and a fix for the upscaler path is tracked for a
+  later change.
