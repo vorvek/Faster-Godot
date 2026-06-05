@@ -36,6 +36,10 @@
 #include "core/templates/fixed_vector.h"
 #include "drivers/vulkan/vulkan_hooks.h"
 
+#ifdef XESS_VK_HEADERS_PRESENT
+#include "drivers/vulkan/xess_vulkan_loader.h"
+#endif
+
 #include <thirdparty/misc/smolv.h>
 
 #if defined(AFTERMATH_ENABLED)
@@ -666,6 +670,22 @@ Error RenderingDeviceDriverVulkan::_initialize_device_extensions() {
 #endif
 	_register_requested_device_extension(VK_EXT_DEVICE_FAULT_EXTENSION_NAME, false);
 
+#ifdef XESS_VK_HEADERS_PRESENT
+	// XeSS requires a set of device extensions enabled before vkCreateDevice. Register them
+	// as optional; unsupported ones leave XeSS unavailable and the renderer falls back to FSR2.
+	{
+		VkInstance xess_instance = context_driver->instance_get();
+		Vector<CharString> xess_device_extensions;
+		if (XessVulkanLoader::get_required_device_extensions(xess_instance, physical_device, xess_device_extensions)) {
+			for (const CharString &extension_name : xess_device_extensions) {
+				if (!requested_device_extensions.has(extension_name)) {
+					_register_requested_device_extension(extension_name, false);
+				}
+			}
+		}
+	}
+#endif
+
 	{
 		// Debug marker extensions.
 		// Should be last element in the array.
@@ -744,6 +764,24 @@ Error RenderingDeviceDriverVulkan::_initialize_device_extensions() {
 			}
 		}
 	}
+
+#ifdef XESS_VK_HEADERS_PRESENT
+	// Record whether every XeSS-required device extension was enabled. Combined with the
+	// instance stage, this drives the capability gate in vendor_upscaler.
+	{
+		VkInstance xess_instance = context_driver->instance_get();
+		Vector<CharString> xess_device_extensions;
+		bool xess_ready = XessVulkanLoader::is_instance_ready() &&
+				XessVulkanLoader::get_required_device_extensions(xess_instance, physical_device, xess_device_extensions);
+		for (const CharString &extension_name : xess_device_extensions) {
+			if (!enabled_device_extension_names.has(extension_name)) {
+				xess_ready = false;
+				break;
+			}
+		}
+		XessVulkanLoader::set_device_ready(xess_ready);
+	}
+#endif
 
 	return OK;
 }
@@ -1584,14 +1622,37 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 		}
 	}
 
+#ifdef XESS_VK_HEADERS_PRESENT
+	// XeSS requires its device features chained via VkPhysicalDeviceFeatures2 with a null
+	// pEnabledFeatures. Only switch to that form when XeSS passed the device handshake; the
+	// normal path stays on pEnabledFeatures unchanged.
+	VkPhysicalDeviceFeatures2 xess_features2 = {};
+	void *xess_chain_head = nullptr;
+	bool xess_features_active = false;
+	if (XessVulkanLoader::is_device_ready()) {
+		xess_features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+		xess_features2.features = requested_device_features;
+		xess_features2.pNext = create_info_next;
+		xess_chain_head = &xess_features2;
+		if (XessVulkanLoader::patch_required_device_features(context_driver->instance_get(), physical_device, &xess_chain_head)) {
+			xess_features_active = true;
+		}
+	}
+#endif
+
 	VkDeviceCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	create_info.pNext = create_info_next;
 	create_info.queueCreateInfoCount = p_queue_create_info.size();
 	create_info.pQueueCreateInfos = p_queue_create_info.ptr();
 	create_info.enabledExtensionCount = enabled_extension_names.size();
 	create_info.ppEnabledExtensionNames = enabled_extension_names.ptr();
+#ifdef XESS_VK_HEADERS_PRESENT
+	create_info.pNext = xess_features_active ? xess_chain_head : create_info_next;
+	create_info.pEnabledFeatures = xess_features_active ? nullptr : &requested_device_features;
+#else
+	create_info.pNext = create_info_next;
 	create_info.pEnabledFeatures = &requested_device_features;
+#endif
 
 	if (VulkanHooks::get_singleton() != nullptr) {
 		bool device_created = VulkanHooks::get_singleton()->create_vulkan_device(&create_info, &vk_device);
