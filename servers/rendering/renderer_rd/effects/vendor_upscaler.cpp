@@ -41,6 +41,7 @@
 #if defined(VENDOR_UPSCALER_XESS_REQUESTED) && defined(XESS_VK_HEADERS_PRESENT)
 #include "core/os/os.h"
 #include "drivers/vulkan/godot_vulkan.h"
+#include "drivers/vulkan/xess_vulkan_loader.h"
 #include "xess_vk.h"
 #endif
 
@@ -73,27 +74,6 @@ static VulkanTextureHandles _get_vulkan_texture_handles(RD *p_rd, RID p_texture)
 
 static bool _vulkan_textures_share_image(const VulkanTextureHandles &p_a, const VulkanTextureHandles &p_b) {
 	return p_a.image != VK_NULL_HANDLE && p_a.image == p_b.image;
-}
-
-static bool _open_vendor_library(const char *const *p_library_names, uint32_t p_library_name_count, void *&r_library_handle, String &r_resolved_library_name) {
-	OS *os = OS::get_singleton();
-	ERR_FAIL_NULL_V(os, false);
-
-	for (uint32_t i = 0; i < p_library_name_count; i++) {
-		const char *library_name = p_library_names[i];
-		if (library_name == nullptr) {
-			continue;
-		}
-
-		if (os->open_dynamic_library(library_name, r_library_handle) == OK && r_library_handle != nullptr) {
-			r_resolved_library_name = library_name;
-			return true;
-		}
-	}
-
-	r_library_handle = nullptr;
-	r_resolved_library_name = String();
-	return false;
 }
 
 } // namespace
@@ -163,10 +143,11 @@ static bool _xess_should_skip_context_creation_on_device(String &r_unavailable_r
 		return true;
 	}
 
-	OS *os = OS::get_singleton();
-	const bool force_xess_on_non_intel = os != nullptr && os->get_environment("GODOT_FORCE_XESS_VULKAN_ON_NON_INTEL") == "1";
-	if (rd->get_device().vendor != RenderingContextDriver::Vendor::VENDOR_INTEL && !force_xess_on_non_intel) {
-		r_unavailable_reason = "XeSS Vulkan SR is enabled by default only on Intel GPUs because the native XeSS runtime crashed during context creation on the tested non-Intel Vulkan driver. Set GODOT_FORCE_XESS_VULKAN_ON_NON_INTEL=1 for debugging.";
+	// XeSS super resolution is cross-vendor; it runs wherever its required Vulkan extensions
+	// and features were enabled at device creation. The Vulkan drivers perform that handshake
+	// and record the result here, so this is a capability check rather than a GPU-vendor check.
+	if (!XessVulkanLoader::is_super_resolution_ready()) {
+		r_unavailable_reason = "XeSS Vulkan extensions and features were not enabled at device creation (libxess missing at startup, a required capability is unsupported on this GPU, or GODOT_DISABLE_XESS_VULKAN=1).";
 		return true;
 	}
 
@@ -189,10 +170,6 @@ static void _xess_log_callback(const char *p_message, xess_logging_level_t p_lev
 			print_verbose(vformat("XeSS: %s", p_message));
 			break;
 	}
-}
-
-static bool _xess_resolve_symbol(void *p_library_handle, const String &p_symbol, void *&r_symbol) {
-	return OS::get_singleton()->get_dynamic_library_symbol_handle(p_library_handle, p_symbol, r_symbol, true) == OK && r_symbol != nullptr;
 }
 
 static xess_quality_settings_t _xess_quality_for_resolution(const Size2i &p_internal_size, const Size2i &p_target_size) {
@@ -251,7 +228,6 @@ struct XessUpscaleContext {
 };
 
 class XessRuntime {
-	void *library_handle = nullptr;
 	bool attempted_load = false;
 	bool loaded = false;
 	bool device_probe_attempted = false;
@@ -283,53 +259,34 @@ public:
 
 		attempted_load = true;
 
-		OS *os = OS::get_singleton();
-		ERR_FAIL_NULL_V(os, false);
-
-		const char *const library_names[] = {
-#if defined(WINDOWS_ENABLED)
-			"libxess.dll",
-#elif defined(LINUXBSD_ENABLED)
-			"libxess.so",
-#else
-			"libxess.dll",
-			"libxess.so",
-#endif
-		};
-		String resolved_library_name;
-		if (!_open_vendor_library(library_names, std_size(library_names), library_handle, resolved_library_name)) {
-			library_handle = nullptr;
+		if (!XessVulkanLoader::ensure_loaded()) {
 			unavailable_reason = "The XeSS runtime library could not be loaded.";
 			return false;
 		}
 
+		// Resolve the runtime exports from the shared libxess handle owned by the Vulkan
+		// driver, so the library is opened once for both the bootstrap handshake and dispatch.
 		bool resolved = true;
-		void *symbol = nullptr;
-		resolved = _xess_resolve_symbol(library_handle, "xessGetVersion", symbol) && resolved;
-		xess_get_version = reinterpret_cast<XessGetVersionFunc>(symbol);
-		resolved = _xess_resolve_symbol(library_handle, "xessDestroyContext", symbol) && resolved;
-		xess_destroy_context = reinterpret_cast<XessDestroyContextFunc>(symbol);
-		resolved = _xess_resolve_symbol(library_handle, "xessIsOptimalDriver", symbol) && resolved;
-		xess_is_optimal_driver = reinterpret_cast<XessIsOptimalDriverFunc>(symbol);
-		resolved = _xess_resolve_symbol(library_handle, "xessSetLoggingCallback", symbol) && resolved;
-		xess_set_logging_callback = reinterpret_cast<XessSetLoggingCallbackFunc>(symbol);
-		resolved = _xess_resolve_symbol(library_handle, "xessSetVelocityScale", symbol) && resolved;
-		xess_set_velocity_scale = reinterpret_cast<XessSetVelocityScaleFunc>(symbol);
-		resolved = _xess_resolve_symbol(library_handle, "xessSetJitterScale", symbol) && resolved;
-		xess_set_jitter_scale = reinterpret_cast<XessSetJitterScaleFunc>(symbol);
-		resolved = _xess_resolve_symbol(library_handle, "xessVKCreateContext", symbol) && resolved;
-		xess_vk_create_context = reinterpret_cast<XessVKCreateContextFunc>(symbol);
-		resolved = _xess_resolve_symbol(library_handle, "xessVKBuildPipelines", symbol) && resolved;
-		xess_vk_build_pipelines = reinterpret_cast<XessVKBuildPipelinesFunc>(symbol);
-		resolved = _xess_resolve_symbol(library_handle, "xessVKInit", symbol) && resolved;
-		xess_vk_init = reinterpret_cast<XessVKInitFunc>(symbol);
-		resolved = _xess_resolve_symbol(library_handle, "xessVKExecute", symbol) && resolved;
-		xess_vk_execute = reinterpret_cast<XessVKExecuteFunc>(symbol);
+		auto resolve_export = [&resolved](const char *p_name) -> void * {
+			void *symbol = XessVulkanLoader::resolve_symbol(p_name);
+			resolved = resolved && symbol != nullptr;
+			return symbol;
+		};
+		xess_get_version = reinterpret_cast<XessGetVersionFunc>(resolve_export("xessGetVersion"));
+		xess_destroy_context = reinterpret_cast<XessDestroyContextFunc>(resolve_export("xessDestroyContext"));
+		xess_is_optimal_driver = reinterpret_cast<XessIsOptimalDriverFunc>(resolve_export("xessIsOptimalDriver"));
+		xess_set_logging_callback = reinterpret_cast<XessSetLoggingCallbackFunc>(resolve_export("xessSetLoggingCallback"));
+		xess_set_velocity_scale = reinterpret_cast<XessSetVelocityScaleFunc>(resolve_export("xessSetVelocityScale"));
+		xess_set_jitter_scale = reinterpret_cast<XessSetJitterScaleFunc>(resolve_export("xessSetJitterScale"));
+		xess_vk_create_context = reinterpret_cast<XessVKCreateContextFunc>(resolve_export("xessVKCreateContext"));
+		xess_vk_build_pipelines = reinterpret_cast<XessVKBuildPipelinesFunc>(resolve_export("xessVKBuildPipelines"));
+		xess_vk_init = reinterpret_cast<XessVKInitFunc>(resolve_export("xessVKInit"));
+		xess_vk_execute = reinterpret_cast<XessVKExecuteFunc>(resolve_export("xessVKExecute"));
 
 		if (!resolved) {
 			unload();
 			attempted_load = true;
-			unavailable_reason = vformat("%s is missing one or more required Vulkan SR exports.", resolved_library_name);
+			unavailable_reason = "The XeSS runtime is missing one or more required Vulkan SR exports.";
 			return false;
 		}
 
@@ -338,7 +295,7 @@ public:
 		if (!_xess_result_succeeded(version_result)) {
 			unload();
 			attempted_load = true;
-			unavailable_reason = vformat("%s could not report its version: %s.", resolved_library_name, _xess_result_to_string(version_result));
+			unavailable_reason = vformat("XeSS could not report its version: %s.", _xess_result_to_string(version_result));
 			return false;
 		}
 
@@ -356,10 +313,6 @@ public:
 		}
 		contexts.clear();
 
-		if (library_handle != nullptr && OS::get_singleton() != nullptr) {
-			OS::get_singleton()->close_dynamic_library(library_handle);
-		}
-		library_handle = nullptr;
 		loaded = false;
 		device_probe_attempted = false;
 		device_supported = false;
