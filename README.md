@@ -86,6 +86,13 @@ came mostly from the narrower renderer profile and CPU-side hot-path changes:
   Rapier is the default 2D physics server and Jolt is the default 3D physics
   server. See [docs/rapier_2d_physics.md](docs/rapier_2d_physics.md) for the
   Rapier source, license, and Rust build requirements.
+- Clang + ThinLTO release templates: The shipped release templates are built
+  with clang + lld + ThinLTO. This gives the fork cross-translation-unit
+  inlining the MSVC build never had, plus the GDScript-VM computed-goto dispatch
+  that only compiles under clang. On the fork's benchmark corpus the
+  low-variance scenes (GDScript VM, Forward+ 3D) run 12-22% faster than the MSVC
+  build, with the two virtual-machine scenes leading. The editor toolchain stays
+  on MSVC/GCC. See [docs/pgo.md](docs/pgo.md).
 
 ## Build
 
@@ -107,10 +114,12 @@ Rapier's Rust dependencies are vendored in `thirdparty/rapier_2d/vendor` and
 Use `module_rapier_2d_enabled=no` only for builds that deliberately omit real
 2D physics from this fork.
 
-Windows optimized release template:
+Windows optimized release template (clang + ThinLTO — the shipped toolchain).
+Install LLVM so `clang-cl`, `lld-link`, and `llvm-lib` are on `PATH` ahead of any
+mingw LLVM, then build with `use_llvm=yes lto=thin`:
 
 ```powershell
-scons platform=windows target=template_release arch=x86_64 production=yes tests=no optimize=speed lto=full debug_symbols=no
+scons platform=windows target=template_release arch=x86_64 production=yes tests=no optimize=speed use_llvm=yes lto=thin debug_symbols=no
 ```
 
 Windows optimized release editor:
@@ -128,10 +137,11 @@ scons platform=windows target=editor arch=x86_64 production=yes tests=no optimiz
 python .\modules\mono\build_scripts\build_assemblies.py --godot-output-dir=.\bin --godot-platform=windows --werror --no-deprecated
 ```
 
-Linux optimized release template:
+Linux optimized release template (clang + ThinLTO — the shipped toolchain; needs
+`clang` and `lld`):
 
 ```bash
-scons platform=linuxbsd target=template_release arch=x86_64 production=yes tests=no optimize=speed lto=full debug_symbols=no
+scons platform=linuxbsd target=template_release arch=x86_64 production=yes tests=no optimize=speed use_llvm=yes lto=thin linker=lld debug_symbols=no
 ```
 
 The forked binaries use the `faster-godot` basename and receive the
