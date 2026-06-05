@@ -2462,6 +2462,15 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	}
 #endif
 
+#ifdef FASTER_GODOT_FORWARD_PLUS_ONLY
+	// Projects authored in official Godot may request the Mobile or Compatibility
+	// renderer. This fork only ships Forward+, so fall back to it instead of
+	// refusing to launch, mirroring the Direct3D 12 driver fallback below.
+	if (rendering_method == "mobile" || rendering_method == "gl_compatibility") {
+		WARN_PRINT(vformat("The '%s' rendering method is not available in this fork; using 'forward_plus' instead.", rendering_method));
+		rendering_method = "forward_plus";
+	}
+#endif
 	if (!rendering_method.is_empty()) {
 		if (rendering_method != "forward_plus" &&
 #ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
