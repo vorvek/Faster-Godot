@@ -222,12 +222,12 @@ def configure(env: "SConsEnvironment"):
     env.Append(CCFLAGS=["-ffunction-sections", "-fdata-sections"])
     env.Append(LINKFLAGS=["-Wl,--gc-sections"])
     env.Append(CCFLAGS=["-fno-semantic-interposition"])
-    # GATED (WS1 Task 5): smaller dynamic symbol table + better inlining. Expected safe because
-    # GDExtension entry points are extern-C exports, but MUST be validated by loading a real
-    # GDExtension against a hidden-visibility Linux build before relying on it.
+    # Smaller dynamic symbol table + better inlining. Expected safe because GDExtension entry
+    # points are extern-C exports, but MUST be validated by loading a real GDExtension against a
+    # hidden-visibility Linux build before relying on it.
     env.Append(CCFLAGS=["-fvisibility=hidden", "-fvisibility-inlines-hidden"])
     if env["use_llvm"] and env["linker"] == "lld":
-        # Faster-Godot WS2: identical-code folding (lld-only; deferred from WS1, which had no lld/gold).
+        # Faster-Godot: identical-code folding (lld-only; enabled here because this build's linker is lld).
         env.Append(LINKFLAGS=["-Wl,--icf=safe"])
 
     ## Dependencies
