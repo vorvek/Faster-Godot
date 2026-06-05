@@ -71,6 +71,11 @@ public:
 	static const char *get_super_resolution_unavailable_reason(RSE::ViewportScaling3DMode p_mode);
 	static RSE::ViewportScaling3DMode get_super_resolution_fallback(RSE::ViewportScaling3DMode p_mode);
 	static bool upscale(const SuperResolutionParameters &p_params);
+
+	// Destroys any live vendor-upscaler GPU contexts while the RenderingDevice is still
+	// valid. Must be called during rendering-backend shutdown, before the device is torn
+	// down. No-op when no vendor upscaler is compiled in or none were used.
+	static void cleanup();
 };
 
 } // namespace RendererRD

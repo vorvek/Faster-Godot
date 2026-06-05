@@ -33,6 +33,7 @@
 #include "core/config/project_settings.h"
 #include "core/io/dir_access.h"
 
+#include "servers/rendering/renderer_rd/effects/vendor_upscaler.h"
 #include "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h"
 #ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
 #include "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h"
@@ -167,6 +168,13 @@ uint64_t RendererCompositorRD::frame = 1;
 
 void RendererCompositorRD::finalize() {
 	memdelete(scene);
+
+	// Tear down the global XeSS super-resolution contexts now, while the VkDevice is still
+	// alive. They are owned by a process-lifetime singleton, so relying on C-runtime static
+	// destruction would run xessDestroyContext after the device is gone and fault inside the
+	// driver (0xC0000005 on exit). No-op when XeSS is unused or unavailable.
+	RendererRD::VendorUpscaler::cleanup();
+
 	memdelete(canvas);
 	memdelete(fog);
 	memdelete(particles_storage);

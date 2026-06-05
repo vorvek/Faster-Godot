@@ -583,6 +583,19 @@ RSE::ViewportScaling3DMode VendorUpscaler::get_super_resolution_fallback(RSE::Vi
 	return p_mode;
 }
 
+void VendorUpscaler::cleanup() {
+#if defined(VENDOR_UPSCALER_XESS_REQUESTED) && defined(XESS_VK_HEADERS_PRESENT)
+	// Destroy any live XeSS contexts now, while the RenderingDevice (and the VkDevice behind
+	// it) is still valid. The contexts are owned by a process-lifetime singleton, so without
+	// this deterministic teardown their xessDestroyContext would run during C-runtime static
+	// destruction, after Godot has already destroyed the VkDevice. xessDestroyContext dispatches
+	// Vulkan object teardown into the driver, and doing that against a freed device faults inside
+	// the driver (a 0xC0000005 access violation on exit). Running it here, from the rendering
+	// backend shutdown, keeps the teardown ordered against the device that owns the resources.
+	xess_runtime().unload();
+#endif
+}
+
 bool VendorUpscaler::upscale(const SuperResolutionParameters &p_params) {
 	ERR_FAIL_COND_V_MSG(!is_super_resolution_mode(p_params.mode), false, "The requested scaling mode is not a vendor temporal upscaler.");
 	ERR_FAIL_COND_V_MSG(!is_super_resolution_available(p_params.mode), false, get_super_resolution_unavailable_reason(p_params.mode));
