@@ -493,11 +493,11 @@ def configure_msvc(env: "SConsEnvironment"):
 
     if env["pgo"] != "off":
         if not env["use_llvm"]:
-            print("PGO requires the LLVM toolchain. Use `use_llvm=yes`.")
+            print_error("PGO requires the LLVM toolchain. Use `use_llvm=yes`.")
             sys.exit(255)
         if env["pgo"] in ("cs-generate", "use"):
             if not env["pgo_data"] or not os.path.isfile(env["pgo_data"]):
-                print("pgo=%s requires pgo_data= to point at an existing .profdata file." % env["pgo"])
+                print_error("pgo=%s requires pgo_data= to point at an existing .profdata file." % env["pgo"])
                 sys.exit(255)
         if env["pgo"] == "generate":
             env.AppendUnique(CCFLAGS=["-fprofile-generate"])
@@ -585,6 +585,10 @@ def configure_mingw(env: "SConsEnvironment"):
         print_error(
             "Running from base MSYS2 console/environment, use target specific environment instead (e.g., mingw32, mingw64, clang32, clang64)."
         )
+        sys.exit(255)
+
+    if env["pgo"] != "off":
+        print_error("PGO on Windows is supported only on the clang-cl (MSVC-style) toolchain, not MinGW.")
         sys.exit(255)
 
     if (env_arch := detect_build_env_arch()) and env["arch"] != env_arch:

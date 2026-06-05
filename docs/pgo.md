@@ -97,11 +97,12 @@ A release builder runs five stages, with `llvm-profdata` merging the raw counter
 ```
 # 1. instrument
 scons ... use_llvm=yes pgo=generate lto=none
-# 2. train: run the workload with LLVM_PROFILE_FILE set, then
-llvm-profdata merge -output=pass1.profdata <raw>/*.profraw
+# 2. train: run the instrumented binary over the workload, profile path set per run, then merge
+LLVM_PROFILE_FILE=<raw>/pass1-%p-%m.profraw  <binary>  (play each training scene)
+llvm-profdata merge -output=pass1.profdata <raw>/pass1-*.profraw
 # 3. context-sensitive instrument
 scons ... use_llvm=yes pgo=cs-generate pgo_data=pass1.profdata lto=none
-# 4. train again, then merge the context-sensitive counters with the first profile
+# 4. train again the same way, then merge the context-sensitive counters with the first profile
 llvm-profdata merge -output=combined.profdata <raw>/cs-*.profraw pass1.profdata
 # 5. optimize
 scons ... use_llvm=yes pgo=use pgo_data=combined.profdata lto=thin production=yes
