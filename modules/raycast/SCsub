@@ -105,7 +105,11 @@ if env["builtin_embree"]:
         # Embree needs those; it will automatically use SSE2NEON in ARM.
         env_thirdparty.Append(CPPDEFINES=["__SSE__", "__SSE2__"])
 
-    if env["arch"] == "x86_64" and env.msvc:
+    if env["arch"] == "x86_64" and env.msvc and not env["use_llvm"]:
+        # clang-cl (use_llvm) enforces intrinsic target features like real clang, so it must NOT get
+        # these MSVC-only defines without the matching ISA flags (stripped above for Embree's lowest-ISA
+        # base) — else Embree's headers pick SSE4.1 intrinsics that fail to compile. Like GCC/clang,
+        # clang-cl then takes Embree's SSE2 fallback paths. (Real MSVC tolerates the define/flag mismatch.)
         env_thirdparty.Append(CPPDEFINES=["__SSE3__", "__SSSE3__", "__SSE4_1__", "__SSE4_2__"])
 
     if env["platform"] == "web":
