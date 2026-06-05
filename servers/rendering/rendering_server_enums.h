@@ -471,8 +471,6 @@ enum ViewportScaling3DMode {
 enum ViewportFrameGenerationMode {
 	VIEWPORT_FRAME_GENERATION_DISABLED,
 	VIEWPORT_FRAME_GENERATION_INTERPOLATED,
-	VIEWPORT_FRAME_GENERATION_VENDOR_AUTO,
-	VIEWPORT_FRAME_GENERATION_XESS,
 	VIEWPORT_FRAME_GENERATION_MAX,
 };
 
@@ -494,10 +492,6 @@ inline ViewportScaling3DType scaling_3d_mode_type(ViewportScaling3DMode p_mode) 
 
 inline bool scaling_3d_mode_is_vendor_temporal(ViewportScaling3DMode p_mode) {
 	return p_mode == VIEWPORT_SCALING_3D_MODE_XESS;
-}
-
-inline bool frame_generation_mode_is_vendor(ViewportFrameGenerationMode p_mode) {
-	return p_mode == VIEWPORT_FRAME_GENERATION_VENDOR_AUTO || p_mode == VIEWPORT_FRAME_GENERATION_XESS;
 }
 
 enum ViewportAnisotropicFiltering {

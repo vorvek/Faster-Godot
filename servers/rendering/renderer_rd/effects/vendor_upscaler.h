@@ -65,43 +65,12 @@ public:
 		Transform3D camera_transform;
 	};
 
-	struct FrameGenerationParameters {
-		RSE::ViewportFrameGenerationMode mode = RSE::VIEWPORT_FRAME_GENERATION_DISABLED;
-		uint64_t viewport_id = 0;
-		int screen = -1;
-		Rect2i generation_rect;
-		Size2i render_size;
-		Size2i display_size;
-		RID depth;
-		RID velocity;
-		RID hudless_color;
-		float z_near = 0.0f;
-		float z_far = 0.0f;
-		float fovy = 0.0f;
-		float aspect = 1.0f;
-		Vector2 jitter;
-		float delta_time = 0.0f;
-		bool reset_accumulation = false;
-		bool orthogonal_projection = false;
-		Projection camera_view_to_clip;
-		Projection reprojection;
-		Transform3D camera_transform;
-	};
-
 	static bool is_super_resolution_mode(RSE::ViewportScaling3DMode p_mode);
 	static bool is_super_resolution_available(RSE::ViewportScaling3DMode p_mode);
 	static const char *get_super_resolution_name(RSE::ViewportScaling3DMode p_mode);
 	static const char *get_super_resolution_unavailable_reason(RSE::ViewportScaling3DMode p_mode);
 	static RSE::ViewportScaling3DMode get_super_resolution_fallback(RSE::ViewportScaling3DMode p_mode);
 	static bool upscale(const SuperResolutionParameters &p_params);
-
-	static bool is_frame_generation_mode(RSE::ViewportFrameGenerationMode p_mode);
-	static bool is_frame_generation_available(RSE::ViewportFrameGenerationMode p_mode, bool p_presented_to_swapchain);
-	static const char *get_frame_generation_name(RSE::ViewportFrameGenerationMode p_mode);
-	static const char *get_frame_generation_unavailable_reason(RSE::ViewportFrameGenerationMode p_mode, bool p_presented_to_swapchain);
-	static bool should_use_interpolated_frame_generation_fallback(RSE::ViewportFrameGenerationMode p_mode);
-	static bool prepare_frame_generation(const FrameGenerationParameters &p_params);
-	static void disable_frame_generation(RSE::ViewportFrameGenerationMode p_mode, uint64_t p_viewport_id, int p_screen);
 };
 
 } // namespace RendererRD

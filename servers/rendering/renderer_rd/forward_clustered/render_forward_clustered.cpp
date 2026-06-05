@@ -4455,48 +4455,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		RENDER_TIMESTAMP("Tonemap");
 
 		_render_buffers_post_process_and_tonemap(p_render_data);
-
-		if (rb->is_vendor_frame_generation_presented() && rb->get_view_count() == 1) {
-			real_t fov = p_render_data->scene_data->cam_projection.get_fov();
-			real_t aspect = p_render_data->scene_data->cam_projection.get_aspect();
-			real_t fovy = p_render_data->scene_data->cam_projection.get_fovy(fov, 1.0 / aspect);
-			Vector2 jitter = p_render_data->scene_data->taa_jitter * Vector2(rb->get_internal_size()) * 0.5f;
-
-			RendererRD::VendorUpscaler::FrameGenerationParameters params;
-			params.mode = rb->get_vendor_frame_generation_mode();
-			params.viewport_id = rb->get_vendor_frame_generation_viewport_id();
-			params.screen = rb->get_vendor_frame_generation_screen();
-			params.generation_rect = rb->get_vendor_frame_generation_rect();
-			params.render_size = rb->get_internal_size();
-			params.display_size = rb->get_target_size();
-			params.depth = rb->get_depth_texture(0);
-			params.velocity = rb->get_velocity_buffer(false, 0);
-			params.hudless_color = RendererRD::TextureStorage::get_singleton()->render_target_get_rd_texture(rb->get_render_target());
-			params.z_near = p_render_data->scene_data->z_near;
-			params.z_far = p_render_data->scene_data->z_far;
-			params.fovy = fovy;
-			params.aspect = aspect;
-			params.jitter = jitter;
-			params.delta_time = float(time_step);
-			params.reset_accumulation = false; // FIXME: The engine does not provide a way to reset the accumulation.
-			params.orthogonal_projection = p_render_data->scene_data->cam_orthogonal;
-
-			Projection correction;
-			correction.set_depth_correction(true, true, false);
-
-			const Projection &prev_proj = p_render_data->scene_data->prev_cam_projection;
-			const Projection &cur_proj = p_render_data->scene_data->cam_projection;
-			const Transform3D &prev_transform = p_render_data->scene_data->prev_cam_transform;
-			const Transform3D &cur_transform = p_render_data->scene_data->cam_transform;
-			params.camera_view_to_clip = correction * cur_proj;
-			params.reprojection = (correction * prev_proj) * prev_transform.affine_inverse() * cur_transform * (correction * cur_proj).inverse();
-			params.camera_transform = p_render_data->scene_data->cam_transform;
-
-			RD::get_singleton()->draw_command_begin_label("Vendor Frame Generation Prepare");
-			RENDER_TIMESTAMP("Vendor Frame Generation Prepare");
-			RendererRD::VendorUpscaler::prepare_frame_generation(params);
-			RD::get_singleton()->draw_command_end_label();
-		}
 	}
 
 	if (rb_data.is_valid()) {

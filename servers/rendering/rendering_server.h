@@ -460,8 +460,6 @@ public:
 	using ViewportFrameGenerationMode = RSE::ViewportFrameGenerationMode;
 	static constexpr ViewportFrameGenerationMode VIEWPORT_FRAME_GENERATION_DISABLED = RSE::VIEWPORT_FRAME_GENERATION_DISABLED;
 	static constexpr ViewportFrameGenerationMode VIEWPORT_FRAME_GENERATION_INTERPOLATED = RSE::VIEWPORT_FRAME_GENERATION_INTERPOLATED;
-	static constexpr ViewportFrameGenerationMode VIEWPORT_FRAME_GENERATION_VENDOR_AUTO = RSE::VIEWPORT_FRAME_GENERATION_VENDOR_AUTO;
-	static constexpr ViewportFrameGenerationMode VIEWPORT_FRAME_GENERATION_XESS = RSE::VIEWPORT_FRAME_GENERATION_XESS;
 	static constexpr ViewportFrameGenerationMode VIEWPORT_FRAME_GENERATION_MAX = RSE::VIEWPORT_FRAME_GENERATION_MAX;
 
 
@@ -476,9 +474,6 @@ public:
 	}
 	_ALWAYS_INLINE_ static bool scaling_3d_mode_is_vendor_temporal(ViewportScaling3DMode p_mode) {
 		return RSE::scaling_3d_mode_is_vendor_temporal(p_mode);
-	}
-	_ALWAYS_INLINE_ static bool frame_generation_mode_is_vendor(ViewportFrameGenerationMode p_mode) {
-		return RSE::frame_generation_mode_is_vendor(p_mode);
 	}
 
 	using ViewportAnisotropicFiltering = RSE::ViewportAnisotropicFiltering;

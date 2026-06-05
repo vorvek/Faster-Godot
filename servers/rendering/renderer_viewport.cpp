@@ -416,24 +416,10 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 		}
 	}
 
-	const bool presented_to_swapchain = p_viewport->viewport_to_screen != DisplayServer::INVALID_WINDOW_ID;
-	const bool is_vendor_fg_mode = RendererRD::VendorUpscaler::is_frame_generation_mode(p_viewport->frame_generation_mode);
-	const bool is_vendor_fg_available = is_vendor_fg_mode && RendererRD::VendorUpscaler::is_frame_generation_available(p_viewport->frame_generation_mode, presented_to_swapchain);
-	const bool is_interpolated_fg_enabled = p_viewport->frame_generation_mode == RS::VIEWPORT_FRAME_GENERATION_INTERPOLATED ||
-			(is_vendor_fg_mode && !is_vendor_fg_available);
-	bool is_fg_active = is_interpolated_fg_enabled || is_vendor_fg_available;
-	p_viewport->frame_generation_is_active = is_fg_active;
+	const bool is_interpolated_fg_enabled = p_viewport->frame_generation_mode == RS::VIEWPORT_FRAME_GENERATION_INTERPOLATED;
+	p_viewport->frame_generation_is_active = is_interpolated_fg_enabled;
 
 	Ref<RenderSceneBuffersRD> rb = p_viewport->render_buffers;
-	if (rb.is_valid()) {
-		Rect2i vendor_fg_rect;
-		if (p_viewport->viewport_to_screen_rect != Rect2()) {
-			vendor_fg_rect = p_viewport->viewport_to_screen_rect;
-		} else {
-			vendor_fg_rect = Rect2i(Point2i(), p_viewport->size);
-		}
-		rb->set_vendor_frame_generation_request(p_viewport->frame_generation_mode, p_viewport->self.get_id(), p_viewport->viewport_to_screen, vendor_fg_rect, is_vendor_fg_available);
-	}
 
 	if (is_interpolated_fg_enabled && rb.is_valid()) {
 		if (p_viewport->frame_generation_target_fps > 0) {
@@ -1243,8 +1229,7 @@ bool RendererViewport::_viewport_requires_motion_vectors(Viewport *p_viewport) {
 			RS::scaling_3d_mode_type(p_viewport->scaling_3d_mode) == RS::VIEWPORT_SCALING_3D_TYPE_TEMPORAL ||
 			p_viewport->debug_draw == RenderingServer::VIEWPORT_DEBUG_DRAW_MOTION_VECTORS || p_viewport->force_motion_vectors ||
 			p_viewport->rt_temporal_motion_vectors ||
-			p_viewport->frame_generation_mode == RS::VIEWPORT_FRAME_GENERATION_INTERPOLATED ||
-			RendererRD::VendorUpscaler::is_frame_generation_mode(p_viewport->frame_generation_mode);
+			p_viewport->frame_generation_mode == RS::VIEWPORT_FRAME_GENERATION_INTERPOLATED;
 }
 
 void RendererViewport::viewport_set_frame_generation_mode(RID p_viewport, RS::ViewportFrameGenerationMode p_mode) {
@@ -1256,15 +1241,7 @@ void RendererViewport::viewport_set_frame_generation_mode(RID p_viewport, RS::Vi
 	}
 
 	bool motion_vectors_before = _viewport_requires_motion_vectors(viewport);
-	if (RendererRD::VendorUpscaler::is_frame_generation_mode(viewport->frame_generation_mode)) {
-		RendererRD::VendorUpscaler::disable_frame_generation(viewport->frame_generation_mode, viewport->self.get_id(), viewport->viewport_to_screen);
-	}
 	viewport->frame_generation_mode = p_mode;
-	if (RendererRD::VendorUpscaler::is_frame_generation_mode(p_mode) && !RendererRD::VendorUpscaler::is_frame_generation_available(p_mode, true)) {
-		String frame_generation_name = RendererRD::VendorUpscaler::get_frame_generation_name(p_mode);
-		String unavailable_reason = RendererRD::VendorUpscaler::get_frame_generation_unavailable_reason(p_mode, true);
-		WARN_PRINT_ONCE(vformat("%s is not available: %s Falling back to interpolated frame generation for this viewport.", frame_generation_name, unavailable_reason));
-	}
 	bool motion_vectors_after = _viewport_requires_motion_vectors(viewport);
 
 	if (motion_vectors_before != motion_vectors_after) {
@@ -1381,11 +1358,6 @@ void RendererViewport::viewport_set_clear_mode(RID p_viewport, RS::ViewportClear
 void RendererViewport::viewport_attach_to_screen(RID p_viewport, const Rect2 &p_rect, DisplayServer::WindowID p_screen) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
-
-	if (RendererRD::VendorUpscaler::is_frame_generation_mode(viewport->frame_generation_mode) &&
-			(viewport->viewport_to_screen != p_screen || viewport->viewport_to_screen_rect != p_rect)) {
-		RendererRD::VendorUpscaler::disable_frame_generation(viewport->frame_generation_mode, viewport->self.get_id(), viewport->viewport_to_screen);
-	}
 
 	if (p_screen != DisplayServer::INVALID_WINDOW_ID) {
 		// If using OpenGL we can optimize this operation by rendering directly to system_fbo
@@ -1970,10 +1942,6 @@ void RendererViewport::viewport_set_vrs_texture(RID p_viewport, RID p_texture) {
 bool RendererViewport::free(RID p_rid) {
 	if (viewport_owner.owns(p_rid)) {
 		Viewport *viewport = viewport_owner.get_or_null(p_rid);
-
-		if (RendererRD::VendorUpscaler::is_frame_generation_mode(viewport->frame_generation_mode)) {
-			RendererRD::VendorUpscaler::disable_frame_generation(viewport->frame_generation_mode, viewport->self.get_id(), viewport->viewport_to_screen);
-		}
 
 		RSG::texture_storage->render_target_free(viewport->render_target);
 		RSG::light_storage->shadow_atlas_free(viewport->shadow_atlas);

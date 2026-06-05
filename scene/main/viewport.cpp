@@ -5333,7 +5333,7 @@ void Viewport::_bind_methods() {
 
 #ifndef _3D_DISABLED
 	ADD_GROUP("Frame Generation", "frame_generation_");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "frame_generation_mode", PROPERTY_HINT_ENUM, "Disabled,Interpolated (3D Motion Vectors),Vendor Auto,XeSS Frame Generation"), "set_frame_generation_mode", "get_frame_generation_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "frame_generation_mode", PROPERTY_HINT_ENUM, "Disabled,Interpolated (3D Motion Vectors)"), "set_frame_generation_mode", "get_frame_generation_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "frame_generation_warp_scale", PROPERTY_HINT_RANGE, "0.1,2.0,0.05"), "set_frame_generation_warp_scale", "get_frame_generation_warp_scale");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "frame_generation_target_fps", PROPERTY_HINT_RANGE, "0,240,1"), "set_frame_generation_target_fps", "get_frame_generation_target_fps");
 
@@ -5410,8 +5410,6 @@ void Viewport::_bind_methods() {
 
 	BIND_ENUM_CONSTANT(FRAME_GENERATION_DISABLED);
 	BIND_ENUM_CONSTANT(FRAME_GENERATION_INTERPOLATED);
-	BIND_ENUM_CONSTANT(FRAME_GENERATION_VENDOR_AUTO);
-	BIND_ENUM_CONSTANT(FRAME_GENERATION_XESS);
 	BIND_ENUM_CONSTANT(FRAME_GENERATION_MAX);
 
 	BIND_ENUM_CONSTANT(MSAA_DISABLED);
