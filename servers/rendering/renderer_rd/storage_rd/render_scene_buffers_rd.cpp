@@ -828,7 +828,7 @@ float RenderSceneBuffersRD::get_luminance_multiplier() const {
 }
 
 void RenderSceneBuffersRD::ensure_frame_gen_buffers() {
-	if (internal_size.x == 0 || internal_size.y == 0) {
+	if (target_size.x == 0 || target_size.y == 0) {
 		return;
 	}
 	bool need_create = false;
@@ -845,8 +845,13 @@ void RenderSceneBuffersRD::ensure_frame_gen_buffers() {
 	}
 
 	if (need_create) {
-		create_texture(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_CURRENT, get_base_data_format(), get_color_usage_bits(false, false, true));
-		create_texture(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_PREVIOUS, get_base_data_format(), get_color_usage_bits(false, false, true));
+		// Frame generation captures from, and composites back into, the display-resolution
+		// render target (the viewport drives every copy with rect = viewport size). The
+		// history buffers must therefore match target_size, not internal_size: when 3D
+		// resolution scaling is active (any upscaler, internal_size < target_size) an
+		// internal-size buffer would only receive the top-left crop of the captured image.
+		create_texture(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_CURRENT, get_base_data_format(), get_color_usage_bits(false, false, true), RD::TEXTURE_SAMPLES_1, target_size);
+		create_texture(RB_SCOPE_BUFFERS, RB_TEX_FRAME_GEN_PREVIOUS, get_base_data_format(), get_color_usage_bits(false, false, true), RD::TEXTURE_SAMPLES_1, target_size);
 	}
 }
 
