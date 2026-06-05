@@ -585,6 +585,16 @@ for tool in custom_tools:
 env.Prepend(CPPPATH=["#"])
 
 # configure ENV for platform
+# Faster-Godot ships desktop Windows and Linux templates only, so the editor must
+# not compile or register export plugins / platform APIs for Web, Android, iOS, or
+# macOS. Restricting these lists drops those EditorExportPlatform* classes (and the
+# per-platform export/*.cpp sources) from the editor binary. Projects that still
+# carry presets for the excluded platforms keep loading; the presets are just not
+# offered. (Disabling the profile would restore the full upstream platform set.)
+if env["faster_godot"]:
+    faster_godot_export_platforms = ("windows", "linuxbsd")
+    platform_exporters = [p for p in platform_exporters if p in faster_godot_export_platforms]
+    platform_apis = [p for p in platform_apis if p in faster_godot_export_platforms]
 env.platform_exporters = platform_exporters
 env.platform_apis = platform_apis
 
@@ -1226,6 +1236,15 @@ if not env["verbose"]:
 modules_enabled = OrderedDict()
 env.module_dependencies = {}
 env.module_icons_paths = []
+if env["faster_godot"]:
+    # Faster-Godot only ships Windows and Linux export platforms, so the class
+    # documentation for the excluded platforms (Web, Android, iOS, macOS, visionOS)
+    # is not embedded in the editor binary.
+    platform_doc_class_path = {
+        class_name: doc_dir
+        for class_name, doc_dir in platform_doc_class_path.items()
+        if doc_dir.startswith("platform/windows/") or doc_dir.startswith("platform/linuxbsd/")
+    }
 env.doc_class_path = platform_doc_class_path
 
 for name, path in modules_detected.items():
