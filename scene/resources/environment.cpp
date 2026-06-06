@@ -49,17 +49,14 @@ static Environment::RTGIDenoiser _rtgi_denoiser_from_pathtracing_denoiser(RSE::P
 	switch ((int)p_denoiser) {
 		case RSE::PT_DENOISER_NONE:
 			return Environment::RTGI_DENOISER_NONE;
-		case RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION:
-			return Environment::RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
 		case RSE::PT_DENOISER_NVIDIA:
 			return Environment::RTGI_DENOISER_NVIDIA;
-		case RSE::PT_DENOISER_INTERNAL:
+		default:
+			// The legacy signal-decomposition denoiser was removed; it rendered
+			// identically to ASVFG, so the internal single-signal denoiser and any
+			// unknown value both collapse to ASVFG.
 			r_normalized_denoiser = RSE::PT_DENOISER_INTERNAL;
 			return Environment::RTGI_DENOISER_ASVFG_EXPERIMENTAL;
-		default:
-			// Unknown or removed denoiser value — fall back to Internal Signal Decomposition.
-			r_normalized_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-			return Environment::RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
 	}
 }
 
@@ -73,16 +70,12 @@ static RSE::PathtracingDenoiser _pathtracing_denoiser_from_rtgi_denoiser(Environ
 			return RSE::PT_DENOISER_NONE;
 		case Environment::RTGI_DENOISER_NVIDIA:
 			return RSE::PT_DENOISER_NVIDIA;
-		case Environment::RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION:
-			return RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-		case Environment::RTGI_DENOISER_ASVFG_EXPERIMENTAL:
-			// Public ASVFG value 8 maps to the internal single-signal denoiser, not to RSE value 8.
+		default:
+			// ASVFG, the removed signal-decomposition option (which rendered
+			// identically), and any unknown value all normalize to ASVFG, the
+			// internal single-signal denoiser, so old projects keep loading.
 			r_normalized_denoiser = Environment::RTGI_DENOISER_ASVFG_EXPERIMENTAL;
 			return RSE::PT_DENOISER_INTERNAL;
-		default:
-			// Unknown or removed denoiser value — fall back to Internal Signal Decomposition.
-			r_normalized_denoiser = Environment::RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-			return RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
 	}
 }
 
@@ -731,8 +724,8 @@ void Environment::_mark_rtgi_quality_preset_custom() {
 	}
 
 	bool matches_preset = pathtracing_samples_per_pixel == 1 &&
-			rtgi_denoiser == RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION &&
-			pathtracing_denoiser == RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION &&
+			rtgi_denoiser == RTGI_DENOISER_ASVFG_EXPERIMENTAL &&
+			pathtracing_denoiser == RSE::PT_DENOISER_INTERNAL &&
 			rtgi_analytic_light_sampling_enabled &&
 			rtgi_explicit_emissive_sampling_enabled &&
 			Math::is_equal_approx(rtgi_ray_firefly_suppression, 0.85f);
@@ -774,8 +767,8 @@ void Environment::_apply_rtgi_quality_preset(RTGIQualityPreset p_preset) {
 	}
 
 	pathtracing_samples_per_pixel = 1;
-	rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
-	pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+	rtgi_denoiser = RTGI_DENOISER_ASVFG_EXPERIMENTAL;
+	pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL;
 	rtgi_analytic_light_sampling_enabled = true;
 	rtgi_explicit_emissive_sampling_enabled = true;
 	rtgi_ray_firefly_suppression = 0.85f;
@@ -1881,7 +1874,7 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_analytic_light_sampling_enabled"), "set_rtgi_analytic_light_sampling_enabled", "is_rtgi_analytic_light_sampling_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_explicit_emissive_sampling_enabled"), "set_rtgi_explicit_emissive_sampling_enabled", "is_rtgi_explicit_emissive_sampling_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_wrc_strength", PROPERTY_HINT_RANGE, "0,8,0.01"), "set_rtgi_wrc_strength", "get_rtgi_wrc_strength");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "ASVFG (Experimental):8,Internal Signal Decomposition:14,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "ASVFG:8,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_debug_mode", PROPERTY_HINT_ENUM, "Disabled,Mirror Reflection,Geometry Normals,Final Normals,Normal Map,Tangent,Bitangent,UV,Albedo,ORM,Diffuse Albedo,Specular Albedo,Normal+Roughness,Specular Hit Dist,Metalness,Roughness,View Normals,Diffuse+Specular,Fresnel F0,Front/Back Face,Depth,Emissive,BRDF Rejection,Normal Deviation,Specular Reflection Direction,Specular Reflected Hit Distance,Specular Reflected Hit Normal"), "set_rtgi_debug_mode", "get_rtgi_debug_mode");
 
 	// Glow

@@ -103,6 +103,9 @@ public:
 		RTGI_DENOISER_NVIDIA = 11,
 		RTGI_DENOISER_RESERVED_12 = 12,
 		RTGI_DENOISER_RESERVED_13 = 13,
+		// Deprecated: a vestige of the removed multi-signal denoiser. It rendered
+		// identically to ASVFG and now normalizes to it on load. Kept bound so the
+		// serialized value and any script reference still resolve.
 		RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION = 14,
 		RTGI_DENOISER_SVGF = RTGI_DENOISER_ASVFG_EXPERIMENTAL,
 	};
@@ -229,7 +232,7 @@ private:
 	PathtracingDebugMode pathtracing_debug_mode = RT_DEBUG_DISABLED;
 	int pathtracing_samples_per_pixel = 1;
 	int pathtracing_max_bounces = 4;
-	RSE::PathtracingDenoiser pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+	RSE::PathtracingDenoiser pathtracing_denoiser = RSE::PT_DENOISER_INTERNAL;
 	RTGIBackend rtgi_backend = RTGI_BACKEND_VULKAN_GENERIC;
 	RTGIQualityPreset rtgi_quality_preset = RTGI_QUALITY_PRESET_PRODUCTION;
 	RTGIMode rtgi_mode = RTGI_MODE_HYBRID;
@@ -243,7 +246,7 @@ private:
 	bool rtgi_analytic_light_sampling_enabled = true;
 	bool rtgi_explicit_emissive_sampling_enabled = true;
 	float rtgi_wrc_strength = 1.0f;
-	RTGIDenoiser rtgi_denoiser = RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+	RTGIDenoiser rtgi_denoiser = RTGI_DENOISER_ASVFG_EXPERIMENTAL;
 	bool rtgi_applying_quality_preset = false;
 	void _apply_rtgi_quality_preset(RTGIQualityPreset p_preset);
 	void _mark_rtgi_quality_preset_custom();

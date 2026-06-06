@@ -873,7 +873,7 @@ struct PathtracingParams {
 	uint32_t visual_mode = 0;
 	uint32_t sample_count = 1;
 	uint32_t max_bounces = 4;
-	PathtracingDenoiser denoiser = PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION;
+	PathtracingDenoiser denoiser = PT_DENOISER_INTERNAL;
 	float energy = 1.0f;
 	float resolution_scale = 0.67f;
 	uint32_t mode = 2;

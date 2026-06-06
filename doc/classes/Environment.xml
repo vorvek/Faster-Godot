@@ -230,8 +230,8 @@
 		<member name="rtgi_resolution_scale" type="float" setter="set_rtgi_resolution_scale" getter="get_rtgi_resolution_scale" default="0.67">
 			Scales the internal RTGI render resolution before denoising, temporal stabilization, and full-resolution reconstruction. Lower values reduce ray-tracing cost and can improve temporal stability, but rely more heavily on reconstruction; [code]1.0[/code] traces at the viewport's internal 3D resolution. This is an RTGI-specific subsample of the ray trace, independent of the viewport's overall 3D render scale ([code]rendering/scaling_3d/scale[/code]) which scales the entire render.
 		</member>
-		<member name="rtgi_denoiser" type="int" setter="set_rtgi_denoiser" getter="get_rtgi_denoiser" enum="Environment.RTGIDenoiser" default="14">
-			Selects the RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser, [constant RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION] denoises split lighting signals before recomposition, and [constant RTGI_DENOISER_NONE] shows the raw sampled result.
+		<member name="rtgi_denoiser" type="int" setter="set_rtgi_denoiser" getter="get_rtgi_denoiser" enum="Environment.RTGIDenoiser" default="8">
+			Selects the RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser, and [constant RTGI_DENOISER_NONE] shows the raw sampled result.
 		</member>
 		<member name="rtgi_debug_mode" type="int" setter="set_rtgi_debug_mode" getter="get_rtgi_debug_mode" default="0">
 			Selects the RTGI debug visualization. Use it to inspect sampled buffers, material guides, rejection data, and reflection diagnostics.
@@ -556,7 +556,7 @@
 			Disable RTGI denoising. The legacy serialized value [code]5[/code] is accepted as a migration shim and normalized to this value.
 		</constant>
 		<constant name="RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION" value="14" enum="RTGIDenoiser">
-			Use the internal multi-signal RTGI denoiser. Direct light, emissive, indirect, sky, diffuse, and specular signals are denoised separately before internal recomposition.
+			Deprecated. The multi-signal RTGI denoiser was removed; it produced the same result as [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL], so this value now normalizes to it on load.
 		</constant>
 		<constant name="RTGI_DENOISER_NVIDIA" value="11" enum="RTGIDenoiser">
 			Request the NVIDIA RTGI denoiser. Falls back to ASVFG until NRD support is available.
