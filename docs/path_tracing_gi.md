@@ -111,9 +111,9 @@ The feature is exposed on `Environment`, so it appears through the same
     specular radiance keep separate temporal/spatial resources before the final
     internal composite pass.
   - `NVIDIA`: requests the NVIDIA denoiser path. NRD and DLSS Ray
-    Reconstruction remain gated by Streamline/API/platform/runtime requirements.
-    Until available, this warns once and falls back to ASVFG without rewriting
-    the scene.
+    Reconstruction remain gated by the NRD runtime and the experimental RTXPT
+    module, which are off by default. Until available, this warns once and falls
+    back to ASVFG without rewriting the scene.
   - Legacy `FidelityFX`, `AMD`, and `Intel` constants are accepted for older
     scenes and scripts, warn once, and normalize to `Internal Signal
     Decomposition`. They do not call an external FidelityFX, AMD, or Intel
