@@ -327,7 +327,9 @@ jobs:
       - name: Publish GitHub release
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITHUB_TOKEN returns HTTP 403 "Resource not accessible by integration" on
+          # release creation here even with contents: write, so publish with a PAT.
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           set -euxo pipefail
           if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
@@ -346,7 +348,7 @@ jobs:
       - name: Remove the previous (half-broken) release
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           set -euxo pipefail
           # Only runs after the new release published above. Removes the older release the new one replaces.
