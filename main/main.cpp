@@ -2463,9 +2463,9 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 #endif
 
 #ifdef FASTER_GODOT_FORWARD_PLUS_ONLY
-	// Projects authored in official Godot may request the Mobile or Compatibility
-	// renderer. This fork only ships Forward+, so fall back to it instead of
-	// refusing to launch, mirroring the Direct3D 12 driver fallback below.
+	// A --rendering-method request for Mobile or Compatibility is redirected to
+	// forward_plus here so it passes the validation below instead of aborting.
+	// The project-setting case is handled later, once that value is resolved.
 	if (rendering_method == "mobile" || rendering_method == "gl_compatibility") {
 		WARN_PRINT(vformat("The '%s' rendering method is not available in this fork; using 'forward_plus' instead.", rendering_method));
 		rendering_method = "forward_plus";
@@ -2623,6 +2623,18 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	if (rendering_method.is_empty()) {
 		rendering_method = GLOBAL_GET("rendering/renderer/rendering_method");
 	}
+
+#ifdef FASTER_GODOT_FORWARD_PLUS_ONLY
+	// A project setting can also select the Mobile or Compatibility renderer (a
+	// project authored in official Godot, or a rendering_method.mobile/.web
+	// override). Redirect it to forward_plus now that the project value is
+	// resolved, before the driver is chosen from it and before the method is
+	// reported, so a project authored elsewhere still opens on Forward+.
+	if (rendering_method == "mobile" || rendering_method == "gl_compatibility") {
+		WARN_PRINT(vformat("The '%s' rendering method is not available in this fork; using 'forward_plus' instead.", rendering_method));
+		rendering_method = "forward_plus";
+	}
+#endif
 
 	if (rendering_driver.is_empty()) {
 		if (rendering_method == "dummy") {
