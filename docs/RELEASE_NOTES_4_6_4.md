@@ -18,7 +18,7 @@ An interpolated frame generation path doubles apparent frame rate by warping bet
 TAA with extra quality controls, AMD FSR2, and Intel XeSS, plus custom viewport 3D scaling modes. The viewport scale and the upscaler are the recommended way to trade resolution for performance, and RTGI composites cleanly underneath them.
 
 ### Build-level performance
-- A documented clang and ThinLTO build recipe for the release templates, measured at 12 to 22 percent faster than the MSVC build on the trustworthy benchmark scenes, up to 32 percent on 2D, led by the GDScript virtual machine at about 18 to 22 percent because clang unlocks its computed-goto dispatch. The editor stays on MSVC and GCC.
+- The release templates are built with clang and ThinLTO, measured at 12 to 22 percent faster than the MSVC build on the trustworthy benchmark scenes, up to 32 percent on 2D, led by the GDScript virtual machine at about 18 to 22 percent because clang unlocks its computed-goto dispatch. The editor stays on MSVC and GCC.
 - An opt-in clang PGO path builds on the clang toolchain.
 - The runtime side adds a Vulkan descriptor set cache, Forward+ and RTGI hot-path tuning, animation and skinning SIMD, SceneTree and audio work, and AVX2/FMA culling.
 
@@ -36,6 +36,7 @@ The desktop binaries assume an AVX2, FMA3, F16C, BMI, AES, and SSE4.2 capable x8
 - A Full Path Tracing primary stabilizer fix: a moving light used to leave a permanent bright trail on surfaces it had left, because stale history was kept whenever the surface darkened. The stabilizer now rectifies reprojected history into the current neighborhood color box, so the lighting decays the same frame the light moves on, while the per-frame path-traced noise still resolves.
 - Intel XeSS integration with the missing Vulkan handshake fixed, and the DLSS, Streamline, and FSR 3.1 vendor paths removed in favor of XeSS and FSR2.
 - A denoiser-option cleanup: deprecated and placeholder values normalize to the shipping denoiser on load, and a developer-only path-tracing reference toggle is hidden from the inspector.
+- An editor RTGI fix: enabling RTGI in the editor no longer floods the log with texture errors, and switching between scenes that use different RTGI modes no longer crashes. The material guides are now requested through an existence check instead of a mandatory accessor, so a mode that does not produce them, or a mid-switch buffer teardown, is handled gracefully.
 - Measured upscaler behavior: Hybrid RTGI is stable under TAA, FSR2, and XeSS, and below native resolution. Full Path Tracing pairs cleanly with no upscaler, TAA, and XeSS; it boils under FSR2 specifically, because a feed-forward temporal upscaler cannot lock a per-frame stochastic path-traced primary, so Hybrid is the recommended mode under FSR2.
 
 ## Requirements
