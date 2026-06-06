@@ -2036,120 +2036,83 @@ func _apply_debug_view(viewport: Viewport, view: String) -> void:
 	RenderingServer.viewport_set_debug_draw(viewport.get_viewport_rid(), _debug_draw_value(view))
 
 
+# Maps a harness debug-view name to its RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_*
+# constant NAME. Resolved by name at runtime in _debug_draw_value() rather than
+# referenced directly: a direct reference to a constant a given build does not expose
+# fails to PARSE and takes the whole harness down with it. The RTGI debug-draw enum
+# set churns across architecture revisions (the denoiser/signal/cache/STRC views were
+# replaced by WRC/SPG/RESOLVE views), so unknown names fall back to the beauty frame.
+const _RTGI_DEBUG_VIEW_CONSTANTS := {
+	"raw_radiance": "VIEWPORT_DEBUG_DRAW_RTGI_RAW_RADIANCE",
+	"diffuse_noisy": "VIEWPORT_DEBUG_DRAW_RTGI_DIFFUSE_NOISY",
+	"specular_noisy": "VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_NOISY",
+	"diffuse_final": "VIEWPORT_DEBUG_DRAW_RTGI_DIFFUSE_FINAL",
+	"specular_final": "VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_FINAL",
+	"specular_guide": "VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_GUIDE",
+	"specular_reflection_direction": "VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTION_DIRECTION",
+	"specular_reflected_hit_distance": "VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTED_HIT_DISTANCE",
+	"specular_reflected_hit_normal": "VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTED_HIT_NORMAL",
+	"specular_roughness_bucket": "VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_ROUGHNESS_BUCKET",
+	"specular_history_length": "VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_HISTORY_LENGTH",
+	"specular_rejection": "VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REJECTION",
+	"noisy": "VIEWPORT_DEBUG_DRAW_RTGI_NOISY",
+	"normal_roughness": "VIEWPORT_DEBUG_DRAW_RTGI_NORMAL_ROUGHNESS",
+	"viewz_hitdist": "VIEWPORT_DEBUG_DRAW_RTGI_VIEWZ_HITDIST",
+	"motion_vectors": "VIEWPORT_DEBUG_DRAW_RTGI_MOTION_VECTORS",
+	"signal_direct": "VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_DIRECT_LIGHT",
+	"signal_emissive": "VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_EMISSIVE",
+	"signal_indirect": "VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_INDIRECT",
+	"signal_sky": "VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_SKY",
+	"signal_confidence": "VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_CONFIDENCE",
+	"source_candidate": "VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_CANDIDATE",
+	"source_history": "VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_HISTORY",
+	"source_temporal_delta": "VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_TEMPORAL_DELTA",
+	"source_rejection": "VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_REJECTION",
+	"secondary_cache_source": "VIEWPORT_DEBUG_DRAW_RTGI_SECONDARY_CACHE_SOURCE",
+	"secondary_cache_rejection": "VIEWPORT_DEBUG_DRAW_RTGI_SECONDARY_CACHE_REJECTION",
+	"secondary_cache_surface": "VIEWPORT_DEBUG_DRAW_RTGI_SECONDARY_CACHE_SURFACE",
+	"surface_feedback": "VIEWPORT_DEBUG_DRAW_RTGI_SURFACE_FEEDBACK",
+	"surface_key": "VIEWPORT_DEBUG_DRAW_RTGI_SURFACE_KEY",
+	"cache_raw_diffuse": "VIEWPORT_DEBUG_DRAW_RTGI_CACHE_RAW_DIFFUSE",
+	"cache_filtered_diffuse": "VIEWPORT_DEBUG_DRAW_RTGI_CACHE_FILTERED_DIFFUSE",
+	"cache_hit_confidence": "VIEWPORT_DEBUG_DRAW_RTGI_CACHE_HIT_CONFIDENCE",
+	"cache_age": "VIEWPORT_DEBUG_DRAW_RTGI_CACHE_AGE",
+	"cache_rejection": "VIEWPORT_DEBUG_DRAW_RTGI_CACHE_REJECTION",
+	"strc_radiance": "VIEWPORT_DEBUG_DRAW_RTGI_STRC_RADIANCE",
+	"strc_confidence": "VIEWPORT_DEBUG_DRAW_RTGI_STRC_CONFIDENCE",
+	"strc_updates": "VIEWPORT_DEBUG_DRAW_RTGI_STRC_UPDATES",
+	"strc_visibility": "VIEWPORT_DEBUG_DRAW_RTGI_STRC_VISIBILITY",
+	"strc_age": "VIEWPORT_DEBUG_DRAW_RTGI_STRC_AGE",
+	"strc_variance": "VIEWPORT_DEBUG_DRAW_RTGI_STRC_VARIANCE",
+	"strc_rejection": "VIEWPORT_DEBUG_DRAW_RTGI_STRC_REJECTION",
+	"variance": "VIEWPORT_DEBUG_DRAW_RTGI_VARIANCE",
+	"history_length": "VIEWPORT_DEBUG_DRAW_RTGI_HISTORY_LENGTH",
+	"rejection": "VIEWPORT_DEBUG_DRAW_RTGI_REJECTION",
+	"final": "VIEWPORT_DEBUG_DRAW_RTGI_FINAL",
+	"denoised_radiance": "VIEWPORT_DEBUG_DRAW_RTGI_DENOISED_RADIANCE",
+	"reconstructed": "VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED",
+	"reconstructed_radiance": "VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED_RADIANCE",
+	"reconstructed_reactivity": "VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED_REACTIVITY",
+	"reconstruction_reactivity": "VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_REACTIVITY",
+	"reconstruction_signal_confidence": "VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_SIGNAL_CONFIDENCE",
+	"reconstruction_guide_mismatch": "VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_GUIDE_MISMATCH",
+	"reconstruction_fill_source": "VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_FILL_SOURCE",
+}
+var _warned_missing_rtgi_debug := {}
+
+
 func _debug_draw_value(view: String) -> int:
-	match view:
-		"beauty", "disabled":
-			return 0
-		"raw_radiance":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RAW_RADIANCE
-		"diffuse_noisy":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_DIFFUSE_NOISY
-		"specular_noisy":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_NOISY
-		"diffuse_final":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_DIFFUSE_FINAL
-		"specular_final":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_FINAL
-		"specular_guide":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_GUIDE
-		"specular_reflection_direction":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTION_DIRECTION
-		"specular_reflected_hit_distance":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTED_HIT_DISTANCE
-		"specular_reflected_hit_normal":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTED_HIT_NORMAL
-		"specular_roughness_bucket":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_ROUGHNESS_BUCKET
-		"specular_history_length":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_HISTORY_LENGTH
-		"specular_rejection":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REJECTION
-		"noisy":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_NOISY
-		"normal_roughness":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_NORMAL_ROUGHNESS
-		"viewz_hitdist":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_VIEWZ_HITDIST
-		"motion_vectors":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_MOTION_VECTORS
-		"signal_direct":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_DIRECT_LIGHT
-		"signal_emissive":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_EMISSIVE
-		"signal_indirect":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_INDIRECT
-		"signal_sky":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_SKY
-		"signal_confidence":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SIGNAL_CONFIDENCE
-		"source_candidate":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_CANDIDATE
-		"source_history":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_HISTORY
-		"source_temporal_delta":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_TEMPORAL_DELTA
-		"source_rejection":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_REJECTION
-		"secondary_cache_source":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SECONDARY_CACHE_SOURCE
-		"secondary_cache_rejection":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SECONDARY_CACHE_REJECTION
-		"secondary_cache_surface":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SECONDARY_CACHE_SURFACE
-		"surface_feedback":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SURFACE_FEEDBACK
-		"surface_key":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_SURFACE_KEY
-		"cache_raw_diffuse":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_RAW_DIFFUSE
-		"cache_filtered_diffuse":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_FILTERED_DIFFUSE
-		"cache_hit_confidence":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_HIT_CONFIDENCE
-		"cache_age":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_AGE
-		"cache_rejection":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_CACHE_REJECTION
-		"strc_radiance":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_RADIANCE
-		"strc_confidence":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_CONFIDENCE
-		"strc_updates":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_UPDATES
-		"strc_visibility":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_VISIBILITY
-		"strc_age":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_AGE
-		"strc_variance":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_VARIANCE
-		"strc_rejection":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_STRC_REJECTION
-		"variance":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_VARIANCE
-		"history_length":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_HISTORY_LENGTH
-		"rejection":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_REJECTION
-		"final":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_FINAL
-		"denoised_radiance":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_DENOISED_RADIANCE
-		"reconstructed":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED
-		"reconstructed_radiance":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED_RADIANCE
-		"reconstructed_reactivity":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED_REACTIVITY
-		"reconstruction_reactivity":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_REACTIVITY
-		"reconstruction_signal_confidence":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_SIGNAL_CONFIDENCE
-		"reconstruction_guide_mismatch":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_GUIDE_MISMATCH
-		"reconstruction_fill_source":
-			return RenderingServer.VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_FILL_SOURCE
-		_:
-			return 0
+	if view == "beauty" or view == "disabled":
+		return 0
+	var constant_name: String = _RTGI_DEBUG_VIEW_CONSTANTS.get(view, "")
+	if constant_name.is_empty():
+		return 0
+	if ClassDB.class_has_integer_constant("RenderingServer", constant_name):
+		return ClassDB.class_get_integer_constant("RenderingServer", constant_name)
+	if not _warned_missing_rtgi_debug.has(constant_name):
+		_warned_missing_rtgi_debug[constant_name] = true
+		push_warning("RTGI debug view '%s' (%s) is not exposed by this engine build; capturing beauty instead." % [view, constant_name])
+	return 0
 
 
 func _source_attribution_summary(metrics: Dictionary) -> String:
