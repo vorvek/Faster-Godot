@@ -38,6 +38,8 @@ The desktop binaries assume an AVX2, FMA3, F16C, BMI, AES, and SSE4.2 capable x8
 - A denoiser-option cleanup: deprecated and placeholder values normalize to the shipping denoiser on load, and a developer-only path-tracing reference toggle is hidden from the inspector.
 - An editor RTGI fix: enabling RTGI in the editor no longer floods the log with texture errors, and switching between scenes that use different RTGI modes no longer crashes. The material guides are now requested through an existence check instead of a mandatory accessor, so a mode that does not produce them, or a mid-switch buffer teardown, is handled gracefully.
 - Measured upscaler behavior: Hybrid RTGI is stable under TAA, FSR2, and XeSS, and below native resolution. Full Path Tracing pairs cleanly with no upscaler, TAA, and XeSS; it boils under FSR2 specifically, because a feed-forward temporal upscaler cannot lock a per-frame stochastic path-traced primary, so Hybrid is the recommended mode under FSR2.
+- Full Path Tracing now applies volumetric fog. Path tracing replaces the raster opaque pass, so the per-fragment froxel fog the raster path applies never reached the path-traced image, and fog was missing in that mode. A dedicated pass now samples the same froxel volume and blends it onto the path-traced result before the stabilizer and the beauty composite, so the fog matches the other modes.
+- The RTGI render scale now defaults to full resolution. The earlier default rendered the ray-traced lighting at 0.67 of the viewport, which softened it. The default and the Production preset are now 1.0, while the Performance and Balanced presets still scale down to trade resolution for speed.
 
 ## Requirements
 - Windows or Linux, x86_64.
