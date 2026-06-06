@@ -78,13 +78,17 @@ void JSON::_stringify(String &r_result, const Variant &p_var, const String &p_in
 
 			// JSON does not support NaN or Infinity, so use extremely large numbers for infinity.
 			if (!Math::is_finite(num)) {
-				if (num == Math::INF) {
-					r_result += "1e99999";
-				} else if (num == -Math::INF) {
-					r_result += "-1e99999";
-				} else {
+				// Check NaN before the infinity comparisons. Under the fork's fast
+				// floating-point model a raw `num == INF` test can spuriously match NaN,
+				// which would serialize NaN as a huge number instead of the JSON `null`
+				// it must become (and round-trip back as a float rather than null).
+				if (Math::is_nan(num)) {
 					WARN_PRINT_ONCE("`NaN` (\"Not a Number\") found in argument passed to JSON.stringify(). `NaN` cannot be represented in JSON, so the value has been replaced with `null`. This warning will not be printed for any later NaN occurrences.");
 					r_result += "null";
+				} else if (num > 0.0) {
+					r_result += "1e99999";
+				} else {
+					r_result += "-1e99999";
 				}
 				return;
 			}

@@ -317,7 +317,10 @@ public:
 			}
 		}
 
-		if (max <= min || min < 0 || min > rel_l || min_index == -1) { // Exit conditions.
+		// The `min > rel_l` bound carries a small length-relative tolerance so the fork's
+		// fast floating-point rounding cannot drop an intersection whose entry point lands
+		// on the segment's far end (for example a ray that stops exactly on a convex face).
+		if (max <= min || min < 0 || min > rel_l * ((real_t)1.0 + (real_t)CMP_EPSILON) || min_index == -1) { // Exit conditions.
 			return false; // No intersection.
 		}
 

@@ -104,3 +104,21 @@ set. Faster-Godot does not require AMD's separate FMA4 or XOP extensions.
 - F16C, POPCNT, AES, PCLMUL, BMI1, BMI2, and LZCNT are part of the Faster-Godot
   runtime contract.
 - This profile is not intended for deterministic cross-platform simulation.
+
+## Correctness guards
+
+Fast floating-point relaxes rounding, which is acceptable here because the differences
+are not perceptible in rendering, animation, or physics. It also relaxes how the
+compiler reasons about NaN and infinity, so code that must treat those values exactly
+cannot rely on a plain `x == INF` or `x > 0` comparison. The game-facing paths where
+that matters are guarded explicitly:
+
+- `JSON.stringify()` detects NaN with `Math::is_nan()` before its infinity check, so a
+  NaN still serializes to `null` and round-trips as `null` instead of turning into a
+  huge number.
+- `Geometry3D::segment_intersects_convex()` gives its far-end bound a small
+  length-relative tolerance, so a segment that ends on a convex face still reports the
+  hit instead of dropping it to rounding.
+
+The accepted rounding drift is left as is. Only behavior a game could observe, and then
+struggle to debug, is guarded.
