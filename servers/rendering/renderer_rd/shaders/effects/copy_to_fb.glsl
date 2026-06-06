@@ -269,28 +269,50 @@ void main() {
 	vec2 velocity = textureLod(velocity_texture, uv, 0.0).xy;
 
 	float warp = params.luminance_multiplier; // Repurposed for warp_scale.
-	vec2 uv_curr = uv - 0.5 * velocity * warp;
-	vec2 uv_prev = uv + 0.5 * velocity * warp;
 
-	// Clamp UVs to avoid wrapping artifacts
-	uv_curr = clamp(uv_curr, vec2(0.001), vec2(0.999));
-	uv_prev = clamp(uv_prev, vec2(0.001), vec2(0.999));
+	// Cap the per-frame warp so a single very large motion vector cannot stretch
+	// the image across the screen. Half of the warped offset is applied in each
+	// direction, so a cap of about 8 percent of the screen per side keeps fast
+	// pans from smearing.
+	vec2 half_offset = 0.5 * velocity * warp;
+	float max_half = 0.08;
+	float offset_len = length(half_offset);
+	if (offset_len > max_half) {
+		half_offset *= max_half / offset_len;
+	}
+	vec2 uv_curr = uv - half_offset;
+	vec2 uv_prev = uv + half_offset;
 
-	vec4 color_curr = textureLod(current_color, uv_curr, 0.0);
-	vec4 color_prev = textureLod(previous_color, uv_prev, 0.0);
+	// If a warped UV leaves the frame the source has no data there, so fall back
+	// to the unwarped sample for that side rather than smearing the clamped edge
+	// texel.
+	bool curr_oob = any(lessThan(uv_curr, vec2(0.0))) || any(greaterThan(uv_curr, vec2(1.0)));
+	bool prev_oob = any(lessThan(uv_prev, vec2(0.0))) || any(greaterThan(uv_prev, vec2(1.0)));
+	vec2 uv_curr_s = curr_oob ? uv : clamp(uv_curr, vec2(0.0), vec2(1.0));
+	vec2 uv_prev_s = prev_oob ? uv : clamp(uv_prev, vec2(0.0), vec2(1.0));
 
-	// Premium discrepancy-based disocclusion masking
-	// Compare color difference in RGB
+	vec4 color_curr = textureLod(current_color, uv_curr_s, 0.0);
+	vec4 color_prev = textureLod(previous_color, uv_prev_s, 0.0);
+
+	// Discrepancy-based disocclusion masking: compare the warped samples in RGB.
 	float diff = distance(color_curr.rgb, color_prev.rgb);
 
-	// Adaptive threshold based on luma to avoid blending issues in dark vs bright regions
+	// Adaptive threshold based on luma to avoid blending issues in dark vs bright regions.
 	float luma_curr = dot(color_curr.rgb, vec3(0.299, 0.587, 0.114));
 	float luma_prev = dot(color_prev.rgb, vec3(0.299, 0.587, 0.114));
 	float luma_avg = max(0.001, 0.5 * (luma_curr + luma_prev));
-	float threshold = 0.12 * (1.0 + luma_avg * 1.5); // Smooth premium threshold scaling
+	float threshold = 0.12 * (1.0 + luma_avg * 1.5);
 
-	// If discrepancy is high, smoothly fall back to standard unwarped blending
+	// If discrepancy is high, smoothly fall back to standard unwarped blending.
 	float mask = smoothstep(threshold * 1.5, threshold, diff);
+
+	// Blend back toward the unwarped average as motion magnitude grows: fast
+	// motion is where warping is least reliable, independent of the color
+	// discrepancy test. The full warp length is twice the pre-cap half-offset
+	// already measured above, so reuse it rather than taking a second length().
+	float motion_mag = 2.0 * offset_len;
+	float motion_falloff = 1.0 - smoothstep(0.04, 0.12, motion_mag);
+	mask *= motion_falloff;
 
 	vec4 unwarped_curr = textureLod(current_color, uv, 0.0);
 	vec4 unwarped_prev = textureLod(previous_color, uv, 0.0);

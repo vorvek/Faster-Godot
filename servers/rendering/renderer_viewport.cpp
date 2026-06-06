@@ -425,10 +425,19 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 		if (p_viewport->frame_generation_target_fps > 0) {
 			uint64_t target_interval_usec = 1000000 / p_viewport->frame_generation_target_fps;
 			uint64_t current_time = OS::get_singleton()->get_ticks_usec();
-			if (p_viewport->last_frame_step_time_usec != 0) {
+			// Guard against a non-monotonic clock: only pace when time moved forward,
+			// otherwise the unsigned subtraction would underflow to a huge elapsed value
+			// and silently skip pacing.
+			if (p_viewport->last_frame_step_time_usec != 0 && current_time >= p_viewport->last_frame_step_time_usec) {
 				uint64_t elapsed_usec = current_time - p_viewport->last_frame_step_time_usec;
 				if (elapsed_usec < target_interval_usec) {
 					uint64_t delay_usec = target_interval_usec - elapsed_usec;
+					// Never block more than 100 ms on a single pace so a very low target
+					// fps or a clock jump cannot stall the frame.
+					const uint64_t max_pacing_delay_usec = 100000;
+					if (delay_usec > max_pacing_delay_usec) {
+						delay_usec = max_pacing_delay_usec;
+					}
 					OS::get_singleton()->delay_usec(delay_usec);
 				}
 			}
@@ -442,6 +451,14 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 		RID frame_gen_current = rb->get_frame_gen_buffer_current();
 		RID frame_gen_previous = rb->get_frame_gen_buffer_previous();
 
+		// Frame generation captures the render target BEFORE the 2D canvas is
+		// composited (render_canvas runs later in this function). Even steps store
+		// the 3D-only image into the history buffers; odd steps warp those buffers
+		// into the render target and the real 2D canvas is drawn fresh on top, so
+		// the UI is never motion-warped. The velocity returned by
+		// get_velocity_buffer(false) is UV-normalized, so no resolution rescale is
+		// needed even though the history buffers are target-size and velocity is
+		// internal-size.
 		if (p_viewport->frame_generation_step % 2 == 0) {
 			uint64_t current_time = OS::get_singleton()->get_ticks_usec();
 			if (p_viewport->last_real_frame_time_usec != 0) {
