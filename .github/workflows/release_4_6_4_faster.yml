@@ -14,7 +14,7 @@ env:
   RELEASE_TAG: faster-godot-4.6.4
   RELEASE_TITLE: Faster-Godot 4.6.4
   PREVIOUS_RELEASE_TAG: faster-godot-4.6.3b
-  SOURCE_REF: 75fec61079004aeeb464189e607e721413cd3e65
+  SOURCE_REF: d3080f849b8f3273f7686213ba2d31dcfbbb5f2a
   # Common flags. The editor adds lto=full (MSVC/GCC); the templates add use_llvm=yes lto=thin
   # (clang + ThinLTO), which is the shipped release-template toolchain.
   SCONS_BASE: arch=x86_64 faster_godot=yes production=yes tests=no optimize=speed debug_symbols=no verbose=no warnings=no werror=no progress=no
