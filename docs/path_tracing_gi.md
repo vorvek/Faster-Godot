@@ -331,12 +331,20 @@ before the composite. It reprojects the previous accumulated value with the RT v
 guide, accepts it only on a same-surface depth and normal test read from the current
 guides, clamps fireflies against the local neighborhood, and blends with a
 sample-counted weight. On a still camera this brought the frame-to-frame luminance
-change of the path-traced primary down by about four times in our test scene. The blend
-rejects a sudden drop to near-black so a sub-native sampling miss on a grazing surface
-cannot leave a persistent dark patch. The pass is limited to the no-upscaler path. FSR2,
+change of the path-traced primary down by about four times in our test scene. Before
+blending, it also rectifies the reprojected history into the current 3x3 neighborhood
+color box. This is what removes moving-light trails: when a light leaves a surface, the
+surface's stale bright history is clipped back toward the now-dark neighborhood and decays
+the same frame, instead of latching once the surface darkens. Grazing sub-native sampling
+misses are already pulled toward the lit neighborhood by the firefly clamp, so no separate
+dark-drop rule is needed. The pass is limited to the no-upscaler path. FSR2,
 XeSS, and MetalFX run their own jittered temporal accumulation. That accumulation settles
 a deterministic raster primary, but a pre-averaged path-traced primary works against it, so
 under those upscalers the composite keeps the raw path-traced color and lets them accumulate it.
+A reduced-strength pre-average was measured under FSR2 and left the frame-to-frame delta
+unchanged, so the raw color is kept. In practice the path-traced primary stays clean with no
+upscaler, native TAA, and XeSS, but boils under FSR2 specifically, whose feed-forward
+accumulation cannot lock the stochastic base, so Hybrid RTGI is the better mode under FSR2.
 
 RTGI writes noisy radiance, depth, velocity, normal/roughness,
 albedo/metalness, view-Z, hit-distance, validity, and history ID guides at the

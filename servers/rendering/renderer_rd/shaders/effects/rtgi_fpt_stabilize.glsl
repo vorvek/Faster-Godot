@@ -119,12 +119,19 @@ void main() {
 	// accumulator. Edge texels clamp the tap coordinate.
 	vec3 m1 = vec3(0.0);
 	vec3 m2 = vec3(0.0);
+	// Also track the YCoCg neighborhood AABB (min/max): the TAA color box the history
+	// rectification below clips the reprojected history into, so a stale-bright value left by a
+	// now-moved light is pulled back to the current lighting instead of latching a permanent trail.
+	vec3 nbox_min = vec3(1e30);
+	vec3 nbox_max = vec3(-1e30);
 	for (int dy = -1; dy <= 1; dy++) {
 		for (int dx = -1; dx <= 1; dx++) {
 			ivec2 t = clamp(pixel + ivec2(dx, dy), ivec2(0), size - ivec2(1));
 			vec3 yc = rgb_to_ycocg(texelFetch(cur_color, t, 0).rgb);
 			m1 += yc;
 			m2 += yc * yc;
+			nbox_min = min(nbox_min, yc);
+			nbox_max = max(nbox_max, yc);
 		}
 	}
 	const float inv_n = 1.0 / 9.0;
@@ -170,23 +177,23 @@ void main() {
 	float nn = min(hist_n + 1.0, n_cap);
 	float weight = 1.0 / max(nn, 1.0);
 
-	// DARK-DROP REJECTION: drop a near-TOTAL black dropout from the blend this frame. A sub-native
-	// (resolution_scale < 1) primary-direct MISS reads ~0 on a grazing surface the half-res sample
-	// slipped off; without this the 1/n blend latches that black into a persistent blotch (worse at
-	// high n_cap). The cut is RELATIVE and EXTREME -- current below 2% of a clearly-lit history -- so
-	// normal stochastic noise (firefly-clamped to within ~1.5 sigma of the neighborhood mean) never
-	// triggers it, the delta is unaffected, and a legitimately dark pixel (history at/near black) is
-	// exempt. On trigger the converged history is kept (weight 0); n still advances so a real later
-	// darkening converges normally. Only applied to accepted history (a fresh pixel takes cur outright).
+	// HISTORY RECTIFICATION (TAA color-box clamp): clip the reprojected history into the current
+	// 3x3 YCoCg neighborhood AABB before blending. Stale history outside the local color range,
+	// e.g. a wall still carrying the brightness of a now-moved light, is pulled back to the current
+	// lighting so the illumination decays the SAME frame instead of latching a permanent trail. The
+	// box adapts on its own: on a noisy lit surface it spans the per-frame NEE spread so the 1/n
+	// temporal denoise survives, but where the light has left and the neighborhood is uniformly dark
+	// it collapses to that dark value and the stale-bright history is clipped out. This replaces the
+	// old 2%-luma dark-drop, which kept stale-bright history (the trail source) while only half
+	// suppressing grazing / sub-native black misses; those are already lifted toward the lit
+	// neighborhood by the current-sample firefly clamp above, so the latch is unnecessary.
+	vec3 outc = clamped_cur;
 	if (accept) {
-		float hist_luma = luma(hist_rgb);
-		float cur_luma = luma(clamped_cur);
-		if (hist_luma > 1e-3 && cur_luma < 0.02 * hist_luma) {
-			weight = 0.0;
-		}
+		// Rectify the reprojected history into the current neighborhood color box only when it is
+		// actually blended (a rejected pixel takes the clamped current sample outright).
+		vec3 hist_rect = sanitize_color(ycocg_to_rgb(clamp(rgb_to_ycocg(hist_rgb), nbox_min, nbox_max)));
+		outc = mix(hist_rect, clamped_cur, weight);
 	}
-
-	vec3 outc = accept ? mix(hist_rgb, clamped_cur, weight) : clamped_cur;
 	outc = sanitize_color(outc);
 	imageStore(stable_out, pixel, vec4(outc, nn / n_cap));
 }
