@@ -1,0 +1,146 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/specular_motion_anim.gd" id="1_xmnfe"]
+
+[sub_resource type="Environment" id="Environment_bai16"]
+background_mode = 1
+background_color = Color(0.004, 0.005, 0.007, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.01, 0.01, 0.013, 1)
+ambient_light_energy = 0.06
+tonemap_mode = 2
+tonemap_exposure = 0.85
+rtgi_enabled = true
+rtgi_quality_preset = 0
+rtgi_disable_in_editor = false
+
+[sub_resource type="BoxMesh" id="BoxMesh_oc0h2"]
+size = Vector3(14, 0.1, 14)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_erps5"]
+albedo_color = Color(0.42, 0.4, 0.37, 1)
+roughness = 0.86
+
+[sub_resource type="SphereMesh" id="SphereMesh_pi2py"]
+radius = 0.55
+height = 1.1
+radial_segments = 48
+rings = 24
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_b7ig4"]
+albedo_color = Color(0.82, 0.82, 0.84, 1)
+metallic = 1.0
+roughness = 0.05
+
+[sub_resource type="SphereMesh" id="SphereMesh_f0617"]
+radius = 0.55
+height = 1.1
+radial_segments = 48
+rings = 24
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_44xmv"]
+albedo_color = Color(0.82, 0.82, 0.84, 1)
+metallic = 1.0
+roughness = 0.08
+
+[sub_resource type="SphereMesh" id="SphereMesh_vs762"]
+radius = 0.55
+height = 1.1
+radial_segments = 48
+rings = 24
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_f6a6w"]
+albedo_color = Color(0.82, 0.82, 0.84, 1)
+metallic = 1.0
+roughness = 0.14
+
+[sub_resource type="SphereMesh" id="SphereMesh_8ds6q"]
+radius = 0.55
+height = 1.1
+radial_segments = 48
+rings = 24
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_63nlq"]
+albedo_color = Color(0.82, 0.82, 0.84, 1)
+metallic = 1.0
+roughness = 0.2
+
+[node name="SpecularMotion" type="Node3D" unique_id=2086096586]
+script = ExtResource("1_xmnfe")
+
+[node name="RTGIWorldEnvironment" type="WorldEnvironment" parent="." unique_id=635156938]
+environment = SubResource("Environment_bai16")
+
+[node name="Floor" type="MeshInstance3D" parent="." unique_id=1340349614]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+mesh = SubResource("BoxMesh_oc0h2")
+surface_material_override/0 = SubResource("StandardMaterial3D_erps5")
+
+[node name="Spheres" type="Node3D" parent="." unique_id=24272512]
+
+[node name="MetalSphere_00" type="MeshInstance3D" parent="Spheres" unique_id=414720466]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
+gi_mode = 2
+mesh = SubResource("SphereMesh_pi2py")
+surface_material_override/0 = SubResource("StandardMaterial3D_b7ig4")
+
+[node name="MetalSphere_01" type="MeshInstance3D" parent="Spheres" unique_id=793285928]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
+gi_mode = 2
+mesh = SubResource("SphereMesh_f0617")
+surface_material_override/0 = SubResource("StandardMaterial3D_44xmv")
+
+[node name="MetalSphere_02" type="MeshInstance3D" parent="Spheres" unique_id=2012523681]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
+gi_mode = 2
+mesh = SubResource("SphereMesh_vs762")
+surface_material_override/0 = SubResource("StandardMaterial3D_f6a6w")
+
+[node name="MetalSphere_03" type="MeshInstance3D" parent="Spheres" unique_id=802765173]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
+gi_mode = 2
+mesh = SubResource("SphereMesh_8ds6q")
+surface_material_override/0 = SubResource("StandardMaterial3D_63nlq")
+
+[node name="MovingLights" type="Node3D" parent="." unique_id=251233172]
+
+[node name="MovingLight_00" type="OmniLight3D" parent="MovingLights" unique_id=160963247]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.35, 0)
+light_color = Color(1, 0.18, 0.12, 1)
+light_energy = 4.0
+light_size = 0.1
+shadow_enabled = true
+omni_range = 9.0
+
+[node name="MovingLight_01" type="OmniLight3D" parent="MovingLights" unique_id=1798158676]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.35, 0)
+light_color = Color(0.16, 1, 0.22, 1)
+light_energy = 4.0
+light_size = 0.1
+shadow_enabled = true
+omni_range = 9.0
+
+[node name="MovingLight_02" type="OmniLight3D" parent="MovingLights" unique_id=2139785096]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.35, 0)
+light_color = Color(0.18, 0.34, 1, 1)
+light_energy = 4.0
+light_size = 0.1
+shadow_enabled = true
+omni_range = 9.0
+
+[node name="MovingLight_03" type="OmniLight3D" parent="MovingLights" unique_id=886769009]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.35, 0)
+light_color = Color(1, 0.82, 0.55, 1)
+light_energy = 4.0
+light_size = 0.1
+shadow_enabled = true
+omni_range = 9.0
+
+[node name="SpecularMotionCamera" type="Camera3D" parent="." unique_id=684022781]
+transform = Transform3D(0.99999994, 0, 0, 0, 0.98162735, 0.1908089, 0, -0.19080889, 0.9816273, 0, 1.54, 6.4)
+current = true
+fov = 56.0
+far = 60.0

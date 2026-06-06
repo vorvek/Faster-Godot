@@ -30,17 +30,30 @@ var _write_reference := false
 var _camera_pan := false
 var _specular_object_motion := false
 var _specular_motion_nodes: Array[Node3D] = []
+var _packed_scene_root: Node3D = null
 var _reference_spp := 16
 var _sparkle_frames := 16
 var _convergence_frames := 0
+var _fast_iteration := false
 var _scene_mode := "stress"
 var _cornell_compare := false
 var _cornell_reference_image := ""
 var _sponza_path := ""
 var _sponza_normal_y_mode := "auto"
 var _gate_profile := "strict"
+# Per-run override flags. Each stays empty (or NAN) when the matching CLI flag is
+# absent, which means "leave the scene-authored value untouched".
+var _rtgi_mode_override := ""
+var _rtgi_denoiser_override := ""
+var _rtgi_resolution_scale_override := NAN
+var _upscaler_override := ""
+var _scale_3d_override := NAN
 var _camera: Camera3D
 var _environment: Environment
+# Steady-state perf samples gathered over the tail of the warmup loop. The measured
+# render time has a few-frame latency, so only the last frames are sampled.
+var _perf_gpu_samples: Array[float] = []
+var _perf_cpu_samples: Array[float] = []
 var _sponza_asset_loaded := false
 var _sponza_normal_y_flipped := false
 var _sponza_flipped_normal_texture_count := 0
@@ -51,10 +64,77 @@ func _ready() -> void:
 	_parse_args()
 	if _scene_mode == "convergence" and _convergence_frames <= 0:
 		_convergence_frames = 48
-	if _scene_mode == "cornell":
+	if _fast_iteration:
+		# Fast iteration: short warmup, beauty PNG + metrics JSON + the
+		# scene-specific measurement only. Skip the per-view debug captures and
+		# the comparison grid so a single scene finishes in well under a minute.
+		_warmup_frames = mini(_warmup_frames, 24)
+		_capture_all_debug_views = false
+		_capture_comparison = false
+	if _scene_mode == "cornell" or _scene_mode == "cornell_box":
+		# The committed cornell_box scene reuses the proven runtime cornell
+		# projection (25 mm square image plane, 35 mm focal length), which frames
+		# the open-front box correctly only on a square viewport.
 		_force_square_viewport()
 	_build_scene()
+	# Apply the per-run environment overrides on top of whatever the scene authored.
+	_apply_environment_overrides()
+	# Configure the viewport upscaler LAST so it is not clobbered by the
+	# square-viewport forcing above (which runs before _build_scene), and so it
+	# wins over any scaling the instanced scene set up.
+	_apply_viewport_overrides()
+	# Enable per-viewport GPU/CPU render-time measurement so _sample_frame_perf can
+	# read it. It is off by default (it has a small cost) and returns 0 until enabled.
+	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 	call_deferred("_run_capture")
+
+
+# Overrides _environment.rtgi_mode / rtgi_denoiser / rtgi_resolution_scale from the
+# matching CLI flags. Each branch is a no-op when its flag was absent, so the scene's
+# authored values survive untouched.
+func _apply_environment_overrides() -> void:
+	if _environment == null:
+		return
+	match _rtgi_mode_override:
+		"hybrid":
+			_environment.rtgi_mode = Environment.RTGI_MODE_HYBRID
+		"fpt":
+			_environment.rtgi_mode = Environment.RTGI_MODE_FULL_PATH_TRACING
+		"reflections":
+			_environment.rtgi_mode = Environment.RTGI_MODE_REFLECTIONS_RT_ONLY
+	match _rtgi_denoiser_override:
+		"asvfg":
+			_environment.rtgi_denoiser = Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL
+		"reactive":
+			_environment.rtgi_denoiser = Environment.RTGI_DENOISER_REACTIVE
+		"none":
+			_environment.rtgi_denoiser = Environment.RTGI_DENOISER_NONE
+	if not is_nan(_rtgi_resolution_scale_override):
+		_environment.rtgi_resolution_scale = _rtgi_resolution_scale_override
+
+
+# Configures the root window viewport's 3D scaling pipeline from --rtgi-upscaler and
+# --rtgi-scale-3d. When --rtgi-upscaler is absent the engine-default scaling mode is
+# left alone; --rtgi-scale-3d is independent and only touches the render scale.
+func _apply_viewport_overrides() -> void:
+	var viewport := get_viewport()
+	if viewport == null:
+		return
+	match _upscaler_override:
+		"none":
+			viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+			viewport.use_taa = false
+		"taa":
+			viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+			viewport.use_taa = true
+		"fsr2":
+			viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR2
+			viewport.use_taa = false
+		"xess":
+			viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_XESS
+			viewport.use_taa = false
+	if not is_nan(_scale_3d_override):
+		viewport.scaling_3d_scale = _scale_3d_override
 
 
 func _rtgi_denoiser_path_name(denoiser: int) -> String:
@@ -65,8 +145,8 @@ func _rtgi_denoiser_path_name(denoiser: int) -> String:
 			return "Internal Signal Decomposition"
 		Environment.RTGI_DENOISER_NONE:
 			return "None"
-		Environment.RTGI_DENOISER_NVIDIA:
-			return "NVIDIA requested; active fallback ASVFG"
+		Environment.RTGI_DENOISER_REACTIVE:
+			return "Reactive (RR-style)"
 		_:
 			return "Unknown"
 
@@ -120,7 +200,7 @@ func _parse_args() -> void:
 			_convergence_frames = clampi(arg.trim_prefix("--rtgi-convergence-frames=").to_int(), 0, 128)
 		elif arg.begins_with("--rtgi-scene="):
 			var requested_scene := arg.trim_prefix("--rtgi-scene=").to_lower()
-			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability", "offscreen_bounce"]:
+			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability", "offscreen_bounce", "cornell_box", "specular_motion", "reflective_pool"]:
 				_scene_mode = requested_scene
 			else:
 				push_warning("Unknown RTGI quality scene '%s'; using stress scene." % requested_scene)
@@ -164,9 +244,37 @@ func _parse_args() -> void:
 			_camera_pan = true
 		elif arg == "--rtgi-specular-object-motion":
 			_specular_object_motion = true
+		elif arg.begins_with("--rtgi-mode="):
+			var mode := arg.trim_prefix("--rtgi-mode=").to_lower()
+			if mode in ["hybrid", "fpt", "reflections"]:
+				_rtgi_mode_override = mode
+			else:
+				push_warning("Unknown RTGI mode '%s'; leaving the scene-authored mode untouched." % mode)
+		elif arg.begins_with("--rtgi-denoiser="):
+			var denoiser := arg.trim_prefix("--rtgi-denoiser=").to_lower()
+			if denoiser in ["asvfg", "reactive", "none"]:
+				_rtgi_denoiser_override = denoiser
+			else:
+				push_warning("Unknown RTGI denoiser '%s'; leaving the scene-authored denoiser untouched." % denoiser)
+		elif arg.begins_with("--rtgi-resolution-scale="):
+			_rtgi_resolution_scale_override = clampf(arg.trim_prefix("--rtgi-resolution-scale=").to_float(), 0.25, 1.0)
+		elif arg.begins_with("--rtgi-upscaler="):
+			var upscaler := arg.trim_prefix("--rtgi-upscaler=").to_lower()
+			if upscaler in ["none", "taa", "fsr2", "xess"]:
+				_upscaler_override = upscaler
+			else:
+				push_warning("Unknown RTGI upscaler '%s'; leaving the viewport scaling untouched." % upscaler)
+		elif arg.begins_with("--rtgi-scale-3d="):
+			_scale_3d_override = clampf(arg.trim_prefix("--rtgi-scale-3d=").to_float(), 0.5, 1.0)
+		elif arg == "--rtgi-fast":
+			_fast_iteration = true
 
 
 func _build_scene() -> void:
+	if _is_packed_test_scene():
+		_build_packed_test_scene()
+		return
+
 	var env := Environment.new()
 	env.glow_enabled = false
 	env.rtgi_enabled = true
@@ -266,6 +374,53 @@ func _build_scene() -> void:
 	_camera.position = Vector3(0.15, 1.45, 2.5)
 	add_child(_camera)
 	_camera.look_at(Vector3(-0.15, 1.15, -2.5), Vector3.UP)
+
+
+func _is_packed_test_scene() -> bool:
+	return _scene_mode in ["cornell_box", "specular_motion", "reflective_pool"]
+
+
+# Loads one of the committed static test scenes (cornell_box, specular_motion,
+# reflective_pool) and runs it through the same warmup/capture/measure pipeline
+# as the runtime-built modes. These scenes carry their own WorldEnvironment with
+# RTGI enabled, so the harness pulls _environment and _camera from the instanced
+# tree and applies the per-run RTGI knob overrides on top.
+func _build_packed_test_scene() -> void:
+	var scene_path := "res://scenes/%s.tscn" % _scene_mode
+	if not ResourceLoader.exists(scene_path):
+		push_error("Packed test scene '%s' is missing. Run tools/generate_test_scenes.gd to regenerate it." % scene_path)
+		get_tree().quit(2)
+		return
+	var packed: PackedScene = load(scene_path)
+	if packed == null:
+		push_error("Could not load packed test scene '%s'." % scene_path)
+		get_tree().quit(2)
+		return
+	var instance := packed.instantiate()
+	if not (instance is Node3D):
+		push_error("Packed test scene '%s' did not instantiate a Node3D root." % scene_path)
+		get_tree().quit(2)
+		return
+	_packed_scene_root = instance as Node3D
+	add_child(_packed_scene_root)
+
+	var found_envs := _packed_scene_root.find_children("*", "WorldEnvironment", true, false)
+	var world_environment: WorldEnvironment = found_envs[0] if not found_envs.is_empty() else null
+	if world_environment != null and world_environment.environment != null:
+		_environment = world_environment.environment
+		# Apply per-run RTGI knob overrides on top of the scene-authored values so
+		# CLI sweeps behave the same way they do for the runtime-built modes.
+		_environment.rtgi_ray_firefly_suppression = _ray_firefly_suppression
+		_environment.rtgi_ray_max_radiance = _ray_max_radiance
+		_environment.rtgi_analytic_light_sampling_enabled = _analytic_light_sampling
+		_environment.rtgi_explicit_emissive_sampling_enabled = _explicit_emissive_sampling
+	else:
+		push_warning("Packed test scene '%s' has no WorldEnvironment; RTGI metrics may be unreliable." % scene_path)
+
+	var found_cams := _packed_scene_root.find_children("*", "Camera3D", true, false)
+	_camera = found_cams[0] if not found_cams.is_empty() else null
+	if _camera != null:
+		_camera.current = true
 
 
 func _build_many_light_emissive_scene(env: Environment) -> void:
@@ -774,11 +929,17 @@ func _build_sponza_fallback_atrium() -> void:
 
 func _run_capture() -> void:
 	_apply_debug_view(_debug_view)
+	# Sample the measured GPU/CPU frame time over the tail of the warmup loop. The
+	# measurement carries a few-frame latency, so the last frames before capture are
+	# the steady-state (post-warmup) readings we want.
+	var perf_sample_start := maxi(_warmup_frames - 8, 0)
 	for frame in range(_warmup_frames):
 		if _camera_pan:
 			_animate_camera(frame)
 		_animate_specular_objects(frame)
 		await _wait_render_frame()
+		if frame >= perf_sample_start:
+			_sample_frame_perf()
 
 	var output_dir_error := DirAccess.make_dir_recursive_absolute(_output_dir)
 	if output_dir_error != OK:
@@ -824,6 +985,10 @@ func _run_capture() -> void:
 			metrics.merge(_compare_cornell_reference(final_image, base_name), true)
 	elif _scene_mode == "sponza":
 		metrics.merge(_measure_sponza_image(final_image), true)
+	elif _scene_mode == "cornell_box":
+		metrics.merge(_measure_cornell_box_image(final_image), true)
+	elif _scene_mode == "reflective_pool":
+		metrics.merge(_measure_reflective_pool_image(final_image), true)
 	elif _is_coexistence_scene():
 		metrics.merge(await _measure_coexistence_image(final_image, base_name), true)
 	metrics["denoise_strength"] = _denoise_strength
@@ -853,12 +1018,16 @@ func _run_capture() -> void:
 	var render_diagnostics := _collect_rtgi_render_diagnostics(get_viewport())
 	metrics["render_diagnostics"] = render_diagnostics
 	metrics.merge(render_diagnostics, true)
+	# Per-run performance readings and the effective applied override values, so the
+	# metrics file is self-describing for sweep comparisons.
+	metrics.merge(_collect_perf_metrics(), true)
+	metrics.merge(_collect_applied_override_metrics(), true)
 	metrics.merge(_rtgi_diffuse_cache_budget_metrics(Vector2i(final_image.get_width(), final_image.get_height())), true)
 	if _sparkle_frames > 1 and DisplayServer.get_name().to_lower() != "headless":
 		metrics.merge(await _measure_temporal_sparkle(base_name), true)
-	if _convergence_frames > 1 and DisplayServer.get_name().to_lower() != "headless":
+	if not _fast_iteration and _convergence_frames > 1 and DisplayServer.get_name().to_lower() != "headless":
 		metrics.merge(await _measure_convergence_curve(base_name), true)
-	if DisplayServer.get_name().to_lower() != "headless":
+	if not _fast_iteration and DisplayServer.get_name().to_lower() != "headless":
 		metrics.merge(await _measure_signal_debug_views(), true)
 		metrics["rtgi_instability_attribution"] = _source_attribution_summary(metrics)
 
@@ -902,6 +1071,9 @@ func _animate_camera(frame: int) -> void:
 
 
 func _animate_specular_objects(frame: int) -> void:
+	if _is_packed_test_scene():
+		_advance_packed_scene_animation(frame)
+		return
 	if _scene_mode != "specular_stability" or not _specular_object_motion:
 		return
 	var t := float(frame) * 0.045
@@ -915,6 +1087,14 @@ func _animate_specular_objects(frame: int) -> void:
 		else:
 			node.position = Vector3(1.35 + cos(t * 0.8) * 0.22, 0.50, -3.85 + sin(t * 1.1) * 0.28)
 			node.rotation_degrees = Vector3(fposmod(float(frame) * 1.3, 360.0), fposmod(float(frame) * 2.7, 360.0), 0.0)
+
+
+# Steps a committed test scene's frame-counter animation. The specular_motion
+# and reflective_pool roots expose advance_to_frame() so the harness drives them
+# in lock-step with the warmup/capture loop, keeping captures deterministic.
+func _advance_packed_scene_animation(frame: int) -> void:
+	if _packed_scene_root != null and _packed_scene_root.has_method("advance_to_frame"):
+		_packed_scene_root.advance_to_frame(frame)
 
 
 func _capture_debug_views(base_name: String) -> void:
@@ -939,6 +1119,65 @@ func _collect_rtgi_render_diagnostics(viewport: Viewport) -> Dictionary:
 		"rtgi_reconstruction_guide_quality": guide_quality,
 		"rtgi_reconstruction_guide_quality_label": _rtgi_reconstruction_guide_quality_label(guide_quality),
 	}
+
+
+# Records one GPU/CPU measured-frame-time reading. The measured render time reports
+# 0.0 until a few frames have rendered, so zero readings are dropped to keep the
+# steady-state average honest.
+func _sample_frame_perf() -> void:
+	var rid := get_viewport().get_viewport_rid()
+	var gpu_msec := RenderingServer.viewport_get_measured_render_time_gpu(rid)
+	var cpu_msec := RenderingServer.viewport_get_measured_render_time_cpu(rid)
+	if gpu_msec > 0.0:
+		_perf_gpu_samples.append(gpu_msec)
+	if cpu_msec > 0.0:
+		_perf_cpu_samples.append(cpu_msec)
+
+
+# Assembles the per-run performance metrics: the GPU/CPU frame-time samples gathered
+# over the warmup tail plus the video-memory and draw-call readings taken at capture
+# time. Min GPU time is the most-representative uncontended frame; avg smooths jitter.
+func _collect_perf_metrics() -> Dictionary:
+	var perf := {}
+	if not _perf_gpu_samples.is_empty():
+		var gpu_sum := 0.0
+		var gpu_min: float = _perf_gpu_samples[0]
+		for sample in _perf_gpu_samples:
+			gpu_sum += sample
+			gpu_min = minf(gpu_min, sample)
+		perf["perf_gpu_frame_msec_avg"] = gpu_sum / float(_perf_gpu_samples.size())
+		perf["perf_gpu_frame_msec_min"] = gpu_min
+	if not _perf_cpu_samples.is_empty():
+		var cpu_sum := 0.0
+		for sample in _perf_cpu_samples:
+			cpu_sum += sample
+		perf["perf_cpu_frame_msec_avg"] = cpu_sum / float(_perf_cpu_samples.size())
+	perf["perf_video_mem_used_bytes"] = int(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED))
+	perf["perf_draw_calls"] = int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
+	return perf
+
+
+# Reports the effective per-run override values so each metrics file is
+# self-describing. Mode/denoiser read back the applied enum on _environment; the
+# viewport scaling values read back from the live root viewport.
+func _collect_applied_override_metrics() -> Dictionary:
+	var applied := {}
+	if _environment != null:
+		applied["applied_rtgi_mode"] = int(_environment.rtgi_mode)
+		applied["applied_rtgi_denoiser"] = int(_environment.rtgi_denoiser)
+		applied["applied_rtgi_resolution_scale"] = _environment.rtgi_resolution_scale
+	var viewport := get_viewport()
+	if viewport != null:
+		applied["applied_upscaler_scaling_3d_mode"] = int(viewport.scaling_3d_mode)
+		applied["applied_use_taa"] = viewport.use_taa
+		applied["applied_scaling_3d_scale"] = viewport.scaling_3d_scale
+	# Echo the raw flag selections so a sweep run is filterable by intent.
+	applied["override_rtgi_mode"] = _rtgi_mode_override
+	applied["override_rtgi_denoiser"] = _rtgi_denoiser_override
+	applied["override_rtgi_resolution_scale"] = _rtgi_resolution_scale_override if not is_nan(_rtgi_resolution_scale_override) else null
+	applied["override_upscaler"] = _upscaler_override
+	applied["override_scale_3d"] = _scale_3d_override if not is_nan(_scale_3d_override) else null
+	return applied
 
 
 func _rtgi_reconstruction_guide_quality_label(quality: int) -> String:
@@ -1936,12 +2175,12 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"strc_enabled": false,
 		},
 		{
-			"name": "vendor_denoiser_fallback_nvidia",
+			"name": "vendor_denoiser_reactive",
 			"enabled": true,
 			"backend": Environment.RTGI_BACKEND_VULKAN_GENERIC,
 			"mode": Environment.RTGI_MODE_FULL_PATH_TRACING,
 			"spp": 1,
-			"denoiser": Environment.RTGI_DENOISER_NVIDIA,
+			"denoiser": Environment.RTGI_DENOISER_REACTIVE,
 			"max_bounces": 3,
 			"split_signals": _split_signals,
 			"analytic_light_sampling": _analytic_light_sampling,
@@ -2314,6 +2553,54 @@ func _measure_cornell_image(image: Image) -> Dictionary:
 	}
 
 
+# Color-bleed measurement for the committed cornell_box scene. The walls and
+# floor are neutral white, so the left half of the floor should pick up a red
+# tint from the red wall and the right half a green tint from the green wall.
+# This is the RTGI color-bleed ground truth, and the chroma margins below stay
+# positive only when that indirect bounce reaches the floor. ROIs are tuned to
+# the cornell_box camera framing (centered box, opening toward the camera).
+func _measure_cornell_box_image(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var left_wall := _measure_mean_color(image, int(width * 0.04), int(height * 0.30), int(width * 0.16), int(height * 0.70))
+	var right_wall := _measure_mean_color(image, int(width * 0.84), int(height * 0.30), int(width * 0.96), int(height * 0.70))
+	# Floor strips hugging each colored wall, outside the central interior blocks,
+	# where the wall color bleed onto the neutral floor is strongest and cleanest.
+	var left_floor := _measure_mean_color(image, int(width * 0.07), int(height * 0.66), int(width * 0.24), int(height * 0.84))
+	var right_floor := _measure_mean_color(image, int(width * 0.76), int(height * 0.66), int(width * 0.93), int(height * 0.84))
+	var back_wall := _measure_mean_color(image, int(width * 0.36), int(height * 0.30), int(width * 0.64), int(height * 0.58))
+	var floor_luma := _measure_mean_luma(image, int(width * 0.22), int(height * 0.74), int(width * 0.78), int(height * 0.94))
+	var ceiling_hot_pixels := _count_isolated_hot_pixels(image, int(width * 0.36), int(height * 0.02), int(width * 0.64), int(height * 0.14))
+	return {
+		"cornell_box_red_wall_chroma_margin": left_wall.r - maxf(left_wall.g, left_wall.b),
+		"cornell_box_green_wall_chroma_margin": right_wall.g - maxf(right_wall.r, right_wall.b),
+		"cornell_box_left_floor_red_bleed_margin": left_floor.r - maxf(left_floor.g, left_floor.b),
+		"cornell_box_right_floor_green_bleed_margin": right_floor.g - maxf(right_floor.r, right_floor.b),
+		"cornell_box_floor_mean_luma": floor_luma,
+		"cornell_box_back_wall_mean_luma": _luma(back_wall),
+		"cornell_box_ceiling_hot_pixels": ceiling_hot_pixels,
+	}
+
+
+# Reflection-quality measurement for the committed reflective_pool scene. The
+# near-mirror plane fills the lower half of the frame, so the edge energy there
+# tracks how sharply the emissive spheres reflect, and the pool mean luma tracks
+# the emissive GI bleeding onto the surface. Both should stay above their floors
+# when reflections and bleed are intact.
+func _measure_reflective_pool_image(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var reflection := _measure_detail_region(image, int(width * 0.20), int(height * 0.56), int(width * 0.80), int(height * 0.96))
+	var pool_luma := _measure_mean_luma(image, int(width * 0.10), int(height * 0.60), int(width * 0.90), int(height * 0.98))
+	var reflection_fireflies := _count_isolated_hot_pixels(image, int(width * 0.10), int(height * 0.56), int(width * 0.90), int(height * 0.98))
+	return {
+		"reflective_pool_reflection_edge_energy": reflection["edge_energy"],
+		"reflective_pool_reflection_luma_stddev": reflection["luma_stddev"],
+		"reflective_pool_surface_mean_luma": pool_luma,
+		"reflective_pool_reflection_fireflies": reflection_fireflies,
+	}
+
+
 func _measure_black_fraction(image: Image, x0: int, y0: int, x1: int, y1: int, threshold: float) -> float:
 	var black := 0
 	var count := 0
@@ -2349,7 +2636,8 @@ func _measure_mean_color(image: Image, x0: int, y0: int, x1: int, y1: int) -> Co
 
 func _measure_temporal_sparkle(base_name: String) -> Dictionary:
 	_apply_debug_view("beauty")
-	if _scene_mode == "specular_stability":
+	var motion_scene := _scene_mode == "specular_stability" or _is_packed_test_scene()
+	if motion_scene:
 		if _camera_pan:
 			_animate_camera(_warmup_frames)
 		_animate_specular_objects(_warmup_frames)
@@ -2362,7 +2650,7 @@ func _measure_temporal_sparkle(base_name: String) -> Dictionary:
 	var sampled_pixels := 0
 	var last := previous
 	for frame in range(1, _sparkle_frames):
-		if _scene_mode == "specular_stability":
+		if motion_scene:
 			var scene_frame := _warmup_frames + frame
 			if _camera_pan:
 				_animate_camera(scene_frame)
@@ -3338,6 +3626,15 @@ func _compare_metrics(metrics: Dictionary, expected: Dictionary) -> Array[String
 	_check_max_threshold(metrics, thresholds, "coexistence_rt_owner_luma", failures)
 	_check_max_threshold(metrics, thresholds, "coexistence_owner_luma_ratio", failures)
 	_check_max_threshold(metrics, thresholds, "coexistence_owner_luma_delta", failures)
+	_check_min_threshold(metrics, thresholds, "cornell_box_red_wall_chroma_margin", failures)
+	_check_min_threshold(metrics, thresholds, "cornell_box_green_wall_chroma_margin", failures)
+	_check_min_threshold(metrics, thresholds, "cornell_box_left_floor_red_bleed_margin", failures)
+	_check_min_threshold(metrics, thresholds, "cornell_box_right_floor_green_bleed_margin", failures)
+	_check_min_threshold(metrics, thresholds, "cornell_box_floor_mean_luma", failures)
+	_check_max_threshold(metrics, thresholds, "cornell_box_ceiling_hot_pixels", failures)
+	_check_min_threshold(metrics, thresholds, "reflective_pool_reflection_edge_energy", failures)
+	_check_min_threshold(metrics, thresholds, "reflective_pool_surface_mean_luma", failures)
+	_check_max_threshold(metrics, thresholds, "reflective_pool_reflection_fireflies", failures)
 	return failures
 
 

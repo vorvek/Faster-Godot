@@ -1,0 +1,152 @@
+[gd_scene format=3]
+
+[sub_resource type="Environment" id="Environment_t0yfv"]
+background_mode = 1
+ambient_light_source = 1
+rtgi_enabled = true
+rtgi_quality_preset = 0
+rtgi_max_bounces = 8
+rtgi_disable_in_editor = false
+
+[sub_resource type="BoxMesh" id="BoxMesh_bedsx"]
+size = Vector3(2.78, 0.08, 2.78)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_63ciw"]
+cull_mode = 2
+diffuse_mode = 1
+specular_mode = 2
+albedo_color = Color(0.705, 0.675, 0.515, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_kelpb"]
+size = Vector3(2.78, 0.08, 2.78)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="BoxMesh" id="BoxMesh_r1quu"]
+size = Vector3(2.78, 2.94, 0.08)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="BoxMesh" id="BoxMesh_n28ak"]
+size = Vector3(0.08, 2.94, 2.78)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tu62v"]
+cull_mode = 2
+diffuse_mode = 1
+specular_mode = 2
+albedo_color = Color(0.52, 0.085, 0.07, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_v1y2h"]
+size = Vector3(0.08, 2.94, 2.78)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_xvopy"]
+cull_mode = 2
+diffuse_mode = 1
+specular_mode = 2
+albedo_color = Color(0.15, 0.36, 0.125, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_ruvfq"]
+size = Vector3(0.65, 0.035, 0.52)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_x401s"]
+cull_mode = 2
+diffuse_mode = 1
+specular_mode = 2
+albedo_color = Color(1, 0.84, 0.58, 1)
+emission_enabled = true
+emission = Color(1, 0.84, 0.58, 1)
+emission_energy_multiplier = 3.2
+
+[sub_resource type="BoxMesh" id="BoxMesh_stwwu"]
+size = Vector3(0.72, 1.65, 0.72)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="BoxMesh" id="BoxMesh_fd53q"]
+size = Vector3(0.72, 0.82, 0.72)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[node name="CornellBox" type="Node3D" unique_id=419319602]
+
+[node name="RTGIWorldEnvironment" type="WorldEnvironment" parent="." unique_id=270054243]
+environment = SubResource("Environment_t0yfv")
+
+[node name="Floor" type="MeshInstance3D" parent="." unique_id=1625155950]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.04, 0)
+mesh = SubResource("BoxMesh_bedsx")
+surface_material_override/0 = SubResource("StandardMaterial3D_63ciw")
+
+[node name="Ceiling" type="MeshInstance3D" parent="." unique_id=325269218]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.82, 0)
+mesh = SubResource("BoxMesh_kelpb")
+surface_material_override/0 = SubResource("StandardMaterial3D_63ciw")
+
+[node name="BackWall" type="MeshInstance3D" parent="." unique_id=103281723]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.39, -1.43)
+mesh = SubResource("BoxMesh_r1quu")
+surface_material_override/0 = SubResource("StandardMaterial3D_63ciw")
+
+[node name="LeftRedWall" type="MeshInstance3D" parent="." unique_id=1743455582]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.43, 1.39, 0)
+mesh = SubResource("BoxMesh_n28ak")
+surface_material_override/0 = SubResource("StandardMaterial3D_tu62v")
+
+[node name="RightGreenWall" type="MeshInstance3D" parent="." unique_id=880358478]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.43, 1.39, 0)
+mesh = SubResource("BoxMesh_v1y2h")
+surface_material_override/0 = SubResource("StandardMaterial3D_xvopy")
+
+[node name="CeilingKeyLight" type="OmniLight3D" parent="." unique_id=294622121]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.66, 0)
+light_color = Color(1, 0.84, 0.58, 1)
+light_energy = 4.6
+light_size = 0.65
+shadow_enabled = true
+omni_range = 6.0
+
+[node name="CeilingAreaLight" type="AreaLight3D" parent="." unique_id=1996173536]
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 2.76, 0)
+light_color = Color(1, 0.84, 0.58, 1)
+light_energy = 4.0
+shadow_enabled = true
+area_range = 8.0
+area_size = Vector2(0.65, 0.52)
+
+[node name="CeilingEmitter" type="MeshInstance3D" parent="." unique_id=1493867230]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.75, 0)
+mesh = SubResource("BoxMesh_ruvfq")
+surface_material_override/0 = SubResource("StandardMaterial3D_x401s")
+
+[node name="TallBlock" type="MeshInstance3D" parent="." unique_id=1799937936]
+transform = Transform3D(0.9563048, 0, 0.2923717, 0, 1, 0, -0.2923717, 0, 0.9563048, 0.46, 0.83, -0.36)
+mesh = SubResource("BoxMesh_stwwu")
+surface_material_override/0 = SubResource("StandardMaterial3D_63ciw")
+
+[node name="ShortBlock" type="MeshInstance3D" parent="." unique_id=37808155]
+transform = Transform3D(0.9563048, 0, -0.2923717, 0, 1, 0, 0.2923717, 0, 0.9563048, -0.46, 0.41, 0.31)
+mesh = SubResource("BoxMesh_fd53q")
+surface_material_override/0 = SubResource("StandardMaterial3D_63ciw")
+
+[node name="CornellCamera" type="Camera3D" parent="." unique_id=331241894]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.39, 5.39)
+keep_aspect = 0
+current = true
+fov = 39.307648
+far = 40.0

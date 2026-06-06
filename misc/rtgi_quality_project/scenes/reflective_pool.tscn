@@ -1,0 +1,147 @@
+[gd_scene format=3 uid="uid://c5bmctbxqtw3l"]
+
+[ext_resource type="Script" uid="uid://cieqagkmjh31b" path="res://scripts/reflective_pool_anim.gd" id="1_3uyb5"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_bavmn"]
+sky_top_color = Color(0.1, 0.16, 0.34, 1)
+sky_horizon_color = Color(0.34, 0.38, 0.46, 1)
+ground_bottom_color = Color(0.1, 0.1, 0.13, 1)
+ground_horizon_color = Color(0.3, 0.32, 0.36, 1)
+
+[sub_resource type="Sky" id="Sky_syx0u"]
+sky_material = SubResource("ProceduralSkyMaterial_bavmn")
+
+[sub_resource type="Environment" id="Environment_eq5tp"]
+background_mode = 2
+sky = SubResource("Sky_syx0u")
+ambient_light_source = 1
+rtgi_enabled = true
+rtgi_quality_preset = 0
+rtgi_mode = 0
+rtgi_max_bounces = 5
+
+[sub_resource type="BoxMesh" id="BoxMesh_uqy2b"]
+size = Vector3(24, 0.1, 24)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_u87n4"]
+albedo_color = Color(0.9, 0.92, 0.96, 1)
+metallic = 1.0
+roughness = 0.04
+
+[sub_resource type="BoxMesh" id="BoxMesh_tsp0y"]
+size = Vector3(24, 8, 0.2)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_dwlxy"]
+albedo_color = Color(0.18, 0.18, 0.2, 1)
+roughness = 0.85
+
+[sub_resource type="SphereMesh" id="SphereMesh_12dlm"]
+radius = 0.7
+height = 1.4
+radial_segments = 48
+rings = 24
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_3vnx8"]
+albedo_color = Color(1, 0.32, 0.16, 1)
+roughness = 0.35
+emission_enabled = true
+emission = Color(1, 0.32, 0.16, 1)
+emission_energy_multiplier = 6.0
+
+[sub_resource type="SphereMesh" id="SphereMesh_6kg1d"]
+radius = 0.7
+height = 1.4
+radial_segments = 48
+rings = 24
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_4nkrf"]
+albedo_color = Color(0.22, 1, 0.7, 1)
+roughness = 0.35
+emission_enabled = true
+emission = Color(0.22, 1, 0.7, 1)
+emission_energy_multiplier = 10.0
+
+[sub_resource type="SphereMesh" id="SphereMesh_xvg5n"]
+radius = 0.7
+height = 1.4
+radial_segments = 48
+rings = 24
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_jp18l"]
+albedo_color = Color(0.95, 0.97, 1, 1)
+roughness = 0.35
+emission_enabled = true
+emission = Color(0.95, 0.97, 1, 1)
+emission_energy_multiplier = 18.0
+
+[node name="ReflectivePool" type="Node3D" unique_id=1648216352]
+script = ExtResource("1_3uyb5")
+
+[node name="RTGIWorldEnvironment" type="WorldEnvironment" parent="." unique_id=1123487565]
+environment = SubResource("Environment_eq5tp")
+
+[node name="Pool" type="MeshInstance3D" parent="." unique_id=1089845272]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+mesh = SubResource("BoxMesh_uqy2b")
+surface_material_override/0 = SubResource("StandardMaterial3D_u87n4")
+
+[node name="Backdrop" type="MeshInstance3D" parent="." unique_id=2014511985]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, -8)
+mesh = SubResource("BoxMesh_tsp0y")
+surface_material_override/0 = SubResource("StandardMaterial3D_dwlxy")
+
+[node name="Emitters" type="Node3D" parent="." unique_id=206471982]
+
+[node name="EmitterLow" type="MeshInstance3D" parent="Emitters" unique_id=2133737469]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.4, 0.95, -1.4)
+gi_mode = 2
+mesh = SubResource("SphereMesh_12dlm")
+surface_material_override/0 = SubResource("StandardMaterial3D_3vnx8")
+
+[node name="EmitterLowLamp" type="OmniLight3D" parent="Emitters" unique_id=2012481056]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.4, 0.95, -1.4)
+light_color = Color(1, 0.32, 0.16, 1)
+light_energy = 4.0
+omni_range = 16.0
+
+[node name="EmitterMid" type="MeshInstance3D" parent="Emitters" unique_id=1820848725]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.15, -2.2)
+gi_mode = 2
+mesh = SubResource("SphereMesh_6kg1d")
+surface_material_override/0 = SubResource("StandardMaterial3D_4nkrf")
+
+[node name="EmitterMidLamp" type="OmniLight3D" parent="Emitters" unique_id=1190409795]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.15, -2.2)
+light_color = Color(0.22, 1, 0.7, 1)
+light_energy = 4.0
+omni_range = 16.0
+
+[node name="EmitterHigh" type="MeshInstance3D" parent="Emitters" unique_id=338142668]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.4, 1.3, -1.4)
+gi_mode = 2
+mesh = SubResource("SphereMesh_xvg5n")
+surface_material_override/0 = SubResource("StandardMaterial3D_jp18l")
+
+[node name="EmitterHighLamp" type="OmniLight3D" parent="Emitters" unique_id=683423071]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.4, 1.3, -1.4)
+light_color = Color(0.95, 0.97, 1, 1)
+light_energy = 4.0
+omni_range = 16.0
+
+[node name="SoftFill" type="OmniLight3D" parent="." unique_id=202170243]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6, 5)
+light_color = Color(0.86, 0.9, 1, 1)
+light_energy = 0.6
+omni_range = 24.0
+
+[node name="ReflectivePoolCamera" type="Camera3D" parent="." unique_id=501834689]
+transform = Transform3D(0.99999994, 0, 0, 0, 0.98162735, 0.1908089, 0, -0.19080889, 0.9816273, 0, 1.54, 4.2)
+current = true
+fov = 52.0
+far = 90.0

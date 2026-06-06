@@ -2837,8 +2837,8 @@ func _rtgi_denoiser_path_name(denoiser: int) -> String:
 			return "Internal Signal Decomposition"
 		Environment.RTGI_DENOISER_NONE:
 			return "None"
-		Environment.RTGI_DENOISER_NVIDIA:
-			return "NVIDIA requested; active fallback ASVFG"
+		Environment.RTGI_DENOISER_REACTIVE:
+			return "Reactive (RR-style)"
 		_:
 			return "Unknown"
 

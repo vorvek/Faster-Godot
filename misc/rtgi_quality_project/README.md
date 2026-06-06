@@ -22,7 +22,7 @@ Use `--rtgi-output-dir=<path>` for an explicit output directory.
 
 Useful options:
 
-- `--rtgi-scene=stress|cornell|sponza|sdfgi|voxelgi|lightmap|lightprobe|path_traced_sdfgi_exclusive`
+- `--rtgi-scene=stress|cornell|sponza|sdfgi|voxelgi|lightmap|lightprobe|path_traced_sdfgi_exclusive|cornell_box|specular_motion|reflective_pool`
 - `--rtgi-denoise-strength=0.0..1.0`
 - `--rtgi-history-weight=0.0..0.98` (default `0.95` for split diffuse)
 - `--rtgi-firefly-suppression=0.0..1.0`
@@ -46,6 +46,26 @@ Useful options:
   flips imported Sponza normal-map green channels in the harness only)
 - `--rtgi-camera-pan`
 - `--rtgi-write-reference`
+- `--rtgi-mode=hybrid|fpt|reflections` (overrides the scene's authored RTGI mode; left untouched when absent)
+- `--rtgi-denoiser=asvfg|reactive|none` (overrides the scene's RTGI denoiser; left untouched when absent)
+- `--rtgi-resolution-scale=0.25..1.0` (scales the RTGI trace inside the 3D render; left untouched when absent)
+- `--rtgi-upscaler=none|taa|fsr2|xess` (configures the root viewport scaling; `none`/`taa` use bilinear, `taa` also enables built-in temporal AA; left untouched when absent)
+- `--rtgi-scale-3d=0.5..1.0` (the 3D render scale that the upscaler upscales from, separate from `--rtgi-resolution-scale`; left untouched when absent)
+
+The mode, denoiser, and resolution-scale overrides apply to the scene's
+environment after it is built; the upscaler and 3D-scale overrides apply to the
+root viewport after any square-viewport forcing, so they are not clobbered. Every
+run records its effective applied values plus per-run performance metrics
+(`perf_gpu_frame_msec_avg`, `perf_gpu_frame_msec_min`, `perf_cpu_frame_msec_avg`,
+`perf_video_mem_used_bytes`, `perf_draw_calls`) in the metrics JSON. GPU/CPU frame
+times are sampled over the tail of the warmup loop (steady state); `*_min` is the
+most-representative uncontended frame.
+
+A typical sweep run combining the new flags:
+
+```
+... --rtgi-scene=specular_motion --rtgi-mode=fpt --rtgi-upscaler=fsr2 --rtgi-scale-3d=0.67 --rtgi-denoiser=reactive --rtgi-resolution-scale=0.67 --rtgi-fast
+```
 
 `--rtgi-capture-comparison` writes beauty-frame Full Path Tracing split-signal,
 Full Path Tracing single-beauty fallback, Reflections RT Only, no-RTGI, and high-SPP reference
@@ -183,6 +203,56 @@ Sources:
 
 - Cornell Box public data: <https://www.graphics.cornell.edu/online/box/data.html>
 - Cornell synthetic reference image: <https://www.graphics.cornell.edu/online/box/simulated.jpg>
+
+## Committed Weak-Spot Scenes
+
+Three extra scenes target specific RTGI weak spots. Unlike the runtime-built
+modes above, these are committed static `.tscn` files under `scenes/`, so the
+harness loads them instead of rebuilding geometry each run. An earlier scene set
+was lost because it was only built at runtime in script and never committed;
+keeping real `.tscn` files avoids that.
+
+- `cornell_box`: a classic Cornell box with a red left wall, a green right wall,
+  neutral white floor/ceiling/back, a ceiling `AreaLight3D`, and the two
+  canonical interior blocks. The `WorldEnvironment` uses a linear tonemapper with
+  ambient light off, so the red-onto-white and green-onto-white color bleed is
+  the ground-truth RTGI signal. It measures the wall and floor chroma bleed
+  margins, floor luma, and ceiling firefly count.
+- `specular_motion`: a large matte floor with four low-roughness metallic spheres
+  that orbit the center while four colored `OmniLight3D` nodes orbit on opposing
+  paths, sweeping specular highlights across the spheres every frame. This is the
+  temporal-stability stressor; it measures frame-to-frame temporal sparkle under
+  motion.
+- `reflective_pool`: a near-mirror reflective plane with three emissive spheres at
+  roughly 1x, 4x, and 16x energy floating above it and gently bobbing. It tests
+  sharp reflections of the emissives in the plane and emissive GI bleeding onto
+  the plane, using a linear tonemapper. It measures reflection edge energy,
+  reflected-firefly count, and the bled surface luma.
+
+The `specular_motion` and `reflective_pool` animations are driven by an integer
+frame counter (never delta-time or wall-clock), so a captured run reproduces
+frame for frame. The harness steps the animation in lock-step with the
+warmup/capture loop.
+
+Generate or regenerate the `.tscn` files from the committed generator with the
+editor binary:
+
+```powershell
+D:\dev\faster-godot-4.6.3\bin\faster-godot.windows.editor.dev.x86_64.faster_godot.mono.console.exe --headless --path D:\dev\faster-godot-4.6.3\misc\rtgi_quality_project --script res://tools/generate_test_scenes.gd
+```
+
+Run each scene headlessly for measurement (drop `--headless` for actual RTGI
+metrics; the headless display has no RT-capable viewport texture):
+
+```powershell
+D:\dev\faster-godot-4.6.3\bin\faster-godot.windows.editor.dev.x86_64.faster_godot.mono.console.exe --path D:\dev\faster-godot-4.6.3\misc\rtgi_quality_project --scene res://scenes/rtgi_quality_main.tscn --rtgi-scene=cornell_box
+D:\dev\faster-godot-4.6.3\bin\faster-godot.windows.editor.dev.x86_64.faster_godot.mono.console.exe --path D:\dev\faster-godot-4.6.3\misc\rtgi_quality_project --scene res://scenes/rtgi_quality_main.tscn --rtgi-scene=specular_motion
+D:\dev\faster-godot-4.6.3\bin\faster-godot.windows.editor.dev.x86_64.faster_godot.mono.console.exe --path D:\dev\faster-godot-4.6.3\misc\rtgi_quality_project --scene res://scenes/rtgi_quality_main.tscn --rtgi-scene=reflective_pool
+```
+
+The thresholds for these three scenes in
+`expected/rtgi_quality_expected.json` are initial, intentionally lenient
+baselines. Tighten them after a reviewed per-GPU baseline capture.
 
 ## Sponza
 
