@@ -746,7 +746,7 @@ void Environment::_mark_rtgi_quality_preset_custom() {
 		case RTGI_QUALITY_PRESET_PRODUCTION:
 			matches_preset = matches_preset &&
 					pathtracing_max_bounces == 4 &&
-					Math::is_equal_approx(rtgi_resolution_scale, 0.67f) &&
+					Math::is_equal_approx(rtgi_resolution_scale, 1.0f) &&
 					Math::is_equal_approx(rtgi_ray_max_radiance, 48.0f);
 			break;
 		case RTGI_QUALITY_PRESET_CUSTOM:
@@ -787,7 +787,7 @@ void Environment::_apply_rtgi_quality_preset(RTGIQualityPreset p_preset) {
 		case RTGI_QUALITY_PRESET_PRODUCTION:
 		default:
 			pathtracing_max_bounces = 4;
-			rtgi_resolution_scale = 0.67f;
+			rtgi_resolution_scale = 1.0f;
 			rtgi_ray_max_radiance = 48.0f;
 			break;
 	}

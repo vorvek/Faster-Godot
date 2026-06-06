@@ -243,7 +243,7 @@ private:
 	// FPT deep-path A/B reference oracle (FULL_PATH_TRACING only). Default false keeps FPT-fast.
 	bool rtgi_fpt_reference = false;
 	float rtgi_energy = 1.0;
-	float rtgi_resolution_scale = 0.67f;
+	float rtgi_resolution_scale = 1.0f;
 	bool rtgi_disable_in_editor = true;
 	float rtgi_ray_firefly_suppression = 0.85f;
 	float rtgi_ray_max_radiance = 48.0f;
