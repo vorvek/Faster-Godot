@@ -14,8 +14,10 @@ env:
   RELEASE_TAG: faster-godot-4.6.4
   RELEASE_TITLE: Faster-Godot 4.6.4
   PREVIOUS_RELEASE_TAG: faster-godot-4.6.3b
-  SOURCE_REF: 959094ab94f7789a882ebd70c4e6898ff6b5eb1b
-  SCONS_BASE: arch=x86_64 faster_godot=yes production=yes tests=no optimize=speed lto=full debug_symbols=no verbose=no warnings=no werror=no progress=no
+  SOURCE_REF: 4650c6d8823048273981d1938f5705814c92073e
+  # Common flags. The editor adds lto=full (MSVC/GCC); the templates add use_llvm=yes lto=thin
+  # (clang + ThinLTO), which is the shipped release-template toolchain.
+  SCONS_BASE: arch=x86_64 faster_godot=yes production=yes tests=no optimize=speed debug_symbols=no verbose=no warnings=no werror=no progress=no
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
 
@@ -60,6 +62,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
+            clang \
+            lld \
+            llvm \
             pkg-config \
             libx11-dev \
             libxcursor-dev \
@@ -115,8 +120,9 @@ jobs:
           mkdir -p release/templates/${template_dir}
 
           if [[ "${{ matrix.package }}" == "editor" ]]; then
-            scons platform=linuxbsd target=editor "${mono_arg[@]}" $SCONS_BASE
-            editor_bin="bin/godot.linuxbsd.editor.x86_64.faster_godot${mono_suffix}"
+            # Editor stays on GCC, full LTO.
+            scons platform=linuxbsd target=editor "${mono_arg[@]}" $SCONS_BASE lto=full
+            editor_bin="bin/faster-godot.linuxbsd.editor.x86_64.faster_godot${mono_suffix}"
             if [[ "${{ matrix.mono }}" == "true" ]]; then
               "${editor_bin}" --headless --generate-mono-glue ./modules/mono/glue
               ./modules/mono/build_scripts/build_assemblies.py --godot-output-dir=./bin --godot-platform=linuxbsd --no-deprecated --werror
@@ -132,12 +138,13 @@ jobs:
               (cd release && zip -9 "Faster-Godot_v${RELEASE_VERSION}_linux.x86_64.zip" "Faster-Godot_v${RELEASE_VERSION}_linux.x86_64")
             fi
           else
-            scons platform=linuxbsd target=template_debug "${mono_arg[@]}" $SCONS_BASE
-            scons platform=linuxbsd target=template_release "${mono_arg[@]}" $SCONS_BASE
-            strip "bin/godot.linuxbsd.template_debug.x86_64.faster_godot${mono_suffix}"
-            strip "bin/godot.linuxbsd.template_release.x86_64.faster_godot${mono_suffix}"
-            cp "bin/godot.linuxbsd.template_debug.x86_64.faster_godot${mono_suffix}" "release/templates/${template_dir}/linux_debug.x86_64"
-            cp "bin/godot.linuxbsd.template_release.x86_64.faster_godot${mono_suffix}" "release/templates/${template_dir}/linux_release.x86_64"
+            # Release templates: clang + ThinLTO + lld. use_llvm adds the .llvm suffix to the binary name.
+            scons platform=linuxbsd target=template_debug "${mono_arg[@]}" $SCONS_BASE use_llvm=yes lto=thin linker=lld
+            scons platform=linuxbsd target=template_release "${mono_arg[@]}" $SCONS_BASE use_llvm=yes lto=thin linker=lld
+            strip "bin/faster-godot.linuxbsd.template_debug.x86_64.llvm.faster_godot${mono_suffix}"
+            strip "bin/faster-godot.linuxbsd.template_release.x86_64.llvm.faster_godot${mono_suffix}"
+            cp "bin/faster-godot.linuxbsd.template_debug.x86_64.llvm.faster_godot${mono_suffix}" "release/templates/${template_dir}/linux_debug.x86_64"
+            cp "bin/faster-godot.linuxbsd.template_release.x86_64.llvm.faster_godot${mono_suffix}" "release/templates/${template_dir}/linux_release.x86_64"
             chmod +x "release/templates/${template_dir}/linux_debug.x86_64" "release/templates/${template_dir}/linux_release.x86_64"
           fi
 
@@ -202,6 +209,11 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          # Put the standalone LLVM toolchain ahead of anything else so clang-cl / lld-link resolve to it
+          # for the use_llvm template builds. The editor build does not use it (MSVC).
+          if (Test-Path "C:\Program Files\LLVM\bin\clang-cl.exe") {
+            $env:PATH = "C:\Program Files\LLVM\bin;" + $env:PATH
+          }
           $sconsBase = $env:SCONS_BASE -split ' '
           $monoArg = @()
           $monoSuffix = ""
@@ -215,10 +227,11 @@ jobs:
           New-Item -ItemType Directory -Force "release\templates\$templateDir" | Out-Null
 
           if ("${{ matrix.package }}" -eq "editor") {
-            scons platform=windows target=editor @monoArg @sconsBase
+            # Editor stays on MSVC, full LTO.
+            scons platform=windows target=editor @monoArg @sconsBase lto=full
             if ("${{ matrix.mono }}" -eq "true") {
-              $editorBin = "bin\godot.windows.editor.x86_64.faster_godot.mono.exe"
-              $editorConsole = "bin\godot.windows.editor.x86_64.faster_godot.mono.console.exe"
+              $editorBin = "bin\faster-godot.windows.editor.x86_64.faster_godot.mono.exe"
+              $editorConsole = "bin\faster-godot.windows.editor.x86_64.faster_godot.mono.console.exe"
               & $editorConsole --headless --generate-mono-glue .\modules\mono\glue
               python .\modules\mono\build_scripts\build_assemblies.py --godot-output-dir=.\bin --godot-platform=windows --no-deprecated --werror
               $packageDir = "release\Faster-Godot_v${env:RELEASE_VERSION}_mono_win64"
@@ -230,17 +243,19 @@ jobs:
             } else {
               $packageDir = "release\Faster-Godot_v${env:RELEASE_VERSION}_win64"
               New-Item -ItemType Directory -Force $packageDir | Out-Null
-              Copy-Item bin\godot.windows.editor.x86_64.faster_godot.exe "$packageDir\Faster-Godot_v${env:RELEASE_VERSION}_win64.exe"
-              Copy-Item bin\godot.windows.editor.x86_64.faster_godot.console.exe "$packageDir\Faster-Godot_v${env:RELEASE_VERSION}_win64_console.exe"
+              Copy-Item bin\faster-godot.windows.editor.x86_64.faster_godot.exe "$packageDir\Faster-Godot_v${env:RELEASE_VERSION}_win64.exe"
+              Copy-Item bin\faster-godot.windows.editor.x86_64.faster_godot.console.exe "$packageDir\Faster-Godot_v${env:RELEASE_VERSION}_win64_console.exe"
               Compress-Archive -Path "$packageDir\*" -DestinationPath "release\Faster-Godot_v${env:RELEASE_VERSION}_win64.exe.zip" -CompressionLevel Optimal -Force
             }
           } else {
-            scons platform=windows target=template_debug @monoArg @sconsBase
-            scons platform=windows target=template_release @monoArg @sconsBase
-            Copy-Item "bin\godot.windows.template_debug.x86_64.faster_godot$monoSuffix.exe" "release\templates\$templateDir\windows_debug_x86_64.exe"
-            Copy-Item "bin\godot.windows.template_debug.x86_64.faster_godot$monoSuffix.console.exe" "release\templates\$templateDir\windows_debug_x86_64.console.exe"
-            Copy-Item "bin\godot.windows.template_release.x86_64.faster_godot$monoSuffix.exe" "release\templates\$templateDir\windows_release_x86_64.exe"
-            Copy-Item "bin\godot.windows.template_release.x86_64.faster_godot$monoSuffix.console.exe" "release\templates\$templateDir\windows_release_x86_64.console.exe"
+            # Release templates: clang-cl + ThinLTO. use_llvm adds the .llvm suffix to the binary name.
+            clang-cl --version
+            scons platform=windows target=template_debug @monoArg @sconsBase use_llvm=yes lto=thin
+            scons platform=windows target=template_release @monoArg @sconsBase use_llvm=yes lto=thin
+            Copy-Item "bin\faster-godot.windows.template_debug.x86_64.llvm.faster_godot$monoSuffix.exe" "release\templates\$templateDir\windows_debug_x86_64.exe"
+            Copy-Item "bin\faster-godot.windows.template_debug.x86_64.llvm.faster_godot$monoSuffix.console.exe" "release\templates\$templateDir\windows_debug_x86_64.console.exe"
+            Copy-Item "bin\faster-godot.windows.template_release.x86_64.llvm.faster_godot$monoSuffix.exe" "release\templates\$templateDir\windows_release_x86_64.exe"
+            Copy-Item "bin\faster-godot.windows.template_release.x86_64.llvm.faster_godot$monoSuffix.console.exe" "release\templates\$templateDir\windows_release_x86_64.console.exe"
           }
 
           Remove-Item bin\*.exp, bin\*.lib, bin\*.pdb -ErrorAction SilentlyContinue
