@@ -10,6 +10,7 @@
 #include "core/math/projection.h"
 #include "core/math/transform_3d.h"
 #include "servers/rendering/renderer_rd/shaders/effects/rtgi_gi_resolve.glsl.gen.h"
+#include "servers/rendering/renderer_rd/shaders/effects/rtgi_volumetric_fog.glsl.gen.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.h"
 
 namespace RendererRD {
@@ -132,6 +133,16 @@ public:
 	// binding 16 is bound to the neutral gi_debug_image placeholder (never touched).
 	void render_composite(RID p_depth, RID p_guide_albedo, RID p_guide_orm, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count, RID p_fpt_primary_color = RID(), RID p_reactive_out = RID());
 
+	// Composite the volumetric-fog froxel onto an RT color image. Full Path Tracing replaces the
+	// raster opaque pass, so the per-fragment froxel fog the raster path applies never runs on the
+	// path-traced primary; this re-applies it (sampling the same froxel volume the raster path
+	// builds), before the FPT stabilize + beauty composite consume the RT color. A standalone pass
+	// with its OWN shader/pipeline, independent of the resolve modes above. p_source_context /
+	// p_source_texture name the RT color in the render buffers (sliced per p_view); p_viewz_hitdist
+	// supplies linear view-z for the froxel slice; p_fog_map is the froxel volume. Sizes/rects are in
+	// RT pixels. Restores what the legacy rtgi_denoise effect did before it was removed.
+	void composite_volumetric_fog(Ref<RenderSceneBuffersRD> p_render_buffers, const StringName &p_source_context, const StringName &p_source_texture, RID p_viewz_hitdist, RID p_fog_map, const Size2i &p_process_size, const Vector2i &p_visible_origin, const Size2i &p_visible_size, float p_fog_length, float p_fog_detail_spread, float p_fog_sky_affect, bool p_legacy_blending, uint32_t p_view);
+
 	void free_resources();
 
 private:
@@ -176,6 +187,24 @@ private:
 	RtgiGiResolveShaderRD shader;
 	RID shader_version;
 	RID pipeline; // INTEGRATE/TEMPORAL/SPATIAL/DEBUG_GI all share this shader (one set-0 layout).
+
+	// Standalone volumetric-fog composite: its OWN shader + pipeline, independent of the resolve
+	// modes above (a smaller 3-binding set-0 layout). Drives composite_volumetric_fog (FPT only).
+	RtgiVolumetricFogShaderRD fog_shader;
+	RID fog_shader_version;
+	RID fog_pipeline;
+	struct FogPushConstant {
+		float resolution[2];
+		float visible_origin[2];
+		float visible_size[2];
+		float fog_inv_length;
+		float fog_detail_spread;
+		float fog_sky_affect;
+		float fog_legacy_blending;
+		float pad0;
+		float pad1;
+	};
+	void _dispatch_volumetric_fog(const FogPushConstant &p_push_constant, RID p_color, RID p_viewz_hitdist, RID p_fog_map);
 
 	// Uniform buffer carrying GiResolveUBO (the resolve's reconstruction matrices; see
 	// above for why a UBO and not a push constant). Created lazily on first run_resolve()

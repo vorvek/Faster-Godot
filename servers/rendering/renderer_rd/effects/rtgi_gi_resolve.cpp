@@ -35,11 +35,67 @@ RTGIGIResolve::RTGIGIResolve() {
 	shader.initialize({ "" });
 	shader_version = shader.version_create();
 	pipeline = RD::get_singleton()->compute_pipeline_create(shader.version_get_shader(shader_version, 0));
+
+	// Standalone volumetric-fog composite shader/pipeline (FPT re-applies the froxel fog the
+	// raster opaque pass would have applied; see composite_volumetric_fog). Its own small 3-binding
+	// set-0 layout, separate from the resolve's unified layout above.
+	fog_shader.initialize({ "" });
+	fog_shader_version = fog_shader.version_create();
+	fog_pipeline = RD::get_singleton()->compute_pipeline_create(fog_shader.version_get_shader(fog_shader_version, 0));
 }
 
 RTGIGIResolve::~RTGIGIResolve() {
 	free_resources();
 	shader.version_free(shader_version);
+	fog_shader.version_free(fog_shader_version);
+}
+
+void RTGIGIResolve::composite_volumetric_fog(Ref<RenderSceneBuffersRD> p_render_buffers, const StringName &p_source_context, const StringName &p_source_texture, RID p_viewz_hitdist, RID p_fog_map, const Size2i &p_process_size, const Vector2i &p_visible_origin, const Size2i &p_visible_size, float p_fog_length, float p_fog_detail_spread, float p_fog_sky_affect, bool p_legacy_blending, uint32_t p_view) {
+	ERR_FAIL_COND(p_render_buffers.is_null());
+	ERR_FAIL_COND(p_process_size.x <= 0 || p_process_size.y <= 0);
+	ERR_FAIL_COND(p_visible_size.x <= 0 || p_visible_size.y <= 0);
+	ERR_FAIL_COND(!p_render_buffers->has_texture(p_source_context, p_source_texture));
+	ERR_FAIL_COND(!p_viewz_hitdist.is_valid() || !p_fog_map.is_valid());
+	ERR_FAIL_UNSIGNED_INDEX(p_view, p_render_buffers->get_view_count());
+
+	RID source = p_render_buffers->get_texture_slice(p_source_context, p_source_texture, p_view, 0);
+
+	FogPushConstant push_constant;
+	memset(&push_constant, 0, sizeof(FogPushConstant));
+	push_constant.resolution[0] = (float)p_process_size.x;
+	push_constant.resolution[1] = (float)p_process_size.y;
+	push_constant.visible_origin[0] = (float)p_visible_origin.x;
+	push_constant.visible_origin[1] = (float)p_visible_origin.y;
+	push_constant.visible_size[0] = (float)p_visible_size.x;
+	push_constant.visible_size[1] = (float)p_visible_size.y;
+	push_constant.fog_inv_length = p_fog_length > 0.0f ? 1.0f / p_fog_length : 1.0f;
+	push_constant.fog_detail_spread = p_fog_detail_spread > 0.0f ? 1.0f / p_fog_detail_spread : 1.0f;
+	push_constant.fog_sky_affect = CLAMP(p_fog_sky_affect, 0.0f, 1.0f);
+	push_constant.fog_legacy_blending = p_legacy_blending ? 1.0f : 0.0f;
+
+	_dispatch_volumetric_fog(push_constant, source, p_viewz_hitdist, p_fog_map);
+}
+
+void RTGIGIResolve::_dispatch_volumetric_fog(const FogPushConstant &p_push_constant, RID p_color, RID p_viewz_hitdist, RID p_fog_map) {
+	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
+	ERR_FAIL_NULL(uniform_set_cache);
+	MaterialStorage *material_storage = MaterialStorage::get_singleton();
+	ERR_FAIL_NULL(material_storage);
+
+	RID linear_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID nearest_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID shader_rd = fog_shader.version_get_shader(fog_shader_version, 0);
+
+	RD::Uniform u_color(RD::UNIFORM_TYPE_IMAGE, 0, p_color);
+	RD::Uniform u_viewz_hitdist(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ nearest_sampler, p_viewz_hitdist }));
+	RD::Uniform u_fog_map(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, Vector<RID>({ linear_sampler, p_fog_map }));
+
+	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, fog_pipeline);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_rd, 0, u_color, u_viewz_hitdist, u_fog_map), 0);
+	RD::get_singleton()->compute_list_set_push_constant(compute_list, &p_push_constant, sizeof(FogPushConstant));
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, (uint32_t)p_push_constant.resolution[0], (uint32_t)p_push_constant.resolution[1], 1);
+	RD::get_singleton()->compute_list_end();
 }
 
 void RTGIGIResolve::free_resources() {

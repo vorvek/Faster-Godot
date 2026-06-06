@@ -4094,6 +4094,28 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				RD::get_singleton()->draw_command_end_label();
 			}
 
+			// FPT replaces the raster opaque pass, so the per-fragment froxel volumetric fog the raster
+			// scene shader applies never runs on the path-traced primary. Re-apply it onto the RT primary
+			// color here (sampling the SAME froxel volume the raster path built), BEFORE the stabilize and
+			// beauty composite consume it, so distant FPT surfaces fog like Hybrid/raster ones do. Restores
+			// the application the legacy rtgi_denoise effect performed before the A3 cleanup removed it;
+			// FPT-only (Hybrid fogs per-fragment in the raster opaque pass, byte-unchanged).
+			if (rt_radiance_probes_fpt && rt_state && rtgi_resolve != nullptr && rb_data->rt_has_texture() && rb->has_custom_data(RB_SCOPE_FOG)) {
+				Ref<RendererRD::Fog::VolumetricFog> rt_fog = rb->get_custom_data(RB_SCOPE_FOG);
+				if (rt_fog.is_valid() && rt_fog->fog_map.is_valid()) {
+					const float rt_fog_sky_affect = p_render_data->environment.is_valid() ? environment_get_volumetric_fog_sky_affect(p_render_data->environment) : 1.0f;
+					RENDER_TIMESTAMP("RTGI FPT Volumetric Fog");
+					RD::get_singleton()->draw_command_begin_label("RTGI FPT Volumetric Fog");
+					for (uint32_t v = 0; v < p_render_data->scene_data->view_count; v++) {
+						rtgi_resolve->composite_volumetric_fog(rb, RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RAYTRACING,
+								rb_data->rt_get_viewz_hitdist(), rt_fog->fog_map, rb_data->rt_get_size(),
+								rb_data->rt_get_visible_origin(), rb_data->rt_get_visible_size(),
+								rt_fog->length, rt_fog->spread, rt_fog_sky_affect, fog_use_legacy_blending_get(), v);
+					}
+					RD::get_singleton()->draw_command_end_label();
+				}
+			}
+
 			// A4 FPT-fast: temporally stabilize the per-frame-stochastic primary-direct color BEFORE the
 			// composite blits it, so the final no-upscaler image is stable (the primary boils otherwise: the NEE soft-
 			// shadow / area-light sampling re-seeds every frame from the frame index). RTGIFPTStabilize
