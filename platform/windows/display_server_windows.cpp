@@ -260,15 +260,21 @@ void DisplayServerWindows::_set_mouse_mode_impl(MouseMode p_mode) {
 			mm->set_meta_pressed(mods.has_flag(WinKeyModifierMask::META));
 			mm->set_button_mask(mouse_get_button_state());
 
-			mm->set_relative(Vector2(mm->get_position() - Vector2(old_x, old_y)));
-			mm->set_relative_screen_position(mm->get_relative());
-			old_x = mm->get_position().x;
-			old_y = mm->get_position().y;
-
 			mm->set_position(center);
 			mm->set_global_position(center);
+			// The cursor is warped to the window center on capture. That is a
+			// programmatic move, not user input, so this transition event must carry
+			// zero relative motion. Deriving it from old_x/old_y injected a spurious
+			// jump of -(old_x, old_y) (get_position() is still zero at this point),
+			// which snapped captured-mode consumers such as editor value drags and
+			// 3D freelook to their extremes on the first frame of a drag.
+			mm->set_relative(Vector2(0, 0));
+			mm->set_relative_screen_position(Vector2(0, 0));
 			mm->set_velocity(Vector2(0, 0));
 			mm->set_screen_velocity(Vector2(0, 0));
+
+			old_x = center.x;
+			old_y = center.y;
 
 			if (windows[window_id].window_focused || window_get_active_popup() == window_id) {
 				Input::get_singleton()->parse_input_event(mm);

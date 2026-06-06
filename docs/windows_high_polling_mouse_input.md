@@ -25,6 +25,20 @@ this fork update.
 - `platform/windows/display_server_windows.h`
   - Declares `process_raw_input()`.
 
+## Capture transition
+
+When the mouse is captured the cursor is warped to the window center. That warp is
+a programmatic move, not a user gesture, so the synthetic motion event emitted at
+that point reports zero relative motion and resets the relative baseline (`old_x`,
+`old_y`) to the center.
+
+The upstream PR derived this event's relative motion from the previous cursor
+position while `get_position()` was still zero, so it produced the negated last
+cursor location: a large false delta on the first captured frame. A hidden cursor
+masks the position blip, but captured-mode consumers act on the relative motion, so
+editor value drags snapped to their limits and the 3D freelook camera flipped fully
+up or down at the start of a drag.
+
 ## Pros
 
 - Prevents `PeekMessage()`/`WM_INPUT` floods from dominating the frame when a
