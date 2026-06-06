@@ -10240,9 +10240,14 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		// the hue-proxy albedo, and to add first-hit emission (115) for directly-visible emitters.
 		// NEAREST samplers (texelFetch). Fall back to default-black when the guides are not yet
 		// allocated; only the primary-direct dispatch ever samples them.
-		RID guide_albedo = rb_data->rt_get_guide_albedo().is_valid() ? rb_data->rt_get_guide_albedo() : default_black;
-		RID guide_orm = rb_data->rt_get_guide_orm().is_valid() ? rb_data->rt_get_guide_orm() : default_black;
-		RID guide_emission = rb_data->rt_get_guide_emission().is_valid() ? rb_data->rt_get_guide_emission() : default_black;
+		// Probe existence with has_texture (rt_has_material_guides), NOT the erroring get_texture: in
+		// REFLECTIONS_RT_ONLY and before the material-guide prepass runs the guides are not allocated,
+		// and calling get_texture on a missing key would flood the log every frame. Only the
+		// primary-direct dispatch samples them; otherwise default-black is correct.
+		const bool rt_guides_ready = rb_data->rt_has_material_guides();
+		RID guide_albedo = rt_guides_ready ? rb_data->rt_get_guide_albedo() : default_black;
+		RID guide_orm = rt_guides_ready ? rb_data->rt_get_guide_orm() : default_black;
+		RID guide_emission = rt_guides_ready ? rb_data->rt_get_guide_emission() : default_black;
 		add_combined(113, nearest_sampler, guide_albedo);
 		add_combined(114, nearest_sampler, guide_orm);
 		add_combined(115, nearest_sampler, guide_emission);

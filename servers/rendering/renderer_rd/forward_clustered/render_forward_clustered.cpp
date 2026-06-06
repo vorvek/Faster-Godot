@@ -4053,11 +4053,17 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					// rough-spec F0 + roughness/metallic; INTEGRATE's diffuse still takes no albedo
 					// (the debug view shows the raw lighting-space output, and remod-by-albedo
 					// lands at the composite in T4/T5).
-					rtgi_resolve->run_resolve(rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), spg_vel,
-							rb_data->rt_get_guide_albedo(), rb_data->rt_get_guide_orm(),
-							rtgi_spg->get_radiance_filtered(), rtgi_spg->get_header_plane(), rtgi_spg->get_header_aux(),
-							rtgi_wrc->get_radiance_atlas(), rtgi_wrc->get_distance_atlas(),
-							rfp, p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform);
+					// The resolve consumes the material guides (rough-spec F0). Skip it if they are not
+					// allocated this frame (a scene or mode switch can tear the RT buffers down between
+					// the guide prepass and here); a later frame re-runs the prepass. This keeps a
+					// torn-down (null) guide from being bound, which would crash the resolve dispatch.
+					if (rb_data->rt_has_material_guides()) {
+						rtgi_resolve->run_resolve(rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), spg_vel,
+								rb_data->rt_get_guide_albedo(), rb_data->rt_get_guide_orm(),
+								rtgi_spg->get_radiance_filtered(), rtgi_spg->get_header_plane(), rtgi_spg->get_header_aux(),
+								rtgi_wrc->get_radiance_atlas(), rtgi_wrc->get_distance_atlas(),
+								rfp, p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform);
+					}
 				}
 				RD::get_singleton()->draw_command_end_label();
 			}
@@ -4150,6 +4156,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			} else if (rt_radiance_probes_composite && rtgi_resolve != nullptr &&
 					rtgi_resolve->get_diffuse_gi().is_valid() &&
 					rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS) &&
+					rb_data->rt_has_material_guides() &&
 					!using_sdfgi && !using_voxelgi) {
 				// Prefer the temporally-stabilized primary-direct color (accumulated just above) so the
 				// final no-upscaler image is stable; fall back to the raw RT color when stabilization did
