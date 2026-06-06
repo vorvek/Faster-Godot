@@ -2821,7 +2821,7 @@ void fragment_shader(in SceneData scene_data) {
 		}
 	}
 
-	{ // area lights
+	if (sc_use_area_lights()) { // area lights
 
 		// In this fork the cluster appends area lights as the last element type
 		// (ELEMENT_TYPE_AREA_LIGHT == 4: OMNI, SPOT, DECAL, REFLECTION_PROBE, AREA_LIGHT),

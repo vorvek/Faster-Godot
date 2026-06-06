@@ -45,6 +45,17 @@ Tighten active Forward+ runtime paths instead of only removing unused code.
   - Caches glow environment settings once per post-process pass instead of
     repeatedly querying storage and copying the glow-level vector during glow
     blur and tonemap setup.
+- `servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h`,
+  `servers/rendering/renderer_rd/cluster_builder_rd.h`,
+  `servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp`, and the
+  `forward_clustered` scene shaders
+  - Compiles the AreaLight3D (LTC) shading path into the opaque scene shader only for
+    views that contain an area light. A `use_area_lights` specialization
+    constant, set once per view from the cluster builder's area-light count, gates the
+    per-fragment area-light cluster loop and the `light_process_area` LTC function.
+    Views with no area lights compile a smaller opaque shader that the driver strips the
+    area path from, which raises GPU occupancy. Views that do contain an area light
+    compile the full variant and render the same as before.
 
 ## Pros
 
@@ -59,6 +70,12 @@ Tighten active Forward+ runtime paths instead of only removing unused code.
   texture chain or tonemap inputs.
 - Keeps optimizations in active Forward+ paths rather than relying only on build
   pruning.
+- Recovers Forward+ opaque-pass GPU time on scenes that have no area lights, which is
+  the common case. On an RTX 4080 SUPER at 4K, the synthetic post-processing test scene's
+  opaque pass dropped from about 1.5 ms to about 1.0 ms, a recovery of roughly 0.55 ms or
+  about 36 percent of that pass, measured with an interleaved before/after comparison.
+  Area-light scenes render unchanged (the validation scene renders pixel for pixel
+  identical).
 
 ## Cons
 
@@ -70,6 +87,10 @@ Tighten active Forward+ runtime paths instead of only removing unused code.
 - SSAO quality changes from Ultra to a lower preset clear the SSAO context to
   drop stale importance-map textures. Changes from a lower preset to Ultra reuse
   the existing context and add the missing Ultra-only textures.
+- A view that contains any area light compiles the full opaque variant for all of its
+  draws, so a scene that mixes area lights with other geometry does not get the smaller
+  shader. The first frame a view gains or loses an area light pays a one-time pipeline
+  compile for the new variant, the same way the depth-fog toggle already does.
 
 ## Rejected In This Pass
 

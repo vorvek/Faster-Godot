@@ -3758,6 +3758,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 		_pre_opaque_render(p_render_data, using_ssao, using_ssil, using_ssr, using_sdfgi || using_voxelgi, normal_roughness_views, rb_data.is_valid() && rb_data->has_voxelgi() ? rb_data->get_voxelgi() : RID());
 
+		// Gate the Forward+ area-light (AreaLight3D / LTC) shader path behind a specialization
+		// constant so only views that actually contain area lights compile the heavier opaque
+		// variant. The cluster is baked inside _pre_opaque_render above, so the per-type count is
+		// valid here; this runs before the opaque/motion/transparent color passes that read
+		// base_specialization (the depth and guide prepasses ran earlier with the default false and
+		// carry no area-light code).
+		base_specialization.use_area_lights = current_cluster_builder != nullptr && current_cluster_builder->get_cluster_count_by_type(ClusterBuilderRD::ELEMENT_TYPE_AREA_LIGHT) > 0;
+
 		RENDER_TIMESTAMP("Render Opaque Pass");
 
 		RD::get_singleton()->draw_command_begin_label("Render Opaque Pass");

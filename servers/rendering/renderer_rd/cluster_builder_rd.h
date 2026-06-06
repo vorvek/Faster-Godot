@@ -432,6 +432,7 @@ public:
 	RID get_cluster_buffer() const;
 	uint32_t get_cluster_size() const;
 	uint32_t get_max_cluster_elements() const;
+	_FORCE_INLINE_ uint32_t get_cluster_count_by_type(ElementType p_element_type) const { return cluster_count_by_type[p_element_type]; }
 
 	void set_shared(ClusterBuilderSharedDataRD *p_shared);
 
