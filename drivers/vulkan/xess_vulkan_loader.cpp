@@ -55,6 +55,17 @@ PFN_GetReqDevFeat g_get_required_device_features = nullptr;
 bool resolve(const String &p_symbol, void *&r_symbol) {
 	return OS::get_singleton()->get_dynamic_library_symbol_handle(g_library, p_symbol, r_symbol, true) == OK && r_symbol != nullptr;
 }
+
+template <typename T>
+bool resolve_export(const char *p_symbol, T &r_function) {
+	void *symbol = nullptr;
+	if (!resolve(p_symbol, symbol)) {
+		r_function = nullptr;
+		return false;
+	}
+	r_function = reinterpret_cast<T>(symbol);
+	return true;
+}
 } // namespace
 
 bool XessVulkanLoader::ensure_loaded() {
@@ -90,14 +101,10 @@ bool XessVulkanLoader::ensure_loaded() {
 		return false;
 	}
 
-	void *sym = nullptr;
 	bool ok = true;
-	ok = resolve("xessVKGetRequiredInstanceExtensions", sym) && ok;
-	g_get_required_instance_extensions = reinterpret_cast<PFN_GetReqInstExt>(sym);
-	ok = resolve("xessVKGetRequiredDeviceExtensions", sym) && ok;
-	g_get_required_device_extensions = reinterpret_cast<PFN_GetReqDevExt>(sym);
-	ok = resolve("xessVKGetRequiredDeviceFeatures", sym) && ok;
-	g_get_required_device_features = reinterpret_cast<PFN_GetReqDevFeat>(sym);
+	ok = resolve_export("xessVKGetRequiredInstanceExtensions", g_get_required_instance_extensions) && ok;
+	ok = resolve_export("xessVKGetRequiredDeviceExtensions", g_get_required_device_extensions) && ok;
+	ok = resolve_export("xessVKGetRequiredDeviceFeatures", g_get_required_device_features) && ok;
 
 	if (!ok) {
 		os->close_dynamic_library(g_library);
