@@ -801,7 +801,11 @@ enum PathtracingDenoiser {
 	PT_DENOISER_RESERVED_3 = 3,
 	PT_DENOISER_RESERVED_4 = 4,
 	PT_DENOISER_NVIDIA = 5,
-	PT_DENOISER_RESERVED_6 = 6,
+	// GI-aware reactive ("poor-man's Ray Reconstruction") carrier: the resolve composite emits a
+	// reactive mask from the per-pixel GI confidence and routes it to the FSR2 reactive channel /
+	// XeSS responsive-pixel mask. A distinct slot from PT_DENOISER_NVIDIA(5) so it does not collide
+	// with the legacy Environment "None" value (RTGI_DENOISER_LEGACY_NONE_VALUE == 5).
+	PT_DENOISER_REACTIVE = 6,
 	PT_DENOISER_RESERVED_7 = 7,
 	// Internal multi-signal denoise and recomposition path.
 	PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION = 8,

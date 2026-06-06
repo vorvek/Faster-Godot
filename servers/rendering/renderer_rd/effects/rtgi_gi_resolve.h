@@ -125,7 +125,12 @@ public:
 	// opaque), THEN the resolved probe indirect (gi_debug_image) is added on top -> opaque =
 	// primary-direct + probe indirect. Background pixels carry the primary-direct's sky-on-miss (the
 	// indirect is masked to 0 there). RID() (Hybrid) keeps the additive-onto-raster path unchanged.
-	void render_composite(RID p_depth, RID p_guide_albedo, RID p_guide_orm, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count, RID p_fpt_primary_color = RID());
+	// p_reactive_out (optional): a write-only R8 image (RB_TEX_RTGI_REACTIVE, internal size). When
+	// valid (the Reactive denoiser is selected) COMPOSITE also writes the GI-aware reactive mask
+	// (1 - confidence) there for the temporal upscaler. RID() (the default + every non-reactive
+	// path) keeps the composite output byte-identical: the shader's write_reactive flag stays 0 and
+	// binding 16 is bound to the neutral gi_debug_image placeholder (never touched).
+	void render_composite(RID p_depth, RID p_guide_albedo, RID p_guide_orm, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count, RID p_fpt_primary_color = RID(), RID p_reactive_out = RID());
 
 	void free_resources();
 
@@ -154,7 +159,7 @@ private:
 		float wrc_base_spacing;
 		uint32_t debug_channel; // DEBUG_GI: 0 = diffuse only, 1 = spec only, else = combined.
 		float history_rejection; // TEMPORAL (T2): depth/normal reproject tolerance scale (was pad0).
-		uint32_t pad1;
+		uint32_t write_reactive; // COMPOSITE: 1 = also write the GI-aware reactive mask (binding 16); 0 = skip (was pad1).
 		uint32_t pad2;
 	};
 
@@ -195,8 +200,18 @@ private:
 	// neutral IMAGE bindings of the unified set-0 layout the active mode does not write,
 	// so each dispatch keeps every binding valid while ensuring no single texture is bound
 	// as BOTH a sampler and a storage image in one descriptor set (which would be a
-	// same-resource read+write). Never actually read+written by either mode.
+	// same-resource read+write). Never actually read+written by either mode. (When the
+	// reactive denoiser is off it also stands in at binding 16, the reactive-mask slot,
+	// which the shader then never touches -- so still no same-resource read+write.)
 	RID gi_debug_image;
+
+	// 1x1 R8 STORAGE dummy bound at the reactive-mask slot (binding 16, declared `r8`) whenever the
+	// reactive denoiser is OFF -- in run_resolve / render_resolve_debug (which never write it) and in
+	// render_composite when no real reactive target is passed. A FORMAT-MATCHING (r8) neutral image, so
+	// the descriptor's view format matches the shader's declared image format even though the slot is
+	// never accessed. gi_debug_image (RGBA16F) cannot stand in here without a storage-image format
+	// mismatch. Allocated alongside the GI buffers; freed in free_resources(). Never read or written.
+	RID reactive_dummy;
 
 	GiResolveParams cached_params;
 	Size2i cached_render_size;

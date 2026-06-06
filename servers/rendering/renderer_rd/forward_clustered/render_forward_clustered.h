@@ -249,6 +249,14 @@ public:
 		RID rt_get_hybrid_taa_prev_history_id() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_HYBRID_TAA_HISTORY_ID_PREV); }
 		bool rt_has_taa_reactivity() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_TAA_REACTIVITY); }
 		RID rt_get_taa_reactivity() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_TAA_REACTIVITY); }
+		// GI-aware reactive mask for the temporal upscalers (FSR2 reactive / XeSS responsive
+		// pixel mask). Created at the INTERNAL render size (the resolve composite runs there),
+		// lazily and ONLY when the Reactive denoiser is selected; the default (ASVFG) path never
+		// allocates it. rtgi_reactive_ensure() returns the RID (creating + clearing it once).
+		bool rtgi_reactive_has() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_REACTIVE); }
+		RID rtgi_reactive_get() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_REACTIVE); }
+		RID rtgi_reactive_get(uint32_t p_view) const { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_REACTIVE, p_view, 0); }
+		RID rtgi_reactive_ensure();
 		RID rt_get_normal_roughness() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_NORMAL_ROUGHNESS); }
 		RID rt_get_normal_roughness(uint32_t p_layer) const { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_NORMAL_ROUGHNESS, p_layer, 0); }
 		RID rt_get_source_normal_roughness_prev() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SOURCE_NORMAL_ROUGHNESS_PREV); }

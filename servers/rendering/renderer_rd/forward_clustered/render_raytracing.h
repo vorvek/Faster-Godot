@@ -102,6 +102,11 @@
 #define RB_TEX_RT_SOURCE_HISTORY SNAME("rt_source_history")
 #define RB_TEX_RT_SOURCE_TEMPORAL_DELTA SNAME("rt_source_temporal_delta")
 #define RB_TEX_RT_SOURCE_REJECTION SNAME("rt_source_rejection")
+// GI-aware reactive mask ("poor-man's Ray Reconstruction"): the RTGI resolve composite
+// writes 1 - confidence here, so the temporal upscaler (FSR2 reactive / XeSS responsive
+// pixel mask) trusts the current frame where GI just disoccluded or is low-confidence.
+// Internal-size R8_UNORM, allocated + written ONLY when the Reactive denoiser is selected.
+#define RB_TEX_RTGI_REACTIVE SNAME("rtgi_reactive")
 
 class RenderDataRD;
 class RenderSceneBuffersRD;

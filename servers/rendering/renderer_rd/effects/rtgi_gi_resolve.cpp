@@ -57,6 +57,10 @@ void RTGIGIResolve::free_resources() {
 		RD::get_singleton()->free_rid(gi_debug_image);
 		gi_debug_image = RID();
 	}
+	if (reactive_dummy.is_valid()) {
+		RD::get_singleton()->free_rid(reactive_dummy);
+		reactive_dummy = RID();
+	}
 	if (resolve_ubo.is_valid()) {
 		RD::get_singleton()->free_rid(resolve_ubo);
 		resolve_ubo = RID();
@@ -104,6 +108,18 @@ void RTGIGIResolve::_allocate(const Size2i &p_render_size) {
 	gi_debug_image = RD::get_singleton()->texture_create(gi_format, RD::TextureView());
 	RD::get_singleton()->set_resource_name(gi_debug_image, "RTGI Resolve Debug Image");
 	RD::get_singleton()->texture_clear(gi_debug_image, Color(0, 0, 0, 0), 0, 1, 0, 1);
+
+	// 1x1 R8 STORAGE dummy for the reactive-mask slot (binding 16) when the reactive denoiser is off.
+	// Format-matching (r8) so the storage-image view matches the shader's declared format; never
+	// accessed by any mode (see the header). Tiny (1x1) since it is a pure placeholder.
+	RD::TextureFormat reactive_dummy_format;
+	reactive_dummy_format.format = RD::DATA_FORMAT_R8_UNORM;
+	reactive_dummy_format.width = 1;
+	reactive_dummy_format.height = 1;
+	reactive_dummy_format.usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT;
+	reactive_dummy = RD::get_singleton()->texture_create(reactive_dummy_format, RD::TextureView());
+	RD::get_singleton()->set_resource_name(reactive_dummy, "RTGI Resolve Reactive Dummy");
+	RD::get_singleton()->texture_clear(reactive_dummy, Color(0, 0, 0, 0), 0, 1, 0, 1);
 
 	read_index = 0;
 	resources_valid = true;
@@ -214,15 +230,16 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	// shader's set-0 layout must declare all of them): G-buffers (0-1), the material-guide
 	// albedo (2), the velocity buffer (3, A3-T2), SPG atlas + headers (4-6), WRC atlases
 	// (7-8), the GI read+write images (9-10 = [read_index]), the GI HISTORY read samplers
-	// (11-12 = [prev_index]), the debug dest image (13), the params UBO (14), and the
-	// material-guide ORM (15). ONE shared uniform set drives BOTH INTEGRATE and TEMPORAL:
-	// INTEGRATE writes 9-10 and reads 0-2 + 4-8 + 15 (it ignores 3/11/12); TEMPORAL reads
-	// 3 + 11-12 and read-modify-writes 9-10 in place. The set binds exactly
-	// {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}. NO same-resource sampler+image hazard:
+	// (11-12 = [prev_index]), the debug dest image (13), the params UBO (14), the
+	// material-guide ORM (15), and the reactive-mask image (16). ONE shared uniform set drives
+	// BOTH INTEGRATE and TEMPORAL: INTEGRATE writes 9-10 and reads 0-2 + 4-8 + 15 (it ignores
+	// 3/11/12/16); TEMPORAL reads 3 + 11-12 and read-modify-writes 9-10 in place. The set binds
+	// exactly {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}. NO same-resource sampler+image hazard:
 	// [read_index] appears ONLY at 9/10 (image), [prev_index] ONLY at 11/12 (sampler), and
 	// they are DIFFERENT buffers (the ping-pong sets); the debug dest image 13 is the
-	// untouched gi_debug_image. (The DEBUG_GI set in render_resolve_debug is separate: it
-	// binds 11/12 = [read_index] to DISPLAY this frame's resolved output.)
+	// untouched gi_debug_image; the reactive slot 16 is the untouched reactive_dummy (these
+	// modes never write the reactive mask). (The DEBUG_GI set in render_resolve_debug is
+	// separate: it binds 11/12 = [read_index] to DISPLAY this frame's resolved output.)
 	LocalVector<RD::Uniform> uniforms;
 	{
 		RD::Uniform u;
@@ -361,6 +378,18 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		u.append_id(guide_orm_rid);
 		uniforms.push_back(u);
 	}
+	// Binding 16: the GI-aware reactive mask (write-only). INTEGRATE/TEMPORAL/SPATIAL never write it
+	// (only COMPOSITE does), so the shared set-0 layout binds the neutral r8 reactive_dummy here -- a
+	// format-matching STORAGE image, never written through this slot, so it adds no same-resource
+	// read+write hazard. The spatial per-iteration set copies `uniforms`, so this slot propagates there
+	// unchanged (binding 16 stays reactive_dummy across the a-trous loop).
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		u.binding = 16;
+		u.append_id(reactive_dummy);
+		uniforms.push_back(u);
+	}
 
 	GiResolveUBO ubo;
 	memset(&ubo, 0, sizeof(GiResolveUBO));
@@ -458,8 +487,9 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		RD::get_singleton()->compute_list_add_barrier(compute_list);
 
 		// Per-iteration set: identical to the run_resolve layout except the 4 GI bindings. Copy the
-		// common uniforms (0-8, 13-15 untouched) and override 9/10 (DEST images) + 11/12 (SOURCE
-		// samplers). The pushed order is binding-sequential, so uniforms[b].binding == b for b<=15.
+		// common uniforms (0-8, 13-16 untouched, incl. the neutral reactive slot 16) and override 9/10
+		// (DEST images) + 11/12 (SOURCE samplers). The pushed order is binding-sequential, so
+		// uniforms[b].binding == b for b<=16.
 		LocalVector<RD::Uniform> spatial_uniforms = uniforms;
 		spatial_uniforms[9].clear_ids();
 		spatial_uniforms[9].append_id(diffuse_gi[spatial_dst]);
@@ -524,12 +554,13 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 
 	// Same full set-0 layout as run_resolve (one GLSL shader, one layout). DEBUG_GI reads
 	// binding 11 (diffuse), 12 (spec) and writes 13 (debug dest). The neutral SAMPLER slots
-	// (0,1,2,3,4-8,15) point at diffuse_gi[read_index] (a read texture, like 11) and the neutral
-	// IMAGE slots (9-10) point at gi_debug_image (the write target, like 13), so NO texture is
-	// bound as both a sampler and a storage image in this set: read textures (diffuse/spec)
-	// appear only as samplers, gi_debug_image only as images. That avoids a same-resource
-	// read+write within one descriptor set. The set provides exactly
-	// {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15} -- the same layout run_resolve provides.
+	// (0,1,2,3,4-8,15) point at diffuse_gi[read_index] (a read texture, like 11), the neutral
+	// IMAGE slots (9-10) point at gi_debug_image (the write target, like 13), and the reactive
+	// slot (16) points at the untouched r8 reactive_dummy, so NO texture is bound as both a
+	// sampler and a storage image in this set: read textures (diffuse/spec) appear only as
+	// samplers, gi_debug_image only as images. That avoids a same-resource read+write within one
+	// descriptor set. The set provides exactly {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16} -- the
+	// same layout run_resolve provides.
 	LocalVector<RD::Uniform> uniforms;
 	for (uint32_t b = 0; b <= 8; b++) {
 		// Samplers 0-8 (incl. binding 2 the material-guide albedo and binding 3 the velocity
@@ -590,13 +621,22 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 	}
 	// Binding 15 (material-guide ORM): neutral here -- DEBUG_GI does not read it, so it points
 	// at the resolved-diffuse read texture like the other neutral samplers (never a same-resource
-	// read+write, since the only images in this set are gi_debug_image at 9/10/13).
+	// read+write, since the only images in this set are gi_debug_image at 9/10/13/16).
 	{
 		RD::Uniform u;
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
 		u.binding = 15;
 		u.append_id(linear_sampler);
 		u.append_id(diffuse_gi[read_index]);
+		uniforms.push_back(u);
+	}
+	// Binding 16 (reactive mask): neutral here -- DEBUG_GI does not write it, so it binds the
+	// format-matching r8 reactive_dummy. write_reactive stays 0 (memset), so the slot is never touched.
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		u.binding = 16;
+		u.append_id(reactive_dummy);
 		uniforms.push_back(u);
 	}
 
@@ -628,7 +668,7 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 	copy_effects->copy_to_fb_rect(gi_debug_image, p_dest_fb, Rect2i(Point2i(), size), false, false, false, false, RID(), multiview, false, false, false, Rect2(), 1.0, true, CopyEffects::COPY_TO_FB_FLAG_MODE_NONE);
 }
 
-void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, RID p_guide_orm, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count, RID p_fpt_primary_color) {
+void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, RID p_guide_orm, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count, RID p_fpt_primary_color, RID p_reactive_out) {
 	if (!resources_valid || !diffuse_gi[read_index].is_valid() || !spec_gi[read_index].is_valid()) {
 		return;
 	}
@@ -657,16 +697,20 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, RID p_guid
 	RID linear_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 
 	// Same full set-0 layout as render_resolve_debug (one GLSL shader, one layout), with the SAME
-	// hazard discipline: the ONLY images in this set are gi_debug_image (at 9/10/13), and every read
-	// texture is bound only on a sampler -- so no texture is bound as BOTH a sampler and a storage
-	// image. COMPOSITE reads binding 0 (depth, the background mask), 2 (guide albedo, the diffuse
-	// remod), 15 (guide ORM, the metallic for the diffuse split), 11 (diffuse_gi[read_index]) and 12
-	// (spec_gi[read_index] = THIS frame's resolved GI), and writes 13. The departures from the debug
-	// layout are exactly: binding 0 = the REAL depth, binding 2 = the REAL guide albedo, and binding
-	// 15 = the REAL guide ORM (the diffuse remod multiplies A by albedo * (1 - ORM.b) so metals get
-	// no Lambertian diffuse). All other sampler slots (1, 3, 4-8) stay neutral (point at
-	// diffuse_gi[read_index], a read texture) since COMPOSITE ignores them. The set provides exactly
-	// {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}.
+	// hazard discipline: the images in this set are gi_debug_image (at 9/10/13) and the reactive mask
+	// (at 16), and every read texture is bound only on a sampler -- so no texture is bound as BOTH a
+	// sampler and a storage image. COMPOSITE reads binding 0 (depth, the background mask), 2 (guide
+	// albedo, the diffuse remod), 15 (guide ORM, the metallic for the diffuse split), 11
+	// (diffuse_gi[read_index]) and 12 (spec_gi[read_index] = THIS frame's resolved GI), writes 13, and
+	// (only when the reactive denoiser is selected) writes 16. The departures from the debug layout are
+	// exactly: binding 0 = the REAL depth, binding 2 = the REAL guide albedo, binding 15 = the REAL
+	// guide ORM (the diffuse remod multiplies A by albedo * (1 - ORM.b) so metals get no Lambertian
+	// diffuse), and binding 16 = the REAL reactive mask when p_reactive_out is valid. The reactive image
+	// at 16 is a DISTINCT write-only image (RB_TEX_RTGI_REACTIVE), never also bound as a sampler, so it
+	// adds no same-resource read+write hazard; when p_reactive_out is RID() it binds the neutral
+	// format-matching reactive_dummy and write_reactive stays 0, so binding 16 is never touched. All other sampler slots
+	// (1, 3, 4-8) stay neutral (point at diffuse_gi[read_index], a read texture) since COMPOSITE ignores
+	// them. The set provides exactly {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}.
 	LocalVector<RD::Uniform> uniforms;
 	{
 		// Binding 0: the REAL depth buffer (COMPOSITE reads it to mask the background/sky).
@@ -764,12 +808,25 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, RID p_guid
 		u.append_id(p_guide_orm);
 		uniforms.push_back(u);
 	}
+	// Binding 16: the GI-aware reactive mask output. When p_reactive_out is valid (the Reactive
+	// denoiser is selected) COMPOSITE writes 1 - confidence there for the temporal upscaler; otherwise
+	// bind the neutral format-matching r8 reactive_dummy and leave write_reactive 0 so the shader never
+	// touches it -- keeping the composite output byte-identical.
+	const bool reactive_enabled = p_reactive_out.is_valid();
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		u.binding = 16;
+		u.append_id(reactive_enabled ? p_reactive_out : reactive_dummy);
+		uniforms.push_back(u);
+	}
 
 	PushConstant push_constant;
 	memset(&push_constant, 0, sizeof(PushConstant));
 	push_constant.mode = RESOLVE_MODE_COMPOSITE;
 	push_constant.screen_w = (uint32_t)size.x;
 	push_constant.screen_h = (uint32_t)size.y;
+	push_constant.write_reactive = reactive_enabled ? 1u : 0u;
 
 	RD::get_singleton()->draw_command_begin_label("RTGI Composite Hybrid");
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();

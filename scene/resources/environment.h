@@ -100,7 +100,11 @@ public:
 		RTGI_DENOISER_ASVFG_EXPERIMENTAL = 8,
 		RTGI_DENOISER_NONE = 9,
 		RTGI_DENOISER_RESERVED_10 = 10,
-		RTGI_DENOISER_NVIDIA = 11,
+		// GI-aware reactive denoise ("RR-style"): derives a reactive mask from the RTGI resolve's
+		// per-pixel temporal confidence and feeds it to the FSR2 / XeSS reactive channel so the
+		// temporal upscaler trusts the current frame where GI just disoccluded. Keeps value 11 (the
+		// old serialized NVIDIA slot) so existing projects still resolve.
+		RTGI_DENOISER_REACTIVE = 11,
 		RTGI_DENOISER_RESERVED_12 = 12,
 		RTGI_DENOISER_RESERVED_13 = 13,
 		// Deprecated: a vestige of the removed multi-signal denoiser. It rendered

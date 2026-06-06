@@ -87,10 +87,10 @@ layout(push_constant, std430) uniform Params {
 	uint wrc_cascade_count;
 	float wrc_base_spacing;
 	// DEBUG_GI channel select (T1): 0 = diffuse_gi only, 1 = spec_gi only, else = combined.
-	// Unused by INTEGRATE. The 2 pad uints keep the block a 16-byte multiple (80 B).
+	// Unused by INTEGRATE. write_reactive + the trailing pad uint keep the block a 16-byte multiple (80 B).
 	uint debug_channel;
 	float history_rejection; // TEMPORAL (T2): depth/normal reproject tolerance scale (was pad0).
-	uint pad1;
+	uint write_reactive; // COMPOSITE: 1 = also write the GI-aware reactive mask (binding 16); 0 = skip (was pad1).
 	uint pad2;
 }
 pc;
@@ -100,9 +100,11 @@ pc;
 // rtgi_spg_accumulate.glsl declares its full layout). G-buffers (0-1), the material-guide
 // albedo (2), the velocity buffer (3, TEMPORAL), SPG atlas + headers (4-6), WRC atlases
 // (7-8), the GI read+write images (9-10), the GI history read samplers (11-12), the debug
-// dest image (13), the params UBO (14), and the material-guide ORM (15). INTEGRATE writes
-// 9-10 and reads 0-2 + 4-8 + 15 (it ignores 3/11/12); TEMPORAL reads 3 + 11-12 + the cur
-// G-buffer and read-modify-writes 9-10 in place; DEBUG_GI reads 11-12 and writes 13.
+// dest image (13), the params UBO (14), the material-guide ORM (15), and the GI-aware reactive
+// mask output (16). INTEGRATE writes 9-10 and reads 0-2 + 4-8 + 15 (it ignores 3/11/12);
+// TEMPORAL reads 3 + 11-12 + the cur G-buffer and read-modify-writes 9-10 in place; DEBUG_GI
+// reads 11-12 and writes 13; COMPOSITE reads 0 + 2 + 11/12 + 15, writes 13, and (only when
+// pc.write_reactive == 1u) writes 16.
 layout(set = 0, binding = 0) uniform sampler2D depth_buffer;
 layout(set = 0, binding = 1) uniform sampler2D normal_roughness_buffer;
 // Material-guide albedo (A3-T1): rgb = base albedo, a = alpha. Populated by the "RTGI Material
@@ -159,6 +161,16 @@ ubo;
 // rough-spec cone + F0; declared at binding 15 (after the UBO) to keep the existing 0-14
 // numbering stable.
 layout(set = 0, binding = 15) uniform sampler2D guide_orm;
+
+// GI-aware reactive mask output (binding 16): COMPOSITE writes 1 - confidence here (R8) so the
+// temporal upscaler trusts the current frame where GI just disoccluded / is low-confidence
+// ("poor-man's Ray Reconstruction"). DISTINCT write-only image, never also bound as a sampler,
+// so it adds no same-resource hazard to the set (the only other images are gi_debug_image at
+// 9/10/13). It is ALWAYS bound (the shared set-0 layout must stay valid for every mode), but
+// written ONLY by COMPOSITE and ONLY when pc.write_reactive == 1u. NOT `restrict`: when the
+// reactive denoiser is off the caller binds a tiny format-matching r8 dummy here as a neutral
+// placeholder and the shader never touches it, so there is no aliasing in either case.
+layout(set = 0, binding = 16, r8) uniform writeonly image2D reactive_image;
 
 // Split-sum environment-BRDF DFG approximation (Karis' analytic fit), returning the
 // (scale, bias) pair so the specular term is F0 * dfg.x + dfg.y. This is the SAME analytic
@@ -812,10 +824,23 @@ void resolve_composite_main(ivec2 pos) {
 	// F0/BRDF-correct from INTEGRATE, so it is added unmodified.
 	float metalness = texelFetch(guide_orm, pos, 0).b; // binding 15 ORM.b = metallic (r=ao, g=rough, a=sss).
 	vec3 diffuse_albedo = albedo * (1.0 - metalness);
-	vec3 A = texelFetch(diffuse_history, pos, 0).rgb; // binding 11 = [read_index] diffuse: lighting-space A.
+	vec4 diffuse_sample = texelFetch(diffuse_history, pos, 0); // binding 11 = [read_index] diffuse.
+	vec3 A = diffuse_sample.rgb; // lighting-space A.
 	vec3 spec = texelFetch(spec_history, pos, 0).rgb; // binding 12 = [read_index] spec: radiance-space (BRDF applied).
 	// Mask the background so the additive composite does not lift the raster sky/clear color.
 	vec3 indirect = (raw_depth <= 0.0) ? vec3(0.0) : (diffuse_albedo * A + spec);
+
+	// GI-aware reactive mask ("poor-man's Ray Reconstruction"): diffuse_sample.a holds the
+	// post-TEMPORAL sample fraction n/n_cap in [0,1] (the resolve's per-pixel temporal CONFIDENCE).
+	// reactive = 1 - confidence, so freshly disoccluded / low-confidence GI tells the temporal
+	// upscaler to trust THIS frame there. Background/sky (raw_depth <= 0) is 0 = "trust history".
+	// Written only when requested (the Reactive denoiser is selected); otherwise binding 16 is a
+	// neutral placeholder the shader never touches.
+	if (pc.write_reactive == 1u) {
+		float conf = clamp(diffuse_sample.a, 0.0, 1.0);
+		float reactive = (raw_depth <= 0.0) ? 0.0 : clamp(1.0 - conf, 0.0, 1.0);
+		imageStore(reactive_image, pos, vec4(reactive, 0.0, 0.0, 0.0));
+	}
 	// Sanitize before the additive store (B4): this lands on a PERSISTENT color FB via additive_blend
 	// (dest.rgb += source.rgb), so a single negative or non-finite resolve value would STICK and
 	// permanently corrupt the beauty. Clamp negatives to 0 (the indirect contribution is additive

@@ -119,21 +119,6 @@ static const float *_rtgi_shader_params_for_environment(RID p_environment, float
 	return r_shader_params;
 }
 
-static const char *_rtgi_denoiser_name(uint32_t p_denoiser) {
-	switch (p_denoiser) {
-		case RSE::PT_DENOISER_NONE:
-			return "None";
-		case RSE::PT_DENOISER_INTERNAL:
-			return "ASVFG";
-		case RSE::PT_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION:
-			return "Internal Signal Decomposition";
-		case RSE::PT_DENOISER_NVIDIA:
-			return "NVIDIA";
-		default:
-			return "Unknown";
-	}
-}
-
 static const char *_rtgi_reconstruction_guide_quality_name(uint32_t p_quality) {
 	switch (p_quality) {
 		case RenderForwardClustered::RenderBufferDataForwardClustered::RTGI_RECONSTRUCTION_GUIDE_QUALITY_NONE:
@@ -868,6 +853,41 @@ RID RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_depth_at
 	}
 
 	return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_DEPTH_ATTACHMENT);
+}
+
+RID RenderForwardClustered::RenderBufferDataForwardClustered::rtgi_reactive_ensure() {
+	ERR_FAIL_NULL_V(render_buffers, RID());
+
+	// Sized to the INTERNAL render size: the resolve composite that fills this runs at
+	// internal size, and so does the upscaler input (it reads the reactive mask 1:1 with the
+	// internal color). NOT rt_size, which can carry overscan margins. R8_UNORM holds the single
+	// reactive scalar (.r/.x), which satisfies both FSR2 (Texture2D<FfxFloat32>) and the XeSS
+	// responsive-pixel mask. STORAGE (the composite imageStores it) + SAMPLING (the upscaler
+	// reads it) + CAN_COPY (parity with RB_TEX_RT_TAA_REACTIVITY).
+	const Size2i reactive_size = render_buffers->get_internal_size();
+	if (render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_REACTIVE) &&
+			render_buffers->get_texture_slice_size(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_REACTIVE, 0) != reactive_size) {
+		render_buffers->clear_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_REACTIVE);
+	}
+
+	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_REACTIVE)) {
+		const uint32_t usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT |
+				RD::TEXTURE_USAGE_SAMPLING_BIT |
+				RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT |
+				RD::TEXTURE_USAGE_CAN_COPY_TO_BIT;
+		RID reactive = render_buffers->create_texture(
+				RB_SCOPE_FORWARD_CLUSTERED,
+				RB_TEX_RTGI_REACTIVE,
+				RD::DATA_FORMAT_R8_UNORM,
+				usage_bits,
+				RD::TEXTURE_SAMPLES_1,
+				reactive_size);
+		// Clear once so the first frame (before the composite has written it) reads 0 = "trust
+		// history", the neutral default that leaves the upscaler unaffected.
+		RD::get_singleton()->texture_clear(reactive, Color(0, 0, 0, 0), 0, 1, 0, render_buffers->get_view_count());
+	}
+
+	return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RTGI_REACTIVE);
 }
 
 RID RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_reconstructed(const Size2i &p_size) {
@@ -2993,9 +3013,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		WARN_PRINT_ONCE("RTGI Full Path Tracing is running the deep-path reference oracle (Environment.rtgi_fpt_reference is enabled). This is a ground-truth path tracer for A/B validation: it traces one sample per frame, so it is noisy, unstable under temporal upscalers, and much slower than the real-time path. Set rtgi_fpt_reference to false for the production FPT-fast mode (analytic-light primary plus probe indirect).");
 	}
 	const uint32_t rt_denoiser = rt_env_params ? (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
-	if (scene_features.rt && rt_denoiser == RSE::PT_DENOISER_NVIDIA) {
-		WARN_PRINT_ONCE(vformat("RTGI denoiser '%s' is not available in the Vulkan renderer yet. Falling back to ASVFG for this viewport without changing the Environment resource.", _rtgi_denoiser_name(rt_denoiser)));
-	}
+	// GI-aware reactive denoise ("poor-man's Ray Reconstruction"): when the Reactive denoiser is
+	// selected, the RTGI resolve composite emits a per-pixel reactive mask (1 - GI confidence) that
+	// is routed into the FSR2 reactive channel / XeSS responsive-pixel mask below. This is a no-op for
+	// any other denoiser (ASVFG, the default, never sets it), keeping that path byte-identical.
+	// rt_reactive_denoiser_selected is the static intent; use_rtgi_reactive is armed only AFTER the
+	// composite actually wrote the mask this frame (it stays false if the composite was skipped).
+	const bool rt_reactive_denoiser_selected = scene_features.rt && rt_denoiser == RSE::PT_DENOISER_REACTIVE;
+	bool use_rtgi_reactive = false;
 
 	static const int texture_multisamples[RSE::VIEWPORT_MSAA_MAX] = { 1, 2, 4, 8 };
 
@@ -4072,11 +4097,16 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// is never set in Hybrid, so the Hybrid composite stays byte-identical. The deep-path oracle
 			// (rt_fpt_reference) is excluded so its raw beauty stays un-stabilized. Multiview is not
 			// handled (single-layer ping-pong) -> falls through to the raw RT color, no crash.
-			// Gate OUT the temporal upscalers (FSR2/XeSS/MetalFX): pre-averaging the primary fights an upscaler's own
-			// jittered accumulation (they converge the deterministic raster primary but not a pre-averaged
-			// path-traced one -- a structural upscaler-lock limitation tracked separately), so under a
-			// jittered upscaler the composite uses the raw RT color. Native TAA is NOT gated out: it
-			// converges the stabilized primary fine (measured); the no-upscaler path benefits most.
+			// Gate OUT the temporal vendor upscalers (FSR2/XeSS/MetalFX): the path-traced primary is
+			// per-frame stochastic (NEE re-seed), and a feed-forward temporal upscaler cannot lock that
+			// stochastic base the way it locks a deterministic raster primary, so it boils. Pre-averaging
+			// the primary at the rt scale before the upscaler does not fix it (a reduced-strength
+			// accumulation was measured: FPT+FSR2 frame-to-frame delta was unchanged) and a full-strength
+			// average instead fights the upscaler's own jitter accumulation (ghosting), so under a vendor
+			// upscaler the composite uses the raw RT color. This is a structural upscaler-lock limitation:
+			// FPT pairs cleanly with no upscaler, native TAA, and XeSS; FSR2 specifically struggles with
+			// the stochastic primary, so Hybrid is the recommended mode under FSR2. Native TAA is NOT gated
+			// out (it converges the stabilized primary fine); the no-upscaler path benefits most.
 			const bool fpt_stabilize_ok = scale_type != SCALE_FSR2 && scale_type != SCALE_VENDOR && scale_type != SCALE_MFX;
 			RID rt_stabilized_primary;
 			if (fpt_stabilize_ok && rt_radiance_probes_fpt && !rt_fpt_reference && rt_state && rtgi_primary_stabilize != nullptr &&
@@ -4135,9 +4165,20 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				// sky (over-bright, an energy-bound violation). Using the PT depth keeps the mask
 				// consistent with the primary-direct rt_color the composite is replacing onto.
 				const RID composite_depth = (rt_radiance_probes_fpt && rb_data->rt_has_depth_texture()) ? rb_data->rt_get_depth_texture() : rb->get_depth_texture();
+				// GI-aware reactive mask ("poor-man's Ray Reconstruction"): only when the Reactive
+				// denoiser is selected do we allocate the internal-size R8 mask and ask the composite to
+				// write it (1 - GI confidence). Any other denoiser passes RID(), so the composite output is
+				// byte-identical and the mask is never created. use_rtgi_reactive is armed here (after the
+				// mask is ensured + about to be written) so the upscaler routing below only swaps in the
+				// RTGI mask on frames the composite actually ran.
+				RID rtgi_reactive_out;
+				if (rt_reactive_denoiser_selected) {
+					rtgi_reactive_out = rb_data->rtgi_reactive_ensure();
+					use_rtgi_reactive = rtgi_reactive_out.is_valid();
+				}
 				RENDER_TIMESTAMP(rt_radiance_probes_fpt ? "RTGI Composite FPT" : "RTGI Composite Hybrid");
 				rtgi_resolve->render_composite(composite_depth, rb_data->rt_get_guide_albedo(), rb_data->rt_get_guide_orm(),
-						rb->get_internal_size(), rb_data->get_color_only_fb(), p_render_data->scene_data->view_count, fpt_primary_color);
+						rb->get_internal_size(), rb_data->get_color_only_fb(), p_render_data->scene_data->view_count, fpt_primary_color, rtgi_reactive_out);
 			}
 
 			RD::get_singleton()->draw_command_end_label();
@@ -4383,7 +4424,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				params.color = rb->get_internal_texture(v);
 				params.depth = rb->get_depth_texture(v);
 				params.velocity = rb->get_velocity_buffer(false, v);
-				params.reactive = rb->get_internal_texture_reactive(v);
+				// GI-aware reactive mask: when the Reactive denoiser ran this frame, feed FSR2 the RTGI
+				// confidence-derived mask (1 - confidence, R8 .r) instead of the default alpha-derived
+				// reactivity, so the upscaler trusts the current frame where GI just disoccluded. Any other
+				// denoiser keeps the stock get_internal_texture_reactive() path byte-identical.
+				params.reactive = use_rtgi_reactive ? rb_data->rtgi_reactive_get(v) : rb->get_internal_texture_reactive(v);
 				params.exposure = exposure;
 				params.output = rb->get_upscaled_texture(v);
 				params.z_near = p_render_data->scene_data->z_near;
@@ -4429,7 +4474,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				params.color = rb->get_internal_texture(v);
 				params.depth = rb->get_depth_texture(v);
 				params.velocity = rb->get_velocity_buffer(false, v);
-				params.reactive = rb->get_internal_texture_reactive(v);
+				// GI-aware reactive mask: same RTGI confidence routing for the Intel XeSS responsive-pixel
+				// mask (the vendor upscaler auto-enables XESS_INIT_FLAG_RESPONSIVE_PIXEL_MASK when reactive
+				// is valid). R8 .r/.x feeds the responsive mask; non-Reactive denoisers keep the stock path.
+				params.reactive = use_rtgi_reactive ? rb_data->rtgi_reactive_get(v) : rb->get_internal_texture_reactive(v);
 				params.exposure = exposure;
 				params.output = rb->get_upscaled_texture(v);
 				params.z_near = p_render_data->scene_data->z_near;

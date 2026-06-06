@@ -49,8 +49,8 @@ static Environment::RTGIDenoiser _rtgi_denoiser_from_pathtracing_denoiser(RSE::P
 	switch ((int)p_denoiser) {
 		case RSE::PT_DENOISER_NONE:
 			return Environment::RTGI_DENOISER_NONE;
-		case RSE::PT_DENOISER_NVIDIA:
-			return Environment::RTGI_DENOISER_NVIDIA;
+		case RSE::PT_DENOISER_REACTIVE:
+			return Environment::RTGI_DENOISER_REACTIVE;
 		default:
 			// The legacy signal-decomposition denoiser was removed; it rendered
 			// identically to ASVFG, so the internal single-signal denoiser and any
@@ -68,8 +68,8 @@ static RSE::PathtracingDenoiser _pathtracing_denoiser_from_rtgi_denoiser(Environ
 		case RTGI_DENOISER_LEGACY_NONE_VALUE:
 			r_normalized_denoiser = Environment::RTGI_DENOISER_NONE;
 			return RSE::PT_DENOISER_NONE;
-		case Environment::RTGI_DENOISER_NVIDIA:
-			return RSE::PT_DENOISER_NVIDIA;
+		case Environment::RTGI_DENOISER_REACTIVE:
+			return RSE::PT_DENOISER_REACTIVE;
 		default:
 			// ASVFG, the removed signal-decomposition option (which rendered
 			// identically), and any unknown value all normalize to ASVFG, the
@@ -1863,7 +1863,11 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_backend", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR), "set_rtgi_backend", "get_rtgi_backend");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_quality_preset", PROPERTY_HINT_ENUM, "Custom,Performance,Balanced,Production"), "set_rtgi_quality_preset", "get_rtgi_quality_preset");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_mode", PROPERTY_HINT_ENUM, "Reflections RT Only,Full Scene Path-Traced GI,Hybrid RTGI"), "set_rtgi_mode", "get_rtgi_mode");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_fpt_reference"), "set_rtgi_fpt_reference", "get_rtgi_fpt_reference");
+	// rtgi_fpt_reference is a developer A/B oracle (the deep-path ground-truth path tracer), not a
+	// shipping knob. Keep it serialized + scriptable (set/get stay bound) but hide it from the
+	// inspector with PROPERTY_USAGE_NO_EDITOR. A project that serialized rtgi_fpt_reference = true
+	// still loads and applies the value; it just no longer shows up as an editable control.
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_fpt_reference", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR), "set_rtgi_fpt_reference", "get_rtgi_fpt_reference");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_samples_per_pixel", PROPERTY_HINT_RANGE, "1,16,1"), "set_rtgi_samples_per_pixel", "get_rtgi_samples_per_pixel");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_max_bounces", PROPERTY_HINT_RANGE, "1,8,1"), "set_rtgi_max_bounces", "get_rtgi_max_bounces");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_energy", PROPERTY_HINT_RANGE, "0,16,0.01,or_greater"), "set_rtgi_energy", "get_rtgi_energy");
@@ -1874,6 +1878,10 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_analytic_light_sampling_enabled"), "set_rtgi_analytic_light_sampling_enabled", "is_rtgi_analytic_light_sampling_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_explicit_emissive_sampling_enabled"), "set_rtgi_explicit_emissive_sampling_enabled", "is_rtgi_explicit_emissive_sampling_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_wrc_strength", PROPERTY_HINT_RANGE, "0,8,0.01"), "set_rtgi_wrc_strength", "get_rtgi_wrc_strength");
+	// Reactive (RR-style) denoiser (enum value 11) is intentionally not exposed here. It was explored
+	// as a poor-man's Ray Reconstruction (feed a GI-confidence reactive mask to FSR2/XeSS) but measured
+	// WORSE than ASVFG under disocclusion (the reactive channel makes the upscaler trust the noisy
+	// current frame exactly where the GI is noisiest), so it is kept inert and out of the inspector.
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "ASVFG:8,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_debug_mode", PROPERTY_HINT_ENUM, "Disabled,Mirror Reflection,Geometry Normals,Final Normals,Normal Map,Tangent,Bitangent,UV,Albedo,ORM,Diffuse Albedo,Specular Albedo,Normal+Roughness,Specular Hit Dist,Metalness,Roughness,View Normals,Diffuse+Specular,Fresnel F0,Front/Back Face,Depth,Emissive,BRDF Rejection,Normal Deviation,Specular Reflection Direction,Specular Reflected Hit Distance,Specular Reflected Hit Normal"), "set_rtgi_debug_mode", "get_rtgi_debug_mode");
 
@@ -2089,7 +2097,7 @@ void Environment::_bind_methods() {
 	BIND_ENUM_CONSTANT(RTGI_DENOISER_SVGF);
 	BIND_ENUM_CONSTANT(RTGI_DENOISER_NONE);
 	BIND_ENUM_CONSTANT(RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION);
-	BIND_ENUM_CONSTANT(RTGI_DENOISER_NVIDIA);
+	BIND_ENUM_CONSTANT(RTGI_DENOISER_REACTIVE);
 
 	BIND_ENUM_CONSTANT(RT_DEBUG_DISABLED);
 	BIND_ENUM_CONSTANT(RT_DEBUG_MIRROR_REFLECTION);

@@ -558,8 +558,8 @@
 		<constant name="RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION" value="14" enum="RTGIDenoiser">
 			Deprecated. The multi-signal RTGI denoiser was removed; it produced the same result as [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL], so this value now normalizes to it on load.
 		</constant>
-		<constant name="RTGI_DENOISER_NVIDIA" value="11" enum="RTGIDenoiser">
-			Request the NVIDIA RTGI denoiser. Falls back to ASVFG until NRD support is available.
+		<constant name="RTGI_DENOISER_REACTIVE" value="11" enum="RTGIDenoiser">
+			GI-aware reactive denoise. Derives a reactive mask from the RTGI resolve's per-pixel temporal confidence and feeds it to the FSR2 reactive channel and the XeSS responsive-pixel mask, so the temporal upscaler trusts the current frame where GI just disoccluded or is low-confidence.
 		</constant>
 	</constants>
 </class>
