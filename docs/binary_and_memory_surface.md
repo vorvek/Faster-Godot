@@ -13,6 +13,9 @@ used by the target profile.
     `objectdb_profiler`, `openxr`, `upnp`, `webrtc`, `websocket`, and `webxr`.
   - Disables XR and non-target rendering backends.
   - Keeps one physics backend per dimension: Rapier for 2D and Jolt for 3D.
+  - Restricts the registered export platforms, platform APIs, and platform class
+    documentation to Windows and Linux, so the editor no longer compiles or
+    offers the Web, Android, iOS, and macOS export plugins.
 - `servers/rendering/rendering_server.cpp`
   - Skips several mobile and OpenGL compatibility project-setting defaults in
     the Forward+ only profile.

@@ -14,8 +14,9 @@ Vulkan Forward+ game.
   - Defines `FASTER_GODOT_FORWARD_PLUS_ONLY`.
 - `main/main.cpp`
   - Limits renderer hints to `forward_plus`.
-  - Rejects `mobile` and `gl_compatibility` as valid renderer selections in the
-    fork profile.
+  - Redirects a `mobile` or `gl_compatibility` rendering method to `forward_plus`
+    with a warning, so a project authored in official Godot with one of those
+    methods still opens instead of aborting at startup.
 - `servers/rendering/renderer_rd/renderer_compositor_rd.cpp`
   - Always instantiates `RenderForwardClustered`.
   - Removes the fallback to Forward Mobile.
@@ -41,9 +42,9 @@ Vulkan Forward+ game.
 
 ## Cons
 
-- Projects that need Mobile or Compatibility rendering cannot use this fork
-  profile.
+- Projects that need Mobile or Compatibility rendering run on Forward+ instead;
+  the fork has no Mobile or Compatibility renderer to fall back to.
 - Low-end GPUs with fewer than 48 textures per shader stage are no longer
   supported by fallback.
-- Some official Godot tutorials or samples that depend on Compatibility mode may
-  not run on this fork profile.
+- Samples that depend on Compatibility-specific rendering behavior run on
+  Forward+ here, so their results can differ from official Godot.
