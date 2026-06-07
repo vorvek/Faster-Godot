@@ -725,8 +725,110 @@ bool resolve_tap_surface(ivec2 p, out vec3 view_n, out float rough, out float li
 	return true;
 }
 
+// SPATIAL LDS tile (step-1 iteration only): the 8x8 workgroup's 5x5 taps span a contiguous
+// (GROUP_SIZE + 2*radius) square. The cooperative load fills these once; each pixel then filters from
+// shared memory instead of re-fetching depth/normal/diffuse/spec per tap. s_linz <= 0 marks an invalid
+// texel (background, degenerate normal, or off-screen halo), which the per-pixel loop rejects exactly
+// like the global path's bounds + surface checks. Only the SPATIAL pipeline references these (the mode
+// specialization DCEs resolve_spatial_main from the other modes), so only it allocates the ~8 KB LDS.
+#define SPATIAL_RADIUS 2
+#define SPATIAL_TILE (GROUP_SIZE + 2 * SPATIAL_RADIUS)
+#define SPATIAL_TILE_AREA (SPATIAL_TILE * SPATIAL_TILE)
+shared float s_linz[SPATIAL_TILE_AREA];
+shared vec3 s_vn[SPATIAL_TILE_AREA];
+shared float s_rough[SPATIAL_TILE_AREA];
+shared vec4 s_diff[SPATIAL_TILE_AREA];
+shared vec4 s_spec[SPATIAL_TILE_AREA];
+
 // SPATIAL: per screen pixel, one joint edge-aware a-trous step at step = 1 << cur_iter.
 void resolve_spatial_main(ivec2 pos) {
+	// LDS PATH (step-1 iteration, the default): cooperatively cache the 12x12 surface+signal tile, then
+	// filter the 5x5 from shared memory. Byte-identical to the global path below (same values, same
+	// edge weight + accumulation order); it just reads them from LDS instead of refetching per tap.
+	if (pc.cur_iter == 0u && pc.spatial_iter != 0u) {
+		// Cooperative load: stride over the tile by the LOCAL INVOCATION INDEX (not pos), so off-screen
+		// -pixel threads still load their share. Each entry: the per-tap surface (cheap linz / view
+		// normal / roughness; s_linz <= 0 = invalid) + the diffuse/spec history (the filtered signal).
+		ivec2 tile_origin = ivec2(gl_WorkGroupID.xy) * GROUP_SIZE - ivec2(SPATIAL_RADIUS);
+		for (uint t = gl_LocalInvocationIndex; t < uint(SPATIAL_TILE_AREA); t += uint(GROUP_SIZE * GROUP_SIZE)) {
+			ivec2 lp = ivec2(int(t) % SPATIAL_TILE, int(t) / SPATIAL_TILE);
+			ivec2 gp = tile_origin + lp;
+			bool inb = gp.x >= 0 && gp.y >= 0 && gp.x < int(pc.screen_w) && gp.y < int(pc.screen_h);
+			vec3 vn = vec3(0.0);
+			float rg = 0.0;
+			float lz = -1.0; // invalid sentinel (background / degenerate / off-screen).
+			if (inb) {
+				if (!resolve_tap_surface(gp, vn, rg, lz)) {
+					lz = -1.0; // in-bounds but background / degenerate normal -> invalid.
+				}
+				s_diff[t] = texelFetch(diffuse_history, gp, 0);
+				s_spec[t] = texelFetch(spec_history, gp, 0);
+			} else {
+				s_diff[t] = vec4(0.0);
+				s_spec[t] = vec4(0.0);
+			}
+			s_linz[t] = lz;
+			s_vn[t] = vn;
+			s_rough[t] = rg;
+		}
+		barrier();
+
+		// Every thread has contributed to the tile; off-screen-pixel threads now drop out (no store).
+		if (pos.x >= int(pc.screen_w) || pos.y >= int(pc.screen_h)) {
+			return;
+		}
+
+		ivec2 lc = ivec2(gl_LocalInvocationID.xy) + ivec2(SPATIAL_RADIUS); // this pixel's center tile coord.
+		int ci = lc.y * SPATIAL_TILE + lc.x;
+		vec4 lcd = s_diff[ci];
+		vec4 lcs = s_spec[ci];
+		if (s_linz[ci] <= 0.0) {
+			// Background / degenerate center -> passthrough, preserving .a (same as the global path).
+			imageStore(diffuse_gi_rw, pos, lcd);
+			imageStore(spec_gi_rw, pos, lcs);
+			return;
+		}
+		vec3 lcn = s_vn[ci];
+		float lcrough = s_rough[ci];
+		float lcdepth = s_linz[ci];
+		float lboost_d = mix(0.25, 1.0, 1.0 - clamp(lcd.a, 0.0, 1.0));
+		float lboost_s = mix(0.25, 1.0, 1.0 - clamp(lcs.a, 0.0, 1.0));
+		vec3 lsd = lcd.rgb;
+		float lwd = 1.0;
+		vec3 lss = lcs.rgb;
+		float lws = 1.0;
+		for (int dy = -SPATIAL_RADIUS; dy <= SPATIAL_RADIUS; dy++) {
+			for (int dx = -SPATIAL_RADIUS; dx <= SPATIAL_RADIUS; dx++) {
+				if (dx == 0 && dy == 0) {
+					continue; // center already folded in.
+				}
+				int ti = (lc.y + dy) * SPATIAL_TILE + (lc.x + dx);
+				if (s_linz[ti] <= 0.0) {
+					continue; // invalid / off-screen tap (subsumes the global path's bounds + surface rejects).
+				}
+				float edge = resolve_edge_weight(lcdepth, lcn, lcrough, s_linz[ti], s_vn[ti], s_rough[ti]);
+				if (edge <= 0.0) {
+					continue;
+				}
+				float kernel = 1.0 / (1.0 + float(dx * dx + dy * dy)); // un-dilated offset (step == 1 here).
+				float w_geo = edge * kernel;
+				vec4 td = s_diff[ti];
+				vec4 ts = s_spec[ti];
+				float wnd = w_geo * lboost_d * clamp(td.a, 0.0, 1.0);
+				float wns = w_geo * lboost_s * clamp(ts.a, 0.0, 1.0);
+				lsd += td.rgb * wnd;
+				lwd += wnd;
+				lss += ts.rgb * wns;
+				lws += wns;
+			}
+		}
+		imageStore(diffuse_gi_rw, pos, vec4((lwd > 0.0) ? (lsd / lwd) : lcd.rgb, lcd.a));
+		imageStore(spec_gi_rw, pos, vec4((lws > 0.0) ? (lss / lws) : lcs.rgb, lcs.a));
+		return;
+	}
+
+	// GLOBAL PATH (cur_iter > 0 escalation, or the defensive spatial_iter == 0): the Phase-1 trimmed
+	// per-tap loop (dilated taps at step > 1 do not tile cleanly into LDS).
 	// SOURCE is bound at the history samplers (11/12); DEST at the write images (9/10). The
 	// center value is read from the SOURCE so iterations chain (iter k reads iter k-1's output).
 	vec4 cd = texelFetch(diffuse_history, pos, 0); // .rgb = lighting-space A, .a = n/n_cap.
@@ -908,7 +1010,12 @@ void resolve_composite_main(ivec2 pos) {
 
 void main() {
 	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
-	if (pos.x >= int(pc.screen_w) || pos.y >= int(pc.screen_h)) {
+	// The SPATIAL step-1 path caches a shared-memory tile and barriers, so ALL workgroup threads must
+	// reach it even when their pixel is off-screen (an early-out here would desync the barrier on a
+	// workgroup that straddles the screen edge). It does its own bounds check after the barrier. Every
+	// other path (and the SPATIAL step>1 / defensive paths) early-outs off-screen threads here.
+	bool spatial_lds = sc_resolve_mode == RESOLVE_MODE_SPATIAL && pc.cur_iter == 0u && pc.spatial_iter != 0u;
+	if (!spatial_lds && (pos.x >= int(pc.screen_w) || pos.y >= int(pc.screen_h))) {
 		return;
 	}
 
