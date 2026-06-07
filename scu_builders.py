@@ -323,9 +323,7 @@ def generate_scu_files(max_includes_per_scu):
     process_folder(["editor/version_control"])
 
     process_folder(["platform/android/export"])
-    process_folder(["platform/ios/export"])
     process_folder(["platform/linuxbsd/export"])
-    process_folder(["platform/macos/export"])
     process_folder(["platform/web/export"])
     process_folder(["platform/windows/export"])
 
