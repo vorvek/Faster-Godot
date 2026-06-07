@@ -242,61 +242,32 @@ WrcParams resolve_wrc_params() {
 	return wp;
 }
 
-// Cosine-integrate one SPG probe's HEMISPHERE-octahedral radiance tile against the
-// world-space surface normal `world_N`. The tile is oriented in the probe's OWN anchor
-// basis (local +Z = probe_N), so each local hemioct direction is rotated to world via
-// that basis before the dot with world_N. CONFIDENCE-WEIGHTED NORMALIZER (verbatim from
-// rtgi_spg_gi_consumer.glsl::integrate_probe): numerator and denominator both weight by
-// ndl * rad.a so rad.a cancels -- unwritten texels (a == 0) are excluded and partial
-// coverage still yields the true cosine-mean radiance (~= L). Reports lit-hemisphere
-// coverage in `cos_norm` (0 == no usable texels).
-vec3 resolve_integrate_probe(ivec2 probe, vec3 probe_N, vec3 world_N, out float cos_norm) {
+// Fused per-probe consumer: ONE walk of the probe's HEMISPHERE-octahedral radiance tile that
+// produces BOTH the cosine-integrated diffuse radiance (against world_N) AND, when do_spec, the
+// GGX-cone-prefiltered rough-spec radiance (around the reflection vector R). Replaces the separate
+// resolve_integrate_probe + resolve_prefilter_probe, which walked the SAME tile twice for a rough
+// pixel: duplicate spg_radiance texelFetch + duplicate spg_hemioct_decode / spg_local_to_world + a
+// second spg_build_basis. The tile is in the probe's OWN anchor basis (local +Z = probe_N), so each
+// local hemioct direction is decoded + rotated to world ONCE and reused by both weights.
+// CONFIDENCE-WEIGHTED NORMALIZERS, verbatim from the two originals (and from
+// rtgi_spg_gi_consumer.glsl::integrate_probe): the diffuse numerator and denominator both weight by
+// ndl * rad.a (rad.a cancels), the spec by lobe * rad.a, so unwritten texels (a == 0) drop out and
+// partial coverage still yields the true mean (~= L). The diffuse accumulator sees the same texels
+// (ndl > 0) and the spec accumulator the same texels (lobe > 0), in the same (ty,tx) order with the
+// same values as the two-loop version, so each channel is bit-identical. The single texelFetch is
+// gated on the UNION of the two acceptance tests, so each needed texel is fetched exactly once (the
+// two loops fetched their gate intersection twice).
+//   diffuse_irr / cos_norm: cosine-mean incident radiance (cos_norm == 0 -> no lit coverage).
+//   spec_pref  / lobe_norm: GGX-cone-prefiltered radiance (lobe_norm == 0 -> no cone coverage); the
+//     split-sum BRDF (F0 * dfg.x + dfg.y) is applied by the caller. Both spec outputs stay 0 when
+//     do_spec is false, so a smooth / spec-disabled pixel pays only the diffuse cost (the per-texel
+//     do_spec test is uniform across the tile, so it predicates cheaply).
+void resolve_probe_fused(ivec2 probe, vec3 probe_N, vec3 world_N, vec3 R, float roughness, bool do_spec,
+		out vec3 diffuse_irr, out float cos_norm, out vec3 spec_pref, out float lobe_norm) {
 	cos_norm = 0.0;
-	vec3 irr = vec3(0.0);
-
-	int res = int(max(pc.spg_oct_res, 1u));
-	float inv_res = 1.0 / float(res);
-	vec3 pt, pb;
-	spg_build_basis(probe_N, pt, pb);
-	ivec2 tile_origin = probe * res;
-
-	for (int ty = 0; ty < res; ty++) {
-		for (int tx = 0; tx < res; tx++) {
-			vec2 local_oct = (vec2(tx, ty) + vec2(0.5)) * inv_res; // texel center.
-			vec3 local_dir = spg_hemioct_decode(local_oct); // local, +Z = probe_N.
-			vec3 world_dir = spg_local_to_world(local_dir, pt, pb, probe_N);
-			float ndl = max(0.0, dot(world_N, world_dir));
-			if (ndl <= 0.0) {
-				continue;
-			}
-			vec4 rad = texelFetch(spg_radiance, tile_origin + ivec2(tx, ty), 0);
-			irr += rad.rgb * (ndl * rad.a);
-			cos_norm += ndl * rad.a;
-		}
-	}
-	return (cos_norm > 0.0) ? (irr / cos_norm) : vec3(0.0);
-}
-
-// Cone-prefilter one SPG probe's HEMISPHERE-octahedral radiance tile around the reflection
-// direction `R` (A3-T1 rough-spec). Same tile addressing + local->world rotation as
-// resolve_integrate_probe, but the per-texel weight is a GGX-lobe term toward R instead of a
-// cosine toward the surface normal: a roughness-driven cone (narrow lobe at low roughness,
-// widening toward the diffuse hemisphere at roughness 1). The lobe weight is the GGX NDF of
-// the half-vector between R and the sampled direction, evaluated with alpha = roughness^2
-// (Disney/UE remap). CONFIDENCE-WEIGHTED NORMALIZER (matches the diffuse integrate): both the
-// numerator and the normalizer weight by lobe * rad.a, so rad.a cancels and unwritten texels
-// (a == 0) are excluded. Returns the prefiltered radiance; `lobe_norm` reports the summed
-// weight (0 == no usable texels). The split-sum BRDF (F0 * dfg.x + dfg.y) is applied by the
-// caller -- this returns radiance only.
-vec3 resolve_prefilter_probe(ivec2 probe, vec3 probe_N, vec3 R, float roughness, out float lobe_norm) {
+	diffuse_irr = vec3(0.0);
 	lobe_norm = 0.0;
-	vec3 pref = vec3(0.0);
-
-	// GGX NDF with the perceptual->linear roughness remap (alpha = roughness^2). alpha2 is
-	// clamped off zero so a perfectly smooth surface still yields a finite, sharply-peaked
-	// lobe rather than a divide-by-zero.
-	float alpha = max(roughness * roughness, 1e-3);
-	float alpha2 = alpha * alpha;
+	spec_pref = vec3(0.0);
 
 	int res = int(max(pc.spg_oct_res, 1u));
 	float inv_res = 1.0 / float(res);
@@ -304,36 +275,60 @@ vec3 resolve_prefilter_probe(ivec2 probe, vec3 probe_N, vec3 R, float roughness,
 	spg_build_basis(probe_N, pt, pb);
 	ivec2 tile_origin = probe * res;
 
+	// GGX NDF setup (perceptual->linear roughness remap, alpha = roughness^2), only when the spec
+	// channel is active. alpha2 is clamped off zero so a perfectly smooth surface still yields a
+	// finite, sharply-peaked lobe rather than a divide-by-zero. Matches resolve_prefilter_probe.
+	float alpha2 = 0.0;
+	if (do_spec) {
+		float alpha = max(roughness * roughness, 1e-3);
+		alpha2 = alpha * alpha;
+	}
+
 	for (int ty = 0; ty < res; ty++) {
 		for (int tx = 0; tx < res; tx++) {
 			vec2 local_oct = (vec2(tx, ty) + vec2(0.5)) * inv_res; // texel center.
 			vec3 local_dir = spg_hemioct_decode(local_oct); // local, +Z = probe_N.
 			vec3 world_dir = spg_local_to_world(local_dir, pt, pb, probe_N);
-			// GGX lobe weight toward R: the half-vector between the reflection direction and the
-			// sampled direction, scored by the GGX NDF (D). NoH = dot(R, H) since the lobe is
-			// centered on R. Directions outside the lobe (or pointing away from R) get ~0 weight.
-			// Guard the half-vector normalize against the near-antiparallel case (world_dir ~= -R,
-			// where R + world_dir ~= 0 -> normalize NaN): such directions are opposite the lobe,
-			// so skip them (their GGX weight is ~0 anyway).
-			vec3 h = R + world_dir;
-			float hlen2 = dot(h, h);
-			if (hlen2 < 1e-8) {
-				continue;
+
+			// Diffuse cosine weight toward the surface normal (resolve_integrate_probe).
+			float ndl = max(0.0, dot(world_N, world_dir));
+
+			// Spec GGX-lobe weight toward R (resolve_prefilter_probe); 0 unless the spec channel is
+			// active and the half-vector is well-defined. Guard the normalize against the near-
+			// antiparallel case (world_dir ~= -R -> R + world_dir ~= 0): those directions are opposite
+			// the lobe, so their weight is ~0 anyway.
+			float lobe = 0.0;
+			if (do_spec) {
+				vec3 h = R + world_dir;
+				float hlen2 = dot(h, h);
+				if (hlen2 >= 1e-8) {
+					vec3 H = h * inversesqrt(hlen2);
+					float NoH = max(dot(R, H), 0.0);
+					float d = (alpha2 - 1.0) * NoH * NoH + 1.0;
+					lobe = alpha2 / max(d * d, 1e-8); // GGX D (PI-free; the constant cancels in the normalize).
+				}
 			}
-			vec3 H = h * inversesqrt(hlen2);
-			float NoH = max(dot(R, H), 0.0);
-			float d = (alpha2 - 1.0) * NoH * NoH + 1.0;
-			float lobe = alpha2 / max(d * d, 1e-8); // GGX D (PI-free; the constant cancels in the normalize).
-			if (lobe <= 0.0) {
+
+			// One fetch, only when this texel feeds at least one channel (the union of the two gates).
+			if (ndl <= 0.0 && lobe <= 0.0) {
 				continue;
 			}
 			vec4 rad = texelFetch(spg_radiance, tile_origin + ivec2(tx, ty), 0);
-			float w = lobe * rad.a;
-			pref += rad.rgb * w;
-			lobe_norm += w;
+
+			if (ndl > 0.0) {
+				diffuse_irr += rad.rgb * (ndl * rad.a);
+				cos_norm += ndl * rad.a;
+			}
+			if (lobe > 0.0) {
+				float w = lobe * rad.a;
+				spec_pref += rad.rgb * w;
+				lobe_norm += w;
+			}
 		}
 	}
-	return (lobe_norm > 0.0) ? (pref / lobe_norm) : vec3(0.0);
+
+	diffuse_irr = (cos_norm > 0.0) ? (diffuse_irr / cos_norm) : vec3(0.0);
+	spec_pref = (lobe_norm > 0.0) ? (spec_pref / lobe_norm) : vec3(0.0);
 }
 
 // INTEGRATE: per pixel -> 4 surrounding SPG probes, plane-weighted, cosine-integrate the
@@ -433,25 +428,28 @@ void resolve_integrate_main(ivec2 pos) {
 				continue;
 			}
 
+			// Fused diffuse + rough-spec consumer: ONE walk of this probe's tile yields both the
+			// cosine-integrated diffuse radiance and (when do_spec) the GGX-cone-prefiltered spec
+			// radiance, instead of walking the tile twice (see resolve_probe_fused).
 			float cos_norm;
-			vec3 probe_irr = resolve_integrate_probe(probe, probe_N, world_N, cos_norm);
+			float lobe_norm;
+			vec3 probe_irr;
+			vec3 probe_spec;
+			resolve_probe_fused(probe, probe_N, world_N, R, rough, do_spec, probe_irr, cos_norm, probe_spec, lobe_norm);
 			if (cos_norm <= 0.0) {
-				continue; // No lit-hemisphere coverage for this probe.
+				// No lit-hemisphere coverage for this probe (skips spec too, exactly as before: the
+				// old code computed the spec prefilter only after this same continue).
+				continue;
 			}
 
 			A += probe_irr * bw;
 			wsum += bw;
 
-			// Rough-spec cone-prefilter from the SAME probe tile, around R (A3-T1). Shares this
-			// probe's plane/normal validation + bilinear weight; only accumulated when the spec
-			// channel is active and the cone found usable (confidence-weighted) texels.
-			if (do_spec) {
-				float lobe_norm;
-				vec3 probe_spec = resolve_prefilter_probe(probe, probe_N, R, rough, lobe_norm);
-				if (lobe_norm > 0.0) {
-					spec_rad += probe_spec * bw;
-					spec_wsum += bw;
-				}
+			// Rough-spec accumulate from the SAME walk. Only when the spec channel is active and the
+			// cone found usable (confidence-weighted) texels -- identical gate to the old two-pass path.
+			if (do_spec && lobe_norm > 0.0) {
+				spec_rad += probe_spec * bw;
+				spec_wsum += bw;
 			}
 		}
 	}
