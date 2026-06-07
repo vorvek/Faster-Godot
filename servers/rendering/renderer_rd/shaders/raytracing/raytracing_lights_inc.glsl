@@ -61,6 +61,8 @@ vec3 rt_light_area_ex(RTLightData l) { return l.spot_direction; }
 vec3 rt_light_area_ey(RTLightData l) { return vec3(l.radius, l.inv_spot_attenuation, l.cos_spot_angle); }
 vec3 rt_light_area_normal(RTLightData l) { return normalize(cross(rt_light_area_ex(l), rt_light_area_ey(l))); }
 
+#include "area_light_sample_inc.glsl"
+
 // ============================================================================
 // Unified Cone Sampling (for sphere, directional, spot lights)
 // ============================================================================
