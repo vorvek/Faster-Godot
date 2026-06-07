@@ -15,9 +15,9 @@ This is a port of upstream PR
 The north-star is **pixel-parity with 4.7 for `AreaLight3D` in Forward+**: the
 exact class name, property names, defaults, and energy/LTC normalization match
 upstream, so a 4.7 `.tscn`/`.scn`/glTF/FBX area light deserializes and renders
-identically. The one explicit exception is when the fork's RTGI
-(`radiance_probes`) is the active GI — there, indirect lighting is RTGI's
-domain and area-light GI injection is bypassed (see *Cons*).
+identically. When the fork's RTGI (`radiance_probes`) is the active GI, the
+path tracer evaluates area lights directly through next-event estimation with
+matched energy rather than the raster LTC code (see *Path-traced area lights*).
 
 The port targets the **Forward+ / Vulkan (RenderingDevice) path only**. The
 fork is Vulkan-only/Forward+, so the GLES3 Compatibility and Forward Mobile
@@ -146,6 +146,40 @@ activated/filled; everything else is new in this port.
   plus the Viewport/RenderingServer API expose area-light debug-draw modes in
   the 3D editor's View menu.
 
+## Path-traced area lights (FPT / RTGI)
+
+When the fork's `radiance_probes` RTGI is active, lighting is evaluated by the
+path tracer instead of the raster LTC code. The path tracer originally had no
+area-light primitive, so an enabled `AreaLight3D` was treated as a point light
+at the rectangle's center. Its shape was discarded, so the soft shadow was the
+wrong size and in the wrong place, the boundary was noisy at one sample per
+pixel, and the brightness did not match the raster. In the deep-path reference
+mode the misclassified light was resampled at every bounce for no useful result.
+
+The path tracer now samples `AreaLight3D` as a real rectangle in next-event
+estimation, using the area-preserving spherical-rectangle parameterization from
+Urena, Fajardo and King (2013). A shading point importance-samples the solid
+angle the rectangle subtends, traces one shadow ray toward the sampled point,
+and runs the same BRDF, specular, and reservoir code the other light types use.
+Because primary shading, probe gathers, indirect bounces, and reflections all
+run through that one path, area lights work in every RTGI mode: full path
+tracing, reflections-only, and hybrid.
+
+Emission matches the raster LTC path, so a light reads the same whether RTGI is
+on or off. The rectangle radiance reuses the same energy, the same
+`area_normalize_energy` division by surface area, and the same physical-units
+normalization. `area_texture` works by sampling the area-light atlas at the
+sampled point and modulating the emitted radiance with premultiplied alpha, as
+the raster does. Emission is one-sided toward the light's local -Z.
+
+Cost depends on how the path tracer is configured. In the production path
+(screen and world probes plus the temporal stabilizer) a room-sized
+shadow-casting area light adds roughly 1.5 ms of GPU time at 1080p with a 0.75
+render scale on an RTX 4080 Super, which is the cost of one more shadow-casting
+light. The deep-path reference mode (`rtgi_fpt_reference`) resamples every light
+at every bounce by design, so an area light is proportionally heavier there;
+that mode is a quality reference, not the shipping configuration.
+
 ## Pros
 
 - Imported Godot 4.7 scenes — and glTF/FBX assets carrying area lights — keep
@@ -169,10 +203,10 @@ activated/filled; everything else is new in this port.
   lists for them — are not part of this fork.
 - Rectangular shape only. Disk, anisotropic, and other non-rectangular area
   lights remain upstream future-work and are not ported.
-- Area lights are not yet fed into the fork's RTGI (`radiance_probes`). When
-  RTGI is the active GI, area-light indirect lighting is RTGI's domain and the
-  LTC GI / fog / baked injection is bypassed for that view — a deferred
-  follow-up, not a parity target.
+- Under RTGI (`radiance_probes`) area lights are sampled by the path tracer
+  (see *Path-traced area lights*), not by the LTC VoxelGI / SDFGI / volumetric
+  fog injection, which only runs when those non-RTGI GI systems are active.
+  Baked lightmaps still use the LTC bake path.
 - Activating the previously dead cull / culler / shadow paths (which no node
   could exercise before) can surface latent bugs; because area lights share the
   `LightData` and cluster paths, omni/spot/directional lighting must stay
