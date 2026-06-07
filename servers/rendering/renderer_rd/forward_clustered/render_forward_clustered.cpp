@@ -1189,13 +1189,28 @@ RID RenderForwardClustered::RenderBufferDataForwardClustered::rt_ensure_material
 		return RID();
 	}
 
+	// Pick the depth attachment (index 5) for the single-sample guide prepass. Without MSAA the scene
+	// depth is itself a single-sample depth-stencil attachment, so reuse it (this keeps the non-MSAA
+	// path byte-identical). With MSAA the scene depth attachment is the multisample RB_TEX_DEPTH_MSAA,
+	// and get_depth_texture() returns the resolved RB_TEX_DEPTH, which is a sampling/storage resolve
+	// target with no attachment usage bit and therefore cannot back a framebuffer. The guide prepass
+	// runs at single sample and clears plus re-renders its own depth (DRAW_CLEAR_ALL), so it needs no
+	// prior depth contents and nothing downstream samples this attachment: give it a dedicated
+	// single-sample depth-stencil texture in that case. Its format matches the non-MSAA depth, so the
+	// framebuffer format (and the guide pipeline) is the same in both cases.
+	const bool use_msaa = render_buffers->get_msaa_3d() != RSE::VIEWPORT_MSAA_DISABLED;
+	RID guide_depth = use_msaa ? rt_ensure_depth_attachment() : render_buffers->get_depth_texture();
+	if (guide_depth.is_null()) {
+		return RID();
+	}
+
 	return FramebufferCacheRD::get_singleton()->get_cache_multiview(render_buffers->get_view_count(),
 			render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_ALBEDO),
 			render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_NORMAL),
 			render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_ORM),
 			render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_EMISSION),
 			render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_GUIDE_VIEWZ),
-			render_buffers->get_depth_texture());
+			guide_depth);
 }
 
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_fsr2(RendererRD::FSR2Effect *effect) {
