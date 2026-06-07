@@ -39,3 +39,16 @@ comparisons.
 - A GPU profiler timestamp that the resolve issued inside an active compute list,
   which the RenderingDevice does not allow, now sits outside it. Before, it logged
   an error every frame and dropped the spatial pass from the profile.
+
+### Fixes
+
+- RTGI now renders correctly with 3D MSAA enabled. The material-guide prepass that
+  feeds the GI resolve attached the viewport's resolved depth buffer as a render
+  target. With MSAA on, that buffer is a sampling and storage resolve target with
+  no attachment usage, so the prepass framebuffer failed to build every frame. The
+  prepass was then skipped, its guide buffer stayed at the white value it clears to,
+  and the composite multiplied the frame by that white guide, which produced the
+  all-white screen in the report. The prepass now renders into its own single-sample
+  depth-stencil attachment when MSAA is on, matching its single-sample guide buffers.
+  All three RTGI modes (Hybrid, Reflections, and Full Path Tracing) render with MSAA
+  enabled, and the non-MSAA path is unchanged.

@@ -316,6 +316,14 @@ specular path keep their raster values. `SDFGI` and `VoxelGI` still take
 precedence when active, since blending them against RTGI per pixel needs
 ownership tracking that does not exist yet.
 
+3D MSAA runs together with RTGI. The raster passes anti-alias primary visibility
+at the sample count the viewport sets, while the ray-traced GI and its denoiser
+run at a single sample, the same as they do without MSAA. The material-guide
+prepass that feeds the GI resolve renders into its own single-sample depth
+attachment when MSAA is on, so it stays consistent with its single-sample guide
+buffers. MSAA only sharpens raster primary-visibility edges here; it does not
+change the ray-traced GI itself.
+
 The path-traced Forward+ flow denoises the opaque RT result before transparent
 rendering. Transparent particles and other alpha overlay instances are kept out
 of the TLAS and rendered as the normal Forward+ transparent pass after RT
