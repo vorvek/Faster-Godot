@@ -664,7 +664,8 @@ void resolve_temporal_main(ivec2 pos) {
 // (a same-surface gate: a tap on a different plane / facing away / much rougher gets ~0, so
 // no cross-edge leak). Returns a 0..1 multiplier; the kernel scales it by the spatial falloff
 // and the tap's confidence. `cdepth`/`tdepth` are view-space linear depths (positive in
-// front), `cn`/`tn` world normals, `crough`/`trough` the guide roughness.
+// front), `cn`/`tn` normals in a COMMON space (SPATIAL passes VIEW normals; the dot is rotation-
+// invariant), `crough`/`trough` the surface roughness.
 float resolve_edge_weight(float cdepth, vec3 cn, float crough, float tdepth, vec3 tn, float trough) {
 	// Depth: relative difference, 0 at equal depth -> 0 weight at a 5% break (the same rel-tol
 	// family the TEMPORAL reject + the SPG plane match use). max() guards a near-zero depth.
@@ -679,6 +680,49 @@ float resolve_edge_weight(float cdepth, vec3 cn, float crough, float tdepth, vec
 	// 0.5 difference; the diffuse channel is largely roughness-flat so this mostly gates spec.
 	float w_rough = max(1.0 - abs(trough - crough) / 0.5, 0.0);
 	return w_depth * w_normal * w_rough;
+}
+
+// Cheap view-space LINEAR depth from raw reverse-Z, for the SPATIAL edge gate (lever B): a 2-term
+// rational read straight off inv_projection, dropping the off-axis terms (m[0][2]*ndc.x + m[1][2]*ndc.y
+// and the w-row equivalents). Those are zero for a symmetric frustum and tiny+similar between nearby
+// taps otherwise, so the coarse 5% depth gate is unchanged in practice, and it skips the full
+// mat4 x vec4 resolve_reconstruct_view_position does per tap. Equals -resolve_reconstruct_view_position(.).z
+// for a symmetric projection.
+float resolve_cheap_linear_depth(float raw_depth) {
+	float vz = ubo.inv_projection[2][2] * raw_depth + ubo.inv_projection[3][2];
+	float vw = ubo.inv_projection[2][3] * raw_depth + ubo.inv_projection[3][3];
+	return -vz / vw; // -view_z, positive in front.
+}
+
+// SPATIAL per-tap surface read (levers A/B/C): ONE depth fetch (-> cheap linear depth) + ONE
+// normal_roughness fetch (-> VIEW normal, NO mat3; roughness decoded from .w, NO separate guide_orm
+// fetch). The edge weight's normal term is a dot, which is rotation-invariant (inv_view's 3x3 is a
+// rotation), so VIEW normals give the same gate as the old world normals while skipping the per-tap
+// world rotation. Returns false for a background (raw <= 0) or degenerate-normal texel, matching the old
+// bounds + normal rejects.
+bool resolve_tap_surface(ivec2 p, out vec3 view_n, out float rough, out float linz) {
+	view_n = vec3(0.0);
+	rough = 0.0;
+	linz = 0.0;
+	float raw = texelFetch(depth_buffer, p, 0).r;
+	if (raw <= 0.0) {
+		return false; // background / sky.
+	}
+	vec4 nr = texelFetch(normal_roughness_buffer, p, 0);
+	vec3 vn = nr.xyz * 2.0 - 1.0;
+	if (dot(vn, vn) < 0.0001) {
+		return false; // degenerate normal (no surface).
+	}
+	view_n = normalize(vn);
+	// Decode the packed roughness from normal_roughness.w (engine idiom:
+	// scene_forward_clustered_inc.glsl::normal_roughness_compatibility), avoiding a separate guide_orm fetch.
+	float r = nr.w;
+	if (r > 0.5) {
+		r = 1.0 - r;
+	}
+	rough = r / (127.0 / 255.0);
+	linz = resolve_cheap_linear_depth(raw);
+	return true;
 }
 
 // SPATIAL: per screen pixel, one joint edge-aware a-trous step at step = 1 << cur_iter.
@@ -701,15 +745,16 @@ void resolve_spatial_main(ivec2 pos) {
 	// Center surface (CURRENT-frame G-buffer; the same reconstruction INTEGRATE/TEMPORAL use). A
 	// background / degenerate-normal pixel has no surface to filter -> pass the (zero) center
 	// through unchanged, preserving .a (so the furnace background stays black, no edge leak).
-	float craw = texelFetch(depth_buffer, pos, 0).r;
+	// Center surface via the consolidated tap read (levers A/B/C): VIEW normal (no mat3), cheap linear
+	// depth (no mat4), roughness decoded from the normal-roughness alpha (no guide_orm fetch).
 	vec3 cn;
-	if (craw <= 0.0 || !resolve_world_normal(pos, cn)) {
+	float crough;
+	float cdepth;
+	if (!resolve_tap_surface(pos, cn, crough, cdepth)) {
 		imageStore(diffuse_gi_rw, pos, cd);
 		imageStore(spec_gi_rw, pos, cs);
 		return;
 	}
-	float cdepth = -resolve_reconstruct_view_position(pos, craw).z; // view-space linear depth.
-	float crough = texelFetch(guide_orm, pos, 0).g;
 
 	int atrous_step = 1 << int(pc.cur_iter); // a-trous hole size: 1, 2, 4, ... per iteration.
 	int radius = 2; // 5x5 tap footprint (at the current step).
@@ -741,14 +786,14 @@ void resolve_spatial_main(ivec2 pos) {
 			if (tp.x < 0 || tp.y < 0 || tp.x >= int(pc.screen_w) || tp.y >= int(pc.screen_h)) {
 				continue; // off-screen tap.
 			}
-			float traw = texelFetch(depth_buffer, tp, 0).r;
 			vec3 tn;
-			if (traw <= 0.0 || !resolve_world_normal(tp, tn)) {
+			float trough;
+			float tdepth;
+			if (!resolve_tap_surface(tp, tn, trough, tdepth)) {
 				continue; // background / degenerate neighbor -> reject (no leak into/out of geometry).
 			}
-			float tdepth = -resolve_reconstruct_view_position(tp, traw).z;
-			float trough = texelFetch(guide_orm, tp, 0).g;
-			// Edge-stopping (depth + normal + roughness): a different-surface tap gets ~0.
+			// Edge-stopping (depth + normal + roughness): a different-surface tap gets ~0. cn/tn are
+			// VIEW normals here; the edge dot is rotation-invariant so the gate is unchanged.
 			float edge = resolve_edge_weight(cdepth, cn, crough, tdepth, tn, trough);
 			if (edge <= 0.0) {
 				continue;
