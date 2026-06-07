@@ -526,21 +526,31 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	// after the compute list (a GPU blit; the buffers carry CAN_COPY_FROM/TO). The default (1) is
 	// odd. A third scratch pair is avoided -- [prev] suffices.
 	const uint32_t spatial_iterations = (uint32_t)MAX(cached_params.spatial_iterations, 0);
-	// Finer GPU-profiler bracket (A3-T8): ONE label before the a-trous loop covers all the
-	// SPATIAL iterations as a single profiler area (mirrors gi.cpp, which labels an iterative
-	// jump-flood pass once before its loop). GUARDED by spatial_iterations > 0 -- exactly the
-	// condition that gates the dispatch loop -- so no SPATIAL region is opened when SPATIAL is
-	// skipped (spatial_iterations == 0); in that case compute_list_end closes the TEMPORAL region.
-	if (spatial_iterations > 0) {
-		RENDER_TIMESTAMP("RTGI Resolve Spatial");
-	}
+	// Finer GPU-profiler bracket (A3-T8): ONE label covers all the SPATIAL iterations as a single
+	// profiler area (mirrors gi.cpp, which labels an iterative jump-flood pass once before its loop).
+	// The RENDER_TIMESTAMP is issued INSIDE the loop on iteration 0, right after that iteration's
+	// barrier, NOT here before the loop: capturing a timestamp on an active compute list is only
+	// legal while its dispatch_count is 0 (RenderingDevice::capture_timestamp ERR_FAILs otherwise,
+	// at rendering_device.cpp), and the TEMPORAL dispatch above left dispatch_count > 0. The iter-0
+	// barrier resets it to 0, so the timestamp is legal there. When spatial_iterations == 0 the loop
+	// never runs, so no SPATIAL region is opened and compute_list_end closes the TEMPORAL region.
 	uint32_t spatial_src = read_index; // iter 0 reads the TEMPORAL output in [read_index].
 	for (uint32_t it = 0; it < spatial_iterations; it++) {
 		const uint32_t spatial_dst = 1u - spatial_src;
 
 		// Barrier so this iteration reads the FULLY-written previous pass (TEMPORAL for iter 0, the
-		// prior a-trous step otherwise) rather than a partial write.
+		// prior a-trous step otherwise) rather than a partial write. The barrier also resets the
+		// compute list's dispatch_count to 0 (internally it ends and re-begins the list), which is
+		// what makes the iter-0 SPATIAL timestamp below legal.
 		RD::get_singleton()->compute_list_add_barrier(compute_list);
+
+		// Open the SPATIAL profiler region once, on iteration 0, AFTER the barrier above (see the
+		// note before the loop): the timestamp closes the TEMPORAL region and brackets the a-trous
+		// iterations. It must follow a barrier so dispatch_count == 0 when it is captured, otherwise
+		// RenderingDevice::capture_timestamp ERR_FAILs and the pass time is dropped.
+		if (it == 0) {
+			RENDER_TIMESTAMP("RTGI Resolve Spatial");
+		}
 
 		// Per-iteration set: identical to the run_resolve layout except the 4 GI bindings. Copy the
 		// common uniforms (0-8, 13-16 untouched, incl. the neutral reactive slot 16) and override 9/10
