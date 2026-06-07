@@ -26,7 +26,6 @@ desktop Forward+ profile. The detailed notes are split by change area:
 | Windows high-polling mouse input | [docs/windows_high_polling_mouse_input.md](docs/windows_high_polling_mouse_input.md) |
 | Binary and memory surface reduction | [docs/binary_and_memory_surface.md](docs/binary_and_memory_surface.md) |
 | Custom Viewport Resolution Scaling Modes | [docs/custom_viewport_scaling.md](docs/custom_viewport_scaling.md) |
-| Metal driver, MetalFX, Apple platforms, and XeSS removed | The fork builds Windows and Linux on Vulkan only, so the Metal rendering driver, the MetalFX upscaler, and the macOS, iOS, and visionOS platforms are deleted. The Intel XeSS upscaler and its vendor-upscaler layer are removed as well. FSR2 and the built-in scalers stay, and a project that selects XeSS or MetalFX falls back to FSR2. |
 | Linux optimized release build hygiene | Linux LTO release builds suppress known GCC cross-translation-unit range-analysis false positives and avoid duplicate or ambiguous symbols in ICU data, KTX/Vulkan format aliases, ETC texture compression helpers, and selected hot-path temporaries without changing shipped features. |
 | Desktop build-level compiler/linker flag pass | [docs/pgo.md](docs/pgo.md) |
 | Clang + ThinLTO release editor and templates (GDScript-VM computed-goto unlock) | [docs/pgo.md](docs/pgo.md) |
