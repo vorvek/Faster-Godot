@@ -8,6 +8,7 @@
 
 #define RT_LIGHT_TYPE_OMNI 0 // Point light with radius (soft shadows)
 #define RT_LIGHT_TYPE_DIRECTIONAL 1 // Sun/moon with angular size
+#define RT_LIGHT_TYPE_AREA 2 // Rectangular area light (spherical-rectangle NEE)
 #define RT_LIGHT_TYPE_SPOT 3 // Spot light with cone falloff
 #define RT_LIGHT_FLAG_SHADOW 1u
 
@@ -17,7 +18,7 @@
 #endif
 
 // ============================================================================
-// Light Data (matches C++ RT_LightData, 96 bytes, std430)
+// Light Data (matches C++ RT_LightData, 128 bytes, std430)
 // ============================================================================
 
 struct RTLightData {
@@ -39,6 +40,11 @@ struct RTLightData {
 	float shadow_opacity;
 	float shadow_max_distance;
 	uint source_id; // Run-local stable diagnostic ID, derived from the light instance RID.
+	vec4 area_atlas_rect; // xy = atlas offset, zw = atlas scale.
+	uint area_atlas_idx; // bindless index, 0 = untextured.
+	float area_max_mip;
+	uint area_pad0;
+	uint area_pad1;
 };
 
 // Light buffer SSBO (binding provided by the including shader via RT_LIGHT_BUFFER_BINDING).
@@ -49,6 +55,11 @@ struct RTLightData {
 layout(set = 0, binding = RT_LIGHT_BUFFER_BINDING, std430) readonly buffer LightBuffer {
 	RTLightData rt_lights[];
 };
+
+// For RT_LIGHT_TYPE_AREA the spot fields carry the rectangle half-edge vectors.
+vec3 rt_light_area_ex(RTLightData l) { return l.spot_direction; }
+vec3 rt_light_area_ey(RTLightData l) { return vec3(l.radius, l.inv_spot_attenuation, l.cos_spot_angle); }
+vec3 rt_light_area_normal(RTLightData l) { return normalize(cross(rt_light_area_ex(l), rt_light_area_ey(l))); }
 
 // ============================================================================
 // Unified Cone Sampling (for sphere, directional, spot lights)

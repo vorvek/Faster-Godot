@@ -208,14 +208,16 @@ static_assert(sizeof(RT_EmissiveCandidate) == 80, "RT_EmissiveCandidate must be 
 enum RTLightType : uint32_t {
 	RT_LIGHT_TYPE_OMNI = 0,
 	RT_LIGHT_TYPE_DIRECTIONAL = 1,
+	RT_LIGHT_TYPE_AREA = 2,
 	RT_LIGHT_TYPE_SPOT = 3,
 };
 
 enum RTLightFlag : uint32_t {
 	RT_LIGHT_FLAG_SHADOW = 1 << 0,
+	RT_LIGHT_FLAG_AREA_TWO_SIDED = 1 << 1, // reserved; one-sided is the default match for the raster.
 };
 
-// Must match GLSL RTLightData (std430, 96 bytes).
+// Must match GLSL RTLightData (std430, 128 bytes).
 struct alignas(16) RT_LightData {
 	float position[3]; // World position (omni/spot) or direction (directional, normalized).
 	uint32_t type;
@@ -235,8 +237,16 @@ struct alignas(16) RT_LightData {
 	float shadow_opacity;
 	float shadow_max_distance;
 	uint32_t source_id;
+	// Area-light texture (RT_LIGHT_TYPE_AREA only; area_atlas_idx == 0 means untextured).
+	// For RT_LIGHT_TYPE_AREA the unused spot fields carry the rectangle half-edge vectors:
+	// spot_direction = ex, and (radius, inv_spot_attenuation, cos_spot_angle) = ey.
+	float area_atlas_rect[4]; // xy = atlas offset, zw = atlas scale (normalized).
+	uint32_t area_atlas_idx; // bindless index of the area-light atlas, 0 = none.
+	float area_max_mip; // max mip level for the atlas fetch.
+	uint32_t area_pad0;
+	uint32_t area_pad1;
 };
-static_assert(sizeof(RT_LightData) == 96, "RT_LightData must be 96 bytes for std430");
+static_assert(sizeof(RT_LightData) == 128, "RT_LightData must be 128 bytes for std430");
 
 enum {
 	RT_LIGHTS_MAX = 64,
