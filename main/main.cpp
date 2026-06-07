@@ -2575,9 +2575,6 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 #ifdef VULKAN_ENABLED
 			available_drivers.push_back("vulkan");
 #endif
-#ifdef METAL_ENABLED
-			available_drivers.push_back("metal");
-#endif
 		}
 #if defined(GLES3_ENABLED) && !defined(FASTER_GODOT_FORWARD_PLUS_ONLY)
 		if (rendering_method == "gl_compatibility") {

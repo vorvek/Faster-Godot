@@ -179,10 +179,6 @@
 #include "editor/shader/shader_baker/shader_baker_export_plugin_platform_vulkan.h"
 #endif
 
-#ifdef METAL_ENABLED
-#include "editor/shader/shader_baker/shader_baker_export_plugin_platform_metal.h"
-#endif
-
 #include "modules/modules_enabled.gen.h" // For gdscript, mono.
 
 #ifndef PHYSICS_2D_DISABLED
@@ -9320,12 +9316,6 @@ EditorNode::EditorNode() {
 	Ref<ShaderBakerExportPluginPlatformVulkan> shader_baker_export_plugin_platform_vulkan;
 	shader_baker_export_plugin_platform_vulkan.instantiate();
 	shader_baker_export_plugin->add_platform(shader_baker_export_plugin_platform_vulkan);
-#endif
-
-#ifdef METAL_ENABLED
-	Ref<ShaderBakerExportPluginPlatformMetal> shader_baker_export_plugin_platform_metal;
-	shader_baker_export_plugin_platform_metal.instantiate();
-	shader_baker_export_plugin->add_platform(shader_baker_export_plugin_platform_metal);
 #endif
 
 	EditorExport::get_singleton()->add_export_plugin(shader_baker_export_plugin);

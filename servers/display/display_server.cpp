@@ -39,9 +39,6 @@
 #include "drivers/vulkan/rendering_context_driver_vulkan.h"
 #undef CursorShape
 #endif
-#if defined(METAL_ENABLED)
-#include "drivers/metal/rendering_context_driver_metal.h"
-#endif
 
 DisplayServer *DisplayServer::singleton = nullptr;
 
@@ -2023,14 +2020,6 @@ bool DisplayServer::is_rendering_device_supported() {
 #if defined(VULKAN_ENABLED)
 	rcd = memnew(RenderingContextDriverVulkan);
 #endif
-#ifdef METAL_ENABLED
-	if (rcd == nullptr) {
-		GODOT_CLANG_WARNING_PUSH_AND_IGNORE("-Wunguarded-availability")
-		// Eliminate "RenderingContextDriverMetal is only available on iOS 14.0 or newer".
-		rcd = memnew(RenderingContextDriverMetal);
-		GODOT_CLANG_WARNING_POP
-	}
-#endif
 
 	if (rcd != nullptr) {
 		err = rcd->initialize();
@@ -2099,14 +2088,6 @@ bool DisplayServer::can_create_rendering_device() {
 
 #if defined(VULKAN_ENABLED)
 	rcd = memnew(RenderingContextDriverVulkan);
-#endif
-#ifdef METAL_ENABLED
-	if (rcd == nullptr) {
-		GODOT_CLANG_WARNING_PUSH_AND_IGNORE("-Wunguarded-availability")
-		// Eliminate "RenderingContextDriverMetal is only available on iOS 14.0 or newer".
-		rcd = memnew(RenderingContextDriverMetal);
-		GODOT_CLANG_WARNING_POP
-	}
 #endif
 
 	if (rcd != nullptr) {

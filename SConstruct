@@ -705,7 +705,6 @@ if env["precision"] != "single":
 
 env["vulkan"] = True
 env["opengl3"] = False
-env["metal"] = False
 env["disable_xr"] = True
 env["deprecated"] = False
 env["accesskit"] = False
