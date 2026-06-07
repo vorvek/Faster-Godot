@@ -30,9 +30,6 @@
 
 #pragma once
 
-#ifdef METAL_ENABLED
-#include "../effects/metal_fx.h"
-#endif
 #include "../effects/vrs.h"
 #include "core/templates/hash_map.h"
 #include "material_storage.h"
@@ -89,9 +86,6 @@ private:
 	float texture_mipmap_bias = 0.0f;
 	RS::ViewportAnisotropicFiltering anisotropic_filtering_level = RS::VIEWPORT_ANISOTROPY_4X;
 
-#ifdef METAL_ENABLED
-	RendererRD::MFXSpatialContext *mfx_spatial_context = nullptr;
-#endif
 
 	// Aliasing settings
 	RS::ViewportMSAA msaa_3d = RS::VIEWPORT_MSAA_DISABLED;
@@ -212,10 +206,6 @@ public:
 	virtual void set_anisotropic_filtering_level(RS::ViewportAnisotropicFiltering p_anisotropic_filtering_level) override;
 	virtual void set_use_debanding(bool p_use_debanding) override;
 
-#ifdef METAL_ENABLED
-	void ensure_mfx(RendererRD::MFXSpatialEffect *p_effect);
-	_FORCE_INLINE_ RendererRD::MFXSpatialContext *get_mfx_spatial_context() const { return mfx_spatial_context; }
-#endif
 
 	// Named Textures
 

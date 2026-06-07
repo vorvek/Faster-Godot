@@ -1218,24 +1218,6 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_fsr2(Rende
 	}
 }
 
-#ifdef METAL_MFXTEMPORAL_ENABLED
-bool RenderForwardClustered::RenderBufferDataForwardClustered::ensure_mfx_temporal(RendererRD::MFXTemporalEffect *p_effect) {
-	if (mfx_temporal_context == nullptr) {
-		RendererRD::MFXTemporalEffect::CreateParams params;
-		params.input_size = render_buffers->get_internal_size();
-		params.output_size = render_buffers->get_target_size();
-		params.input_format = render_buffers->get_base_data_format();
-		params.depth_format = render_buffers->get_depth_format(false, false, render_buffers->get_can_be_storage());
-		params.motion_format = render_buffers->get_velocity_format();
-		params.reactive_format = render_buffers->get_base_data_format(); // Reactive is derived from input.
-		params.output_format = render_buffers->get_base_data_format();
-		params.motion_vector_scale = render_buffers->get_internal_size();
-		mfx_temporal_context = p_effect->create_context(params);
-		return true;
-	}
-	return false;
-}
-#endif
 
 void RenderForwardClustered::RenderBufferDataForwardClustered::free_data() {
 	// JIC, should already have been cleared
@@ -1262,12 +1244,6 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::free_data() {
 		fsr2_context = nullptr;
 	}
 
-#ifdef METAL_MFXTEMPORAL_ENABLED
-	if (mfx_temporal_context) {
-		memdelete(mfx_temporal_context);
-		mfx_temporal_context = nullptr;
-	}
-#endif
 
 	if (!render_sdfgi_uniform_set.is_null() && RD::get_singleton()->uniform_set_is_valid(render_sdfgi_uniform_set)) {
 		RD::get_singleton()->free_rid(render_sdfgi_uniform_set);
@@ -3115,11 +3091,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			scale_type = SCALE_FSR2;
 			break;
 		case RSE::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL:
-#ifdef METAL_MFXTEMPORAL_ENABLED
-			scale_type = SCALE_MFX;
-#else
 			scale_type = SCALE_NONE;
-#endif
 			break;
 		default:
 			break;
@@ -4498,35 +4470,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 			RD::get_singleton()->draw_command_end_label();
 		} else if (scale_type == SCALE_MFX) {
-#ifdef METAL_MFXTEMPORAL_ENABLED
-			bool reset = rb_data->ensure_mfx_temporal(mfx_temporal_effect);
-
-			RID exposure;
-			if (RSG::camera_attributes->camera_attributes_uses_auto_exposure(p_render_data->camera_attributes)) {
-				exposure = luminance->get_current_luminance_buffer(rb);
-			}
-
-			RD::get_singleton()->draw_command_begin_label("MetalFX Temporal");
-			// Scale to ±0.5.
-			Vector2 jitter = p_render_data->scene_data->taa_jitter * 0.5f;
-			jitter *= Vector2(1.0, -1.0); // Flip y-axis as bottom left is origin.
-
-			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
-				RendererRD::MFXTemporalEffect::Params params;
-				params.src = rb->get_internal_texture(v);
-				params.depth = rb->get_depth_texture(v);
-				params.motion = rb->get_velocity_buffer(false, v);
-				params.exposure = exposure;
-				params.dst = rb->get_upscaled_texture(v);
-				params.jitter_offset = jitter;
-				params.reset = reset;
-
-				rb->set_upscaler_ready(true);
-				mfx_temporal_effect->process(rb_data->get_mfx_temporal_context(), params);
-			}
-
-			RD::get_singleton()->draw_command_end_label();
-#endif
 		} else if (using_viewport_taa) {
 			RD::get_singleton()->draw_command_begin_label("TAA");
 			RENDER_TIMESTAMP("TAA");
@@ -7589,9 +7532,6 @@ RenderForwardClustered::RenderForwardClustered() {
 	fsr2_effect = memnew(RendererRD::FSR2Effect);
 	ss_effects = memnew(RendererRD::SSEffects);
 	motion_vectors_store = memnew(RendererRD::MotionVectorsStore);
-#ifdef METAL_MFXTEMPORAL_ENABLED
-	mfx_temporal_effect = memnew(RendererRD::MFXTemporalEffect);
-#endif
 
 	// Raytracing will be initialized lazily when rt_set_enabled(true) is called
 }
@@ -7637,13 +7577,6 @@ RenderForwardClustered::~RenderForwardClustered() {
 		motion_vectors_store = nullptr;
 	}
 
-#ifdef METAL_MFXTEMPORAL_ENABLED
-	if (mfx_temporal_effect) {
-		memdelete(mfx_temporal_effect);
-		mfx_temporal_effect = nullptr;
-	}
-
-#endif
 
 	RD::get_singleton()->free_rid(shadow_sampler);
 	RSG::light_storage->directional_shadow_atlas_set_size(0);

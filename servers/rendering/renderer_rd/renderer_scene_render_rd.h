@@ -51,9 +51,6 @@
 #include "servers/rendering/rendering_server_types.h"
 #include "servers/rendering/rendering_shader_library.h"
 
-#ifdef METAL_ENABLED
-#include "servers/rendering/renderer_rd/effects/metal_fx.h"
-#endif
 
 class RendererSceneRenderRD : public RendererSceneRender, public RenderingShaderLibrary {
 	friend RendererRD::SkyRD;
@@ -71,9 +68,6 @@ protected:
 	RendererRD::FSR *fsr = nullptr;
 	RendererRD::VRS *vrs = nullptr;
 	RendererRD::Resolve *resolve_effects = nullptr;
-#ifdef METAL_ENABLED
-	RendererRD::MFXSpatialEffect *mfx_spatial = nullptr;
-#endif
 	double time = 0.0;
 	double time_step = 0.0;
 
