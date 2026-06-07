@@ -324,7 +324,7 @@ jobs:
           (cd mono && zip -9 -r "../release/Faster-Godot_v${RELEASE_VERSION}_mono_export_templates.tpz" .)
           tar --exclude-vcs --transform "s#^source#faster-godot-${RELEASE_VERSION}-source#" -czf "release/faster-godot-${RELEASE_VERSION}-source.tar.gz" source
           (cd release && find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%P\0' | sort -z | xargs -0 sha256sum > SHA256SUMS)
-          cp source/docs/RELEASE_NOTES_4_6_4.md release_notes.md
+          cp source/docs/RELEASE_NOTES_4_6_4a.md release_notes.md
 
       - name: Upload release assets
         uses: actions/upload-artifact@v4

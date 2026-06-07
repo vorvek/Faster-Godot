@@ -1,6 +1,6 @@
 # Faster-Godot 4.6.4a
 
-Faster-Godot 4.6.4a is a hotfix on 4.6.4. The headline change is that the editor now ships on the same clang and ThinLTO toolchain as the export templates, so testing a project from the editor runs the fast codegen. It also folds in a real-time GI resolve performance pass, a Forward+ area-light optimization, correctness fixes, and a trim of code the Windows and Linux build never used: the Intel XeSS upscaler, the Metal rendering driver, and the Apple platforms.
+Faster-Godot 4.6.4a is a follow-up to 4.6.4. The headline change is that the editor now ships on the same clang and ThinLTO toolchain as the export templates, so testing a project from the editor runs the fast codegen. It also folds in a real-time GI resolve performance pass, a Forward+ area-light optimization, and correctness fixes. Finally, it narrows the upscaler and platform surface to what this fork actually targets: the Intel XeSS upscaler is dropped in favor of FSR2 and the built-in scalers, and the Metal rendering driver along with the macOS, iOS, and visionOS platforms are removed from this Windows and Linux Vulkan-only build.
 
 ## The fast editor
 
