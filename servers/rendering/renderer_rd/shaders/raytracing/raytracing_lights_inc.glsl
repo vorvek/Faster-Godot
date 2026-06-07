@@ -984,7 +984,16 @@ RTDirectLighting lights_evaluate_single_direct_light_split(
 			return rt_direct_lighting_zero();
 		}
 		vec3 emission = light.emission;
-		// (Phase 4 multiplies emission by the area-texture sample here.)
+		if (light.area_atlas_idx != 0u) {
+			// Local rect UV in [0,1] from the sampled point.
+			vec3 rel = sample_pos - corner;
+			float exl2 = dot(ex * 2.0, ex * 2.0);
+			float eyl2 = dot(ey * 2.0, ey * 2.0);
+			vec2 luv = vec2(dot(rel, ex * 2.0) / max(exl2, 1e-8), dot(rel, ey * 2.0) / max(eyl2, 1e-8));
+			vec2 auv = light.area_atlas_rect.xy + clamp(luv, 0.0, 1.0) * light.area_atlas_rect.zw;
+			vec4 tex = textureLod(sampler2D(bindless_textures[nonuniformEXT(light.area_atlas_idx)], SAMPLER_LINEAR_WITH_MIPMAPS_CLAMP), auv, light.area_max_mip);
+			emission *= tex.rgb * tex.a; // premultiplied alpha, matching the raster
+		}
 		if ((light.flags & RT_LIGHT_FLAG_SHADOW) != 0u) {
 			vec3 shadow_origin = offset_ray_origin(hit_pos, dot(geometry_normal, L) >= 0.0 ? geometry_normal : -geometry_normal);
 			if (!lights_trace_shadow_ray(shadow_origin, L, max(sample_dist - 0.002, 0.001), light.shadow_caster_mask, rng_state)) {

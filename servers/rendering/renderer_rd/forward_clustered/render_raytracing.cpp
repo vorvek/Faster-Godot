@@ -9583,11 +9583,24 @@ uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, RT_L
 			ld.cull_mask = ls->light_get_cull_mask(base);
 			ld.shadow_caster_mask = ls->light_get_shadow_caster_mask(base);
 			ld.source_id = _rt_light_source_id(light_instance, type);
-			// Untextured for now (Phase 4 fills these).
-			ld.area_atlas_idx = 0u;
-			ld.area_atlas_rect[0] = 0.0f; ld.area_atlas_rect[1] = 0.0f;
-			ld.area_atlas_rect[2] = 0.0f; ld.area_atlas_rect[3] = 0.0f;
-			ld.area_max_mip = 0.0f;
+			RID area_tex = ls->light_area_get_texture(base);
+			if (area_tex.is_valid()) {
+				RendererRD::TextureStorage *ts = RendererRD::TextureStorage::get_singleton();
+				Rect2 rect = ts->area_light_atlas_get_texture_rect(area_tex);
+				ld.area_atlas_rect[0] = rect.position.x;
+				ld.area_atlas_rect[1] = rect.position.y;
+				ld.area_atlas_rect[2] = rect.size.width;
+				ld.area_atlas_rect[3] = rect.size.height;
+				ld.area_atlas_idx = bindless_block->add_texture(ts->area_light_atlas_get_texture());
+				Size2i tex_px = (rect.size * Size2(ts->area_light_atlas_get_size())).ceil();
+				float max_dim = MAX(tex_px.x, tex_px.y);
+				ld.area_max_mip = MAX(0.0f, MIN(Math::floor(Math::log2(MAX(max_dim, 1.0f))), (float)ts->area_light_atlas_get_mipmaps()) - 1.0f);
+			} else {
+				ld.area_atlas_idx = 0u;
+				ld.area_atlas_rect[0] = 0.0f; ld.area_atlas_rect[1] = 0.0f;
+				ld.area_atlas_rect[2] = 0.0f; ld.area_atlas_rect[3] = 0.0f;
+				ld.area_max_mip = 0.0f;
+			}
 			ld.area_pad0 = 0u; ld.area_pad1 = 0u;
 			rt_light_count++;
 			continue;
