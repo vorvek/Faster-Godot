@@ -484,14 +484,10 @@ enum ViewportScaling3DType {
 inline ViewportScaling3DType scaling_3d_mode_type(ViewportScaling3DMode p_mode) {
 	if (p_mode == VIEWPORT_SCALING_3D_MODE_NEAREST || p_mode == VIEWPORT_SCALING_3D_MODE_BILINEAR || p_mode == VIEWPORT_SCALING_3D_MODE_FSR || p_mode == VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL || p_mode == VIEWPORT_SCALING_3D_MODE_SHARP_BILINEAR || p_mode == VIEWPORT_SCALING_3D_MODE_BICUBIC || p_mode == VIEWPORT_SCALING_3D_MODE_SGSR) {
 		return VIEWPORT_SCALING_3D_TYPE_SPATIAL;
-	} else if (p_mode == VIEWPORT_SCALING_3D_MODE_FSR2 || p_mode == VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL || p_mode == VIEWPORT_SCALING_3D_MODE_XESS) {
+	} else if (p_mode == VIEWPORT_SCALING_3D_MODE_FSR2 || p_mode == VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL) {
 		return VIEWPORT_SCALING_3D_TYPE_TEMPORAL;
 	}
 	return VIEWPORT_SCALING_3D_TYPE_NONE;
-}
-
-inline bool scaling_3d_mode_is_vendor_temporal(ViewportScaling3DMode p_mode) {
-	return p_mode == VIEWPORT_SCALING_3D_MODE_XESS;
 }
 
 enum ViewportAnisotropicFiltering {

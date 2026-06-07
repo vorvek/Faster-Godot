@@ -32,7 +32,6 @@
 
 #include "core/config/project_settings.h"
 #include "servers/rendering/renderer_rd/environment/fog.h"
-#include "servers/rendering/renderer_rd/effects/vendor_upscaler.h"
 #include "servers/rendering/renderer_rd/forward_clustered/scene_shader_raytracing.h"
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/light_storage.h"
@@ -3109,7 +3108,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		SCALE_NONE,
 		SCALE_FSR2,
 		SCALE_MFX,
-		SCALE_VENDOR,
 	} scale_type = SCALE_NONE;
 
 	switch (rb->get_scaling_3d_mode()) {
@@ -3122,11 +3120,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 #else
 			scale_type = SCALE_NONE;
 #endif
-			break;
-		case RSE::VIEWPORT_SCALING_3D_MODE_XESS:
-			if (RendererRD::VendorUpscaler::is_super_resolution_available(rb->get_scaling_3d_mode())) {
-				scale_type = SCALE_VENDOR;
-			}
 			break;
 		default:
 			break;
@@ -4158,7 +4151,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// FPT pairs cleanly with no upscaler, native TAA, and XeSS; FSR2 specifically struggles with
 			// the stochastic primary, so Hybrid is the recommended mode under FSR2. Native TAA is NOT gated
 			// out (it converges the stabilized primary fine); the no-upscaler path benefits most.
-			const bool fpt_stabilize_ok = scale_type != SCALE_FSR2 && scale_type != SCALE_VENDOR && scale_type != SCALE_MFX;
+			const bool fpt_stabilize_ok = scale_type != SCALE_FSR2 && scale_type != SCALE_MFX;
 			RID rt_stabilized_primary;
 			if (fpt_stabilize_ok && rt_radiance_probes_fpt && !rt_fpt_reference && rt_state && rtgi_primary_stabilize != nullptr &&
 					rb_data->rt_has_texture() && rb_data->rt_has_history_validity() &&
@@ -4501,61 +4494,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 				rb->set_upscaler_ready(true);
 				fsr2_effect->upscale(params);
-			}
-
-			RD::get_singleton()->draw_command_end_label();
-		} else if (scale_type == SCALE_VENDOR) {
-			RID exposure;
-			if (RSG::camera_attributes->camera_attributes_uses_auto_exposure(p_render_data->camera_attributes)) {
-				exposure = luminance->get_current_luminance_buffer(rb);
-			}
-
-			RD::get_singleton()->draw_command_begin_label("Vendor Temporal Upscaler");
-			RENDER_TIMESTAMP("Vendor Temporal Upscaler");
-
-			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
-				real_t fov = p_render_data->scene_data->cam_projection.get_fov();
-				real_t aspect = p_render_data->scene_data->cam_projection.get_aspect();
-				real_t fovy = p_render_data->scene_data->cam_projection.get_fovy(fov, 1.0 / aspect);
-				Vector2 jitter = p_render_data->scene_data->taa_jitter * Vector2(rb->get_internal_size()) * 0.5f;
-
-				RendererRD::VendorUpscaler::SuperResolutionParameters params;
-				params.mode = rb->get_scaling_3d_mode();
-				params.internal_size = rb->get_internal_size();
-				params.target_size = rb->get_target_size();
-				params.color = rb->get_internal_texture(v);
-				params.depth = rb->get_depth_texture(v);
-				params.velocity = rb->get_velocity_buffer(false, v);
-				// GI-aware reactive mask: same RTGI confidence routing for the Intel XeSS responsive-pixel
-				// mask (the vendor upscaler auto-enables XESS_INIT_FLAG_RESPONSIVE_PIXEL_MASK when reactive
-				// is valid). R8 .r/.x feeds the responsive mask; non-Reactive denoisers keep the stock path.
-				params.reactive = use_rtgi_reactive ? rb_data->rtgi_reactive_get(v) : rb->get_internal_texture_reactive(v);
-				params.exposure = exposure;
-				params.output = rb->get_upscaled_texture(v);
-				params.z_near = p_render_data->scene_data->z_near;
-				params.z_far = p_render_data->scene_data->z_far;
-				params.fovy = fovy;
-				params.aspect = aspect;
-				params.sharpness = CLAMP(1.0f - (rb->get_fsr_sharpness() / 2.0f), 0.0f, 1.0f);
-				params.jitter = jitter;
-				params.delta_time = float(time_step);
-				params.reset_accumulation = false; // FIXME: The engine does not provide a way to reset the accumulation.
-				params.orthogonal_projection = p_render_data->scene_data->cam_orthogonal;
-
-				Projection correction;
-				correction.set_depth_correction(true, true, false);
-
-				const Projection &prev_proj = p_render_data->scene_data->prev_cam_projection;
-				const Projection &cur_proj = p_render_data->scene_data->cam_projection;
-				const Transform3D &prev_transform = p_render_data->scene_data->prev_cam_transform;
-				const Transform3D &cur_transform = p_render_data->scene_data->cam_transform;
-				params.camera_view_to_clip = correction * cur_proj;
-				params.reprojection = (correction * prev_proj) * prev_transform.affine_inverse() * cur_transform * (correction * cur_proj).inverse();
-				params.camera_transform = cur_transform;
-
-				if (RendererRD::VendorUpscaler::upscale(params)) {
-					rb->set_upscaler_ready(true);
-				}
 			}
 
 			RD::get_singleton()->draw_command_end_label();

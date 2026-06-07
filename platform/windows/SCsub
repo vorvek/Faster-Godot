@@ -79,26 +79,6 @@ def arrange_program_clean(prog):
         Clean(prog, extra_files_to_clean)
 
 
-def stage_vendor_upscaler_runtime_libs(prog):
-    runtime_libs = env.get("vendor_upscaler_runtime_libs", [])
-    if not runtime_libs:
-        return []
-
-    staged_libs = []
-    staged_names = set()
-    for runtime_lib in runtime_libs:
-        runtime_lib_path = Path(runtime_lib)
-        runtime_lib_name = runtime_lib_path.name
-        if runtime_lib_name in staged_names:
-            continue
-
-        staged_names.add(runtime_lib_name)
-        staged_lib = env.CommandNoCache(f"#bin/{runtime_lib_name}", str(runtime_lib_path), Copy("$TARGET", "$SOURCE"))
-        env.Depends(prog, staged_lib)
-        Clean(prog, staged_lib)
-        staged_libs += staged_lib
-
-    return staged_libs
 
 
 env["BUILDERS"]["RES"].emitter = redirect_emitter
@@ -126,7 +106,6 @@ elif env["library_type"] == "shared_library":
 else:
     prog = env.add_program(program_name, sources, PROGSUFFIX=env["PROGSUFFIX"])
 arrange_program_clean(prog)
-staged_vendor_libs = stage_vendor_upscaler_runtime_libs(prog)
 
 env.Depends(prog, "godot.manifest")
 if env.msvc:

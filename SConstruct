@@ -208,8 +208,6 @@ opts.Add(BoolVariable("vulkan", "Enable the Vulkan rendering driver", True))
 opts.Add(BoolVariable("opengl3", "Enable the OpenGL/GLES3 rendering driver", True))
 opts.Add(BoolVariable("metal", "Enable the Metal rendering driver on supported platforms (Apple arm64 only)", False))
 opts.Add(BoolVariable("use_volk", "Use the volk library to load the Vulkan loader dynamically", True))
-opts.Add(BoolVariable("enable_xess", "Enable Intel XeSS super resolution integration", False))
-opts.Add(("xess_sdk_path", "Path to a local Intel XeSS SDK checkout", ""))
 opts.Add(BoolVariable("accesskit", "Use AccessKit C SDK", True))
 opts.Add(("accesskit_sdk_path", "Path to the AccessKit C SDK", ""))
 opts.Add(BoolVariable("sdl", "Enable the SDL3 input driver", True))
@@ -503,65 +501,8 @@ opts.Update(env, {**env.Dictionary(), **ARGUMENTS})
 if "faster_godot" in ARGUMENTS:
     print_warning("The faster_godot option is ignored; this fork always builds the Faster-Godot desktop profile.")
 env["faster_godot"] = True
-env["vendor_upscaler_runtime_libs"] = []
 
 
-def vendor_upscaler_runtime_name_matches_platform(runtime_name):
-    runtime_name_lower = runtime_name.lower()
-    if env["platform"] == "windows":
-        return runtime_name_lower.endswith(".dll")
-    if env["platform"] == "linuxbsd":
-        return ".so" in runtime_name_lower
-    return True
-
-
-def collect_vendor_upscaler_runtime_libs(sdk_path, runtime_names):
-    runtime_name_set = {name.lower() for name in runtime_names}
-    runtime_libs = []
-    for root, _dirs, files in os.walk(sdk_path):
-        for file_name in files:
-            if file_name.lower() in runtime_name_set and vendor_upscaler_runtime_name_matches_platform(file_name):
-                runtime_libs.append(os.path.join(root, file_name))
-    return runtime_libs
-
-
-if env["enable_xess"]:
-    env.AppendUnique(CPPDEFINES=["VENDOR_UPSCALER_XESS_REQUESTED"])
-
-if env["enable_xess"]:
-    xess_path = env.get("xess_sdk_path", "")
-    if xess_path and os.path.isdir(xess_path):
-        xess_include_paths = []
-        for include_path in [
-            os.path.join(xess_path, "inc"),
-            os.path.join(xess_path, "inc", "xess"),
-        ]:
-            if os.path.isdir(include_path):
-                xess_include_paths.append(include_path)
-
-        if xess_include_paths:
-            env.Prepend(CPPPATH=xess_include_paths)
-            env.Prepend(CPPPATH=["#thirdparty/vulkan/include"])
-            env.AppendUnique(CPPDEFINES=["XESS_SDK_HEADERS_PRESENT"])
-
-        if os.path.isfile(os.path.join(xess_path, "inc", "xess", "xess_vk.h")):
-            env.AppendUnique(CPPDEFINES=["XESS_VK_HEADERS_PRESENT"])
-        else:
-            print_warning("XeSS was enabled, but xess_vk.h was not found in xess_sdk_path.")
-
-        xess_runtime_libs = collect_vendor_upscaler_runtime_libs(
-            xess_path,
-            [
-                "libxess.dll",
-                "libxess.so",
-            ],
-        )
-        if xess_runtime_libs:
-            env["vendor_upscaler_runtime_libs"] += xess_runtime_libs
-        elif "XESS_VK_HEADERS_PRESENT" in env.get("CPPDEFINES", []):
-            print_warning("XeSS was enabled, but the XeSS runtime libraries for this platform were not found. Copy Intel's runtime libraries next to the executable/export template for runtime dispatch.")
-    else:
-        print_warning("XeSS was enabled, but xess_sdk_path is empty or invalid.")
 Help(opts.GenerateHelpText(env))
 
 

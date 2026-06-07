@@ -472,9 +472,6 @@ public:
 	_ALWAYS_INLINE_ static ViewportScaling3DType scaling_3d_mode_type(ViewportScaling3DMode p_mode) {
 		return RSE::scaling_3d_mode_type(p_mode);
 	}
-	_ALWAYS_INLINE_ static bool scaling_3d_mode_is_vendor_temporal(ViewportScaling3DMode p_mode) {
-		return RSE::scaling_3d_mode_is_vendor_temporal(p_mode);
-	}
 
 	using ViewportAnisotropicFiltering = RSE::ViewportAnisotropicFiltering;
 	static constexpr ViewportAnisotropicFiltering VIEWPORT_ANISOTROPY_DISABLED = RSE::VIEWPORT_ANISOTROPY_DISABLED;
