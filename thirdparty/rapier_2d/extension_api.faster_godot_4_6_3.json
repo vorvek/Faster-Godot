@@ -31549,7 +31549,7 @@
 					"name": "animation_added",
 					"arguments": [
 						{
-							"name": "name",
+							"name": "anim_name",
 							"type": "StringName"
 						}
 					]
@@ -31558,7 +31558,7 @@
 					"name": "animation_removed",
 					"arguments": [
 						{
-							"name": "name",
+							"name": "anim_name",
 							"type": "StringName"
 						}
 					]
@@ -31567,11 +31567,11 @@
 					"name": "animation_renamed",
 					"arguments": [
 						{
-							"name": "name",
+							"name": "old_name",
 							"type": "StringName"
 						},
 						{
-							"name": "to_name",
+							"name": "new_name",
 							"type": "StringName"
 						}
 					]
@@ -31580,7 +31580,7 @@
 					"name": "animation_changed",
 					"arguments": [
 						{
-							"name": "name",
+							"name": "anim_name",
 							"type": "StringName"
 						}
 					]
@@ -32902,7 +32902,7 @@
 							"type": "int"
 						},
 						{
-							"name": "name",
+							"name": "node_name",
 							"type": "String"
 						}
 					]
@@ -37099,7 +37099,7 @@
 					"name": "current_animation_changed",
 					"arguments": [
 						{
-							"name": "name",
+							"name": "anim_name",
 							"type": "StringName"
 						}
 					]
@@ -39012,6 +39012,124 @@
 					"name": "reverb_bus_uniformity",
 					"setter": "set_reverb_uniformity",
 					"getter": "get_reverb_uniformity"
+				}
+			]
+		},
+		{
+			"name": "AreaLight3D",
+			"is_refcounted": false,
+			"is_instantiable": true,
+			"inherits": "Light3D",
+			"api_type": "core",
+			"methods": [
+				{
+					"name": "set_area_texture",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 4051416890,
+					"arguments": [
+						{
+							"name": "texture",
+							"type": "Texture2D"
+						}
+					]
+				},
+				{
+					"name": "get_area_texture",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3635182373,
+					"return_value": {
+						"type": "Texture2D"
+					}
+				},
+				{
+					"name": "set_area_size",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 743155724,
+					"arguments": [
+						{
+							"name": "area_size",
+							"type": "Vector2"
+						}
+					]
+				},
+				{
+					"name": "get_area_size",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3341600327,
+					"return_value": {
+						"type": "Vector2"
+					}
+				},
+				{
+					"name": "set_area_normalize_energy",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2586408642,
+					"arguments": [
+						{
+							"name": "enable",
+							"type": "bool"
+						}
+					]
+				},
+				{
+					"name": "is_area_normalizing_energy",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 36873697,
+					"return_value": {
+						"type": "bool"
+					}
+				}
+			],
+			"properties": [
+				{
+					"type": "float",
+					"name": "area_range",
+					"setter": "set_param",
+					"getter": "get_param",
+					"index": 4
+				},
+				{
+					"type": "float",
+					"name": "area_attenuation",
+					"setter": "set_param",
+					"getter": "get_param",
+					"index": 6
+				},
+				{
+					"type": "bool",
+					"name": "area_normalize_energy",
+					"setter": "set_area_normalize_energy",
+					"getter": "is_area_normalizing_energy"
+				},
+				{
+					"type": "Vector2",
+					"name": "area_size",
+					"setter": "set_area_size",
+					"getter": "get_area_size"
+				},
+				{
+					"type": "Texture2D,-AnimatedTexture,-AtlasTexture,-CameraTexture,-CanvasTexture,-MeshTexture,-Texture2DRD,-ViewportTexture",
+					"name": "area_texture",
+					"setter": "set_area_texture",
+					"getter": "get_area_texture"
 				}
 			]
 		},
@@ -44611,6 +44729,10 @@
 						{
 							"name": "TRANSITION_TO_TIME_START",
 							"value": 1
+						},
+						{
+							"name": "TRANSITION_TO_TIME_PREVIOUS_POSITION",
+							"value": 2
 						}
 					]
 				},
@@ -64784,6 +64906,28 @@
 							"value": 3
 						}
 					]
+				},
+				{
+					"name": "OversamplingWithScale",
+					"is_bitfield": false,
+					"values": [
+						{
+							"name": "OVERSAMPLING_WITH_SCALE_PARENT_NODE",
+							"value": 0
+						},
+						{
+							"name": "OVERSAMPLING_WITH_SCALE_DISABLED",
+							"value": 1
+						},
+						{
+							"name": "OVERSAMPLING_WITH_SCALE_ENABLED",
+							"value": 2
+						},
+						{
+							"name": "OVERSAMPLING_WITH_SCALE_MAX",
+							"value": 3
+						}
+					]
 				}
 			],
 			"methods": [
@@ -66810,6 +66954,31 @@
 					"return_value": {
 						"type": "enum::CanvasItem.ClipChildrenMode"
 					}
+				},
+				{
+					"name": "set_oversampling_with_scale",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 872218804,
+					"arguments": [
+						{
+							"name": "enabled",
+							"type": "enum::CanvasItem.OversamplingWithScale"
+						}
+					]
+				},
+				{
+					"name": "get_oversampling_with_scale",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2026097197,
+					"return_value": {
+						"type": "enum::CanvasItem.OversamplingWithScale"
+					}
 				}
 			],
 			"signals": [
@@ -66862,6 +67031,12 @@
 					"name": "clip_children",
 					"setter": "set_clip_children_mode",
 					"getter": "get_clip_children_mode"
+				},
+				{
+					"type": "int",
+					"name": "oversampling_with_scale",
+					"setter": "set_oversampling_with_scale",
+					"getter": "get_oversampling_with_scale"
 				},
 				{
 					"type": "int",
@@ -93846,7 +94021,10 @@
 					"is_vararg": false,
 					"is_static": false,
 					"is_virtual": false,
-					"hash": 3879521245,
+					"hash": 1201906210,
+					"hash_compatibility": [
+						3879521245
+					],
 					"return_value": {
 						"type": "enum::Error"
 					},
@@ -93867,6 +94045,11 @@
 							"name": "flags",
 							"type": "bitfield::EditorExportPlatform.DebugFlags",
 							"default_value": "0"
+						},
+						{
+							"name": "notify",
+							"type": "bool",
+							"default_value": "true"
 						}
 					]
 				},
@@ -94259,20 +94442,6 @@
 					]
 				}
 			]
-		},
-		{
-			"name": "EditorExportPlatformAndroid",
-			"is_refcounted": true,
-			"is_instantiable": true,
-			"inherits": "EditorExportPlatform",
-			"api_type": "editor"
-		},
-		{
-			"name": "EditorExportPlatformAppleEmbedded",
-			"is_refcounted": true,
-			"is_instantiable": false,
-			"inherits": "EditorExportPlatform",
-			"api_type": "editor"
 		},
 		{
 			"name": "EditorExportPlatformExtension",
@@ -94909,13 +95078,6 @@
 			]
 		},
 		{
-			"name": "EditorExportPlatformIOS",
-			"is_refcounted": true,
-			"is_instantiable": true,
-			"inherits": "EditorExportPlatformAppleEmbedded",
-			"api_type": "editor"
-		},
-		{
 			"name": "EditorExportPlatformLinuxBSD",
 			"is_refcounted": true,
 			"is_instantiable": true,
@@ -94923,30 +95085,9 @@
 			"api_type": "editor"
 		},
 		{
-			"name": "EditorExportPlatformMacOS",
-			"is_refcounted": true,
-			"is_instantiable": true,
-			"inherits": "EditorExportPlatform",
-			"api_type": "editor"
-		},
-		{
 			"name": "EditorExportPlatformPC",
 			"is_refcounted": true,
 			"is_instantiable": false,
-			"inherits": "EditorExportPlatform",
-			"api_type": "editor"
-		},
-		{
-			"name": "EditorExportPlatformVisionOS",
-			"is_refcounted": true,
-			"is_instantiable": true,
-			"inherits": "EditorExportPlatformAppleEmbedded",
-			"api_type": "editor"
-		},
-		{
-			"name": "EditorExportPlatformWeb",
-			"is_refcounted": true,
-			"is_instantiable": true,
 			"inherits": "EditorExportPlatform",
 			"api_type": "editor"
 		},
@@ -99209,6 +99350,18 @@
 				},
 				{
 					"name": "_is_selectable_when_hidden",
+					"is_const": true,
+					"is_static": false,
+					"is_required": false,
+					"is_vararg": false,
+					"is_virtual": true,
+					"hash": 36873697,
+					"return_value": {
+						"type": "bool"
+					}
+				},
+				{
+					"name": "_can_commit_handle_on_click",
 					"is_const": true,
 					"is_static": false,
 					"is_required": false,
@@ -105956,12 +106109,30 @@
 					]
 				},
 				{
+					"name": "RTGIBackend",
+					"is_bitfield": false,
+					"values": [
+						{
+							"name": "RTGI_BACKEND_VULKAN_GENERIC",
+							"value": 0
+						}
+					]
+				},
+				{
 					"name": "RTGIMode",
 					"is_bitfield": false,
 					"values": [
 						{
-							"name": "RTGI_MODE_HYBRID",
+							"name": "RTGI_MODE_REFLECTIONS_RT_ONLY",
 							"value": 0
+						},
+						{
+							"name": "RTGI_MODE_FULL_PATH_TRACING",
+							"value": 1
+						},
+						{
+							"name": "RTGI_MODE_HYBRID",
+							"value": 2
 						},
 						{
 							"name": "RTGI_MODE_PATH_TRACED",
@@ -105970,9 +106141,35 @@
 					]
 				},
 				{
+					"name": "RTGIQualityPreset",
+					"is_bitfield": false,
+					"values": [
+						{
+							"name": "RTGI_QUALITY_PRESET_CUSTOM",
+							"value": 0
+						},
+						{
+							"name": "RTGI_QUALITY_PRESET_PERFORMANCE",
+							"value": 1
+						},
+						{
+							"name": "RTGI_QUALITY_PRESET_BALANCED",
+							"value": 2
+						},
+						{
+							"name": "RTGI_QUALITY_PRESET_PRODUCTION",
+							"value": 3
+						}
+					]
+				},
+				{
 					"name": "RTGIDenoiser",
 					"is_bitfield": false,
 					"values": [
+						{
+							"name": "RTGI_DENOISER_ASVFG_EXPERIMENTAL",
+							"value": 8
+						},
 						{
 							"name": "RTGI_DENOISER_SVGF",
 							"value": 8
@@ -105980,6 +106177,14 @@
 						{
 							"name": "RTGI_DENOISER_NONE",
 							"value": 9
+						},
+						{
+							"name": "RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION",
+							"value": 14
+						},
+						{
+							"name": "RTGI_DENOISER_REACTIVE",
+							"value": 11
 						}
 					]
 				},
@@ -106078,6 +106283,22 @@
 						{
 							"name": "RT_DEBUG_BRDF_REJECTION",
 							"value": 22
+						},
+						{
+							"name": "RT_DEBUG_NORMAL_DEVIATION",
+							"value": 23
+						},
+						{
+							"name": "RT_DEBUG_SPECULAR_REFLECTION_DIRECTION",
+							"value": 24
+						},
+						{
+							"name": "RT_DEBUG_SPECULAR_REFLECTED_HIT_DISTANCE",
+							"value": 25
+						},
+						{
+							"name": "RT_DEBUG_SPECULAR_REFLECTED_HIT_NORMAL",
+							"value": 26
 						}
 					]
 				},
@@ -107590,6 +107811,56 @@
 					}
 				},
 				{
+					"name": "set_rtgi_backend",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2616758742,
+					"arguments": [
+						{
+							"name": "backend",
+							"type": "enum::Environment.RTGIBackend"
+						}
+					]
+				},
+				{
+					"name": "get_rtgi_backend",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1713470253,
+					"return_value": {
+						"type": "enum::Environment.RTGIBackend"
+					}
+				},
+				{
+					"name": "set_rtgi_quality_preset",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2480293743,
+					"arguments": [
+						{
+							"name": "preset",
+							"type": "enum::Environment.RTGIQualityPreset"
+						}
+					]
+				},
+				{
+					"name": "get_rtgi_quality_preset",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3479022313,
+					"return_value": {
+						"type": "enum::Environment.RTGIQualityPreset"
+					}
+				},
+				{
 					"name": "set_rtgi_mode",
 					"is_const": false,
 					"is_vararg": false,
@@ -107612,6 +107883,31 @@
 					"hash": 1742090573,
 					"return_value": {
 						"type": "enum::Environment.RTGIMode"
+					}
+				},
+				{
+					"name": "set_rtgi_fpt_reference",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2586408642,
+					"arguments": [
+						{
+							"name": "enabled",
+							"type": "bool"
+						}
+					]
+				},
+				{
+					"name": "get_rtgi_fpt_reference",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 36873697,
+					"return_value": {
+						"type": "bool"
 					}
 				},
 				{
@@ -107696,6 +107992,33 @@
 					}
 				},
 				{
+					"name": "set_rtgi_resolution_scale",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 373806689,
+					"arguments": [
+						{
+							"name": "scale",
+							"type": "float",
+							"meta": "float"
+						}
+					]
+				},
+				{
+					"name": "get_rtgi_resolution_scale",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1740695150,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
+					}
+				},
+				{
 					"name": "set_rtgi_disable_in_editor",
 					"is_const": false,
 					"is_vararg": false,
@@ -107718,6 +108041,137 @@
 					"hash": 36873697,
 					"return_value": {
 						"type": "bool"
+					}
+				},
+				{
+					"name": "set_rtgi_ray_firefly_suppression",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 373806689,
+					"arguments": [
+						{
+							"name": "suppression",
+							"type": "float",
+							"meta": "float"
+						}
+					]
+				},
+				{
+					"name": "get_rtgi_ray_firefly_suppression",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1740695150,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
+					}
+				},
+				{
+					"name": "set_rtgi_ray_max_radiance",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 373806689,
+					"arguments": [
+						{
+							"name": "radiance",
+							"type": "float",
+							"meta": "float"
+						}
+					]
+				},
+				{
+					"name": "get_rtgi_ray_max_radiance",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1740695150,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
+					}
+				},
+				{
+					"name": "set_rtgi_analytic_light_sampling_enabled",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2586408642,
+					"arguments": [
+						{
+							"name": "enabled",
+							"type": "bool"
+						}
+					]
+				},
+				{
+					"name": "is_rtgi_analytic_light_sampling_enabled",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 36873697,
+					"return_value": {
+						"type": "bool"
+					}
+				},
+				{
+					"name": "set_rtgi_explicit_emissive_sampling_enabled",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2586408642,
+					"arguments": [
+						{
+							"name": "enabled",
+							"type": "bool"
+						}
+					]
+				},
+				{
+					"name": "is_rtgi_explicit_emissive_sampling_enabled",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 36873697,
+					"return_value": {
+						"type": "bool"
+					}
+				},
+				{
+					"name": "set_rtgi_wrc_strength",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 373806689,
+					"arguments": [
+						{
+							"name": "strength",
+							"type": "float",
+							"meta": "float"
+						}
+					]
+				},
+				{
+					"name": "get_rtgi_wrc_strength",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1740695150,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
 					}
 				},
 				{
@@ -109254,9 +109708,27 @@
 				},
 				{
 					"type": "int",
+					"name": "rtgi_backend",
+					"setter": "set_rtgi_backend",
+					"getter": "get_rtgi_backend"
+				},
+				{
+					"type": "int",
+					"name": "rtgi_quality_preset",
+					"setter": "set_rtgi_quality_preset",
+					"getter": "get_rtgi_quality_preset"
+				},
+				{
+					"type": "int",
 					"name": "rtgi_mode",
 					"setter": "set_rtgi_mode",
 					"getter": "get_rtgi_mode"
+				},
+				{
+					"type": "bool",
+					"name": "rtgi_fpt_reference",
+					"setter": "set_rtgi_fpt_reference",
+					"getter": "get_rtgi_fpt_reference"
 				},
 				{
 					"type": "int",
@@ -109277,10 +109749,46 @@
 					"getter": "get_rtgi_energy"
 				},
 				{
+					"type": "float",
+					"name": "rtgi_resolution_scale",
+					"setter": "set_rtgi_resolution_scale",
+					"getter": "get_rtgi_resolution_scale"
+				},
+				{
 					"type": "bool",
 					"name": "rtgi_disable_in_editor",
 					"setter": "set_rtgi_disable_in_editor",
 					"getter": "is_rtgi_disabled_in_editor"
+				},
+				{
+					"type": "float",
+					"name": "rtgi_ray_firefly_suppression",
+					"setter": "set_rtgi_ray_firefly_suppression",
+					"getter": "get_rtgi_ray_firefly_suppression"
+				},
+				{
+					"type": "float",
+					"name": "rtgi_ray_max_radiance",
+					"setter": "set_rtgi_ray_max_radiance",
+					"getter": "get_rtgi_ray_max_radiance"
+				},
+				{
+					"type": "bool",
+					"name": "rtgi_analytic_light_sampling_enabled",
+					"setter": "set_rtgi_analytic_light_sampling_enabled",
+					"getter": "is_rtgi_analytic_light_sampling_enabled"
+				},
+				{
+					"type": "bool",
+					"name": "rtgi_explicit_emissive_sampling_enabled",
+					"setter": "set_rtgi_explicit_emissive_sampling_enabled",
+					"getter": "is_rtgi_explicit_emissive_sampling_enabled"
+				},
+				{
+					"type": "float",
+					"name": "rtgi_wrc_strength",
+					"setter": "set_rtgi_wrc_strength",
+					"getter": "get_rtgi_wrc_strength"
 				},
 				{
 					"type": "int",
@@ -144611,32 +145119,6 @@
 			]
 		},
 		{
-			"name": "JNISingleton",
-			"is_refcounted": false,
-			"is_instantiable": true,
-			"inherits": "Object",
-			"api_type": "core",
-			"methods": [
-				{
-					"name": "has_java_method",
-					"is_const": true,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 2619796661,
-					"return_value": {
-						"type": "bool"
-					},
-					"arguments": [
-						{
-							"name": "method",
-							"type": "StringName"
-						}
-					]
-				}
-			]
-		},
-		{
 			"name": "JSON",
 			"is_refcounted": true,
 			"is_instantiable": true,
@@ -144835,323 +145317,6 @@
 			"is_refcounted": false,
 			"is_instantiable": true,
 			"inherits": "IterateIK3D",
-			"api_type": "core"
-		},
-		{
-			"name": "JavaClass",
-			"is_refcounted": true,
-			"is_instantiable": true,
-			"inherits": "RefCounted",
-			"api_type": "core",
-			"methods": [
-				{
-					"name": "get_java_class_name",
-					"is_const": true,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 201670096,
-					"return_value": {
-						"type": "String"
-					}
-				},
-				{
-					"name": "get_java_method_list",
-					"is_const": true,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 3995934104,
-					"return_value": {
-						"type": "typedarray::Dictionary"
-					}
-				},
-				{
-					"name": "get_java_parent_class",
-					"is_const": true,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 541536347,
-					"return_value": {
-						"type": "JavaClass"
-					}
-				},
-				{
-					"name": "has_java_method",
-					"is_const": true,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 2619796661,
-					"return_value": {
-						"type": "bool"
-					},
-					"arguments": [
-						{
-							"name": "method",
-							"type": "StringName"
-						}
-					]
-				}
-			]
-		},
-		{
-			"name": "JavaClassWrapper",
-			"is_refcounted": false,
-			"is_instantiable": true,
-			"inherits": "Object",
-			"api_type": "core",
-			"methods": [
-				{
-					"name": "wrap",
-					"is_const": false,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 1124367868,
-					"return_value": {
-						"type": "JavaClass"
-					},
-					"arguments": [
-						{
-							"name": "name",
-							"type": "String"
-						}
-					]
-				},
-				{
-					"name": "get_exception",
-					"is_const": false,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 3277089691,
-					"return_value": {
-						"type": "JavaObject"
-					}
-				}
-			]
-		},
-		{
-			"name": "JavaObject",
-			"is_refcounted": true,
-			"is_instantiable": true,
-			"inherits": "RefCounted",
-			"api_type": "core",
-			"methods": [
-				{
-					"name": "get_java_class",
-					"is_const": true,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 541536347,
-					"return_value": {
-						"type": "JavaClass"
-					}
-				},
-				{
-					"name": "has_java_method",
-					"is_const": true,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 2619796661,
-					"return_value": {
-						"type": "bool"
-					},
-					"arguments": [
-						{
-							"name": "method",
-							"type": "StringName"
-						}
-					]
-				}
-			]
-		},
-		{
-			"name": "JavaScriptBridge",
-			"is_refcounted": false,
-			"is_instantiable": false,
-			"inherits": "Object",
-			"api_type": "core",
-			"methods": [
-				{
-					"name": "eval",
-					"is_const": false,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 218087648,
-					"return_value": {
-						"type": "Variant"
-					},
-					"arguments": [
-						{
-							"name": "code",
-							"type": "String"
-						},
-						{
-							"name": "use_global_execution_context",
-							"type": "bool",
-							"default_value": "false"
-						}
-					]
-				},
-				{
-					"name": "get_interface",
-					"is_const": false,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 1355533281,
-					"return_value": {
-						"type": "JavaScriptObject"
-					},
-					"arguments": [
-						{
-							"name": "interface",
-							"type": "String"
-						}
-					]
-				},
-				{
-					"name": "create_callback",
-					"is_const": false,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 422818440,
-					"return_value": {
-						"type": "JavaScriptObject"
-					},
-					"arguments": [
-						{
-							"name": "callable",
-							"type": "Callable"
-						}
-					]
-				},
-				{
-					"name": "is_js_buffer",
-					"is_const": false,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 821968997,
-					"return_value": {
-						"type": "bool"
-					},
-					"arguments": [
-						{
-							"name": "javascript_object",
-							"type": "JavaScriptObject"
-						}
-					]
-				},
-				{
-					"name": "js_buffer_to_packed_byte_array",
-					"is_const": false,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 64409880,
-					"return_value": {
-						"type": "PackedByteArray"
-					},
-					"arguments": [
-						{
-							"name": "javascript_buffer",
-							"type": "JavaScriptObject"
-						}
-					]
-				},
-				{
-					"name": "create_object",
-					"is_const": false,
-					"is_vararg": true,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 3093893586,
-					"return_value": {
-						"type": "Variant"
-					},
-					"arguments": [
-						{
-							"name": "object",
-							"type": "String"
-						}
-					]
-				},
-				{
-					"name": "download_buffer",
-					"is_const": false,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 3352272093,
-					"hash_compatibility": [
-						4123979296
-					],
-					"arguments": [
-						{
-							"name": "buffer",
-							"type": "PackedByteArray"
-						},
-						{
-							"name": "name",
-							"type": "String"
-						},
-						{
-							"name": "mime",
-							"type": "String",
-							"default_value": "\"application/octet-stream\""
-						}
-					]
-				},
-				{
-					"name": "pwa_needs_update",
-					"is_const": true,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 36873697,
-					"return_value": {
-						"type": "bool"
-					}
-				},
-				{
-					"name": "pwa_update",
-					"is_const": false,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 166280745,
-					"return_value": {
-						"type": "enum::Error"
-					}
-				},
-				{
-					"name": "force_fs_sync",
-					"is_const": false,
-					"is_vararg": false,
-					"is_static": false,
-					"is_virtual": false,
-					"hash": 3218959716
-				}
-			],
-			"signals": [
-				{
-					"name": "pwa_update_available"
-				}
-			]
-		},
-		{
-			"name": "JavaScriptObject",
-			"is_refcounted": true,
-			"is_instantiable": false,
-			"inherits": "RefCounted",
 			"api_type": "core"
 		},
 		{
@@ -184632,7 +184797,13 @@
 					"is_vararg": false,
 					"is_static": false,
 					"is_virtual": false,
-					"hash": 1466479800,
+					"hash": 2141509306,
+					"hash_compatibility": [
+						1466479800
+					],
+					"return_value": {
+						"type": "bool"
+					},
 					"arguments": [
 						{
 							"name": "from",
@@ -217407,6 +217578,686 @@
 			]
 		},
 		{
+			"name": "RDAccelerationStructureGeometry",
+			"is_refcounted": true,
+			"is_instantiable": true,
+			"inherits": "RefCounted",
+			"api_type": "core",
+			"enums": [
+				{
+					"name": "Type",
+					"is_bitfield": false,
+					"values": [
+						{
+							"name": "TYPE_TRIANGLES",
+							"value": 0
+						},
+						{
+							"name": "TYPE_AABBS",
+							"value": 1
+						}
+					]
+				}
+			],
+			"methods": [
+				{
+					"name": "set_geometry_type",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2362770276,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "enum::RDAccelerationStructureGeometry.Type"
+						}
+					]
+				},
+				{
+					"name": "get_geometry_type",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2720281397,
+					"return_value": {
+						"type": "enum::RDAccelerationStructureGeometry.Type"
+					}
+				},
+				{
+					"name": "set_flags",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1046628555,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "bitfield::RenderingDevice.AccelerationStructureGeometryFlagBits"
+						}
+					]
+				},
+				{
+					"name": "get_flags",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1694887119,
+					"return_value": {
+						"type": "bitfield::RenderingDevice.AccelerationStructureGeometryFlagBits"
+					}
+				},
+				{
+					"name": "set_vertex_buffer",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2722037293,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "RID"
+						}
+					]
+				},
+				{
+					"name": "get_vertex_buffer",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2944877500,
+					"return_value": {
+						"type": "RID"
+					}
+				},
+				{
+					"name": "set_vertex_offset",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1286410249,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "int",
+							"meta": "uint32"
+						}
+					]
+				},
+				{
+					"name": "get_vertex_offset",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3905245786,
+					"return_value": {
+						"type": "int",
+						"meta": "uint32"
+					}
+				},
+				{
+					"name": "set_vertex_stride",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1286410249,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "int",
+							"meta": "uint32"
+						}
+					]
+				},
+				{
+					"name": "get_vertex_stride",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3905245786,
+					"return_value": {
+						"type": "int",
+						"meta": "uint32"
+					}
+				},
+				{
+					"name": "set_vertex_count",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1286410249,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "int",
+							"meta": "uint32"
+						}
+					]
+				},
+				{
+					"name": "get_vertex_count",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3905245786,
+					"return_value": {
+						"type": "int",
+						"meta": "uint32"
+					}
+				},
+				{
+					"name": "set_vertex_format",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 565531219,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "enum::RenderingDevice.DataFormat"
+						}
+					]
+				},
+				{
+					"name": "get_vertex_format",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2235804183,
+					"return_value": {
+						"type": "enum::RenderingDevice.DataFormat"
+					}
+				},
+				{
+					"name": "set_index_buffer",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2722037293,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "RID"
+						}
+					]
+				},
+				{
+					"name": "get_index_buffer",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2944877500,
+					"return_value": {
+						"type": "RID"
+					}
+				},
+				{
+					"name": "set_index_offset",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1286410249,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "int",
+							"meta": "uint32"
+						}
+					]
+				},
+				{
+					"name": "get_index_offset",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3905245786,
+					"return_value": {
+						"type": "int",
+						"meta": "uint32"
+					}
+				},
+				{
+					"name": "set_index_count",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1286410249,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "int",
+							"meta": "uint32"
+						}
+					]
+				},
+				{
+					"name": "get_index_count",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3905245786,
+					"return_value": {
+						"type": "int",
+						"meta": "uint32"
+					}
+				},
+				{
+					"name": "set_aabb_buffer",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2722037293,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "RID"
+						}
+					]
+				},
+				{
+					"name": "get_aabb_buffer",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2944877500,
+					"return_value": {
+						"type": "RID"
+					}
+				},
+				{
+					"name": "set_aabb_offset",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1286410249,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "int",
+							"meta": "uint32"
+						}
+					]
+				},
+				{
+					"name": "get_aabb_offset",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3905245786,
+					"return_value": {
+						"type": "int",
+						"meta": "uint32"
+					}
+				},
+				{
+					"name": "set_aabb_stride",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1286410249,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "int",
+							"meta": "uint32"
+						}
+					]
+				},
+				{
+					"name": "get_aabb_stride",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3905245786,
+					"return_value": {
+						"type": "int",
+						"meta": "uint32"
+					}
+				},
+				{
+					"name": "set_aabb_count",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1286410249,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "int",
+							"meta": "uint32"
+						}
+					]
+				},
+				{
+					"name": "get_aabb_count",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3905245786,
+					"return_value": {
+						"type": "int",
+						"meta": "uint32"
+					}
+				}
+			],
+			"properties": [
+				{
+					"type": "int",
+					"name": "geometry_type",
+					"setter": "set_geometry_type",
+					"getter": "get_geometry_type"
+				},
+				{
+					"type": "int",
+					"name": "flags",
+					"setter": "set_flags",
+					"getter": "get_flags"
+				},
+				{
+					"type": "RID",
+					"name": "vertex_buffer",
+					"setter": "set_vertex_buffer",
+					"getter": "get_vertex_buffer"
+				},
+				{
+					"type": "int",
+					"name": "vertex_offset",
+					"setter": "set_vertex_offset",
+					"getter": "get_vertex_offset"
+				},
+				{
+					"type": "int",
+					"name": "vertex_stride",
+					"setter": "set_vertex_stride",
+					"getter": "get_vertex_stride"
+				},
+				{
+					"type": "int",
+					"name": "vertex_count",
+					"setter": "set_vertex_count",
+					"getter": "get_vertex_count"
+				},
+				{
+					"type": "int",
+					"name": "vertex_format",
+					"setter": "set_vertex_format",
+					"getter": "get_vertex_format"
+				},
+				{
+					"type": "RID",
+					"name": "index_buffer",
+					"setter": "set_index_buffer",
+					"getter": "get_index_buffer"
+				},
+				{
+					"type": "int",
+					"name": "index_offset",
+					"setter": "set_index_offset",
+					"getter": "get_index_offset"
+				},
+				{
+					"type": "int",
+					"name": "index_count",
+					"setter": "set_index_count",
+					"getter": "get_index_count"
+				},
+				{
+					"type": "RID",
+					"name": "aabb_buffer",
+					"setter": "set_aabb_buffer",
+					"getter": "get_aabb_buffer"
+				},
+				{
+					"type": "int",
+					"name": "aabb_offset",
+					"setter": "set_aabb_offset",
+					"getter": "get_aabb_offset"
+				},
+				{
+					"type": "int",
+					"name": "aabb_stride",
+					"setter": "set_aabb_stride",
+					"getter": "get_aabb_stride"
+				},
+				{
+					"type": "int",
+					"name": "aabb_count",
+					"setter": "set_aabb_count",
+					"getter": "get_aabb_count"
+				}
+			]
+		},
+		{
+			"name": "RDAccelerationStructureInstance",
+			"is_refcounted": true,
+			"is_instantiable": true,
+			"inherits": "RefCounted",
+			"api_type": "core",
+			"methods": [
+				{
+					"name": "set_transform",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2952846383,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "Transform3D"
+						}
+					]
+				},
+				{
+					"name": "get_transform",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3229777777,
+					"return_value": {
+						"type": "Transform3D"
+					}
+				},
+				{
+					"name": "set_id",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1286410249,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "int",
+							"meta": "uint32"
+						}
+					]
+				},
+				{
+					"name": "get_id",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3905245786,
+					"return_value": {
+						"type": "int",
+						"meta": "uint32"
+					}
+				},
+				{
+					"name": "set_mask",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1286410249,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "int",
+							"meta": "uint8"
+						}
+					]
+				},
+				{
+					"name": "get_mask",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3905245786,
+					"return_value": {
+						"type": "int",
+						"meta": "uint8"
+					}
+				},
+				{
+					"name": "set_hit_sbt_range",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1286410249,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "int",
+							"meta": "int64"
+						}
+					]
+				},
+				{
+					"name": "get_hit_sbt_range",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3905245786,
+					"return_value": {
+						"type": "int",
+						"meta": "int64"
+					}
+				},
+				{
+					"name": "set_flags",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2971840141,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "bitfield::RenderingDevice.AccelerationStructureInstanceFlagBits"
+						}
+					]
+				},
+				{
+					"name": "get_flags",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2410182637,
+					"return_value": {
+						"type": "bitfield::RenderingDevice.AccelerationStructureInstanceFlagBits"
+					}
+				},
+				{
+					"name": "set_blas",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2722037293,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "RID"
+						}
+					]
+				},
+				{
+					"name": "get_blas",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2944877500,
+					"return_value": {
+						"type": "RID"
+					}
+				}
+			],
+			"properties": [
+				{
+					"type": "Transform3D",
+					"name": "transform",
+					"setter": "set_transform",
+					"getter": "get_transform"
+				},
+				{
+					"type": "int",
+					"name": "id",
+					"setter": "set_id",
+					"getter": "get_id"
+				},
+				{
+					"type": "int",
+					"name": "mask",
+					"setter": "set_mask",
+					"getter": "get_mask"
+				},
+				{
+					"type": "int",
+					"name": "hit_sbt_range",
+					"setter": "set_hit_sbt_range",
+					"getter": "get_hit_sbt_range"
+				},
+				{
+					"type": "int",
+					"name": "flags",
+					"setter": "set_flags",
+					"getter": "get_flags"
+				},
+				{
+					"type": "RID",
+					"name": "blas",
+					"setter": "set_blas",
+					"getter": "get_blas"
+				}
+			]
+		},
+		{
 			"name": "RDAttachmentFormat",
 			"is_refcounted": true,
 			"is_instantiable": true,
@@ -217683,6 +218534,110 @@
 					"name": "depth_attachment",
 					"setter": "set_depth_attachment",
 					"getter": "get_depth_attachment"
+				}
+			]
+		},
+		{
+			"name": "RDHitGroup",
+			"is_refcounted": true,
+			"is_instantiable": true,
+			"inherits": "RefCounted",
+			"api_type": "core",
+			"methods": [
+				{
+					"name": "set_closest_hit_shader",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2556777288,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "RDPipelineShader"
+						}
+					]
+				},
+				{
+					"name": "get_closest_hit_shader",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2937716847,
+					"return_value": {
+						"type": "RDPipelineShader"
+					}
+				},
+				{
+					"name": "set_any_hit_shader",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2556777288,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "RDPipelineShader"
+						}
+					]
+				},
+				{
+					"name": "get_any_hit_shader",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2937716847,
+					"return_value": {
+						"type": "RDPipelineShader"
+					}
+				},
+				{
+					"name": "set_intersection_shader",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2556777288,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "RDPipelineShader"
+						}
+					]
+				},
+				{
+					"name": "get_intersection_shader",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2937716847,
+					"return_value": {
+						"type": "RDPipelineShader"
+					}
+				}
+			],
+			"properties": [
+				{
+					"type": "Object",
+					"name": "closest_hit_shader",
+					"setter": "set_closest_hit_shader",
+					"getter": "get_closest_hit_shader"
+				},
+				{
+					"type": "Object",
+					"name": "any_hit_shader",
+					"setter": "set_any_hit_shader",
+					"getter": "get_any_hit_shader"
+				},
+				{
+					"type": "Object",
+					"name": "intersection_shader",
+					"setter": "set_intersection_shader",
+					"getter": "get_intersection_shader"
 				}
 			]
 		},
@@ -219417,6 +220372,79 @@
 					"name": "patch_control_points",
 					"setter": "set_patch_control_points",
 					"getter": "get_patch_control_points"
+				}
+			]
+		},
+		{
+			"name": "RDPipelineShader",
+			"is_refcounted": true,
+			"is_instantiable": true,
+			"inherits": "RefCounted",
+			"api_type": "core",
+			"methods": [
+				{
+					"name": "set_shader",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2722037293,
+					"arguments": [
+						{
+							"name": "p_member",
+							"type": "RID"
+						}
+					]
+				},
+				{
+					"name": "get_shader",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2944877500,
+					"return_value": {
+						"type": "RID"
+					}
+				},
+				{
+					"name": "set_specialization_constants",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 381264803,
+					"arguments": [
+						{
+							"name": "specialization_constants",
+							"type": "typedarray::RDPipelineSpecializationConstant"
+						}
+					]
+				},
+				{
+					"name": "get_specialization_constants",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3995934104,
+					"return_value": {
+						"type": "typedarray::RDPipelineSpecializationConstant"
+					}
+				}
+			],
+			"properties": [
+				{
+					"type": "RID",
+					"name": "shader",
+					"setter": "set_shader",
+					"getter": "get_shader"
+				},
+				{
+					"type": "typedarray::RDPipelineSpecializationConstant",
+					"name": "specialization_constants",
+					"setter": "set_specialization_constants",
+					"getter": "get_specialization_constants"
 				}
 			]
 		},
@@ -224656,6 +225684,141 @@
 							"type": "enum::RenderingServer.ViewportAnisotropicFiltering"
 						}
 					]
+				},
+				{
+					"name": "get_taa_sharpness",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1740695150,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
+					}
+				},
+				{
+					"name": "set_taa_sharpness",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 373806689,
+					"arguments": [
+						{
+							"name": "taa_sharpness",
+							"type": "float",
+							"meta": "float"
+						}
+					]
+				},
+				{
+					"name": "get_taa_history_weight",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1740695150,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
+					}
+				},
+				{
+					"name": "set_taa_history_weight",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 373806689,
+					"arguments": [
+						{
+							"name": "taa_history_weight",
+							"type": "float",
+							"meta": "float"
+						}
+					]
+				},
+				{
+					"name": "get_taa_disocclusion_threshold",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1740695150,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
+					}
+				},
+				{
+					"name": "set_taa_disocclusion_threshold",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 373806689,
+					"arguments": [
+						{
+							"name": "taa_disocclusion_threshold",
+							"type": "float",
+							"meta": "float"
+						}
+					]
+				},
+				{
+					"name": "get_taa_jitter_phase_count",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3905245786,
+					"return_value": {
+						"type": "int",
+						"meta": "uint32"
+					}
+				},
+				{
+					"name": "set_taa_jitter_phase_count",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1286410249,
+					"arguments": [
+						{
+							"name": "taa_jitter_phase_count",
+							"type": "int",
+							"meta": "uint32"
+						}
+					]
+				},
+				{
+					"name": "get_taa_jitter_scale",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1740695150,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
+					}
+				},
+				{
+					"name": "set_taa_jitter_scale",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 373806689,
+					"arguments": [
+						{
+							"name": "taa_jitter_scale",
+							"type": "float",
+							"meta": "float"
+						}
+					]
 				}
 			],
 			"properties": [
@@ -224718,6 +225881,36 @@
 					"name": "anisotropic_filtering_level",
 					"setter": "set_anisotropic_filtering_level",
 					"getter": "get_anisotropic_filtering_level"
+				},
+				{
+					"type": "float",
+					"name": "taa_sharpness",
+					"setter": "set_taa_sharpness",
+					"getter": "get_taa_sharpness"
+				},
+				{
+					"type": "float",
+					"name": "taa_history_weight",
+					"setter": "set_taa_history_weight",
+					"getter": "get_taa_history_weight"
+				},
+				{
+					"type": "float",
+					"name": "taa_disocclusion_threshold",
+					"setter": "set_taa_disocclusion_threshold",
+					"getter": "get_taa_disocclusion_threshold"
+				},
+				{
+					"type": "int",
+					"name": "taa_jitter_phase_count",
+					"setter": "set_taa_jitter_phase_count",
+					"getter": "get_taa_jitter_phase_count"
+				},
+				{
+					"type": "float",
+					"name": "taa_jitter_scale",
+					"setter": "set_taa_jitter_scale",
+					"getter": "get_taa_jitter_scale"
 				}
 			]
 		},
@@ -224842,9 +226035,10 @@
 					"is_vararg": false,
 					"is_static": false,
 					"is_virtual": false,
-					"hash": 2950875024,
+					"hash": 1334190083,
 					"hash_compatibility": [
-						3559915770
+						3559915770,
+						2950875024
 					],
 					"return_value": {
 						"type": "RID"
@@ -224869,29 +226063,40 @@
 						},
 						{
 							"name": "texture_samples",
-							"type": "enum::RenderingDevice.TextureSamples"
+							"type": "enum::RenderingDevice.TextureSamples",
+							"default_value": "0"
 						},
 						{
 							"name": "size",
-							"type": "Vector2i"
+							"type": "Vector2i",
+							"default_value": "Vector2i(0, 0)"
 						},
 						{
 							"name": "layers",
 							"type": "int",
-							"meta": "uint32"
+							"meta": "uint32",
+							"default_value": "0"
 						},
 						{
 							"name": "mipmaps",
 							"type": "int",
-							"meta": "uint32"
+							"meta": "uint32",
+							"default_value": "1"
 						},
 						{
 							"name": "unique",
-							"type": "bool"
+							"type": "bool",
+							"default_value": "true"
 						},
 						{
 							"name": "discardable",
-							"type": "bool"
+							"type": "bool",
+							"default_value": "false"
+						},
+						{
+							"name": "external_memory_exportable",
+							"type": "bool",
+							"default_value": "false"
 						}
 					]
 				},
@@ -225108,6 +226313,24 @@
 							"name": "mipmap",
 							"type": "int",
 							"meta": "uint32"
+						}
+					]
+				},
+				{
+					"name": "clear_texture",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3740211285,
+					"arguments": [
+						{
+							"name": "context",
+							"type": "StringName"
+						},
+						{
+							"name": "name",
+							"type": "StringName"
 						}
 					]
 				},
@@ -225696,6 +226919,30 @@
 							"value": 12
 						},
 						{
+							"name": "DRIVER_RESOURCE_COMMAND_BUFFER",
+							"value": 15
+						},
+						{
+							"name": "DRIVER_RESOURCE_SEMAPHORE",
+							"value": 16
+						},
+						{
+							"name": "DRIVER_RESOURCE_SWAP_CHAIN",
+							"value": 17
+						},
+						{
+							"name": "DRIVER_RESOURCE_FRAMEBUFFER",
+							"value": 18
+						},
+						{
+							"name": "DRIVER_RESOURCE_SWAP_CHAIN_DATA_FORMAT",
+							"value": 19
+						},
+						{
+							"name": "DRIVER_RESOURCE_DEVICE_PROC_ADDR",
+							"value": 20
+						},
+						{
 							"name": "DRIVER_RESOURCE_VULKAN_DEVICE",
 							"value": 0
 						},
@@ -225746,6 +226993,30 @@
 						{
 							"name": "DRIVER_RESOURCE_VULKAN_RENDER_PIPELINE",
 							"value": 12
+						},
+						{
+							"name": "DRIVER_RESOURCE_VULKAN_COMMAND_BUFFER",
+							"value": 15
+						},
+						{
+							"name": "DRIVER_RESOURCE_VULKAN_SEMAPHORE",
+							"value": 16
+						},
+						{
+							"name": "DRIVER_RESOURCE_VULKAN_SWAP_CHAIN",
+							"value": 17
+						},
+						{
+							"name": "DRIVER_RESOURCE_VULKAN_FRAMEBUFFER",
+							"value": 18
+						},
+						{
+							"name": "DRIVER_RESOURCE_VULKAN_SWAP_CHAIN_NATIVE_TEXTURE_FORMAT",
+							"value": 19
+						},
+						{
+							"name": "DRIVER_RESOURCE_VULKAN_DEVICE_PROC_ADDR",
+							"value": 20
 						}
 					]
 				},
@@ -229920,6 +231191,36 @@
 					]
 				},
 				{
+					"name": "screen_get_driver_resource",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2732127783,
+					"return_value": {
+						"type": "int",
+						"meta": "uint64"
+					},
+					"arguments": [
+						{
+							"name": "resource",
+							"type": "enum::RenderingDevice.DriverResource"
+						},
+						{
+							"name": "screen",
+							"type": "int",
+							"meta": "int32",
+							"default_value": "0"
+						},
+						{
+							"name": "index",
+							"type": "int",
+							"meta": "uint64",
+							"default_value": "0"
+						}
+					]
+				},
+				{
 					"name": "screen_get_framebuffer_format",
 					"is_const": true,
 					"is_vararg": false,
@@ -232316,16 +233617,46 @@
 							"value": 4
 						},
 						{
-							"name": "VIEWPORT_SCALING_3D_MODE_DLSS",
+							"name": "VIEWPORT_SCALING_3D_MODE_NEAREST",
 							"value": 5
 						},
 						{
-							"name": "VIEWPORT_SCALING_3D_MODE_NEAREST",
+							"name": "VIEWPORT_SCALING_3D_MODE_SHARP_BILINEAR",
 							"value": 6
 						},
 						{
-							"name": "VIEWPORT_SCALING_3D_MODE_MAX",
+							"name": "VIEWPORT_SCALING_3D_MODE_BICUBIC",
 							"value": 7
+						},
+						{
+							"name": "VIEWPORT_SCALING_3D_MODE_SGSR",
+							"value": 8
+						},
+						{
+							"name": "VIEWPORT_SCALING_3D_MODE_XESS",
+							"value": 11
+						},
+						{
+							"name": "VIEWPORT_SCALING_3D_MODE_MAX",
+							"value": 12
+						}
+					]
+				},
+				{
+					"name": "ViewportFrameGenerationMode",
+					"is_bitfield": false,
+					"values": [
+						{
+							"name": "VIEWPORT_FRAME_GENERATION_DISABLED",
+							"value": 0
+						},
+						{
+							"name": "VIEWPORT_FRAME_GENERATION_INTERPOLATED",
+							"value": 1
+						},
+						{
+							"name": "VIEWPORT_FRAME_GENERATION_MAX",
+							"value": 2
 						}
 					]
 				},
@@ -232576,8 +233907,20 @@
 							"value": 7
 						},
 						{
-							"name": "VIEWPORT_RENDER_INFO_MAX",
+							"name": "VIEWPORT_RENDER_INFO_RTGI_RECONSTRUCTED_COPY_COUNT",
 							"value": 8
+						},
+						{
+							"name": "VIEWPORT_RENDER_INFO_RTGI_RAW_FALLBACK_COPY_COUNT",
+							"value": 9
+						},
+						{
+							"name": "VIEWPORT_RENDER_INFO_RTGI_RECONSTRUCTION_GUIDE_QUALITY",
+							"value": 10
+						},
+						{
+							"name": "VIEWPORT_RENDER_INFO_MAX",
+							"value": 11
 						}
 					]
 				},
@@ -232716,24 +234059,136 @@
 							"value": 26
 						},
 						{
-							"name": "VIEWPORT_DEBUG_DRAW_DLSS_RR_DIFFUSE_ALBEDO",
-							"value": 29
+							"name": "VIEWPORT_DEBUG_DRAW_CLUSTER_AREA_LIGHTS",
+							"value": 27
 						},
 						{
-							"name": "VIEWPORT_DEBUG_DRAW_DLSS_RR_SPECULAR_ALBEDO",
-							"value": 30
-						},
-						{
-							"name": "VIEWPORT_DEBUG_DRAW_DLSS_RR_NORMAL_ROUGHNESS",
-							"value": 31
-						},
-						{
-							"name": "VIEWPORT_DEBUG_DRAW_DLSS_RR_SPECULAR_HIT_DIST",
-							"value": 32
+							"name": "VIEWPORT_DEBUG_DRAW_AREA_LIGHT_ATLAS",
+							"value": 28
 						},
 						{
 							"name": "VIEWPORT_DEBUG_DRAW_RECONSTRUCTED_DEPTH",
+							"value": 29
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_NOISY",
+							"value": 30
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_NORMAL_ROUGHNESS",
+							"value": 31
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_VIEWZ_HITDIST",
+							"value": 32
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_MOTION_VECTORS",
 							"value": 33
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_FINAL",
+							"value": 34
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED",
+							"value": 35
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED_REACTIVITY",
+							"value": 36
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_GUIDE",
+							"value": 37
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTION_DIRECTION",
+							"value": 38
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTED_HIT_DISTANCE",
+							"value": 39
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTED_HIT_NORMAL",
+							"value": 40
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_ROUGHNESS_BUCKET",
+							"value": 41
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_WRC_RADIANCE",
+							"value": 42
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_WRC_CONFIDENCE",
+							"value": 43
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_WRC_GI",
+							"value": 44
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_SPG_RADIANCE",
+							"value": 45
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_SPG_GI",
+							"value": 46
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_RESOLVE_GI",
+							"value": 47
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_RESOLVE_SPEC",
+							"value": 48
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_CANDIDATE",
+							"value": 49
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_HISTORY",
+							"value": 50
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_TEMPORAL_DELTA",
+							"value": 51
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_REJECTION",
+							"value": 52
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_RAW_RADIANCE",
+							"value": 53
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_DENOISED_RADIANCE",
+							"value": 54
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED_RADIANCE",
+							"value": 55
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_REACTIVITY",
+							"value": 56
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_SIGNAL_CONFIDENCE",
+							"value": 57
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_GUIDE_MISMATCH",
+							"value": 58
+						},
+						{
+							"name": "VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_FILL_SOURCE",
+							"value": 59
 						}
 					]
 				},
@@ -233190,6 +234645,32 @@
 						{
 							"name": "ENV_SDFGI_UPDATE_LIGHT_MAX",
 							"value": 5
+						}
+					]
+				},
+				{
+					"name": "PathtracingBackend",
+					"is_bitfield": false,
+					"values": [
+						{
+							"name": "PT_BACKEND_VULKAN_GENERIC",
+							"value": 0
+						},
+						{
+							"name": "PT_BACKEND_NVIDIA_RTXPT",
+							"value": 1
+						},
+						{
+							"name": "PT_BACKEND_AMD_HIP_RT",
+							"value": 2
+						},
+						{
+							"name": "PT_BACKEND_INTEL_EMBREE",
+							"value": 3
+						},
+						{
+							"name": "PT_BACKEND_MAX",
+							"value": 4
 						}
 					]
 				},
@@ -239041,6 +240522,133 @@
 					]
 				},
 				{
+					"name": "viewport_set_frame_generation_mode",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2842375348,
+					"arguments": [
+						{
+							"name": "viewport",
+							"type": "RID"
+						},
+						{
+							"name": "frame_generation_mode",
+							"type": "enum::RenderingServer.ViewportFrameGenerationMode"
+						}
+					]
+				},
+				{
+					"name": "viewport_set_frame_generation_warp_scale",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1794382983,
+					"arguments": [
+						{
+							"name": "viewport",
+							"type": "RID"
+						},
+						{
+							"name": "warp_scale",
+							"type": "float",
+							"meta": "float"
+						}
+					]
+				},
+				{
+					"name": "viewport_set_frame_generation_target_fps",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3411492887,
+					"arguments": [
+						{
+							"name": "viewport",
+							"type": "RID"
+						},
+						{
+							"name": "target_fps",
+							"type": "int",
+							"meta": "int32"
+						}
+					]
+				},
+				{
+					"name": "viewport_is_frame_generation_active",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 4155700596,
+					"return_value": {
+						"type": "bool"
+					},
+					"arguments": [
+						{
+							"name": "viewport",
+							"type": "RID"
+						}
+					]
+				},
+				{
+					"name": "viewport_get_frame_generation_real_fps",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 866169185,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
+					},
+					"arguments": [
+						{
+							"name": "viewport",
+							"type": "RID"
+						}
+					]
+				},
+				{
+					"name": "viewport_get_frame_generation_output_fps",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 866169185,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
+					},
+					"arguments": [
+						{
+							"name": "viewport",
+							"type": "RID"
+						}
+					]
+				},
+				{
+					"name": "viewport_get_frame_generation_latency",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 866169185,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
+					},
+					"arguments": [
+						{
+							"name": "viewport",
+							"type": "RID"
+						}
+					]
+				},
+				{
 					"name": "viewport_set_update_mode",
 					"is_const": false,
 					"is_vararg": false,
@@ -239568,6 +241176,101 @@
 						{
 							"name": "enable",
 							"type": "bool"
+						}
+					]
+				},
+				{
+					"name": "viewport_set_taa_sharpness",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1794382983,
+					"arguments": [
+						{
+							"name": "viewport",
+							"type": "RID"
+						},
+						{
+							"name": "sharpness",
+							"type": "float",
+							"meta": "float"
+						}
+					]
+				},
+				{
+					"name": "viewport_set_taa_history_weight",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1794382983,
+					"arguments": [
+						{
+							"name": "viewport",
+							"type": "RID"
+						},
+						{
+							"name": "history_weight",
+							"type": "float",
+							"meta": "float"
+						}
+					]
+				},
+				{
+					"name": "viewport_set_taa_disocclusion_threshold",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1794382983,
+					"arguments": [
+						{
+							"name": "viewport",
+							"type": "RID"
+						},
+						{
+							"name": "threshold",
+							"type": "float",
+							"meta": "float"
+						}
+					]
+				},
+				{
+					"name": "viewport_set_taa_jitter_phase_count",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3411492887,
+					"arguments": [
+						{
+							"name": "viewport",
+							"type": "RID"
+						},
+						{
+							"name": "jitter_phase_count",
+							"type": "int",
+							"meta": "int32"
+						}
+					]
+				},
+				{
+					"name": "viewport_set_taa_jitter_scale",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1794382983,
+					"arguments": [
+						{
+							"name": "viewport",
+							"type": "RID"
+						},
+						{
+							"name": "jitter_scale",
+							"type": "float",
+							"meta": "float"
 						}
 					]
 				},
@@ -240869,6 +242572,45 @@
 							"type": "bool"
 						}
 					]
+				},
+				{
+					"name": "pathtracing_get_backend_status",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3102165223,
+					"return_value": {
+						"type": "Dictionary"
+					}
+				},
+				{
+					"name": "pathtracing_get_backend_status_for_backend",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1674505410,
+					"return_value": {
+						"type": "Dictionary"
+					},
+					"arguments": [
+						{
+							"name": "backend",
+							"type": "enum::RenderingServer.PathtracingBackend"
+						}
+					]
+				},
+				{
+					"name": "pathtracing_get_backend_capabilities",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3995934104,
+					"return_value": {
+						"type": "Array"
+					}
 				},
 				{
 					"name": "environment_bake_panorama",
@@ -314056,8 +315798,46 @@
 							"value": 4
 						},
 						{
-							"name": "SCALING_3D_MODE_MAX",
+							"name": "SCALING_3D_MODE_NEAREST",
 							"value": 5
+						},
+						{
+							"name": "SCALING_3D_MODE_SHARP_BILINEAR",
+							"value": 6
+						},
+						{
+							"name": "SCALING_3D_MODE_BICUBIC",
+							"value": 7
+						},
+						{
+							"name": "SCALING_3D_MODE_SGSR",
+							"value": 8
+						},
+						{
+							"name": "SCALING_3D_MODE_XESS",
+							"value": 11
+						},
+						{
+							"name": "SCALING_3D_MODE_MAX",
+							"value": 12
+						}
+					]
+				},
+				{
+					"name": "FrameGenerationMode",
+					"is_bitfield": false,
+					"values": [
+						{
+							"name": "FRAME_GENERATION_DISABLED",
+							"value": 0
+						},
+						{
+							"name": "FRAME_GENERATION_INTERPOLATED",
+							"value": 1
+						},
+						{
+							"name": "FRAME_GENERATION_MAX",
+							"value": 2
 						}
 					]
 				},
@@ -314294,6 +316074,14 @@
 						{
 							"name": "DEBUG_DRAW_INTERNAL_BUFFER",
 							"value": 26
+						},
+						{
+							"name": "DEBUG_DRAW_CLUSTER_AREA_LIGHTS",
+							"value": 27
+						},
+						{
+							"name": "DEBUG_DRAW_AREA_LIGHT_ATLAS",
+							"value": 28
 						}
 					]
 				},
@@ -314717,6 +316505,141 @@
 					"hash": 36873697,
 					"return_value": {
 						"type": "bool"
+					}
+				},
+				{
+					"name": "set_taa_sharpness",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 373806689,
+					"arguments": [
+						{
+							"name": "sharpness",
+							"type": "float",
+							"meta": "float"
+						}
+					]
+				},
+				{
+					"name": "get_taa_sharpness",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1740695150,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
+					}
+				},
+				{
+					"name": "set_taa_history_weight",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 373806689,
+					"arguments": [
+						{
+							"name": "history_weight",
+							"type": "float",
+							"meta": "float"
+						}
+					]
+				},
+				{
+					"name": "get_taa_history_weight",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1740695150,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
+					}
+				},
+				{
+					"name": "set_taa_disocclusion_threshold",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 373806689,
+					"arguments": [
+						{
+							"name": "threshold",
+							"type": "float",
+							"meta": "float"
+						}
+					]
+				},
+				{
+					"name": "get_taa_disocclusion_threshold",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1740695150,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
+					}
+				},
+				{
+					"name": "set_taa_jitter_phase_count",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1286410249,
+					"arguments": [
+						{
+							"name": "phase_count",
+							"type": "int",
+							"meta": "int32"
+						}
+					]
+				},
+				{
+					"name": "get_taa_jitter_phase_count",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3905245786,
+					"return_value": {
+						"type": "int",
+						"meta": "int32"
+					}
+				},
+				{
+					"name": "set_taa_jitter_scale",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 373806689,
+					"arguments": [
+						{
+							"name": "scale",
+							"type": "float",
+							"meta": "float"
+						}
+					]
+				},
+				{
+					"name": "get_taa_jitter_scale",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1740695150,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
 					}
 				},
 				{
@@ -315844,6 +317767,132 @@
 					}
 				},
 				{
+					"name": "set_frame_generation_mode",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 2096440889,
+					"arguments": [
+						{
+							"name": "mode",
+							"type": "enum::Viewport.FrameGenerationMode"
+						}
+					]
+				},
+				{
+					"name": "get_frame_generation_mode",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1753444291,
+					"return_value": {
+						"type": "enum::Viewport.FrameGenerationMode"
+					}
+				},
+				{
+					"name": "set_frame_generation_warp_scale",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 373806689,
+					"arguments": [
+						{
+							"name": "warp_scale",
+							"type": "float",
+							"meta": "float"
+						}
+					]
+				},
+				{
+					"name": "get_frame_generation_warp_scale",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1740695150,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
+					}
+				},
+				{
+					"name": "set_frame_generation_target_fps",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1286410249,
+					"arguments": [
+						{
+							"name": "target_fps",
+							"type": "int",
+							"meta": "int32"
+						}
+					]
+				},
+				{
+					"name": "get_frame_generation_target_fps",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 3905245786,
+					"return_value": {
+						"type": "int",
+						"meta": "int32"
+					}
+				},
+				{
+					"name": "is_frame_generation_active",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 36873697,
+					"return_value": {
+						"type": "bool"
+					}
+				},
+				{
+					"name": "get_frame_generation_real_fps",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1740695150,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
+					}
+				},
+				{
+					"name": "get_frame_generation_output_fps",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1740695150,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
+					}
+				},
+				{
+					"name": "get_frame_generation_latency",
+					"is_const": true,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 1740695150,
+					"return_value": {
+						"type": "float",
+						"meta": "float"
+					}
+				},
+				{
 					"name": "set_scaling_3d_mode",
 					"is_const": false,
 					"is_vararg": false,
@@ -316138,6 +318187,36 @@
 					"getter": "is_using_taa"
 				},
 				{
+					"type": "float",
+					"name": "taa_sharpness",
+					"setter": "set_taa_sharpness",
+					"getter": "get_taa_sharpness"
+				},
+				{
+					"type": "float",
+					"name": "taa_history_weight",
+					"setter": "set_taa_history_weight",
+					"getter": "get_taa_history_weight"
+				},
+				{
+					"type": "float",
+					"name": "taa_disocclusion_threshold",
+					"setter": "set_taa_disocclusion_threshold",
+					"getter": "get_taa_disocclusion_threshold"
+				},
+				{
+					"type": "int",
+					"name": "taa_jitter_phase_count",
+					"setter": "set_taa_jitter_phase_count",
+					"getter": "get_taa_jitter_phase_count"
+				},
+				{
+					"type": "float",
+					"name": "taa_jitter_scale",
+					"setter": "set_taa_jitter_scale",
+					"getter": "get_taa_jitter_scale"
+				},
+				{
 					"type": "bool",
 					"name": "use_debanding",
 					"setter": "set_use_debanding",
@@ -316166,6 +318245,24 @@
 					"name": "use_hdr_2d",
 					"setter": "set_use_hdr_2d",
 					"getter": "is_using_hdr_2d"
+				},
+				{
+					"type": "int",
+					"name": "frame_generation_mode",
+					"setter": "set_frame_generation_mode",
+					"getter": "get_frame_generation_mode"
+				},
+				{
+					"type": "float",
+					"name": "frame_generation_warp_scale",
+					"setter": "set_frame_generation_warp_scale",
+					"getter": "get_frame_generation_warp_scale"
+				},
+				{
+					"type": "int",
+					"name": "frame_generation_target_fps",
+					"setter": "set_frame_generation_target_fps",
+					"getter": "get_frame_generation_target_fps"
 				},
 				{
 					"type": "int",
@@ -329054,14 +331151,6 @@
 		{
 			"name": "EditorInterface",
 			"type": "EditorInterface"
-		},
-		{
-			"name": "JavaClassWrapper",
-			"type": "JavaClassWrapper"
-		},
-		{
-			"name": "JavaScriptBridge",
-			"type": "JavaScriptBridge"
 		},
 		{
 			"name": "AudioServer",
