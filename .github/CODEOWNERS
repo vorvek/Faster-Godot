@@ -31,16 +31,12 @@
 /drivers/sdl/                                 @godotengine/input
 
 ## Rendering
-/drivers/dummy/                               @godotengine/rendering
 /drivers/egl/                                 @godotengine/rendering
 /drivers/gles3/                               @godotengine/rendering
-/drivers/metal/                               @godotengine/rendering
-/drivers/spirv-reflect/                       @godotengine/rendering
 /drivers/vulkan/                              @godotengine/rendering
 
 ## OS
 /drivers/apple/                               @godotengine/macos @godotengine/ios
-/drivers/apple_embedded/                      @godotengine/ios
 /drivers/unix/                                @godotengine/linux-bsd
 /drivers/windows/                             @godotengine/windows
 
@@ -207,14 +203,8 @@
 /platform/register_platform_apis.*            @godotengine/buildsystem
 /platform/android/                            @godotengine/android
 /platform/android/doc_classes/                @godotengine/android @godotengine/documentation
-/platform/ios/                                @godotengine/ios
-/platform/ios/doc_classes/                    @godotengine/ios @godotengine/documentation
 /platform/linuxbsd/                           @godotengine/linux-bsd
 /platform/linuxbsd/doc_classes/               @godotengine/linux-bsd @godotengine/documentation
-/platform/macos/                              @godotengine/macos
-/platform/macos/doc_classes/                  @godotengine/macos @godotengine/documentation
-/platform/visionos/                           @godotengine/xr
-/platform/visionos/doc_classes/               @godotengine/xr @godotengine/documentation
 /platform/web/                                @godotengine/web
 /platform/web/doc_classes/                    @godotengine/web @godotengine/documentation
 /platform/windows/                            @godotengine/windows
