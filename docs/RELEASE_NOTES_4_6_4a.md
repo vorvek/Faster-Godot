@@ -1,6 +1,6 @@
 # Faster-Godot 4.6.4a
 
-Faster-Godot 4.6.4a is a hotfix on 4.6.4. The headline change is that the editor now ships on the same clang and ThinLTO toolchain as the export templates, so testing a project from the editor runs the fast codegen. It also folds in a real-time GI resolve performance pass, a Forward+ area-light optimization, and correctness fixes.
+Faster-Godot 4.6.4a is a hotfix on 4.6.4. The headline change is that the editor now ships on the same clang and ThinLTO toolchain as the export templates, so testing a project from the editor runs the fast codegen. It also folds in a real-time GI resolve performance pass, a Forward+ area-light optimization, correctness fixes, and a trim of code the Windows and Linux build never used: the Intel XeSS upscaler, the Metal rendering driver, and the Apple platforms.
 
 ## The fast editor
 
@@ -12,6 +12,10 @@ In Godot, Run Project (F5) and Run Current Scene (F6) run inside the editor bina
 - RTGI now renders correctly with 3D MSAA enabled. The material-guide prepass that feeds the GI resolve failed to build its framebuffer under MSAA, so the guide buffer stayed white and the composite multiplied the frame by white, producing an all-white screen. The prepass now renders into its own single-sample depth-stencil attachment when MSAA is on. All three RTGI modes render with MSAA, and the non-MSAA path is unchanged.
 - The Forward+ area-light path is gated behind a specialization constant, so scenes with no area lights skip that branch in the opaque shader. Measured at about 0.55 ms off the opaque pass on the area-light test scene.
 - NaN serialization and convex-segment intersection stay correct under the fork's fast floating-point build.
+
+## Removed in 4.6.4a
+- The Intel XeSS upscaler and its vendor-upscaler layer. FSR2 and the built-in scalers (Bilinear, FSR1, Nearest, Sharp Bilinear, Bicubic with CAS, SGSR) remain. A project that still selects XeSS now uses FSR2.
+- The Metal rendering driver, the MetalFX upscaler, and the macOS, iOS, and visionOS platforms. The fork builds Windows and Linux on Vulkan only, so these never shipped. A project that selects a MetalFX scaler now uses FSR2.
 
 ## Requirements
 - Windows or Linux, x86_64.

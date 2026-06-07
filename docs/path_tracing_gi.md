@@ -345,13 +345,12 @@ color box. This is what removes moving-light trails: when a light leaves a surfa
 surface's stale bright history is clipped back toward the now-dark neighborhood and decays
 the same frame, instead of latching once the surface darkens. Grazing sub-native sampling
 misses are already pulled toward the lit neighborhood by the firefly clamp, so no separate
-dark-drop rule is needed. The pass is limited to the no-upscaler path. FSR2,
-XeSS, and MetalFX run their own jittered temporal accumulation. That accumulation settles
+dark-drop rule is needed. The pass is limited to the no-upscaler path. FSR2 runs its own jittered temporal accumulation. That accumulation settles
 a deterministic raster primary, but a pre-averaged path-traced primary works against it, so
 under those upscalers the composite keeps the raw path-traced color and lets them accumulate it.
 A reduced-strength pre-average was measured under FSR2 and left the frame-to-frame delta
 unchanged, so the raw color is kept. In practice the path-traced primary stays clean with no
-upscaler, native TAA, and XeSS, but boils under FSR2 specifically, whose feed-forward
+upscaler and native TAA, but boils under FSR2 specifically, whose feed-forward
 accumulation cannot lock the stochastic base, so Hybrid RTGI is the better mode under FSR2.
 
 RTGI writes noisy radiance, depth, velocity, normal/roughness,
@@ -904,7 +903,7 @@ PDF/weight accounting.
   count, denoising settings, and GPU class.
 - Transparent particles are raster-only in this implementation; they do not
   contribute to RT GI, shadows, or reflections.
-- Full Path Tracing under a temporal upscaler (FSR2, XeSS, MetalFX) still shows
+- Full Path Tracing under a temporal upscaler (FSR2) still shows
   residual temporal instability. The upscaler does not settle onto the per-frame
   stochastic path-traced primary the way it settles onto a deterministic raster
   primary, so the no-upscaler primary accumulator is gated off under those upscalers.

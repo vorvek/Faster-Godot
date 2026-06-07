@@ -23,11 +23,6 @@ We have integrated three new high-performance, GPU-powered spatial upscaling mod
 * **Purpose**: High-fidelity, ultra-performance edge-aware spatial upscaler.
 * **Mechanism**: Re-implements the industry-standard Qualcomm SGSR spatial upscaler natively on the GPU. It evaluates 12 surrounding texels to detect pixel directionality, blends diagonally to reconstruct clean, non-aliased geometric edges, and applies high-quality edge-aware sharpening in a single high-performance pass.
 
-### Vendor Temporal Upscalers
-* **Identifier**: `SCALING_3D_MODE_XESS`.
-* **Purpose**: Public per-Viewport entry point for Intel XeSS temporal super resolution.
-* **Current behavior**: XeSS dispatches through Intel's native Vulkan SDK path on any GPU that supports it. At startup the engine runs the XeSS Vulkan handshake and enables the instance and device extensions and features the runtime requires, so the cross-vendor DP4a path works on non-Intel GPUs alongside the XMX path on Arc. If `libxess` is absent or the GPU lacks a required capability, XeSS reports unavailable and the viewport falls back to FSR 2.2 with a one-time warning. Set `GODOT_DISABLE_XESS_VULKAN=1` to skip the handshake for debugging.
-
 ---
 
 ## 2. Scale Range Constraints (Standard 2.0x limit)
@@ -45,7 +40,7 @@ All custom modes are fully integrated into the **Vulkan RD (Rendering Device)** 
 
 ### 3D Render Buffer Allocation & Validation Bugfixes
 We have implemented critical engine fixes to ensure these custom spatial scaling modes operate correctly under all viewport conditions:
-* **Prevention of False-Positive Downsampling Fallbacks**: Official Godot safety checks fall back to bilinear upscaling when scale is $\ge 1.0$ under the assumption that all non-bilinear scaling modes are advanced temporal/spatial upscalers (like FSR or XeSS) which do not support supersampling/downsampling. We introduced `scaling_3d_is_advanced_upscaler` to restrict this fallback logic exclusively to actual advanced upscalers, allowing our custom spatial modes (`NEAREST`, `SHARP_BILINEAR`, `BICUBIC`, `SGSR`) to correctly handle downsampling scales up to `2.0x`.
+* **Prevention of False-Positive Downsampling Fallbacks**: Official Godot safety checks fall back to bilinear upscaling when scale is $\ge 1.0$ under the assumption that all non-bilinear scaling modes are advanced temporal/spatial upscalers (like FSR or FSR2) which do not support supersampling/downsampling. We introduced `scaling_3d_is_advanced_upscaler` to restrict this fallback logic exclusively to actual advanced upscalers, allowing our custom spatial modes (`NEAREST`, `SHARP_BILINEAR`, `BICUBIC`, `SGSR`) to correctly handle downsampling scales up to `2.0x`.
 * **Explicit Buffer Allocation Mappings**: Fixed a fallback bug where custom scaling modes were omitted from the viewport configuration `switch` block in `_configure_3d_render_buffers()`. This omission caused them to hit the `default` branch, silently disabling 3D resolution scaling by reverting the mode to `OFF` and scale to `1.0`. We mapped all custom modes (`NEAREST`, `SHARP_BILINEAR`, `BICUBIC`, `SGSR`) explicitly to their correct scaled resolution targets (up to a clamped safe limit of `16384` pixels).
 
 ---
@@ -58,20 +53,7 @@ A quick summary of files changed to support this feature:
 * [viewport.cpp](file:///d:/dev/faster-godot-4.6.3/scene/main/viewport.cpp): Registered property hints, kept/restored the standard 2.0x scale limit, and bound property enum constants.
 * [rendering_server.cpp](file:///d:/dev/faster-godot-4.6.3/servers/rendering/rendering_server.cpp): Registered default Project Settings hints while keeping the standard 2.0x scale limit.
 * [renderer_viewport.cpp](file:///d:/dev/faster-godot-4.6.3/servers/rendering/renderer_viewport.cpp): Kept/restored standard scale limits, ensured FSR/temporal checks do not interfere with our custom modes, and kept our modes in the safe rendering path.
-* [vendor_upscaler.h](file:///d:/dev/faster-godot-4.6.3/servers/rendering/renderer_rd/effects/vendor_upscaler.h): Provides the vendor super-resolution (XeSS) capability and fallback scaffold used by Viewport configuration.
 * [copy_effects.h](file:///d:/dev/faster-godot-4.6.3/servers/rendering/renderer_rd/effects/copy_effects.h): Added custom modes to `CopyToFBMode` enum and expanded `copy_to_fb_rect` method signature.
 * [copy_effects.cpp](file:///d:/dev/faster-godot-4.6.3/servers/rendering/renderer_rd/effects/copy_effects.cpp): Appended corresponding preprocessor defines to compiler modes, handled texture size query, and mapped enums to shader pipelines.
 * [renderer_scene_render_rd.cpp](file:///d:/dev/faster-godot-4.6.3/servers/rendering/renderer_rd/renderer_scene_render_rd.cpp): Enabled scaling copy-pass for our modes and passed active scale mode.
 * [copy_to_fb.glsl](file:///d:/dev/faster-godot-4.6.3/servers/rendering/renderer_rd/shaders/effects/copy_to_fb.glsl): Implemented GLSL shaders for Sharp Bilinear, Bicubic + CAS, and SGSR.
-
----
-
-## 5. Vendor Upscaler Enum Ordering
-
-Vendor upscaler modes are appended after the existing scaling modes so previously serialized mode values remain stable:
-
-* **Viewport Property Inspector**: XeSS is visible in the Viewport `scaling_3d_mode` dropdown.
-* **Project Settings Dropdown**: XeSS is visible in `rendering/scaling_3d/mode`.
-* **Fallback Safety**: If the XeSS SDK backend is unavailable or unsafe on the current GPU/driver, the renderer prints a one-time warning and falls back to FSR 2.2 (`SCALING_3D_MODE_FSR2`) inside `servers/rendering/renderer_viewport.cpp`.
-* **Context teardown**: XeSS contexts live in a process-wide runtime, and the renderer releases them in `RendererCompositorRD::finalize()` while the Vulkan device that owns their GPU resources is still valid. `xessDestroyContext` records Vulkan object teardown, and that work has to reach a device that still exists. Leaving the contexts for C-runtime static destruction would run it after the device is gone and crash on exit. The cleanup runs whether or not frame generation is active.
-* **Frame Generation**: `frame_generation_mode` has two options, `Disabled` and `Interpolated (3D Motion Vectors)`. The interpolated path reprojects between two real frames using the engine's own motion vectors and works on any viewport. The warp is hardened against fast motion: a per-frame magnitude clamp keeps one large motion vector from stretching the image across the screen, a warped lookup that leaves the frame falls back to the unwarped sample for that side instead of smearing the clamped edge, and the blend biases back toward the unwarped average as motion grows. The 2D canvas is composited after interpolation, so the UI is never warped. The optional frame pacer is guarded against a non-monotonic clock and capped so a very low target frame rate cannot stall a frame. There is no vendor frame generation. The Intel XeSS-FG SDK only ships a D3D12 proxy-swapchain entry point, which the Vulkan renderer here cannot drive, so a vendor mode would do nothing except fall back to the interpolated path.

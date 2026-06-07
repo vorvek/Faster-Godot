@@ -56,9 +56,8 @@ RTGI has an additional internal stabilization path described in
 [path_tracing_gi.md](path_tracing_gi.md). That path can feed RTGI-specific
 reactivity into TAA without adding new public TAA or RTGI controls.
 
-Temporal upscalers keep their existing jitter behavior. FSR2 and MetalFX
-Temporal compute their own jitter phase counts and ignore
-`taa_jitter_phase_count` and `taa_jitter_scale`.
+Temporal upscalers keep their existing jitter behavior. FSR2 computes its own
+jitter phase count and ignores `taa_jitter_phase_count` and `taa_jitter_scale`.
 
 ## Code Changes
 

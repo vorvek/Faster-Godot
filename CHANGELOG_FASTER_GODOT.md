@@ -16,6 +16,16 @@ per-area ledger of how the fork differs from official Godot is in
   default source build stays on MSVC and GCC for fast iteration and native
   debugging.
 
+### Removed
+
+- The Intel XeSS upscaler and its vendor-upscaler layer are gone. The fork keeps
+  FSR2 and the built-in scalers (Bilinear, FSR1, Nearest, Sharp Bilinear, Bicubic
+  with CAS, and SGSR). A project that still selects XeSS now uses FSR2.
+- The Metal rendering driver, the MetalFX upscaler, and the macOS, iOS, and
+  visionOS platforms are removed. The fork builds for Windows and Linux on Vulkan
+  only, so this was dead code in every shipped build. A project that selects a
+  MetalFX scaler now uses FSR2.
+
 ### Performance
 
 #### RTGI Resolve

@@ -130,9 +130,6 @@ func _apply_viewport_overrides() -> void:
 		"fsr2":
 			viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR2
 			viewport.use_taa = false
-		"xess":
-			viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_XESS
-			viewport.use_taa = false
 	if not is_nan(_scale_3d_override):
 		viewport.scaling_3d_scale = _scale_3d_override
 
@@ -260,7 +257,7 @@ func _parse_args() -> void:
 			_rtgi_resolution_scale_override = clampf(arg.trim_prefix("--rtgi-resolution-scale=").to_float(), 0.25, 1.0)
 		elif arg.begins_with("--rtgi-upscaler="):
 			var upscaler := arg.trim_prefix("--rtgi-upscaler=").to_lower()
-			if upscaler in ["none", "taa", "fsr2", "xess"]:
+			if upscaler in ["none", "taa", "fsr2"]:
 				_upscaler_override = upscaler
 			else:
 				push_warning("Unknown RTGI upscaler '%s'; leaving the viewport scaling untouched." % upscaler)

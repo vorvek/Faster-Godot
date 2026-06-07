@@ -2205,10 +2205,6 @@ func _scaling_3d_mode_name(mode: int) -> String:
 			return "fsr"
 		Viewport.SCALING_3D_MODE_FSR2:
 			return "fsr2"
-		Viewport.SCALING_3D_MODE_METALFX_SPATIAL:
-			return "metalfx_spatial"
-		Viewport.SCALING_3D_MODE_METALFX_TEMPORAL:
-			return "metalfx_temporal"
 		Viewport.SCALING_3D_MODE_NEAREST:
 			return "nearest"
 		Viewport.SCALING_3D_MODE_SHARP_BILINEAR:
