@@ -73,6 +73,24 @@ The `linuxbsd` editor built with clang, lld, and ThinLTO (`use_llvm=yes lto=thin
 
 This is not measured for runtime perf or binary size, for the same reason as the GCC flag pass above: WSL2 has no trustworthy Vulkan or perf path, and the Linux build is a one-time compile, link, and boot gate rather than a per-change step. The Windows clang+ThinLTO numbers carry the perf story, and clang codegen on Linux is the same family of wins.
 
+### The shipped editor
+
+The release editor ships on the same clang and ThinLTO toolchain as the
+templates, on Windows and Linux. This matters because testing a project from the
+editor runs inside the editor binary: the Run Project and Run Current Scene paths
+use the editor's own renderer, GDScript VM, and physics, not an export template.
+The editor-proxy measurements above are therefore the play-in-editor numbers, 12
+to 22 percent on the reliable CPU-bound scenes, led by the two GDScript-VM scenes.
+The default source build stays on MSVC and GCC, where fast incremental iteration
+and native debugging matter more than peak runtime, so `use_llvm` is opt-in:
+
+```
+scons platform=windows  target=editor use_llvm=yes lto=thin ...
+scons platform=linuxbsd target=editor use_llvm=yes lto=thin linker=lld ...
+```
+
+The editor binary gains the `.llvm` suffix and coexists with an MSVC editor build.
+
 ## Profile-guided optimization (PGO)
 
 PGO is an opt-in build path that layers on top of the clang and ThinLTO templates above. It is clang-only, off by default, and changes nothing about the standard build: every flag is gated behind `pgo != off`, so the MSVC editor, the GCC build, and the plain clang and ThinLTO templates emit identical flags to before. It targets the CPU-bound part of the frame, where profile-driven block layout and inlining help most.

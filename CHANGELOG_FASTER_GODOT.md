@@ -5,7 +5,16 @@ base. Upstream Godot's own changelog is in [CHANGELOG.md](CHANGELOG.md); the
 per-area ledger of how the fork differs from official Godot is in
 [CHANGES_FROM_OFFICIAL.md](CHANGES_FROM_OFFICIAL.md).
 
-## Unreleased
+## 4.6.4a
+
+### Build
+
+- The release editor now ships on the clang and ThinLTO toolchain, the same one
+  the export templates already use, on Windows and Linux. Testing a project from
+  the editor runs the editor's own renderer, GDScript VM, and physics, so this is
+  where the 12 to 22 percent clang gains land for day-to-day development. The
+  default source build stays on MSVC and GCC for fast iteration and native
+  debugging.
 
 ### Performance
 
@@ -40,6 +49,13 @@ comparisons.
   which the RenderingDevice does not allow, now sits outside it. Before, it logged
   an error every frame and dropped the spatial pass from the profile.
 
+#### Forward+ rendering
+
+- The Forward+ area-light path is now gated behind a specialization constant, so
+  scenes with no area lights skip that branch in the opaque shader. Measured at
+  about 0.55 ms off the opaque pass, roughly 36 percent, on the area-light test
+  scene.
+
 ### Fixes
 
 - RTGI now renders correctly with 3D MSAA enabled. The material-guide prepass that
@@ -52,3 +68,7 @@ comparisons.
   depth-stencil attachment when MSAA is on, matching its single-sample guide buffers.
   All three RTGI modes (Hybrid, Reflections, and Full Path Tracing) render with MSAA
   enabled, and the non-MSAA path is unchanged.
+- NaN serialization and convex-segment intersection now stay correct under the
+  fork's fast floating-point build. A raw NaN comparison that fast FP folds away
+  was replaced with an explicit NaN predicate, fixing JSON round-tripping of NaN
+  and a convex segment-intersection edge case.

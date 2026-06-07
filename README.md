@@ -86,13 +86,15 @@ came mostly from the narrower renderer profile and CPU-side hot-path changes:
   Rapier is the default 2D physics server and Jolt is the default 3D physics
   server. See [docs/rapier_2d_physics.md](docs/rapier_2d_physics.md) for the
   Rapier source, license, and Rust build requirements.
-- Clang + ThinLTO release templates: The shipped release templates are built
-  with clang + lld + ThinLTO. This gives the fork cross-translation-unit
-  inlining the MSVC build never had, plus the GDScript-VM computed-goto dispatch
-  that only compiles under clang. On the fork's benchmark corpus the
-  low-variance scenes (GDScript VM, Forward+ 3D) run 12-22% faster than the MSVC
-  build, with the two virtual-machine scenes leading. The editor toolchain stays
-  on MSVC/GCC. See [docs/pgo.md](docs/pgo.md).
+- Clang + ThinLTO release editor and templates: The shipped release editor and
+  the export templates are built with clang + lld + ThinLTO. This gives the fork
+  cross-translation-unit inlining the MSVC build never had, plus the GDScript-VM
+  computed-goto dispatch that only compiles under clang. On the fork's benchmark
+  corpus the low-variance scenes (GDScript VM, Forward+ 3D) run 12-22% faster
+  than the MSVC build, with the two virtual-machine scenes leading. Testing a
+  project from the editor runs the editor's own renderer, VM, and physics, so the
+  release editor ships with this toolchain too; the default source build stays on
+  MSVC/GCC for fast incremental iteration. See [docs/pgo.md](docs/pgo.md).
 
 ## Build
 
@@ -122,18 +124,20 @@ mingw LLVM, then build with `use_llvm=yes lto=thin`:
 scons platform=windows target=template_release arch=x86_64 production=yes tests=no optimize=speed use_llvm=yes lto=thin debug_symbols=no
 ```
 
-Windows optimized release editor:
+Windows optimized release editor (clang + ThinLTO, the shipped toolchain). The
+default editor build stays on MSVC for fast incremental iteration and native
+debugging; pass `use_llvm=yes lto=thin` for the faster shipped editor:
 
 ```powershell
-scons platform=windows target=editor arch=x86_64 production=yes tests=no optimize=speed lto=full debug_symbols=no
+scons platform=windows target=editor arch=x86_64 production=yes tests=no optimize=speed use_llvm=yes lto=thin debug_symbols=no
 ```
 
 .NET release editor builds use the same editor command with
 `module_mono_enabled=yes`, followed by the Mono glue and assembly steps:
 
 ```powershell
-scons platform=windows target=editor arch=x86_64 production=yes tests=no optimize=speed lto=full debug_symbols=no module_mono_enabled=yes
-.\bin\faster-godot.windows.editor.x86_64.faster_godot.mono.console.exe --headless --generate-mono-glue .\modules\mono\glue
+scons platform=windows target=editor arch=x86_64 production=yes tests=no optimize=speed use_llvm=yes lto=thin debug_symbols=no module_mono_enabled=yes
+.\bin\faster-godot.windows.editor.x86_64.llvm.faster_godot.mono.console.exe --headless --generate-mono-glue .\modules\mono\glue
 python .\modules\mono\build_scripts\build_assemblies.py --godot-output-dir=.\bin --godot-platform=windows --werror --no-deprecated
 ```
 
@@ -142,6 +146,12 @@ Linux optimized release template (clang + ThinLTO, the shipped toolchain; needs
 
 ```bash
 scons platform=linuxbsd target=template_release arch=x86_64 production=yes tests=no optimize=speed use_llvm=yes lto=thin linker=lld debug_symbols=no
+```
+
+Linux optimized release editor (clang + ThinLTO; needs `clang` and `lld`):
+
+```bash
+scons platform=linuxbsd target=editor arch=x86_64 production=yes tests=no optimize=speed use_llvm=yes lto=thin linker=lld debug_symbols=no
 ```
 
 The forked binaries use the `faster-godot` basename and receive the

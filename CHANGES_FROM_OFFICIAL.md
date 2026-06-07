@@ -28,7 +28,7 @@ desktop Forward+ profile. The detailed notes are split by change area:
 | Custom Viewport Resolution Scaling Modes | [docs/custom_viewport_scaling.md](docs/custom_viewport_scaling.md) |
 | Linux optimized release build hygiene | Linux LTO release builds suppress known GCC cross-translation-unit range-analysis false positives and avoid duplicate or ambiguous symbols in ICU data, KTX/Vulkan format aliases, ETC texture compression helpers, and selected hot-path temporaries without changing shipped features. |
 | Desktop build-level compiler/linker flag pass | [docs/pgo.md](docs/pgo.md) |
-| Clang + ThinLTO release templates (GDScript-VM computed-goto unlock) | [docs/pgo.md](docs/pgo.md) |
+| Clang + ThinLTO release editor and templates (GDScript-VM computed-goto unlock) | [docs/pgo.md](docs/pgo.md) |
 | Opt-in clang PGO build path (IR + context-sensitive, feeds ThinLTO) | [docs/pgo.md](docs/pgo.md) |
 | Independent fork identity and legal notices | [README.md](README.md), [LICENSE.txt](LICENSE.txt), [COPYRIGHT.txt](COPYRIGHT.txt) |
 | Faster-Godot branding and default project icon | Root, editor, app icon, splash, platform export, default project/document, web editor, engine version banner, emitted binary basename, shell completions, Windows version resource/installer metadata, Linux desktop/AppStream/MIME/X11/Wayland metadata and installable icons, macOS bundle metadata, editor About/support links, GitHub Actions release artifacts/release-page publishing, and source archive naming now use the fork's FG gear mark and independent Faster-Godot identity instead of Godot-derived artwork/official branding. See [README.md](README.md) and [COPYRIGHT.txt](COPYRIGHT.txt). |
