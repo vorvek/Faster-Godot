@@ -9334,6 +9334,8 @@ uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, RT_L
 			e *= ls->light_get_param(p_base, RSE::LIGHT_PARAM_INTENSITY);
 			if (p_type == RSE::LIGHT_OMNI) {
 				e *= 1.0f / (Math::PI * 4.0f);
+			} else if (p_type == RSE::LIGHT_AREA) {
+				e *= 1.0f / (Math::PI * 2.0f); // matches raster light_storage.cpp area-light branch
 			} else if (p_type == RSE::LIGHT_SPOT) {
 				e *= 1.0f / Math::PI;
 			}
@@ -9547,6 +9549,50 @@ uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, RT_L
 		ld.position[0] = xform.origin.x;
 		ld.position[1] = xform.origin.y;
 		ld.position[2] = xform.origin.z;
+
+		if (type == RSE::LIGHT_AREA) {
+			ld.type = RT_LIGHT_TYPE_AREA;
+			Vector2 area_size = ls->light_area_get_size(base);
+			// Half-edge vectors from the light's local X/Y axes (matches raster
+			// area_width/area_height at light_storage.cpp:1075-1076, which use the
+			// normalized basis axes scaled by the full size; we store halves).
+			Vector3 ex = xform.basis.get_column(0).normalized() * (area_size.x * 0.5f);
+			Vector3 ey = xform.basis.get_column(1).normalized() * (area_size.y * 0.5f);
+			ld.spot_direction[0] = ex.x; ld.spot_direction[1] = ex.y; ld.spot_direction[2] = ex.z;
+			ld.radius = ey.x; ld.inv_spot_attenuation = ey.y; ld.cos_spot_angle = ey.z;
+
+			Color linear_col = ls->light_get_color(base).srgb_to_linear();
+			float energy = compute_light_energy(base, type) * fade;
+			if (ls->light_area_get_normalize_energy(base)) {
+				float surface_area = MAX(area_size.x * area_size.y, 1e-6f);
+				energy /= surface_area;
+			}
+			ld.emission[0] = linear_col.r * energy;
+			ld.emission[1] = linear_col.g * energy;
+			ld.emission[2] = linear_col.b * energy;
+
+			ld.attenuation = ls->light_get_param(base, RSE::LIGHT_PARAM_ATTENUATION);
+			float range = ls->light_get_param(base, RSE::LIGHT_PARAM_RANGE);
+			if (range > 0.0f) { ld.inv_max_range = 1.0f / range; ld.max_range_squared = range * range; }
+			else { ld.inv_max_range = -1.0f; ld.max_range_squared = 0.0f; }
+			ld.specular_amount = ls->light_get_param(base, RSE::LIGHT_PARAM_SPECULAR) * 2.0f;
+			ld.indirect_energy = ls->light_get_param(base, RSE::LIGHT_PARAM_INDIRECT_ENERGY);
+			ld.shadow_opacity = compute_light_shadow_opacity(base, camera_distance);
+			ld.shadow_max_distance = 0.0f;
+			ld.flags = (ls->light_has_shadow(base) && ld.shadow_opacity > 0.001f) ? uint32_t(RT_LIGHT_FLAG_SHADOW) : 0u;
+			ld.cull_mask = ls->light_get_cull_mask(base);
+			ld.shadow_caster_mask = ls->light_get_shadow_caster_mask(base);
+			ld.source_id = _rt_light_source_id(light_instance, type);
+			// Untextured for now (Phase 4 fills these).
+			ld.area_atlas_idx = 0u;
+			ld.area_atlas_rect[0] = 0.0f; ld.area_atlas_rect[1] = 0.0f;
+			ld.area_atlas_rect[2] = 0.0f; ld.area_atlas_rect[3] = 0.0f;
+			ld.area_max_mip = 0.0f;
+			ld.area_pad0 = 0u; ld.area_pad1 = 0u;
+			rt_light_count++;
+			continue;
+		}
+
 		ld.type = (type == RSE::LIGHT_SPOT) ? RT_LIGHT_TYPE_SPOT : RT_LIGHT_TYPE_OMNI;
 
 		Color linear_col = ls->light_get_color(base).srgb_to_linear();

@@ -348,6 +348,27 @@ float lights_selection_weight(vec3 hit_pos, vec3 N, RTLightData light, bool is_i
 		return max(energy * atten * n_dot_l, 1e-6);
 	}
 
+	if (light.type == RT_LIGHT_TYPE_AREA) {
+		vec3 center = light.position;
+		vec3 to_light = center - hit_pos;
+		float dist_sq = dot(to_light, to_light);
+		if (light.max_range_squared != 0.0 && dist_sq > light.max_range_squared) {
+			return 0.0;
+		}
+		vec3 nrm = rt_light_area_normal(light);
+		// One-sided: shading point must be on the front side.
+		if (dot(to_light, nrm) < 0.0) {
+			return 0.0; // receiver behind the emitter (light emits toward -nrm)
+		}
+		float dist = sqrt(max(dist_sq, 1e-8));
+		vec3 L = to_light / dist;
+		float n_dot_l = max(dot(N, L), 0.02);
+		// Approximate area solid angle ~ (ex x ey area) * cos / dist^2.
+		float area = 4.0 * length(cross(rt_light_area_ex(light), rt_light_area_ey(light)));
+		float approx_solid = area * max(-dot(L, nrm), 0.0) / max(dist_sq, 1e-4);
+		return max(energy * approx_solid * n_dot_l, 1e-6);
+	}
+
 	vec3 L = -normalize(light.position);
 	float n_dot_l = max(dot(N, L), 0.02);
 	return max(energy * n_dot_l, 1e-6);
@@ -933,6 +954,59 @@ RTDirectLighting lights_evaluate_single_direct_light_split(
 		inout uint rng_state,
 		bool is_indirect_bounce) {
 	vec2 u = rand2(rng_state);
+
+	// === AREA LIGHT PATH (spherical-rectangle NEE) ===
+	if (light.type == RT_LIGHT_TYPE_AREA) {
+		vec3 center = light.position;
+		vec3 ex = rt_light_area_ex(light);
+		vec3 ey = rt_light_area_ey(light);
+		vec3 nrm = normalize(cross(ex, ey));
+		vec3 to_center = center - hit_pos;
+		// One-sided: the light emits toward its local -Z (= -nrm); reject the back side.
+		if (dot(to_center, nrm) < 0.0) {
+			return rt_direct_lighting_zero();
+		}
+		if (light.max_range_squared != 0.0 && dot(to_center, to_center) > light.max_range_squared) {
+			return rt_direct_lighting_zero();
+		}
+		// Corner + full edges for the spherical-rectangle sampler.
+		vec3 corner = center - ex - ey;
+		SphQuad sq = sph_quad_init(corner, ex * 2.0, ey * 2.0, hit_pos);
+		if (sq.S <= 1e-5) {
+			return rt_direct_lighting_zero(); // degenerate (edge-on / tiny solid angle)
+		}
+		vec3 sample_pos = sph_quad_sample(sq, u.x, u.y);
+		vec3 to_sample = sample_pos - hit_pos;
+		float sample_dist = length(to_sample);
+		vec3 L = to_sample / max(sample_dist, 1e-6);
+		float NdotL = dot(N, L);
+		if (NdotL <= 0.0) {
+			return rt_direct_lighting_zero();
+		}
+		vec3 emission = light.emission;
+		// (Phase 4 multiplies emission by the area-texture sample here.)
+		if ((light.flags & RT_LIGHT_FLAG_SHADOW) != 0u) {
+			vec3 shadow_origin = offset_ray_origin(hit_pos, dot(geometry_normal, L) >= 0.0 ? geometry_normal : -geometry_normal);
+			if (!lights_trace_shadow_ray(shadow_origin, L, max(sample_dist - 0.002, 0.001), light.shadow_caster_mask, rng_state)) {
+				float shadow_visibility = 1.0 - clamp(light.shadow_opacity, 0.0, 1.0);
+				if (shadow_visibility <= 0.001) {
+					return rt_direct_lighting_zero();
+				}
+				emission *= shadow_visibility;
+			}
+		}
+		vec3 brdf_diffuse, brdf_specular;
+		evalCombinedBRDFSeparate(N, L, V, material, brdf_diffuse, brdf_specular);
+		float spec_mul = lights_get_specular_multiplier(light.specular_amount, material.roughness);
+		float indirect_mul = is_indirect_bounce ? light.indirect_energy : 1.0;
+		// Solid-angle pdf = 1/S, so contribution = brdf * Le * S * (1/light_select_pdf).
+		float solid_angle = sq.S;
+		float inv_pdf = solid_angle / max(light_select_pdf, 1e-10);
+		RTDirectLighting result;
+		result.diffuse = brdf_diffuse * emission * indirect_mul * inv_pdf;
+		result.specular = brdf_specular * spec_mul * emission * indirect_mul * inv_pdf;
+		return result;
+	}
 
 	// === POSITIONAL LIGHT PATH (omni + spot) ===
 	if (light.type == RT_LIGHT_TYPE_OMNI || light.type == RT_LIGHT_TYPE_SPOT) {
