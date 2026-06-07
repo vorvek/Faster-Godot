@@ -132,8 +132,6 @@ if env["windows_subsystem"] == "gui":
     prog_wrap = env_wrap.add_program(program_name, common_win_wrap + res_wrap_obj, PROGSUFFIX=env["PROGSUFFIX_WRAP"])
     arrange_program_clean(prog_wrap)
     env_wrap.Depends(prog_wrap, prog)
-    if staged_vendor_libs:
-        env_wrap.Depends(prog_wrap, staged_vendor_libs)
     sources += common_win_wrap + res_wrap_obj
 
 if not env.msvc:
