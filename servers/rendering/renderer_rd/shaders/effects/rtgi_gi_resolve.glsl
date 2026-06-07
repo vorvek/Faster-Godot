@@ -66,6 +66,16 @@ layout(local_size_x = GROUP_SIZE, local_size_y = GROUP_SIZE, local_size_z = 1) i
 // additive blit onto the raster-lit frame. out = albedo * diffuse_A + spec (background masked).
 #define RESOLVE_MODE_COMPOSITE 4u
 
+// Resolve mode as a SPECIALIZATION CONSTANT (constant_id 0): the C++ creates one compute pipeline per
+// mode (rtgi_gi_resolve.cpp), each baking this constant, so the driver folds it and dead-strips the
+// other modes' code -> each mode gets its own register allocation / occupancy. (One shared program
+// branching on the pc.mode push constant made the fused INTEGRATE path's register pressure penalize
+// the TEMPORAL + SPATIAL dispatches.) The reflected set-0 layout stays the union over ALL modes
+// (every binding is still referenced somewhere in the source), so the existing union-layout uniform
+// sets bind to any mode's pipeline unchanged. The `mode` push-constant field is kept for C++ layout
+// parity but is no longer read.
+layout(constant_id = 0) const uint sc_resolve_mode = RESOLVE_MODE_INTEGRATE;
+
 // Push constant: 20 x 4 B = 80 B (a multiple of 16, so the std430-rounded size matches
 // the C++ PushConstant exactly -- a mismatch silently rejects every dispatch). Matches
 // RTGIGIResolve::PushConstant field-for-field.
@@ -857,23 +867,23 @@ void main() {
 		return;
 	}
 
-	if (pc.mode == RESOLVE_MODE_INTEGRATE) {
+	if (sc_resolve_mode == RESOLVE_MODE_INTEGRATE) {
 		resolve_integrate_main(pos);
 		return;
 	}
-	if (pc.mode == RESOLVE_MODE_TEMPORAL) {
+	if (sc_resolve_mode == RESOLVE_MODE_TEMPORAL) {
 		resolve_temporal_main(pos);
 		return;
 	}
-	if (pc.mode == RESOLVE_MODE_SPATIAL) {
+	if (sc_resolve_mode == RESOLVE_MODE_SPATIAL) {
 		resolve_spatial_main(pos);
 		return;
 	}
-	if (pc.mode == RESOLVE_MODE_DEBUG_GI) {
+	if (sc_resolve_mode == RESOLVE_MODE_DEBUG_GI) {
 		resolve_debug_gi_main(pos);
 		return;
 	}
-	if (pc.mode == RESOLVE_MODE_COMPOSITE) {
+	if (sc_resolve_mode == RESOLVE_MODE_COMPOSITE) {
 		resolve_composite_main(pos);
 		return;
 	}

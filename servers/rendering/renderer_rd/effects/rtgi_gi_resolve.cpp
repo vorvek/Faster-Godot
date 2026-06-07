@@ -24,6 +24,8 @@ using namespace RendererRD;
 // COMPOSITE (A3-T4): BEAUTY remod (albedo * diffuse_A + spec) -> gi_debug_image for the
 // additive blit onto the raster-lit frame. EXACTLY matches RESOLVE_MODE_COMPOSITE in the GLSL.
 #define RESOLVE_MODE_COMPOSITE 4u
+// The per-mode pipeline array (pipelines[]) is indexed by these values; RESOLVE_MODE_COUNT must cover
+// 0..COMPOSITE (asserted in the constructor).
 
 RTGIGIResolve::RTGIGIResolve() {
 	// Single compute shader with a `mode` push-constant (mirrors the SPG PLACE shader
@@ -32,9 +34,24 @@ RTGIGIResolve::RTGIGIResolve() {
 	// uniform set / pipeline is sufficient. This is the first compile of
 	// rtgi_gi_resolve.glsl (and thus of its rtgi_spg_inc.glsl / rtgi_wrc_inc.glsl /
 	// oct_inc.glsl include usage in a resolve context), so a GLSL error there trips here.
+	// Keep the mode count in lockstep with the RESOLVE_MODE_* range (member access, so it must live in
+	// a member function, not file scope).
+	static_assert(RESOLVE_MODE_COUNT == RESOLVE_MODE_COMPOSITE + 1u, "RESOLVE_MODE_COUNT must match the RESOLVE_MODE_* range");
 	shader.initialize({ "" });
 	shader_version = shader.version_create();
-	pipeline = RD::get_singleton()->compute_pipeline_create(shader.version_get_shader(shader_version, 0));
+	// One pipeline per resolve mode, each baking sc_resolve_mode (constant_id 0) to the mode value so
+	// the driver dead-strips the other modes' code and gives each its own register allocation. The
+	// shader + set-0 layout are identical across them (the spec constant only gates main()'s dispatch).
+	RID resolve_shader_rd = shader.version_get_shader(shader_version, 0);
+	for (uint32_t mode = 0; mode < RESOLVE_MODE_COUNT; mode++) {
+		RD::PipelineSpecializationConstant sc;
+		sc.type = RD::PIPELINE_SPECIALIZATION_CONSTANT_TYPE_INT;
+		sc.constant_id = 0; // sc_resolve_mode
+		sc.int_value = mode;
+		Vector<RD::PipelineSpecializationConstant> specialization_constants;
+		specialization_constants.push_back(sc);
+		pipelines[mode] = RD::get_singleton()->compute_pipeline_create(resolve_shader_rd, specialization_constants);
+	}
 
 	// Standalone volumetric-fog composite shader/pipeline (FPT re-applies the froxel fog the
 	// raster opaque pass would have applied; see composite_volumetric_fog). Its own small 3-binding
@@ -482,7 +499,7 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	// reprojected [prev_index] history (11/12), and stores the accumulated result to 9/10.
 	RD::get_singleton()->draw_command_begin_label("RTGI Resolve Integrate + Temporal");
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
-	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[RESOLVE_MODE_INTEGRATE]);
 	RID resolve_set = uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, resolve_set, 0);
 
@@ -503,6 +520,10 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	// Finer GPU-profiler bracket (A3-T8): this RENDER_TIMESTAMP ends the INTEGRATE region above;
 	// the SPATIAL label (or compute_list_end when SPATIAL is skipped) closes this one.
 	RENDER_TIMESTAMP("RTGI Resolve Temporal");
+	// The barrier above re-bound the INTEGRATE pipeline (compute_list_add_barrier restores the prior
+	// pipeline + sets); switch to the TEMPORAL pipeline and re-bind the (unchanged) resolve set.
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[RESOLVE_MODE_TEMPORAL]);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, resolve_set, 0);
 	push_constant.mode = RESOLVE_MODE_TEMPORAL;
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, size.x, size.y, 1);
@@ -568,6 +589,9 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		spatial_uniforms[12].append_id(linear_sampler);
 		spatial_uniforms[12].append_id(spec_gi[spatial_src]);
 
+		// The per-iteration barrier above re-bound the prior pipeline (TEMPORAL on iter 0); switch to
+		// the SPATIAL pipeline, then bind this iteration's ping-pong set.
+		RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[RESOLVE_MODE_SPATIAL]);
 		RID spatial_set = uniform_set_cache->get_cache_vec(shader_rd, 0, spatial_uniforms);
 		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, spatial_set, 0);
 
@@ -718,7 +742,7 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 
 	RD::get_singleton()->draw_command_begin_label("RTGI Resolve GI Debug");
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
-	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[RESOLVE_MODE_DEBUG_GI]);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, size.x, size.y, 1);
@@ -896,7 +920,7 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, RID p_guid
 
 	RD::get_singleton()->draw_command_begin_label("RTGI Composite Hybrid");
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
-	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[RESOLVE_MODE_COMPOSITE]);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache_vec(shader_rd, 0, uniforms), 0);
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, size.x, size.y, 1);

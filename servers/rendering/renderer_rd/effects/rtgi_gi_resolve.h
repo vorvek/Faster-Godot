@@ -186,7 +186,13 @@ private:
 
 	RtgiGiResolveShaderRD shader;
 	RID shader_version;
-	RID pipeline; // INTEGRATE/TEMPORAL/SPATIAL/DEBUG_GI all share this shader (one set-0 layout).
+	// One compute pipeline per resolve mode: each bakes constant_id 0 (sc_resolve_mode) to a different
+	// value, so the driver folds the mode and dead-strips the other modes' code, giving each mode its
+	// own register allocation / occupancy. The set-0 layout is the union over all modes, identical for
+	// every pipeline, so the same uniform sets bind to any of them. Indexed by RESOLVE_MODE_* (the
+	// .cpp #defines, 0..4); kept in lockstep with RESOLVE_MODE_COUNT.
+	static const uint32_t RESOLVE_MODE_COUNT = 5; // INTEGRATE, TEMPORAL, SPATIAL, DEBUG_GI, COMPOSITE.
+	RID pipelines[RESOLVE_MODE_COUNT];
 
 	// Standalone volumetric-fog composite: its OWN shader + pipeline, independent of the resolve
 	// modes above (a smaller 3-binding set-0 layout). Drives composite_volumetric_fog (FPT only).
