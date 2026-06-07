@@ -29,7 +29,6 @@
 /**************************************************************************/
 
 #include "renderer_viewport.h"
-#include "servers/rendering/renderer_rd/effects/vendor_upscaler.h"
 #include "servers/rendering/renderer_rd/effects/copy_effects.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
@@ -138,17 +137,17 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 			const float EPSILON = 0.0001;
 			float scaling_3d_scale = p_viewport->scaling_3d_scale;
 			RS::ViewportScaling3DMode scaling_3d_mode = p_viewport->scaling_3d_mode;
-			RS::ViewportScaling3DType scaling_type = RS::scaling_3d_mode_type(scaling_3d_mode);
-			bool upscaler_available = p_viewport->fsr_enabled || RendererRD::VendorUpscaler::is_super_resolution_available(scaling_3d_mode);
-
-			if (RendererRD::VendorUpscaler::is_super_resolution_mode(scaling_3d_mode) && !RendererRD::VendorUpscaler::is_super_resolution_available(scaling_3d_mode)) {
-				String upscaler_name = RendererRD::VendorUpscaler::get_super_resolution_name(scaling_3d_mode);
-				String unavailable_reason = RendererRD::VendorUpscaler::get_super_resolution_unavailable_reason(scaling_3d_mode);
-				WARN_PRINT_ONCE(vformat("%s 3D resolution scaling is not available: %s Falling back to FSR 2 3D resolution scaling.", upscaler_name, unavailable_reason));
-				scaling_3d_mode = (RS::ViewportScaling3DMode)RendererRD::VendorUpscaler::get_super_resolution_fallback(scaling_3d_mode);
-				scaling_type = RS::scaling_3d_mode_type(scaling_3d_mode);
-				upscaler_available = p_viewport->fsr_enabled;
+			// XeSS and MetalFX upscalers were removed from this fork. Coerce any project,
+			// script, or saved setting that still requests them to FSR2 so old projects keep
+			// working instead of selecting an unavailable mode.
+			if (scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_XESS ||
+					scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL ||
+					scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL) {
+				WARN_PRINT_ONCE("XeSS and MetalFX 3D scaling are no longer supported; using FSR2 instead.");
+				scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_FSR2;
 			}
+			RS::ViewportScaling3DType scaling_type = RS::scaling_3d_mode_type(scaling_3d_mode);
+			bool upscaler_available = p_viewport->fsr_enabled;
 
 			if ((!upscaler_available || (scaling_type == RS::VIEWPORT_SCALING_3D_TYPE_SPATIAL)) && scaling_3d_scale >= (1.0 - EPSILON) && scaling_3d_scale <= (1.0 + EPSILON)) {
 				// No 3D scaling for spatial modes? Ignore scaling mode, this just introduces overhead.
@@ -165,51 +164,17 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 				WARN_PRINT_ONCE("MetalFX and FSR upscaling are not supported in the Compatibility renderer. Falling back to bilinear scaling.");
 			}
 
-			if ((scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_FSR || scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_FSR2 || scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL) && OS::get_singleton()->get_current_rendering_method() == "mobile") {
+			if ((scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_FSR || scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_FSR2) && OS::get_singleton()->get_current_rendering_method() == "mobile") {
 				scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_BILINEAR;
 				scaling_type = RS::scaling_3d_mode_type(scaling_3d_mode);
 				WARN_PRINT_ONCE("MetalFX temporal and FSR upscaling are not supported in the Mobile renderer. Falling back to bilinear scaling.");
 			}
 
-			if (scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL && !RD::get_singleton()->has_feature(RD::SUPPORTS_METALFX_TEMPORAL)) {
-				if (RD::get_singleton()->has_feature(RD::SUPPORTS_METALFX_SPATIAL)) {
-					// Prefer MetalFX spatial if it is supported, which will be much more efficient than FSR2,
-					// as the hardware already will struggle with FSR2.
-					scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL;
-					WARN_PRINT_ONCE("MetalFX temporal upscaling is not supported by the current renderer or hardware. Falling back to MetalFX Spatial scaling.");
-				} else {
-					scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_FSR2;
-					WARN_PRINT_ONCE("MetalFX upscaling is not supported by the current renderer or hardware. Falling back to FSR 2 scaling.");
-				}
-				scaling_type = RS::scaling_3d_mode_type(scaling_3d_mode);
-			}
-
-			if (scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL && !RD::get_singleton()->has_feature(RD::SUPPORTS_METALFX_SPATIAL)) {
-				scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_FSR;
-				WARN_PRINT_ONCE("MetalFX spatial upscaling is not supported by the current renderer or hardware. Falling back to FSR scaling.");
-			}
-
 			RS::ViewportMSAA msaa_3d = p_viewport->msaa_3d;
-
-			// If MetalFX Temporal upscaling is supported, verify limits.
-			if (scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL) {
-				double min_scale = (double)RD::get_singleton()->limit_get(RD::LIMIT_METALFX_TEMPORAL_SCALER_MIN_SCALE) / 1000'000.0;
-				double max_scale = (double)RD::get_singleton()->limit_get(RD::LIMIT_METALFX_TEMPORAL_SCALER_MAX_SCALE) / 1000'000.0;
-				if ((double)scaling_3d_scale < min_scale || (double)scaling_3d_scale > max_scale) {
-					scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_FSR2;
-					WARN_PRINT_ONCE(vformat("MetalFX temporal upscaling scale is outside limits; scale must be between %f and %f. Falling back to FSR 2 3D resolution scaling.", min_scale, max_scale));
-				} else if (msaa_3d != RS::VIEWPORT_MSAA_DISABLED) {
-					WARN_PRINT_ONCE("MetalFX temporal upscaling does not support 3D MSAA. Disabling 3D MSAA internally.");
-					msaa_3d = RS::VIEWPORT_MSAA_DISABLED;
-				}
-			}
 
 			bool scaling_3d_is_not_bilinear = scaling_3d_mode != RS::VIEWPORT_SCALING_3D_MODE_OFF && scaling_3d_mode != RS::VIEWPORT_SCALING_3D_MODE_BILINEAR;
 			bool scaling_3d_is_advanced_upscaler = scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_FSR ||
-												scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_FSR2 ||
-												scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL ||
-												scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL ||
-												RS::scaling_3d_mode_is_vendor_temporal(scaling_3d_mode);
+												scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_FSR2;
 			bool use_taa = p_viewport->use_taa;
 
 			if (scaling_3d_is_advanced_upscaler && (scaling_3d_scale >= (1.0 + EPSILON))) {
@@ -253,11 +218,8 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 					render_width = CLAMP(target_width * scaling_3d_scale, 1, 16384);
 					render_height = CLAMP(target_height * scaling_3d_scale, 1, 16384);
 					break;
-				case RS::VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL:
-				case RS::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL:
 				case RS::VIEWPORT_SCALING_3D_MODE_FSR:
 				case RS::VIEWPORT_SCALING_3D_MODE_FSR2:
-				case RS::VIEWPORT_SCALING_3D_MODE_XESS:
 					target_width = p_viewport->size.width;
 					target_height = p_viewport->size.height;
 					render_width = MAX(target_width * scaling_3d_scale, 1.0); // target_width / (target_width * scaling)
@@ -1144,12 +1106,6 @@ void RendererViewport::viewport_set_scaling_3d_mode(RID p_viewport, RS::Viewport
 		if (p_mode == RS::VIEWPORT_SCALING_3D_MODE_FSR2) {
 			WARN_PRINT_ONCE_ED("FSR2 3D scaling is only available when using the Forward+ renderer.");
 		}
-		if (p_mode == RS::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL) {
-			WARN_PRINT_ONCE_ED("MetalFX Temporal 3D scaling is only available when using the Forward+ renderer.");
-		}
-	}
-	if (rendering_method == "gl_compatibility" && p_mode == RS::VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL) {
-		WARN_PRINT_ONCE_ED("MetalFX Spatial 3D scaling is only available when using the Forward+ or Mobile renderer.");
 	}
 #endif
 

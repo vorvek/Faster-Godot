@@ -49,7 +49,7 @@ void RenderSceneBuffersConfiguration::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("get_scaling_3d_mode"), &RenderSceneBuffersConfiguration::get_scaling_3d_mode);
 	ClassDB::bind_method(D_METHOD("set_scaling_3d_mode", "scaling_3d_mode"), &RenderSceneBuffersConfiguration::set_scaling_3d_mode);
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "scaling_3d_mode", PROPERTY_HINT_ENUM, "Bilinear (Fastest):0,FSR 1.0 (Fast):1,FSR 2.2 (Slow):2,MetalFX (Spatial):3,MetalFX (Temporal):4,Nearest:5,Sharp Bilinear:6,Bicubic (Catmull-Rom):7,SGSR:8,XeSS:11,Disabled:255"), "set_scaling_3d_mode", "get_scaling_3d_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "scaling_3d_mode", PROPERTY_HINT_ENUM, "Bilinear (Fastest):0,FSR 1.0 (Fast):1,FSR 2.2 (Slow):2,Nearest:5,Sharp Bilinear:6,Bicubic (Catmull-Rom):7,SGSR:8,Disabled:255"), "set_scaling_3d_mode", "get_scaling_3d_mode");
 
 	ClassDB::bind_method(D_METHOD("get_msaa_3d"), &RenderSceneBuffersConfiguration::get_msaa_3d);
 	ClassDB::bind_method(D_METHOD("set_msaa_3d", "msaa_3d"), &RenderSceneBuffersConfiguration::set_msaa_3d);
