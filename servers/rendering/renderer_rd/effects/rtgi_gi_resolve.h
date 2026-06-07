@@ -10,6 +10,7 @@
 #include "core/math/projection.h"
 #include "core/math/transform_3d.h"
 #include "servers/rendering/renderer_rd/shaders/effects/rtgi_gi_resolve.glsl.gen.h"
+#include "servers/rendering/renderer_rd/shaders/effects/rtgi_gi_resolve_spatial.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/rtgi_volumetric_fog.glsl.gen.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.h"
 
@@ -192,6 +193,11 @@ private:
 	// every pipeline, so the same uniform sets bind to any of them. Indexed by RESOLVE_MODE_* (the
 	// .cpp #defines, 0..4); kept in lockstep with RESOLVE_MODE_COUNT.
 	static const uint32_t RESOLVE_MODE_COUNT = 5; // INTEGRATE, TEMPORAL, SPATIAL, DEBUG_GI, COMPOSITE.
+	// SPATIAL is a STANDALONE shader (rtgi_gi_resolve_spatial.glsl): it owns the LDS tile, so the
+	// other modes' pipelines carry no shared memory. pipelines[RESOLVE_MODE_SPATIAL] is built from it;
+	// the other four indices from the unified `shader` with their mode spec constant.
+	RtgiGiResolveSpatialShaderRD spatial_shader;
+	RID spatial_shader_version;
 	RID pipelines[RESOLVE_MODE_COUNT];
 
 	// Standalone volumetric-fog composite: its OWN shader + pipeline, independent of the resolve

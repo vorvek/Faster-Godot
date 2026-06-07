@@ -44,6 +44,9 @@ RTGIGIResolve::RTGIGIResolve() {
 	// shader + set-0 layout are identical across them (the spec constant only gates main()'s dispatch).
 	RID resolve_shader_rd = shader.version_get_shader(shader_version, 0);
 	for (uint32_t mode = 0; mode < RESOLVE_MODE_COUNT; mode++) {
+		if (mode == RESOLVE_MODE_SPATIAL) {
+			continue; // built from the standalone spatial shader below.
+		}
 		RD::PipelineSpecializationConstant sc;
 		sc.type = RD::PIPELINE_SPECIALIZATION_CONSTANT_TYPE_INT;
 		sc.constant_id = 0; // sc_resolve_mode
@@ -52,6 +55,10 @@ RTGIGIResolve::RTGIGIResolve() {
 		specialization_constants.push_back(sc);
 		pipelines[mode] = RD::get_singleton()->compute_pipeline_create(resolve_shader_rd, specialization_constants);
 	}
+	// SPATIAL: standalone single-mode shader (owns the LDS). No spec constant.
+	spatial_shader.initialize({ "" });
+	spatial_shader_version = spatial_shader.version_create();
+	pipelines[RESOLVE_MODE_SPATIAL] = RD::get_singleton()->compute_pipeline_create(spatial_shader.version_get_shader(spatial_shader_version, 0));
 
 	// Standalone volumetric-fog composite shader/pipeline (FPT re-applies the froxel fog the
 	// raster opaque pass would have applied; see composite_volumetric_fog). Its own small 3-binding
@@ -64,6 +71,7 @@ RTGIGIResolve::RTGIGIResolve() {
 RTGIGIResolve::~RTGIGIResolve() {
 	free_resources();
 	shader.version_free(shader_version);
+	spatial_shader.version_free(spatial_shader_version);
 	fog_shader.version_free(fog_shader_version);
 }
 
@@ -577,22 +585,37 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		// common uniforms (0-8, 13-16 untouched, incl. the neutral reactive slot 16) and override 9/10
 		// (DEST images) + 11/12 (SOURCE samplers). The pushed order is binding-sequential, so
 		// uniforms[b].binding == b for b<=16.
-		LocalVector<RD::Uniform> spatial_uniforms = uniforms;
-		spatial_uniforms[9].clear_ids();
-		spatial_uniforms[9].append_id(diffuse_gi[spatial_dst]);
-		spatial_uniforms[10].clear_ids();
-		spatial_uniforms[10].append_id(spec_gi[spatial_dst]);
-		spatial_uniforms[11].clear_ids();
-		spatial_uniforms[11].append_id(linear_sampler);
-		spatial_uniforms[11].append_id(diffuse_gi[spatial_src]);
-		spatial_uniforms[12].clear_ids();
-		spatial_uniforms[12].append_id(linear_sampler);
-		spatial_uniforms[12].append_id(spec_gi[spatial_src]);
+		// The SPATIAL shader is standalone with a 7-binding subset layout (0,1,9,10,11,12,14), so build
+		// the set from just those (sub-selected from `uniforms`, which is binding-indexed), with this
+		// iteration's ping-pong override on 9/10 (DEST) + 11/12 (SOURCE).
+		LocalVector<RD::Uniform> spatial_uniforms;
+		spatial_uniforms.push_back(uniforms[0]); // depth_buffer
+		spatial_uniforms.push_back(uniforms[1]); // normal_roughness_buffer
+		RD::Uniform su_diff_dst = uniforms[9];
+		su_diff_dst.clear_ids();
+		su_diff_dst.append_id(diffuse_gi[spatial_dst]);
+		spatial_uniforms.push_back(su_diff_dst);
+		RD::Uniform su_spec_dst = uniforms[10];
+		su_spec_dst.clear_ids();
+		su_spec_dst.append_id(spec_gi[spatial_dst]);
+		spatial_uniforms.push_back(su_spec_dst);
+		RD::Uniform su_diff_src = uniforms[11];
+		su_diff_src.clear_ids();
+		su_diff_src.append_id(linear_sampler);
+		su_diff_src.append_id(diffuse_gi[spatial_src]);
+		spatial_uniforms.push_back(su_diff_src);
+		RD::Uniform su_spec_src = uniforms[12];
+		su_spec_src.clear_ids();
+		su_spec_src.append_id(linear_sampler);
+		su_spec_src.append_id(spec_gi[spatial_src]);
+		spatial_uniforms.push_back(su_spec_src);
+		spatial_uniforms.push_back(uniforms[14]); // GiResolveUBO
 
 		// The per-iteration barrier above re-bound the prior pipeline (TEMPORAL on iter 0); switch to
-		// the SPATIAL pipeline, then bind this iteration's ping-pong set.
+		// the standalone SPATIAL pipeline + its own (smaller) set.
+		RID spatial_shader_rd = spatial_shader.version_get_shader(spatial_shader_version, 0);
 		RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[RESOLVE_MODE_SPATIAL]);
-		RID spatial_set = uniform_set_cache->get_cache_vec(shader_rd, 0, spatial_uniforms);
+		RID spatial_set = uniform_set_cache->get_cache_vec(spatial_shader_rd, 0, spatial_uniforms);
 		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, spatial_set, 0);
 
 		push_constant.mode = RESOLVE_MODE_SPATIAL;
