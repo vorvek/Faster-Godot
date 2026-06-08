@@ -822,12 +822,16 @@ void Environment::set_rtgi_mode(RTGIMode p_mode) {
 		case RTGI_MODE_REFLECTIONS_RT_ONLY:
 		case RTGI_MODE_FULL_PATH_TRACING:
 		case RTGI_MODE_HYBRID:
+		case RTGI_MODE_FULL_PATH_TRACING_REFERENCE:
 			rtgi_mode = p_mode;
 			break;
 		default:
 			rtgi_mode = RTGI_MODE_HYBRID;
 			break;
 	}
+	// The deep-path oracle IS the REFERENCE mode now; keep the rtgi_fpt_reference shim in sync so
+	// the renderer wire (params.fpt_reference) and any script reading the bool stay consistent.
+	rtgi_fpt_reference = (rtgi_mode == RTGI_MODE_FULL_PATH_TRACING_REFERENCE);
 	_update_pathtracing();
 }
 
@@ -836,9 +840,17 @@ Environment::RTGIMode Environment::get_rtgi_mode() const {
 }
 
 void Environment::set_rtgi_fpt_reference(bool p_enabled) {
-	// Deep-path A/B reference oracle. Not part of any quality-preset bundle (like rtgi_mode,
-	// it does not mark the preset Custom), so just re-serialize the pathtracing params.
+	// Compatibility shim for the former standalone bool (scripts / pre-fold scenes still set it).
+	// The oracle is now the REFERENCE entry of rtgi_mode, so promote/demote that enum to match:
+	// enabling it from FULL_PATH_TRACING switches to REFERENCE; disabling it from REFERENCE drops
+	// back to FULL_PATH_TRACING. Other modes (Reflections/Hybrid) ignore the flag, so leave them.
+	// Not part of any quality-preset bundle (does not mark the preset Custom).
 	rtgi_fpt_reference = p_enabled;
+	if (p_enabled && rtgi_mode == RTGI_MODE_FULL_PATH_TRACING) {
+		rtgi_mode = RTGI_MODE_FULL_PATH_TRACING_REFERENCE;
+	} else if (!p_enabled && rtgi_mode == RTGI_MODE_FULL_PATH_TRACING_REFERENCE) {
+		rtgi_mode = RTGI_MODE_FULL_PATH_TRACING;
+	}
 	_update_pathtracing();
 }
 
@@ -971,7 +983,10 @@ void Environment::_update_pathtracing() {
 	params.denoiser = pathtracing_denoiser;
 	params.energy = rtgi_energy;
 	params.resolution_scale = rtgi_resolution_scale;
-	params.mode = (uint32_t)rtgi_mode;
+	// REFERENCE is a UI-level sub-mode of FULL_PATH_TRACING: the renderer only knows
+	// REFLECTIONS / FULL_PATH_TRACING / HYBRID and reads the oracle off params.fpt_reference, so map
+	// REFERENCE -> FULL_PATH_TRACING here and let the flag carry the oracle bit (wire unchanged).
+	params.mode = (uint32_t)((rtgi_mode == RTGI_MODE_FULL_PATH_TRACING_REFERENCE) ? RTGI_MODE_FULL_PATH_TRACING : rtgi_mode);
 	params.fpt_reference = rtgi_fpt_reference;
 	params.rtgi_quality_preset = (uint32_t)rtgi_quality_preset;
 	params.backend = (RSE::PathtracingBackend)rtgi_backend;
@@ -1862,11 +1877,16 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_enabled", PROPERTY_HINT_GROUP_ENABLE), "set_rtgi_enabled", "is_rtgi_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_backend", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR), "set_rtgi_backend", "get_rtgi_backend");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_quality_preset", PROPERTY_HINT_ENUM, "Custom,Performance,Balanced,Production"), "set_rtgi_quality_preset", "get_rtgi_quality_preset");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_mode", PROPERTY_HINT_ENUM, "Reflections RT Only,Full Scene Path-Traced GI,Hybrid RTGI"), "set_rtgi_mode", "get_rtgi_mode");
-	// rtgi_fpt_reference is a developer A/B oracle (the deep-path ground-truth path tracer), not a
-	// shipping knob. Keep it serialized + scriptable (set/get stay bound) but hide it from the
-	// inspector with PROPERTY_USAGE_NO_EDITOR. A project that serialized rtgi_fpt_reference = true
-	// still loads and applies the value; it just no longer shows up as an editable control.
+	// rtgi_mode enum hint uses explicit Name:value pairs so the dropdown can show the oracle
+	// (REFERENCE) right after Full Scene Path-Traced GI while keeping the serialized values stable
+	// (REFLECTIONS 0, FULL_PATH_TRACING 1, HYBRID 2, REFERENCE 3) for backward compatibility.
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_mode", PROPERTY_HINT_ENUM, "Reflections RT Only:0,Full Scene Path-Traced GI:1,Full Scene Path-Traced GI (Reference):3,Hybrid RTGI:2"), "set_rtgi_mode", "get_rtgi_mode");
+	// rtgi_fpt_reference is the legacy standalone bool for the deep-path A/B oracle. The oracle is
+	// now a first-class entry of rtgi_mode (RTGI_MODE_FULL_PATH_TRACING_REFERENCE), so this stays
+	// bound + serialized ONLY as a compatibility shim: pre-fold scenes that saved
+	// rtgi_fpt_reference = true still load and promote rtgi_mode to REFERENCE, and scripts/harnesses
+	// that set() it keep working. Hidden from the inspector (NO_EDITOR) since the dropdown is now the
+	// real control.
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_fpt_reference", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR), "set_rtgi_fpt_reference", "get_rtgi_fpt_reference");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_samples_per_pixel", PROPERTY_HINT_RANGE, "1,16,1"), "set_rtgi_samples_per_pixel", "get_rtgi_samples_per_pixel");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_max_bounces", PROPERTY_HINT_RANGE, "1,8,1"), "set_rtgi_max_bounces", "get_rtgi_max_bounces");
@@ -2086,6 +2106,7 @@ void Environment::_bind_methods() {
 	BIND_ENUM_CONSTANT(RTGI_MODE_REFLECTIONS_RT_ONLY);
 	BIND_ENUM_CONSTANT(RTGI_MODE_FULL_PATH_TRACING);
 	BIND_ENUM_CONSTANT(RTGI_MODE_HYBRID);
+	BIND_ENUM_CONSTANT(RTGI_MODE_FULL_PATH_TRACING_REFERENCE);
 	BIND_ENUM_CONSTANT(RTGI_MODE_PATH_TRACED);
 
 	BIND_ENUM_CONSTANT(RTGI_QUALITY_PRESET_CUSTOM);

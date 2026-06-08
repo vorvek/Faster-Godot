@@ -25,6 +25,7 @@ The feature is exposed on `Environment`, so it appears through the same
   - `Reflections RT Only`
   - `Hybrid RTGI`
   - `Full Scene Path-Traced GI`
+  - `Full Scene Path-Traced GI (Reference)`
 - `rtgi_samples_per_pixel`
 - `rtgi_max_bounces`
 - `rtgi_energy`
@@ -67,6 +68,12 @@ The feature is exposed on `Environment`, so it appears through the same
     GI contributions and then composites transparent raster overlays after RT
     denoising. This is heavier and is intended for explicit high-quality dark
     scenes, captures, and RT debugging rather than broad fallback compatibility.
+  - `Full Scene Path-Traced GI (Reference)`: the same full path-traced view, routed
+    through the deep reference path tracer with the probe composite, denoiser, and
+    stabilizer bypassed. It is a slow ground-truth reference for A/B checks against
+    the production Full Scene Path-Traced GI, not a shipping mode. It was previously
+    a hidden flag; folding it into the mode list keeps it a normal, reversible choice
+    rather than a value a saved scene could hold with no way to clear it in the editor.
 - `rtgi_samples_per_pixel`
   - Controls how many RT samples are traced per pixel each frame. Higher values
     reduce raw noise but cost more GPU time. Lower values rely more heavily on
@@ -692,6 +699,12 @@ prefiltering, and edge-aware atrous filtering before the path-traced output is
 written back to the viewport. Newly visible geometry, newly loaded
 materials, and geometry that has just become RT-ready therefore start from fresh
 samples instead of borrowing stale accumulated lighting.
+
+The screen-space temporal reprojection reads the engine motion-vector buffer in its
+native UV, previous-minus-current convention and scales it to pixels, so the indirect
+lighting follows the surface as the camera or an object moves. Builds before this read
+the buffer as if it were already in pixels, so the per-frame offset rounded to zero and
+the low-frequency indirect smeared across the screen under motion.
 
 The Internal Signal Decomposition path runs a separate RTGI denoise graph for
 the split lighting signals. Low-frequency diffuse GI, dominant direct light,

@@ -85,6 +85,11 @@ public:
 		RTGI_MODE_REFLECTIONS_RT_ONLY,
 		RTGI_MODE_FULL_PATH_TRACING,
 		RTGI_MODE_HYBRID,
+		// Deep-path A/B oracle (full path tracer, probe composite bypassed). Folded into this enum
+		// from the former hidden rtgi_fpt_reference bool so it is a first-class, toggleable editor
+		// choice (set/get_rtgi_fpt_reference remain as compatibility shims). Explicit = 3 so the
+		// existing REFLECTIONS / FULL_PATH_TRACING / HYBRID serialized values (0/1/2) are unchanged.
+		RTGI_MODE_FULL_PATH_TRACING_REFERENCE = 3,
 		RTGI_MODE_PATH_TRACED = RTGI_MODE_FULL_PATH_TRACING,
 	};
 

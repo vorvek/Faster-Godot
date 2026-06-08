@@ -73,6 +73,35 @@ TEST_CASE("[SceneTree][Environment] RTGI backend selection exposes only Vulkan G
 	CHECK_EQ(params.backend, RSE::PT_BACKEND_VULKAN_GENERIC);
 }
 
+TEST_CASE("[SceneTree][Environment] RTGI reference mode folds the FPT oracle into rtgi_mode") {
+	Ref<Environment> environment;
+	environment.instantiate();
+
+	// Selecting the Reference mode keeps the oracle flag in sync, and maps to FULL_PATH_TRACING on
+	// the render wire (the renderer only knows Reflections/Full Path Tracing/Hybrid and reads the
+	// oracle off params.fpt_reference).
+	environment->set_rtgi_mode(Environment::RTGI_MODE_FULL_PATH_TRACING_REFERENCE);
+	CHECK_EQ(environment->get_rtgi_mode(), Environment::RTGI_MODE_FULL_PATH_TRACING_REFERENCE);
+	CHECK(environment->get_rtgi_fpt_reference());
+	RSE::PathtracingParams params = RenderingServer::get_singleton()->environment_get_pathtracing_params(environment->get_rid());
+	CHECK_EQ(params.mode, uint32_t(Environment::RTGI_MODE_FULL_PATH_TRACING));
+	CHECK(params.fpt_reference);
+
+	// The legacy bool shim promotes Full Path Tracing to Reference and demotes it back, so pre-fold
+	// scenes / scripts that set rtgi_fpt_reference still drive the same mode.
+	environment->set_rtgi_mode(Environment::RTGI_MODE_FULL_PATH_TRACING);
+	CHECK_FALSE(environment->get_rtgi_fpt_reference());
+	environment->set_rtgi_fpt_reference(true);
+	CHECK_EQ(environment->get_rtgi_mode(), Environment::RTGI_MODE_FULL_PATH_TRACING_REFERENCE);
+	environment->set_rtgi_fpt_reference(false);
+	CHECK_EQ(environment->get_rtgi_mode(), Environment::RTGI_MODE_FULL_PATH_TRACING);
+
+	// The oracle flag only toggles the Full Path Tracing pair, never the other modes.
+	environment->set_rtgi_mode(Environment::RTGI_MODE_HYBRID);
+	environment->set_rtgi_fpt_reference(true);
+	CHECK_EQ(environment->get_rtgi_mode(), Environment::RTGI_MODE_HYBRID);
+}
+
 TEST_CASE("[SceneTree][Environment] RTGI FPT reference oracle round-trips") {
 	Ref<Environment> environment;
 	environment.instantiate();
