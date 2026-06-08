@@ -187,6 +187,7 @@ EditorPropertyNameProcessor::EditorPropertyNameProcessor() {
 	capitalize_string_remaps["filesystem"] = "FileSystem";
 	capitalize_string_remaps["fov"] = "FOV";
 	capitalize_string_remaps["fps"] = "FPS";
+	capitalize_string_remaps["fpt"] = "FPT";
 	capitalize_string_remaps["fs"] = "FS";
 	capitalize_string_remaps["fsr"] = "FSR";
 	capitalize_string_remaps["fxaa"] = "FXAA";
@@ -269,6 +270,7 @@ EditorPropertyNameProcessor::EditorPropertyNameProcessor() {
 	capitalize_string_remaps["rmb"] = "RMB";
 	capitalize_string_remaps["rpc"] = "RPC";
 	capitalize_string_remaps["rv64"] = "rv64";
+	capitalize_string_remaps["rtgi"] = "RTGI";
 	capitalize_string_remaps["s3tc"] = "S3TC";
 	capitalize_string_remaps["scp"] = "SCP";
 	capitalize_string_remaps["scrcpy"] = "scrcpy";
