@@ -121,10 +121,11 @@ layout(set = 0, binding = 1) uniform sampler2D normal_roughness_buffer;
 // Guide Prepass" (RB_TEX_RT_GUIDE_ALBEDO). INTEGRATE reads it for the rough-spec F0 mix; the
 // composite (T4/T5) reuses it for the diffuse remod. NOT the dead rt_albedo_metalness.
 layout(set = 0, binding = 2) uniform sampler2D guide_albedo;
-// Velocity buffer (A3-T2): .xy = screen-space motion in PIXELS (cur - prev, forward), the
-// same convention the SPG anchor motion uses. Consumed by the TEMPORAL mode to motion-
-// reproject the previous frame's accumulated GI; INTEGRATE/DEBUG_GI ignore it. Bound by
-// run_resolve from p_velocity. (Was reserved/undeclared in T0/T1.)
+// Velocity buffer (A3-T2): .xy = screen-space motion in UV (prev_uv - cur_uv), the standard
+// RB_TEX_VELOCITY convention (TAA reads prev_uv = cur_uv + mv). Consumed by the TEMPORAL mode,
+// which scales it to PIXELS (* screen size) and reprojects prev = pos + mv*size; INTEGRATE/
+// DEBUG_GI ignore it. Bound by run_resolve from p_velocity (the SPG anchor motion in
+// header_aux.zw uses the SAME source, pre-scaled to pixels at PLACE). (Was reserved in T0/T1.)
 layout(set = 0, binding = 3) uniform sampler2D velocity_buffer;
 // SPG SPATIAL-filtered per-probe radiance atlas (grid_w*oct_res x grid_h*oct_res): each
 // probe owns an oct_res x oct_res HEMISPHERE-octahedral tile (local +Z = anchor normal),
@@ -592,11 +593,16 @@ void resolve_temporal_main(ivec2 pos) {
 
 	float n_cap = max(pc.temporal_n_cap, 1.0);
 
-	// Screen-space surface motion in PIXELS (cur - prev, forward), so the previous pixel is
-	// pos - motion. On the static furnace motion == 0 -> prev == pos (identity reproject), so
-	// TEMPORAL degenerates to a stable in-place accumulate (no drift).
+	// Surface motion from the velocity buffer (RB_TEX_VELOCITY). Its convention is UV-space,
+	// prev - cur (motion = prev_uv - cur_uv; see scene_forward_clustered.glsl motion_vector +
+	// rt_store_primary_velocity in raytracing_common_inc.glsl, and the TAA/RT consumers that read
+	// prev_uv = cur_uv + mv). So the previous pixel is pos + mv scaled UV -> pixels by the screen
+	// size: prev = pos + round(mv * screen). (The earlier "PIXELS, cur - prev" reading was wrong on
+	// BOTH units and sign: a raw UV value ~0.01 rounded to 0, so the reproject never moved and the
+	// history smeared under motion.) On the static furnace mv == 0 -> prev == pos (identity
+	// reproject, byte-identical to before), so TEMPORAL degenerates to a stable in-place accumulate.
 	vec2 mv = texelFetch(velocity_buffer, pos, 0).xy;
-	ivec2 prev = pos - ivec2(round(mv));
+	ivec2 prev = pos + ivec2(round(mv * vec2(pc.screen_w, pc.screen_h)));
 
 	float n_d = 0.0;
 	float n_s = 0.0;

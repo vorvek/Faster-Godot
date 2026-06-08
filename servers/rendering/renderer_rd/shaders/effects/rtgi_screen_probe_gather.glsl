@@ -61,7 +61,8 @@ layout(set = 0, binding = 0) uniform sampler2D depth_buffer;
 layout(set = 0, binding = 1) uniform sampler2D normal_roughness_buffer;
 layout(set = 0, binding = 2) uniform sampler2D velocity_buffer;
 // Per-probe headers PLACE writes. header_plane: .xyz = world_pos, .w = linear_depth
-// (<= 0 invalid). header_aux: .xy = octahedral world normal, .zw = screen motion.
+// (<= 0 invalid). header_aux: .xy = octahedral world normal, .zw = screen motion (pixels,
+// prev - cur; the UV velocity buffer scaled by the screen size at store time).
 layout(set = 0, binding = 3, rgba32f) uniform restrict writeonly image2D header_plane_image;
 layout(set = 0, binding = 4, rgba16f) uniform restrict writeonly image2D header_aux_image;
 
@@ -153,7 +154,12 @@ void spg_place_main(ivec2 probe) {
 	view_normal = normalize(view_normal);
 	vec3 world_normal = normalize(mat3(place.inv_view) * view_normal);
 
-	vec2 motion = texelFetch(velocity_buffer, found, 0).xy;
+	// Anchor screen motion. The velocity buffer (RB_TEX_VELOCITY) stores UV-space motion
+	// (prev_uv - cur_uv; see scene_forward_clustered.glsl + rt_store_primary_velocity), so scale
+	// by the screen size to store header_aux.zw in PIXELS, which is what the SPG accumulate
+	// REPROJECT consumes (prev_cell = cell + motion_px / spacing). Storing the raw UV here is the
+	// bug that made the probe reproject round to 0 and smear the indirect under motion.
+	vec2 motion = texelFetch(velocity_buffer, found, 0).xy * vec2(place.screen_width, place.screen_height);
 
 	imageStore(header_plane_image, probe, vec4(world_pos, linear_depth));
 	imageStore(header_aux_image, probe, vec4(vec3_to_oct(world_normal), motion));

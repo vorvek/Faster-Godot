@@ -150,12 +150,13 @@ void spg_reproject_main(ivec2 texel) {
 	spg_build_basis(cur_n, ct, cb);
 	vec3 world_dir = spg_local_to_world(local_dir, ct, cb, cur_n);
 	// Reproject this probe to its previous-frame screen cell via the anchor motion.
-	// Convention: motion_px (the anchor's velocity, in screen pixels) is cur - prev
-	// (forward), so the previous cell is probe - motion. On the static furnace motion == 0
-	// (identity carry); the sign is exercised/validated by A3's camera-motion sparkle +
-	// disocclusion gates, where reprojection actually does work.
+	// Convention: motion_px (header_aux.zw) is the anchor velocity in screen PIXELS, prev - cur
+	// (the velocity buffer stores prev_uv - cur_uv; PLACE scaled UV -> pixels), so
+	// prev_uv = cur_uv + motion and the previous cell is probe + motion_px / spacing. On the
+	// static furnace motion == 0 (identity carry). (The previous `probe - ...` reading was the
+	// wrong sign AND fed raw UV, so it rounded to 0 and never reprojected -> indirect smear.)
 	vec2 motion_px = cur_aux.zw;
-	ivec2 prev_probe = probe - ivec2(round(motion_px / float(spacing)));
+	ivec2 prev_probe = probe + ivec2(round(motion_px / float(spacing)));
 	vec4 carried = vec4(0.0); // default: disocclusion / no history -> reset (count 0).
 	if (all(greaterThanEqual(prev_probe, ivec2(0))) && prev_probe.x < grid_w && prev_probe.y < grid_h) {
 		vec4 prev_plane = imageLoad(header_plane_prev, prev_probe);
