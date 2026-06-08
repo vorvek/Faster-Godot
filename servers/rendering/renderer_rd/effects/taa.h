@@ -40,7 +40,7 @@ public:
 	TAA();
 	~TAA();
 
-	void process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far, bool p_raytracing_denoise = false, RID p_rt_history_validity = RID(), RID p_rt_prev_history_validity = RID(), RID p_rt_history_id = RID(), RID p_rt_prev_history_id = RID(), float p_raytracing_history_weight = 0.94f, RID p_rt_taa_reactivity = RID());
+	void process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far, bool p_raytracing_denoise = false, RID p_rt_history_validity = RID(), RID p_rt_prev_history_validity = RID(), RID p_rt_history_id = RID(), RID p_rt_prev_history_id = RID(), float p_raytracing_history_weight = 0.94f, RID p_rt_taa_reactivity = RID(), RID p_taa_confidence_tex = RID(), bool p_confidence_relax = false);
 	void process_texture(Ref<RenderSceneBuffersRD> p_render_buffers, const StringName &p_source_context, const StringName &p_source_texture, const StringName &p_history_context, RD::DataFormat p_format, RID p_velocity_texture, float p_z_near, float p_z_far, bool p_raytracing_denoise = false, RID p_rt_history_validity = RID(), RID p_rt_prev_history_validity = RID(), RID p_rt_history_id = RID(), RID p_rt_prev_history_id = RID(), float p_raytracing_history_weight = 0.94f, const Size2i &p_process_size = Size2i(), RID p_depth_texture = RID(), RID p_rt_taa_reactivity = RID());
 	void process_texture_with_rt_history(Ref<RenderSceneBuffersRD> p_render_buffers, const StringName &p_source_context, const StringName &p_source_texture, const StringName &p_history_context, RD::DataFormat p_format, RID p_velocity_texture, float p_z_near, float p_z_far, bool p_raytracing_denoise, RID p_rt_history_validity, RID p_rt_prev_history_validity, RID p_rt_history_id, RID p_rt_prev_history_id, float p_raytracing_history_weight, const Size2i &p_process_size, RID p_depth_texture, RID p_rt_taa_reactivity, const StringName &p_rt_history_validity_texture, const StringName &p_rt_prev_history_validity_texture, const StringName &p_rt_history_id_texture, const StringName &p_rt_prev_history_id_texture, const StringName &p_rt_taa_reactivity_texture, RID p_rt_signal_confidence = RID(), RID p_rt_history_moments = RID(), RID p_rt_prev_history_moments = RID(), RID p_rt_history_metadata = RID(), RID p_rt_prev_history_metadata = RID(), const StringName &p_rt_signal_confidence_texture = StringName(), const StringName &p_rt_history_moments_texture = StringName(), const StringName &p_rt_prev_history_moments_texture = StringName(), const StringName &p_rt_history_metadata_texture = StringName(), const StringName &p_rt_prev_history_metadata_texture = StringName());
 
@@ -65,16 +65,23 @@ private:
 		float rt_taa_reactivity_enabled;
 		float rt_history_metadata_enabled;
 		float rt_signal_confidence_enabled;
-		float _pad0;
-		float _pad1;
-		float _pad2;
+		float taa_confidence_relax_enabled; // FPT-only: relax the neighborhood clamp / hold history on converged path-traced pixels. Was _pad0.
+		float relax_agree_lo; // history-agreement gate: rel-distance(history, clamped) below this = full relax. Was _pad1.
+		float relax_agree_hi; // history-agreement gate: rel-distance above this = no relax (stock clamp -> no ghost). Was _pad2.
+		float relax_floor; // FPT relax: min per-frame blend on a fully-relaxed pixel = the held-pixel convergence rate. 0.02 ~= 2.5 s scene-change settle, 0.05 ~= 1 s. Sets the transient-vs-steady-calm tradeoff.
+		// std430 rounds the push-constant block up to a 16-byte multiple; the 17 used floats (68 B) round to
+		// 80 B, so pad the struct to 80 B to match the shader's declared push-constant size (else the dispatch
+		// fails with "requires (80) bytes ... supplied (68)" and TAA writes nothing -> black frame).
+		float relax_change_gain; // FPT relax: box-independent spatial change-term weight (neighborhood mean + min vs history). 0 = prior rel-only gate. Was pad0.
+		float relax_dt_gain; // FPT relax: box-independent temporal-term weight (|current - history|); defaulted low. Was pad1.
+		float pad2; // keeps the struct at 80 B (16-byte multiple).
 	};
 
 	TaaResolveShaderRD taa_shader;
 	RID shader_version;
 	RID pipelines[PIPELINE_MAX];
 
-	void resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_prev_velocity, RID p_history, RID p_rt_history_validity, RID p_rt_prev_history_validity, RID p_rt_history_id, RID p_rt_prev_history_id, RID p_rt_taa_reactivity, RID p_rt_signal_confidence, RID p_rt_history_moments, RID p_rt_prev_history_moments, RID p_rt_history_metadata, RID p_rt_prev_history_metadata, Size2 p_resolution, float p_z_near, float p_z_far, bool p_raytracing_denoise, float p_raytracing_history_weight, float p_taa_disocclusion_threshold, float p_taa_history_weight, float p_taa_sharpness);
+	void resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_prev_velocity, RID p_history, RID p_rt_history_validity, RID p_rt_prev_history_validity, RID p_rt_history_id, RID p_rt_prev_history_id, RID p_rt_taa_reactivity, RID p_rt_signal_confidence, RID p_rt_history_moments, RID p_rt_prev_history_moments, RID p_rt_history_metadata, RID p_rt_prev_history_metadata, Size2 p_resolution, float p_z_near, float p_z_far, bool p_raytracing_denoise, float p_raytracing_history_weight, float p_taa_disocclusion_threshold, float p_taa_history_weight, float p_taa_sharpness, bool p_confidence_relax = false);
 };
 
 } // namespace RendererRD

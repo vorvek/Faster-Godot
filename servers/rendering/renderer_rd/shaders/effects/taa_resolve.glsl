@@ -74,9 +74,13 @@ layout(push_constant, std430) uniform Params {
 	float rt_taa_reactivity_enabled;
 	float rt_history_metadata_enabled;
 	float rt_signal_confidence_enabled;
-	float _pad0;
-	float _pad1;
-	float _pad2;
+	float taa_confidence_relax_enabled; // FPT-only confidence-relax (was _pad0).
+	float relax_agree_lo; // history-agreement gate lo rel-distance (was _pad1).
+	float relax_agree_hi; // history-agreement gate hi rel-distance (was _pad2).
+	float relax_floor; // FPT relax: min per-frame blend on a fully-relaxed pixel = held-pixel convergence rate (sets the scene-change transient length).
+	float relax_change_gain; // FPT relax: box-independent spatial change-term weight (neighborhood mean + min vs history). 0 = prior rel-only gate. Was pad0.
+	float relax_dt_gain; // FPT relax: box-independent temporal-term weight (|current - history|); defaulted low. Was pad1.
+	float pad2; // keeps the block at 80 B (std430 rounds the push constant up to a 16-byte multiple; matches the C++ TAAResolvePushConstant).
 }
 params;
 
@@ -365,7 +369,7 @@ vec3 rt_firefly_clamp_screen_3x3(ivec2 screen_pos, vec3 center) {
 }
 
 // Clip history to the neighbourhood of the current sample
-vec3 clip_history_3x3(uvec2 group_pos, uvec2 screen_pos, vec3 color_history, vec2 velocity_closest, out vec3 neighborhood_avg, out vec3 neighborhood_min, out vec3 neighborhood_max) {
+vec3 clip_history_3x3(uvec2 group_pos, uvec2 screen_pos, vec3 color_history, vec3 p_color_current, vec2 velocity_closest, float p_conf, out float out_conf_eff, out vec3 neighborhood_avg, out vec3 neighborhood_min, out vec3 neighborhood_max) {
 	ivec2 local_pos = ivec2(group_pos);
 
 	// Sample a 3x3 neighbourhood
@@ -405,7 +409,33 @@ vec3 clip_history_3x3(uvec2 group_pos, uvec2 screen_pos, vec3 color_history, vec
 	vec3 color_max = color_avg + dev;
 
 	// Variance clipping
-	vec3 color = clip_aabb(color_min, color_max, clamp(color_avg, color_min, color_max), color_history);
+	vec3 clipped = clip_aabb(color_min, color_max, clamp(color_avg, color_min, color_max), color_history);
+
+	// FPT confidence-relax with a HISTORY-AGREEMENT gate. Only relax the clamp where the reprojected history
+	// is already CLOSE to the clamped neighborhood (the boil: history is the stable value within the per-frame
+	// noise, so clipped ~= history -> small rel -> relax -> the stable value is not clipped to the noisy
+	// center). When the history is FAR from the clamped value (a stale lit value as a light moves on, or a
+	// stale object over a now-revealed background -> the ghost), rel is large, agreement -> 0, and the stock
+	// clamp is kept (no trail). Velocity is deliberately NOT used: a static background pixel behind a moving
+	// object/light has velocity 0 yet its content changed, and only this content-agreement test catches it.
+	// rel is scale-invariant (relative to the history magnitude). p_conf == 0 (flag off) => out_conf_eff 0 =>
+	// color = clipped (stock), so non-FPT TAA is byte-identical.
+	float inv_hist = 1.0 / max(length(color_history), 0.05);
+	float rel = length(clipped - color_history) * inv_hist;
+	// BOX-INDEPENDENT terms, max-combined so the gate is MONOTONE (rel_final >= rel -> can only REDUCE the
+	// relax, never create a trail). They catch the wide-box failure the box-relative rel misses: a boiling
+	// region OR a bright/dark moving edge spans the box, so clipped ~= history (rel ~ 0) YET the neighborhood
+	// mean/min are far from the stale history. rel_mean = trailing-edge trail + boil transient; rel_dark = the
+	// thin receding-silhouette ring the mean alone misses; rel_dt = an opt-in low-gain temporal lever. All -> 0
+	// at a static converged pixel, so the steady-state de-boil is preserved. The gains are 0 for non-FPT, so
+	// rel_final == rel there and (with p_conf 0) the result stays byte-identical.
+	float rel_mean = length(neighborhood_avg - color_history) * inv_hist;
+	float rel_dark = length(neighborhood_min - color_history) * inv_hist;
+	float rel_dt = length(p_color_current - color_history) * inv_hist;
+	float rel_final = max(rel, max(params.relax_change_gain * max(rel_mean, rel_dark), params.relax_dt_gain * rel_dt));
+	float agreement = 1.0 - smoothstep(params.relax_agree_lo, params.relax_agree_hi, rel_final);
+	out_conf_eff = p_conf * agreement;
+	vec3 color = mix(clipped, color_history, out_conf_eff);
 
 	// Clamp to prevent NaNs
 	color = clamp(color, FLT_MIN, FLT_MAX);
@@ -542,6 +572,18 @@ vec3 temporal_antialiasing(ivec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_
 	vec2 uv_reprojected = uv + velocity;
 	bool reprojected_in_screen = all(greaterThanEqual(uv_reprojected, vec2(0.0))) && all(lessThanEqual(uv_reprojected, vec2(1.0)));
 
+	// FPT confidence-relax: binding 10 carries the FPT primary stabilizer color, whose .a is the per-pixel
+	// convergence confidence (n / n_cap, 1 == converged). UV sample (not texelFetch): the stabilizer color is
+	// at rt_size while TAA runs at internal_size; normalized UV keeps it aligned at rtgi_resolution_scale < 1.
+	// Whether it is SAFE to relax is decided per-pixel by the history-agreement gate inside clip_history_3x3
+	// (out conf_eff below): it catches static-background ghosting (content change at a velocity-0 pixel) that a
+	// velocity gate cannot. conf stays 0 when the flag is off, so non-FPT TAA is byte-identical.
+	float conf = 0.0;
+	if (params.taa_confidence_relax_enabled > 0.5) {
+		conf = clamp(texture(rt_taa_reactivity_buffer, uv).a, 0.0, 1.0);
+	}
+	float conf_eff = 0.0; // confidence after the agreement gate (set by clip_history_3x3); drives the blend floor.
+
 	// Get input color
 	vec3 color_input = load_color(ivec2(pos_group));
 	if (params.raytracing_denoise > 0.5) {
@@ -567,18 +609,19 @@ vec3 temporal_antialiasing(ivec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_
 
 		// Clip history to the neighbourhood of the current sample (fixes a lot of the ghosting).
 		get_closest_pixel_velocity_3x3(pos_group, pos_group_top_left, velocity_closest);
-		color_history = sanitize_color(clip_history_3x3(pos_group, pos_screen, color_history, velocity_closest, neighborhood_avg, neighborhood_min, neighborhood_max));
+		color_history = sanitize_color(clip_history_3x3(pos_group, pos_screen, color_history, color_input, velocity_closest, conf, conf_eff, neighborhood_avg, neighborhood_min, neighborhood_max));
 	}
 
 	// Compute blend factor
 	float blend_factor = 1.0 - params.history_weight;
 	bool force_current = false;
+	float factor_disocclusion = 0.0; // hoisted to function scope so the FPT confidence-relax floor below can read it.
 	{
 		// If re-projected UV is out of screen, converge to current color immediately.
 		float factor_screen = reprojected_in_screen ? 0.0 : 1.0;
 
 		// Increase blend factor when there is disocclusion (fixes a lot of the remaining ghosting).
-		float factor_disocclusion = reprojected_in_screen ? get_factor_disocclusion(uv_reprojected, velocity) : 0.0;
+		factor_disocclusion = reprojected_in_screen ? get_factor_disocclusion(uv_reprojected, velocity) : 0.0;
 
 		float factor_history_invalid = clamp(1.0 - rt_history_confidence, 0.0, 1.0);
 		force_current = factor_screen > 0.5 || rt_history_confidence <= 0.001;
@@ -603,6 +646,14 @@ vec3 temporal_antialiasing(ivec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_
 		blend_factor = force_current ? 1.0 : mix(0.0, blend_factor, diff);
 		if (params.rt_taa_reactivity_enabled > 0.5) {
 			blend_factor = max(blend_factor, texelFetch(rt_taa_reactivity_buffer, ivec2(pos_screen), 0).r);
+		}
+		// FPT confidence-relax: on converged path-traced pixels (gated by the history-agreement test), lean
+		// on history so TAA stops re-destabilizing the stabilized primary. Floor against the
+		// disocclusion term and params.relax_floor (the per-frame blend of a fully-relaxed pixel = how fast
+		// a HELD pixel follows a change). 0.02 ~= 2.5 s settle; 0.05 ~= 1 s. force_current still wins.
+		// conf == 0 (flag off, or any motion) leaves blend_factor unchanged, so non-FPT TAA is byte-identical.
+		if (params.taa_confidence_relax_enabled > 0.5 && !force_current) {
+			blend_factor = max(blend_factor * (1.0 - conf_eff), max(factor_disocclusion, params.relax_floor));
 		}
 
 		// Lerp/blend

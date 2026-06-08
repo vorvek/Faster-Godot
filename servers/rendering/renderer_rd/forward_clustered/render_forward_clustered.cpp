@@ -4473,7 +4473,17 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		} else if (using_viewport_taa) {
 			RD::get_singleton()->draw_command_begin_label("TAA");
 			RENDER_TIMESTAMP("TAA");
-			taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far);
+			// FPT confidence-relax: on the Full Path Tracing path (this branch already implies no FSR2/MetalFX),
+			// feed the FPT primary stabilizer color so TAA reads its .a convergence confidence and relaxes its
+			// clamp / leans on history for converged path-traced pixels. This kills the static-camera boil that
+			// TAA's neighborhood clamp re-introduces on the stabilized primary. The shader only relaxes where a
+			// box-independent history-agreement test says the reprojected history still matches the current
+			// signal, so a changed/moving pixel (a trail or a still-converging value) keeps the stock clamp.
+			// Hybrid / raster / the oracle (rt_fpt_reference) / multiview pass RID() + false, so their TAA stays
+			// byte-identical.
+			const RID rt_stable_for_taa = (rt_radiance_probes_fpt && !rt_fpt_reference && rtgi_primary_stabilize != nullptr && rtgi_primary_stabilize->has_stable() && p_render_data->scene_data->view_count == 1) ? rtgi_primary_stabilize->get_stable() : RID();
+			const bool fpt_taa_relax = rt_stable_for_taa.is_valid();
+			taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, false, RID(), RID(), RID(), RID(), 0.94f, RID(), rt_stable_for_taa, fpt_taa_relax);
 			RD::get_singleton()->draw_command_end_label();
 		}
 	}

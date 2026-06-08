@@ -30,6 +30,7 @@
 
 #include "taa.h"
 #include "core/config/project_settings.h"
+#include "core/os/os.h"
 #include "servers/rendering/renderer_rd/effects/copy_effects.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
@@ -52,7 +53,7 @@ TAA::~TAA() {
 	taa_shader.version_free(shader_version);
 }
 
-void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_prev_velocity, RID p_history, RID p_rt_history_validity, RID p_rt_prev_history_validity, RID p_rt_history_id, RID p_rt_prev_history_id, RID p_rt_taa_reactivity, RID p_rt_signal_confidence, RID p_rt_history_moments, RID p_rt_prev_history_moments, RID p_rt_history_metadata, RID p_rt_prev_history_metadata, Size2 p_resolution, float p_z_near, float p_z_far, bool p_raytracing_denoise, float p_raytracing_history_weight, float p_taa_disocclusion_threshold, float p_taa_history_weight, float p_taa_sharpness) {
+void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_prev_velocity, RID p_history, RID p_rt_history_validity, RID p_rt_prev_history_validity, RID p_rt_history_id, RID p_rt_prev_history_id, RID p_rt_taa_reactivity, RID p_rt_signal_confidence, RID p_rt_history_moments, RID p_rt_prev_history_moments, RID p_rt_history_metadata, RID p_rt_prev_history_metadata, Size2 p_resolution, float p_z_near, float p_z_far, bool p_raytracing_denoise, float p_raytracing_history_weight, float p_taa_disocclusion_threshold, float p_taa_history_weight, float p_taa_sharpness, bool p_confidence_relax) {
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
@@ -83,6 +84,50 @@ void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_pr
 	push_constant.rt_taa_reactivity_enabled = p_rt_taa_reactivity.is_valid() ? 1.0f : 0.0f;
 	push_constant.rt_history_metadata_enabled = (p_rt_history_moments.is_valid() && p_rt_prev_history_moments.is_valid() && p_rt_history_metadata.is_valid() && p_rt_prev_history_metadata.is_valid()) ? 1.0f : 0.0f;
 	push_constant.rt_signal_confidence_enabled = p_rt_signal_confidence.is_valid() ? 1.0f : 0.0f;
+	// FPT confidence-relax (binding 10 carries the FPT primary stabilizer confidence in .a). Force the
+	// legacy reactivity-max OFF in this mode so the same binding-10 texel is never read with both signs
+	// (the relax wants MORE history on converged pixels; the reactivity-max wants more current).
+	push_constant.taa_confidence_relax_enabled = p_confidence_relax ? 1.0f : 0.0f;
+	if (p_confidence_relax) {
+		push_constant.rt_taa_reactivity_enabled = 0.0f;
+	}
+	// Env-tunable confidence-relax knobs (debug/iteration; read once). FPT_TAA_NORELAX disables the relax
+	// for an A/B baseline; FPT_TAA_AGREE_LO/HI tune the history-agreement gate: the relax only engages when
+	// the reprojected history is within rel-distance AGREE_LO of the clamped neighborhood (the boil case,
+	// where history is the stable value within the noise) and is fully off beyond AGREE_HI (the ghost case,
+	// where history is a stale lit/object value far from the now-changed neighborhood -> keep the clamp).
+	static const bool s_taa_norelax = OS::get_singleton()->has_environment("FPT_TAA_NORELAX");
+	// Defaults tuned on the FPT TAA test harness: 0.05/0.25 keeps the moving-light/object ghost trail at
+	// ~stock level (visually clean) while still de-boiling the static path-traced primary by ~60%. Loosen
+	// (toward 0.15/0.6) for more de-boil if a scene tolerates a faint trail.
+	static const float s_taa_agree_lo = OS::get_singleton()->has_environment("FPT_TAA_AGREE_LO") ? OS::get_singleton()->get_environment("FPT_TAA_AGREE_LO").to_float() : 0.05f;
+	static const float s_taa_agree_hi = OS::get_singleton()->has_environment("FPT_TAA_AGREE_HI") ? OS::get_singleton()->get_environment("FPT_TAA_AGREE_HI").to_float() : 0.25f;
+	if (s_taa_norelax) {
+		push_constant.taa_confidence_relax_enabled = 0.0f;
+	}
+	push_constant.relax_agree_lo = MAX(s_taa_agree_lo, 0.0f);
+	push_constant.relax_agree_hi = MAX(s_taa_agree_hi, push_constant.relax_agree_lo + 0.01f);
+	// Relax FLOOR: the minimum per-frame blend kept on a fully-relaxed (conf_eff ~= 1) pixel, i.e. the
+	// convergence rate of a HELD pixel. At 0.02 a relaxed pixel follows a scene/lighting change at 2%/frame
+	// (~150 frames, ~2.5 s @60 Hz): felt as the slow boil/blotch settle on a camera cut, and as the relax
+	// PROLONGING the indirect-GI convergence transient (the GI keeps changing for ~3 s while the relax holds
+	// the still-converging value, so the blotch flickers instead of being clamped down). 0.05 brings that to
+	// ~1 s (the pre-relax feel) at a small cost in steady-state de-boil. Tunable live (FPT_TAA_RELAX_FLOOR)
+	// for the scene-change-transient vs steady-calm tradeoff; clamped at >= 0.02 (the prior baked behavior).
+	static const float s_taa_relax_floor = OS::get_singleton()->has_environment("FPT_TAA_RELAX_FLOOR") ? OS::get_singleton()->get_environment("FPT_TAA_RELAX_FLOOR").to_float() : 0.05f;
+	push_constant.relax_floor = CLAMP(s_taa_relax_floor, 0.02f, 1.0f);
+	// Box-independent agreement-gate terms (the fix for the high-contrast bright-over-dark ghost AND the
+	// relax-induced boil-hold: the prior gate measured rel against the box-clamped history, which a WIDE box
+	// -- a boiling region, or a bright/dark moving edge -- defeats, so the relax held a stale value). CHANGE_GAIN
+	// weights the box-independent SPATIAL terms (neighborhood mean + min vs history: trailing-edge trail,
+	// receding-silhouette ring, still-converging boil); DT_GAIN weights the opt-in TEMPORAL term
+	// (|current - history|), defaulted LOW because an instantaneous delta cannot tell converging from
+	// converged-but-boiling. Both forced 0 for non-FPT so the gate reduces to the prior rel-only test
+	// (byte-identical). At a static converged pixel all terms -> 0, so the steady-state de-boil is preserved.
+	static const float s_taa_change_gain = OS::get_singleton()->has_environment("FPT_TAA_CHANGE_GAIN") ? OS::get_singleton()->get_environment("FPT_TAA_CHANGE_GAIN").to_float() : 1.0f;
+	static const float s_taa_dt_gain = OS::get_singleton()->has_environment("FPT_TAA_DT_GAIN") ? OS::get_singleton()->get_environment("FPT_TAA_DT_GAIN").to_float() : 0.25f;
+	push_constant.relax_change_gain = p_confidence_relax ? CLAMP(s_taa_change_gain, 0.0f, 4.0f) : 0.0f;
+	push_constant.relax_dt_gain = p_confidence_relax ? CLAMP(s_taa_dt_gain, 0.0f, 4.0f) : 0.0f;
 	if (p_raytracing_denoise) {
 		push_constant.history_weight = CLAMP(p_raytracing_history_weight, 0.0f, 0.999f);
 		push_constant.sharpness = 0.0f;
@@ -134,7 +179,7 @@ void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_pr
 	RD::get_singleton()->compute_list_end();
 }
 
-void TAA::process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far, bool p_raytracing_denoise, RID p_rt_history_validity, RID p_rt_prev_history_validity, RID p_rt_history_id, RID p_rt_prev_history_id, float p_raytracing_history_weight, RID p_rt_taa_reactivity) {
+void TAA::process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far, bool p_raytracing_denoise, RID p_rt_history_validity, RID p_rt_prev_history_validity, RID p_rt_history_id, RID p_rt_prev_history_id, float p_raytracing_history_weight, RID p_rt_taa_reactivity, RID p_taa_confidence_tex, bool p_confidence_relax) {
 	CopyEffects *copy_effects = CopyEffects::get_singleton();
 
 	uint32_t view_count = p_render_buffers->get_view_count();
@@ -170,8 +215,14 @@ void TAA::process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_f
 			RID rt_history_id_slice = p_rt_history_id.is_valid() ? p_render_buffers->get_texture_slice(SNAME("forward_clustered"), SNAME("rt_history_id"), v, 0) : RID();
 			RID rt_prev_history_id_slice = p_rt_prev_history_id.is_valid() ? p_render_buffers->get_texture_slice(SNAME("forward_clustered"), SNAME("rt_history_id_prev"), v, 0) : RID();
 			RID rt_taa_reactivity_slice = p_rt_taa_reactivity.is_valid() ? p_render_buffers->get_texture_slice(SNAME("forward_clustered"), SNAME("rt_taa_reactivity"), v, 0) : RID();
+			// FPT confidence-relax: bind the FPT primary stabilizer color (its .a = convergence confidence)
+			// to binding 10 instead. resolve() forces rt_taa_reactivity_enabled off in this mode, so the
+			// legacy reactivity-max never reads it; the new relax block reads .a. View-0 single-view only.
+			if (p_confidence_relax && p_taa_confidence_tex.is_valid()) {
+				rt_taa_reactivity_slice = p_taa_confidence_tex;
+			}
 
-			resolve(internal_texture, taa_temp, depth_texture, velocity_buffer, taa_prev_velocity, taa_history, rt_history_validity_slice, rt_prev_history_validity_slice, rt_history_id_slice, rt_prev_history_id_slice, rt_taa_reactivity_slice, RID(), RID(), RID(), RID(), RID(), Size2(internal_size.x, internal_size.y), p_z_near, p_z_far, p_raytracing_denoise, p_raytracing_history_weight, p_render_buffers->get_taa_disocclusion_threshold(), p_render_buffers->get_taa_history_weight(), p_render_buffers->get_taa_sharpness());
+			resolve(internal_texture, taa_temp, depth_texture, velocity_buffer, taa_prev_velocity, taa_history, rt_history_validity_slice, rt_prev_history_validity_slice, rt_history_id_slice, rt_prev_history_id_slice, rt_taa_reactivity_slice, RID(), RID(), RID(), RID(), RID(), Size2(internal_size.x, internal_size.y), p_z_near, p_z_far, p_raytracing_denoise, p_raytracing_history_weight, p_render_buffers->get_taa_disocclusion_threshold(), p_render_buffers->get_taa_history_weight(), p_render_buffers->get_taa_sharpness(), p_confidence_relax);
 			copy_effects->copy_to_rect(taa_temp, internal_texture, Rect2(0, 0, internal_size.x, internal_size.y));
 		}
 

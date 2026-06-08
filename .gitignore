@@ -406,3 +406,6 @@ $RECYCLE.BIN/
 /codex_*.log
 /codex_scons_tests.log
 /build_rebuild_rapier*.log
+
+# FPT TAA test-harness image output (local tooling)
+/misc/fpt_taa_test/

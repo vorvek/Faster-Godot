@@ -360,6 +360,24 @@ unchanged, so the raw color is kept. In practice the path-traced primary stays c
 upscaler and native TAA, but boils under FSR2 specifically, whose feed-forward
 accumulation cannot lock the stochastic base, so Hybrid RTGI is the better mode under FSR2.
 
+Native TAA runs after that pass, and left alone it would put the boil back: its
+neighborhood clamp is built for a deterministic raster primary and cannot lock a
+path-traced one, so every frame it pulls the stabilized primary back toward the
+current noisy sample. On the Full Path Tracing path TAA now reads the stabilizer's
+per-pixel convergence confidence and leans on history for pixels that have converged,
+holding the calm value instead of re-shaking it. It relaxes the clamp only where a
+history-agreement test confirms the reprojected history still matches the current
+frame, and that test measures the history against the current neighborhood mean and
+minimum, not just the box-clamped value. That distinction matters: a wide neighborhood
+box, such as a bright edge moving over a dark background or a region that is still
+converging, would otherwise read as agreement and hold a stale value, so checking the
+raw mean and minimum keeps the ordinary clamp there and leaves no trail. On a still,
+converged frame the result is the calm the clamp would otherwise undo. The behavior is
+limited to Full Path Tracing without a vendor upscaler; Hybrid RTGI, the reference
+oracle, and every other viewport keep the stock TAA path unchanged. Its thresholds are
+tunable through the FPT_TAA_CHANGE_GAIN, FPT_TAA_DT_GAIN, FPT_TAA_RELAX_FLOOR,
+FPT_TAA_AGREE_LO, FPT_TAA_AGREE_HI, and FPT_TAA_NORELAX environment variables.
+
 RTGI writes noisy radiance, depth, velocity, normal/roughness,
 albedo/metalness, view-Z, hit-distance, validity, and history ID guides at the
 scaled RT texture size. Hybrid RTGI maps those scaled GI pixels back onto the
