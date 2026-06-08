@@ -334,6 +334,19 @@ layout(set = 0, binding = 113) uniform sampler2D rt_guide_albedo_tex;
 layout(set = 0, binding = 114) uniform sampler2D rt_guide_orm_tex;
 layout(set = 0, binding = 115) uniform sampler2D rt_guide_emission_tex;
 
+// 116 = relief-FREE GEOMETRIC normal (the SAME RB_TEX_RT_GUIDE_NORMAL the material-guide prepass
+// writes as encode24(geo_normal) * 0.5 + 0.5, view space, and rtgi_gi_resolve decodes at its
+// binding 17). The FPT-fast primary-direct path point-samples it (full-res, 1:1 with the launch ->
+// NEAREST texelFetch) to recover the macro surface orientation beneath a normal map: a grazing-lit
+// crevice's relief normal can tip below the light horizon (NdotL <= 0 -> the evaluator hard-zeros it
+// to a black vein), but the geometric normal still faces the light, so the call site bends the relief
+// shading normal toward it for a small geometry-bounded fill (see rt_primary_direct_mode()). ALWAYS
+// bound (the shared set-0 layout must stay valid for every dispatch); a neutral default is bound when
+// the guides are absent and only the primary-direct dispatch samples it, with an in-shader
+// degenerate-decode guard that falls back to the relief world_N, so a bad bind degrades to the
+// pre-fix behavior and never crashes.
+layout(set = 0, binding = 116) uniform sampler2D rt_guide_normal_tex;
+
 mat4 rt_camera_inv_view_matrix() {
 	mat4 inv_view = transpose(mat4(scene_data_block.data.inv_view_matrix[0],
 			scene_data_block.data.inv_view_matrix[1],

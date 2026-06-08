@@ -3010,7 +3010,11 @@ void fragment_shader(in SceneData scene_data) {
 	albedo_output_buffer.rgb = albedo;
 	albedo_output_buffer.a = alpha;
 
-	normal_output_buffer.rgb = encode24(normal) * 0.5 + 0.5;
+	// The RB_TEX_RT_GUIDE_NORMAL attachment carries the relief-free geometric
+	// normal (before any normal-map blend). The FPT-fast RTGI resolve reads it
+	// as the diffuse gathering direction so grazing-lit normal-mapped crevices
+	// can still see the screen probes, instead of self-occluding to pure black.
+	normal_output_buffer.rgb = encode24(geo_normal) * 0.5 + 0.5;
 	normal_output_buffer.a = 0.0;
 	depth_output_buffer.r = -vertex.z;
 

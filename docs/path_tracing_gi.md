@@ -885,6 +885,27 @@ reprojected previous-surface validation. Radiance-affecting source reuse must
 first add a direct-only history surface and document the replacement slot
 PDF/weight accounting.
 
+## Geometric normals for grazing direct lighting (Full Path Tracing fast mode)
+
+Full Path Tracing fast mode evaluates the primary hit's direct lighting with the
+surface normal from the raster G-buffer, which already carries the tangent-space
+normal map. On a normal-mapped surface lit at a grazing angle, the mapped normal
+can dip below the light's horizon while the underlying geometry still faces the
+light. A plain cosine test then zeroes that texel's direct lighting, which reads
+as hard black veins along the normal-map relief, such as the mortar lines on a
+brick wall. The deep-path reference does not show this, because it gathers the
+open hemisphere over several bounces.
+
+The fast path now also reads the relief-free geometric normal, which the
+material-guide prepass already produces. Where the geometry faces the light but
+the mapped normal does not, it bends the shading normal back toward the geometric
+normal by just enough to give the texel a small amount of direct light, scaled by
+the geometric incidence so it never exceeds what the flat surface would receive.
+Texels whose geometry truly faces away stay dark. This keeps the normal-map
+relief while removing the black veins, and it matches the deep-path reference.
+The change touches only the fast path's primary direct lighting; the deep-path
+reference, Hybrid, and Reflections modes are unchanged.
+
 ## Pros
 
 - Gives dark dynamic-light scenes a GI option that follows moving lights.

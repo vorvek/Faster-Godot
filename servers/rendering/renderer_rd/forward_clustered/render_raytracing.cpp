@@ -10310,6 +10310,18 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		add_combined(113, nearest_sampler, guide_albedo);
 		add_combined(114, nearest_sampler, guide_orm);
 		add_combined(115, nearest_sampler, guide_emission);
+
+		// 116: relief-FREE geometric guide normal (RB_TEX_RT_GUIDE_NORMAL, the same texture
+		// rtgi_gi_resolve binds at its binding 17). The FPT-fast primary-direct path point-samples it
+		// (NEAREST, full-res, 1:1 with the launch) to bend the relief shading normal toward the macro
+		// surface in grazing-lit normal-mapped crevices that would otherwise hard-zero to a black vein.
+		// ALWAYS bind (the shared set-0 layout must stay valid for every dispatch); fall back to the
+		// neutral default-white when the guides are not yet allocated -- enc*2-1 = (1,1,1) is still
+		// finite, so the in-shader degenerate guard falls back to the relief world_N. rt_has_material_guides()
+		// (above) already verifies RB_TEX_RT_GUIDE_NORMAL exists, so the getter never floods the log.
+		RID default_white = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
+		RID guide_normal = rt_guides_ready ? rb_data->rt_get_guide_normal() : default_white;
+		add_combined(116, nearest_sampler, guide_normal);
 	}
 
 	// Binding 60: RTGI specular reflection-direction diagnostic output.

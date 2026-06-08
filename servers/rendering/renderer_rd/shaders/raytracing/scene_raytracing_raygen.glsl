@@ -696,6 +696,118 @@ void main() {
 
 		vec3 N = rworld_normal;
 		vec3 V = normalize(rt_camera_world_origin() - rworld_pos);
+
+		// ----------------------------------------------------------------------------------------
+		// FPT-fast crevice fill (this CALL SITE only -- the shared evaluator's NdotL gates are
+		// UNTOUCHED, so the oracle/Hybrid/Reflections stay byte-identical).
+		//
+		// A normal-mapped crevice's RELIEF normal (rworld_normal == N) can tip below a grazing
+		// light's horizon (dot(N, L) <= 0), and the shared per-light evaluator hard-rejects that to
+		// EXACTLY 0 before any BRDF/shadow -> a pure-black vein, unlike the deep-path oracle which
+		// integrates the open hemisphere. We recover the relief-FREE GEOMETRIC normal (geom_N) from
+		// the material guide (binding 116) and, when the geometry truly faces the dominant light but
+		// the relief tips below its horizon, bend the SHADING normal a little toward geom_N so the
+		// cosine reaches a small POSITIVE floor that SCALES with the macro incidence. We pass the bent
+		// normal as the shading-normal arg and geom_N as the geometry-normal arg; everything else is
+		// unchanged. clampShadingNormal (brdf_inc) is VIEW-keyed and a no-op for a frontally-VIEWED
+		// grazing-LIT wall, so this is its light-aware analogue.
+		//
+		// RT_CREVICE_FILL: tunable crevice-fill fraction. The bent cosine targets
+		// RT_CREVICE_FILL * dot(geom_N, L_dom), i.e. a fraction of what the macro surface would
+		// receive -- never brighter than the geometry itself. Raise to brighten veins, lower (-> 0)
+		// to approach the pre-fix hard-zero behavior. Tune here.
+		const float RT_CREVICE_FILL = 0.25;
+
+		// Decode the geometric normal IDENTICALLY to rtgi_gi_resolve.glsl ~:421-431: sample the guide,
+		// enc*2-1, normalize, rotate VIEW->WORLD via mat3(inv_view) (geo_normal is written in view
+		// space, the same space as the relief normal). GUARD: a degenerate / NaN decode (e.g. the
+		// neutral WHITE default bind -> enc*2-1 = (1,1,1), or an unwritten texel) falls back to the
+		// relief world_N, so the worst case is the pre-fix behavior, never a crash.
+		vec3 geom_N = rworld_normal;
+		{
+			vec3 g_enc = texelFetch(rt_guide_normal_tex, guide_pixel, 0).xyz;
+			vec3 g_view = g_enc * 2.0 - 1.0;
+			float g_len2 = dot(g_view, g_view);
+			if (g_len2 >= 1e-8 && !isnan(g_len2) && !isinf(g_len2)) {
+				vec3 g_world = mat3(inv_view) * normalize(g_view);
+				float gw_len2 = dot(g_world, g_world);
+				if (gw_len2 >= 1e-8 && !isnan(gw_len2) && !isinf(gw_len2)) {
+					geom_N = normalize(g_world);
+				}
+			}
+		}
+		// Re-apply the SAME camera-facing sign-flip the relief normal gets in rtgi_load_raster_surface
+		// (~:304-306) so geom_N and N are consistently oriented.
+		if (dot(geom_N, V) < 0.0) {
+			geom_N = -geom_N;
+		}
+
+		// Dominant light direction L_dom at this hit: loop the RT light list (the SAME rt_lights the
+		// evaluator iterates, indices 0..count-1) and pick the light with the greatest scalar
+		// contribution at rworld_pos -- luminance(emission) with distance attenuation for positional
+		// lights, luminance(emission) for a directional. L_dom = unit surface->light vector. Cheap:
+		// no BRDF/shadow, just a select. (For the single-lantern repro this resolves to the lantern.)
+		vec3 L_dom = N;
+		bool have_L_dom = false;
+		{
+			uint ld_light_count = uint(get_rt_param(RT_PARAM_LIGHT_COUNT));
+			float best_contrib = 0.0;
+			for (uint li = 0u; li < ld_light_count; li++) {
+				RTLightData ld = rt_lights[li];
+				vec3 L_i;
+				float contrib;
+				if (ld.type == RT_LIGHT_TYPE_DIRECTIONAL) {
+					// position carries the (incoming) light direction; surface->light is -position.
+					L_i = -normalize(ld.position);
+					contrib = luminance(ld.emission);
+				} else {
+					vec3 to_light = ld.position - rworld_pos;
+					float dist_sq = dot(to_light, to_light);
+					if (ld.max_range_squared != 0.0 && dist_sq > ld.max_range_squared) {
+						continue;
+					}
+					L_i = to_light * inversesqrt(max(dist_sq, 1e-12));
+					LightSample ls_atten;
+					ls_atten.distance_sq = dist_sq;
+					float atten = lights_get_attenuation(ls_atten, ld.inv_max_range, ld.attenuation);
+					contrib = luminance(ld.emission) * atten;
+				}
+				if (contrib > best_contrib) {
+					best_contrib = contrib;
+					L_dom = L_i;
+					have_L_dom = true;
+				}
+			}
+		}
+
+		// Angle-aware, light-aware bend. Default: no bend.
+		vec3 N_bent = N;
+		if (have_L_dom) {
+			float gdl = dot(geom_N, L_dom);
+			float ndl = dot(N, L_dom);
+			if (gdl <= 0.0) {
+				// TRUE geometric back-face: the geometry itself faces away from L_dom. Leave the
+				// relief N; the evaluator's hard reject correctly keeps it dark. Do NOT inject light.
+				N_bent = N;
+			} else if (ndl <= 0.0) {
+				// Geometry faces L_dom but the relief tips below its horizon -> the black vein. Bend
+				// N along the geodesic toward geom_N until the cosine reaches a small positive floor
+				// proportional to the macro incidence (floor scaling by gdl prevents over-brightening
+				// a grazing macro-surface). Where N ~= geom_N (low relief) ndl is already > 0, so this
+				// branch is not entered -> no bend. Deep relief crevices get bent to the floor.
+				float target = RT_CREVICE_FILL * gdl;
+				float t = clamp((target - ndl) / max(gdl - ndl, 1e-6), 0.0, 1.0);
+				vec3 bent = mix(N, geom_N, t);
+				// GUARD the degenerate mix(...) ~= 0 case (N ~= -geom_N) -> fall back to geom_N.
+				if (dot(bent, bent) < 1e-8) {
+					N_bent = geom_N;
+				} else {
+					N_bent = normalize(bent);
+				}
+			}
+		}
+		// ----------------------------------------------------------------------------------------
+
 		uint rng = init_blue_noise_rng(rng_pixel, uint(get_rt_param(RT_PARAM_FRAME_INDEX)), 0u);
 		uint rtgi_sampling_controls = uint(get_rt_param(RT_PARAM_RTGI_SAMPLING_CONTROLS));
 		float pd_roughness = brdf_mat.roughness;
@@ -731,8 +843,11 @@ void main() {
 			// The evaluator's reject logic keeps this CORRECT (a stale/unwritten reservoir is rejected
 			// -> fresh sample), so it is a convergence/noise optimization for many-light scenes, left as
 			// a follow-up (negligible for the few-light validation scenes; furnace/white_room/Cornell pass).
+			// geom_N (the relief-FREE geometric normal) as the geometry_normal arg, N_bent (the relief
+			// normal bent toward geom_N in grazing-lit crevices) as the shading-normal arg. The shared
+			// evaluator is otherwise UNCHANGED. The bent N also flows into the area-light branch -- intended.
 			RTDirectLighting direct_light = lights_evaluate_direct_lighting_split(
-					rworld_pos, rworld_normal, N, V, brdf_mat, rng, /*is_indirect=*/false, /*receiver_layer_mask=*/0xFFFFFFFFu, pd_light_count,
+					rworld_pos, geom_N, N_bent, V, brdf_mat, rng, /*is_indirect=*/false, /*receiver_layer_mask=*/0xFFFFFFFFu, pd_light_count,
 					d_source_key, d_slot_source_key, d_slot_pdf, d_slot_light, d_slot_stochastic,
 					d_slot_reservoir_m, d_slot_reservoir_weight_sum, d_slot_target,
 					d_slot_temporal_accepted, d_slot_spatial_accepted, d_slot_temporal_reject,
