@@ -7,8 +7,10 @@
 
 #include "rtgi_screen_probe_gather.h"
 
+#include "core/os/os.h"
 #include "servers/rendering/renderer_rd/effects/copy_effects.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 
 using namespace RendererRD;
@@ -336,7 +338,7 @@ void RTGIScreenProbeGather::run_placement(Ref<RenderSceneBuffersRD> p_rb, RID p_
 	RD::get_singleton()->compute_list_end();
 }
 
-void RTGIScreenProbeGather::run_accumulate(const SpgFrameParams &p_frame) {
+void RTGIScreenProbeGather::run_accumulate(const SpgFrameParams &p_frame, const WrcSeedInputs &p_wrc_seed) {
 	// resources_valid is set only at the end of _allocate() (which free_resources()es
 	// first), so it guarantees all six ping-pong textures + headers were allocated
 	// together; spot-checking radiance_atlas[read_index] is therefore sufficient.
@@ -374,6 +376,42 @@ void RTGIScreenProbeGather::run_accumulate(const SpgFrameParams &p_frame) {
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 6, ray_result_buffer));
 	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 7, radiance_filtered));
 
+	// WRC atlases for the cold-start seed (binding 8/9). Bound as sampler+texture
+	// (bilinear, clamp), matching the SPG gather's WRC taps. Fall back to a default-black
+	// texture when the WRC is unavailable so the descriptor set is always complete; the
+	// shader keys the actual seed on seed_samples (set to 0 below in that case).
+	MaterialStorage *material_storage = MaterialStorage::get_singleton();
+	ERR_FAIL_NULL(material_storage);
+	RID linear_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID default_black = RendererRD::TextureStorage::get_singleton()->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+	const bool wrc_available = p_wrc_seed.radiance_atlas.is_valid() && p_wrc_seed.distance_atlas.is_valid();
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 8;
+		u.append_id(linear_sampler);
+		u.append_id(wrc_available ? p_wrc_seed.radiance_atlas : default_black);
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 9;
+		u.append_id(linear_sampler);
+		u.append_id(wrc_available ? p_wrc_seed.distance_atlas : default_black);
+		uniforms.push_back(u);
+	}
+
+	// Env override for live tuning (read once), mirroring the FPT_TAA_* knobs. Set
+	// RTGI_SPG_WRC_SEED_SAMPLES before launch to sweep seed strength without rebuilding.
+	static const float s_seed_override = []() -> float {
+		if (OS::get_singleton()->has_environment("RTGI_SPG_WRC_SEED_SAMPLES")) {
+			return OS::get_singleton()->get_environment("RTGI_SPG_WRC_SEED_SAMPLES").to_float();
+		}
+		return -1.0f; // sentinel: not set.
+	}();
+	const float seed_samples = wrc_available ? ((s_seed_override >= 0.0f) ? s_seed_override : p_wrc_seed.seed_samples) : 0.0f;
+
 	AccumPushConstant push_constant;
 	memset(&push_constant, 0, sizeof(AccumPushConstant));
 	push_constant.grid_w = (uint32_t)grid_size.x;
@@ -388,6 +426,14 @@ void RTGIScreenProbeGather::run_accumulate(const SpgFrameParams &p_frame) {
 	// SPATIAL filter radius (A2-T4). Clamped >= 0 here; the shader additionally caps it
 	// to a sane neighbor reach. Radius 0 -> SPATIAL is a straight copy of the atlas.
 	push_constant.spatial_radius = (uint32_t)MAX(cached_params.spatial_radius, 0);
+	push_constant.wrc_cascade_count = (uint32_t)MAX(p_wrc_seed.cascade_count, 1);
+	push_constant.wrc_grid = (uint32_t)MAX(p_wrc_seed.grid, 1);
+	push_constant.wrc_oct_res = (uint32_t)MAX(p_wrc_seed.oct_res, 1);
+	push_constant.wrc_base_spacing = MAX(p_wrc_seed.base_spacing, 0.25f);
+	push_constant.wrc_cam_x = p_wrc_seed.camera_pos.x;
+	push_constant.wrc_cam_y = p_wrc_seed.camera_pos.y;
+	push_constant.wrc_cam_z = p_wrc_seed.camera_pos.z;
+	push_constant.seed_samples = seed_samples;
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, accum_pipeline);

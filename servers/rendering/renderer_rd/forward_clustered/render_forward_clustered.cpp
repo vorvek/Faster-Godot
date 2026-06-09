@@ -4008,7 +4008,18 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				// auto-synchronizes the gather's ray-result SSBO + the placement headers
 				// before this reads them (same resource tracking the WRC accumulate uses).
 				RENDER_TIMESTAMP("RTGI SPG Accumulate");
-				rtgi_spg->run_accumulate(sfp);
+				RendererRD::RTGIScreenProbeGather::WrcSeedInputs wrc_seed;
+				if (rtgi_wrc) {
+					wrc_seed.radiance_atlas = rtgi_wrc->get_radiance_atlas();
+					wrc_seed.distance_atlas = rtgi_wrc->get_distance_atlas();
+				}
+				wrc_seed.cascade_count = wrc_params.cascade_count;
+				wrc_seed.grid = wrc_params.grid;
+				wrc_seed.oct_res = wrc_params.oct_res;
+				wrc_seed.base_spacing = wrc_params.base_spacing;
+				wrc_seed.camera_pos = p_render_data->scene_data->cam_transform.origin;
+				wrc_seed.seed_samples = spg_params.wrc_seed_samples;
+				rtgi_spg->run_accumulate(sfp, wrc_seed);
 
 				// RTGI GI Resolve (A3-T0): the production per-pixel consumer of the SPG/WRC
 				// probes. INTEGRATE reconstructs world pos/normal from the SAME raster

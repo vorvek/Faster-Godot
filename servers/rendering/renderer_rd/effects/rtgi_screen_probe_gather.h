@@ -63,6 +63,20 @@ public:
 		// every frame, so all passes read those as the single source of truth.)
 	};
 
+	// WRC inputs for the cold-start seed (REPROJECT reset path). When radiance_atlas is
+	// invalid (WRC not yet allocated / disabled) or seed_samples == 0, the seed is inert:
+	// run_accumulate binds default-black atlases and the shader skips the seed branch.
+	struct WrcSeedInputs {
+		RID radiance_atlas; // WRC radiance atlas (RGBA16F).
+		RID distance_atlas; // WRC distance atlas (RG16F).
+		int cascade_count = 4;
+		int grid = 32;
+		int oct_res = 8; // WRC atlas oct_res (NOT the SPG oct_res).
+		float base_spacing = 1.0f;
+		Vector3 camera_pos; // clipmap center = camera world origin.
+		float seed_samples = 0.0f; // effective seed sample count; 0 disables seeding.
+	};
+
 	RTGIScreenProbeGather();
 	~RTGIScreenProbeGather();
 
@@ -95,7 +109,7 @@ public:
 	// (read_index) atlas + radiance_filtered; performs NO ping-pong swap (the frame
 	// swap is done in run_placement). Must be called AFTER the gather has filled the
 	// ray-result SSBO for this frame. A no-op if resources are invalid.
-	void run_accumulate(const SpgFrameParams &p_frame);
+	void run_accumulate(const SpgFrameParams &p_frame, const WrcSeedInputs &p_wrc_seed);
 
 	// SPG-GI debug view (A2-T5): the VALIDATION-ONLY per-pixel CONSUMER of the
 	// SPATIAL-filtered per-probe radiance atlas (the screen-probe analogue of
@@ -165,7 +179,19 @@ private:
 		// pad slot. Keep sizeof(AccumPushConstant) == 48 so the dispatch matches.
 		uint32_t spatial_radius;
 		uint32_t pad1;
+		// WRC cold-start seed (mirrors the appended Params fields in
+		// rtgi_spg_accumulate.glsl): WrcParams scalars + the effective seed sample count.
+		// 48 B -> 80 B (still a multiple of 16, within the 128 B push-constant cap).
+		uint32_t wrc_cascade_count;
+		uint32_t wrc_grid;
+		uint32_t wrc_oct_res;
+		float wrc_base_spacing;
+		float wrc_cam_x;
+		float wrc_cam_y;
+		float wrc_cam_z;
+		float seed_samples;
 	};
+	static_assert(sizeof(AccumPushConstant) == 80, "AccumPushConstant must be 80 B to match the std430 Params block in rtgi_spg_accumulate.glsl.");
 
 	// PLACE needs the two camera matrices (clip->view + view->world) = 128 bytes of
 	// std140 mat4s, which alone hit RenderingDevice's 128-byte push-constant cap, so

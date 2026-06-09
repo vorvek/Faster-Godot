@@ -57,6 +57,9 @@ layout(local_size_x = GROUP_SIZE, local_size_y = GROUP_SIZE, local_size_z = 1) i
 #include "../raytracing/rtgi_spg_inc.glsl"
 // Full-sphere octahedral decode (oct_to_vec3) for the probe header normal.
 #include "../oct_inc.glsl"
+// WRC query (rtgi_wrc_sample_radiance) for the cold-start seed. All symbols are
+// wrc_-prefixed -- no clash with rtgi_spg_inc.glsl / oct_inc.glsl above.
+#include "../raytracing/rtgi_wrc_inc.glsl"
 
 // Mode selectors. PLACE (0) lives in rtgi_screen_probe_gather.glsl; this shader runs
 // REPROJECT (1) + BLEND (2) + SPATIAL (3). The numeric values match
@@ -78,6 +81,17 @@ layout(push_constant, std430) uniform Params {
 	float temporal_n_cap;
 	uint spatial_radius; // SPATIAL (A2-T4) 3x3 neighbor reach; 0 -> straight copy. (Was pad0.)
 	uint pad1; // std430 rounds the push-constant block to a multiple of 16 (40 -> 48 B);
+	// WRC cold-start seed: WrcParams scalars + the effective seed sample count. Block
+	// grows 48 B -> 80 B (still a multiple of 16). Mirrors AccumPushConstant in
+	// rtgi_screen_probe_gather.h EXACTLY (a size mismatch is a black screen).
+	uint wrc_cascade_count;
+	uint wrc_grid;
+	uint wrc_oct_res;
+	float wrc_base_spacing;
+	float wrc_cam_x;
+	float wrc_cam_y;
+	float wrc_cam_z;
+	float seed_samples;
 }
 params;
 
@@ -113,6 +127,13 @@ layout(set = 0, binding = 6, std430) readonly buffer SPGRayResults {
 // the SPATIAL mode (REPROJECT/BLEND leave it untouched); consumed by A3 + the debug
 // integrate via get_radiance_filtered(). Same RGBA16F layout as radiance_cur.
 layout(set = 0, binding = 7, rgba16f) uniform restrict writeonly image2D radiance_filtered;
+
+// WRC atlases for the cold-start seed (REPROJECT reset path only). sampler2D
+// (bilinear, clamp), exactly like the SPG gather's WRC taps. When the WRC is
+// unavailable the C++ binds a default-black texture and sets seed_samples = 0,
+// so these reads are inert.
+layout(set = 0, binding = 8) uniform sampler2D wrc_radiance_atlas;
+layout(set = 0, binding = 9) uniform sampler2D wrc_distance_atlas;
 
 // Clamp a colour to finite, non-negative values so a NaN/Inf ray result cannot
 // poison the accumulated radiance (RGBA16F max is 65504). Mirrors wrc_sanitize_color.
@@ -158,6 +179,7 @@ void spg_reproject_main(ivec2 texel) {
 	vec2 motion_px = cur_aux.zw;
 	ivec2 prev_probe = probe + ivec2(round(motion_px / float(spacing)));
 	vec4 carried = vec4(0.0); // default: disocclusion / no history -> reset (count 0).
+	bool from_history = false; // set true only when a valid reprojected texel is read.
 	if (all(greaterThanEqual(prev_probe, ivec2(0))) && prev_probe.x < grid_w && prev_probe.y < grid_h) {
 		vec4 prev_plane = imageLoad(header_plane_prev, prev_probe);
 		if (prev_plane.w > 0.0) {
@@ -177,8 +199,39 @@ void spg_reproject_main(ivec2 texel) {
 					vec2 prev_oct = spg_hemioct_encode(prev_local);
 					ivec2 prev_texel = prev_probe * int(oct_res) + clamp(ivec2(prev_oct * float(oct_res)), ivec2(0), ivec2(int(oct_res) - 1));
 					carried = imageLoad(radiance_prev, prev_texel); // .rgb radiance, .a = n/n_cap.
+					from_history = true;
 				}
 			}
+		}
+	}
+	// Cold-start seed: when reprojection produced no history (off-grid, plane-match fail,
+	// or the re-oriented direction left the previous hemisphere), seed this texel from the
+	// WRC instead of leaving it at count 0. The WRC is a coarse, persistent spatial+angular
+	// average, so the probe is born smooth and sharpens into its own traced detail over
+	// ~seed_samples frames via the BLEND 1/n weight, rather than showing a single noisy ray
+	// (the camera-cut blotch). Mirrors Lumen's "fall back to the World Space Radiance Cache
+	// when reprojection fails". Only runs on the reset path, so successful reprojections
+	// cost nothing.
+	if (!from_history && params.seed_samples > 0.0 && params.wrc_oct_res > 0u) {
+		WrcParams wp;
+		wp.cascade_count = int(max(params.wrc_cascade_count, 1u));
+		wp.grid = int(max(params.wrc_grid, 1u));
+		wp.oct_res = int(max(params.wrc_oct_res, 1u));
+		wp.base_spacing = max(params.wrc_base_spacing, 0.25);
+		wp.camera_pos = vec3(params.wrc_cam_x, params.wrc_cam_y, params.wrc_cam_z);
+		wp.occlusion_bias_spacing = 0.5;
+		wp.min_variance = 0.0001;
+		// SPG per-direction cone (oct_res = the local SPG oct_res from line ~129), the same
+		// cone the gather uses; intentionally NOT the WRC oct_res.
+		float cone = 3.14159265 / float(oct_res);
+		float wrc_conf = 0.0;
+		vec3 seed_rgb = rtgi_wrc_sample_radiance(wrc_radiance_atlas, wrc_distance_atlas, wp, cur_plane.xyz, world_dir, cone, wrc_conf);
+		// Seed only when the WRC actually has data here; otherwise keep the count-0 reset so
+		// we never hold a black value at nonzero confidence for seed_samples frames.
+		if (wrc_conf > 0.0) {
+			float n_cap = max(params.temporal_n_cap, 1.0);
+			float seed_n = clamp(params.seed_samples, 0.0, n_cap - 1.0);
+			carried = vec4(seed_rgb, seed_n / n_cap);
 		}
 	}
 	imageStore(radiance_cur, texel, carried);
