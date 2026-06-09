@@ -142,6 +142,10 @@ void RTGIGIResolve::free_resources() {
 		RD::get_singleton()->free_rid(reactive_dummy);
 		reactive_dummy = RID();
 	}
+	if (age_image.is_valid()) {
+		RD::get_singleton()->free_rid(age_image);
+		age_image = RID();
+	}
 	if (resolve_ubo.is_valid()) {
 		RD::get_singleton()->free_rid(resolve_ubo);
 		resolve_ubo = RID();
@@ -201,6 +205,18 @@ void RTGIGIResolve::_allocate(const Size2i &p_render_size) {
 	reactive_dummy = RD::get_singleton()->texture_create(reactive_dummy_format, RD::TextureView());
 	RD::get_singleton()->set_resource_name(reactive_dummy, "RTGI Resolve Reactive Dummy");
 	RD::get_singleton()->texture_clear(reactive_dummy, Color(0, 0, 0, 0), 0, 1, 0, 1);
+
+	// Cold-start disocclusion-age image: R16F at the render size, STORAGE (TEMPORAL read-modify-writes
+	// it; COMPOSITE reads it). Cleared to a LARGE value so every pre-existing / steady pixel reads
+	// "old" (age >= fade_time -> no lean) until a disocclusion resets it to 0.
+	RD::TextureFormat age_format;
+	age_format.format = RD::DATA_FORMAT_R16_SFLOAT;
+	age_format.width = render_w;
+	age_format.height = render_h;
+	age_format.usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT;
+	age_image = RD::get_singleton()->texture_create(age_format, RD::TextureView());
+	RD::get_singleton()->set_resource_name(age_image, "RTGI Resolve Cold-Start Age");
+	RD::get_singleton()->texture_clear(age_image, Color(1000.0, 0, 0, 0), 0, 1, 0, 1);
 
 	read_index = 0;
 	resources_valid = true;
@@ -471,6 +487,16 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		u.append_id(reactive_dummy);
 		uniforms.push_back(u);
 	}
+	// Binding 17: the cold-start age image. TEMPORAL read-modify-writes it in place (reset on
+	// disocclusion, advance by delta_time). INTEGRATE ignores it. Bound as an IMAGE; it is never
+	// also bound on a sampler, so no same-resource read+write hazard.
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		u.binding = 17;
+		u.append_id(age_image);
+		uniforms.push_back(u);
+	}
 
 	GiResolveUBO ubo;
 	memset(&ubo, 0, sizeof(GiResolveUBO));
@@ -499,6 +525,8 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	// TEMPORAL (A3-T2) reproject tolerance scale; carried for both dispatches (INTEGRATE ignores
 	// it). temporal_n_cap (set above) is the history responsiveness, also shared by both.
 	push_constant.history_rejection = cached_params.history_rejection;
+	push_constant.fade_time = MAX(cached_params.cold_start_fade_time, 0.0f);
+	push_constant.delta_time = MAX(p_frame.delta_time, 0.0f);
 
 	// INTEGRATE -> barrier -> TEMPORAL, recorded back-to-back on ONE compute list with the SAME
 	// shared uniform set (mirrors how RTGIScreenProbeGather::run_accumulate records REPROJECT ->
@@ -752,6 +780,15 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 		u.append_id(reactive_dummy);
 		uniforms.push_back(u);
 	}
+	// Binding 17: the cold-start age image (neutral here -- DEBUG_GI does not touch it, but the
+	// union set-0 layout requires every binding bound). Bound as an IMAGE, never read or written.
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		u.binding = 17;
+		u.append_id(age_image);
+		uniforms.push_back(u);
+	}
 
 	PushConstant push_constant;
 	memset(&push_constant, 0, sizeof(PushConstant));
@@ -931,6 +968,16 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, RID p_guid
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
 		u.binding = 16;
 		u.append_id(reactive_enabled ? p_reactive_out : reactive_dummy);
+		uniforms.push_back(u);
+	}
+	// Binding 17: the cold-start age image. COMPOSITE will read it to drive the WRC lean (the lean
+	// itself is a later step); bound now for the union set-0 layout. Bound as an IMAGE; never also
+	// bound on a sampler, so no same-resource read+write hazard.
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		u.binding = 17;
+		u.append_id(age_image);
 		uniforms.push_back(u);
 	}
 

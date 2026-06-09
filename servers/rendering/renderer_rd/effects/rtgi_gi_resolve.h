@@ -179,7 +179,14 @@ private:
 		float history_rejection; // TEMPORAL (T2): depth/normal reproject tolerance scale (was pad0).
 		uint32_t write_reactive; // COMPOSITE: 1 = also write the GI-aware reactive mask (binding 16); 0 = skip (was pad1).
 		uint32_t pad2;
+		// Cold-start fade (mirrors the appended Params fields in rtgi_gi_resolve.glsl): fade_time =
+		// seconds of the disocclusion fade (0 disables); delta_time = this frame's seconds. 80 B -> 96 B.
+		float fade_time;
+		float delta_time;
+		uint32_t pad3;
+		uint32_t pad4;
 	};
+	static_assert(sizeof(PushConstant) == 96, "PushConstant must be 96 B to match the std430 Params block in rtgi_gi_resolve.glsl.");
 
 	// World-pos reconstruction needs inv_proj + inv_view (two mat4s = 128 bytes, which
 	// alone hit RenderingDevice's 128-byte push-constant cap), so they live in a UBO
@@ -259,6 +266,12 @@ private:
 	// never accessed. gi_debug_image (RGBA16F) cannot stand in here without a storage-image format
 	// mismatch. Allocated alongside the GI buffers; freed in free_resources(). Never read or written.
 	RID reactive_dummy;
+
+	// Cold-start disocclusion-age image (R16F, render size): per-pixel seconds since the last
+	// disocclusion. TEMPORAL updates it in place (binding 17); COMPOSITE reads it to drive the WRC
+	// lean. Single image (not ping-pong, not reprojected). Cleared to a large value at alloc so
+	// steady pixels read "old" -> no lean. Allocated alongside the GI buffers; freed in free_resources().
+	RID age_image;
 
 	GiResolveParams cached_params;
 	Size2i cached_render_size;

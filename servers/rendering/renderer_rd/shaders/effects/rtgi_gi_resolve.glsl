@@ -102,6 +102,13 @@ layout(push_constant, std430) uniform Params {
 	float history_rejection; // TEMPORAL (T2): depth/normal reproject tolerance scale (was pad0).
 	uint write_reactive; // COMPOSITE: 1 = also write the GI-aware reactive mask (binding 16); 0 = skip (was pad1).
 	uint pad2;
+	// Cold-start fade (consumer-side WRC lean): fade_time = seconds of the disocclusion fade
+	// (0 disables); delta_time = this frame's seconds (TEMPORAL advances the per-pixel age by it).
+	// Grows the block 80 B -> 96 B (a multiple of 16); mirrors RTGIGIResolve::PushConstant EXACTLY.
+	float fade_time;
+	float delta_time;
+	uint pad3;
+	uint pad4;
 }
 pc;
 
@@ -182,6 +189,12 @@ layout(set = 0, binding = 15) uniform sampler2D guide_orm;
 // reactive denoiser is off the caller binds a tiny format-matching r8 dummy here as a neutral
 // placeholder and the shader never touches it, so there is no aliasing in either case.
 layout(set = 0, binding = 16, r8) uniform writeonly image2D reactive_image;
+
+// Cold-start disocclusion age (binding 17): per-pixel seconds since the last disocclusion,
+// updated in-place by TEMPORAL (reset on history rejection, incremented by delta_time, clamped to
+// fade_time) and read by COMPOSITE to drive the WRC lean. r16f storage image. INTEGRATE/DEBUG_GI
+// do not touch it (bound for the union layout). NOT ping-pong / not reprojected (in-place).
+layout(set = 0, binding = 17, r16f) uniform restrict image2D age_image;
 
 // Split-sum environment-BRDF DFG approximation (Karis' analytic fit), returning the
 // (scale, bias) pair so the specular term is F0 * dfg.x + dfg.y. This is the SAME analytic
@@ -608,6 +621,7 @@ void resolve_temporal_main(ivec2 pos) {
 	float n_s = 0.0;
 	vec3 hist_d = vec3(0.0);
 	vec3 hist_s = vec3(0.0);
+	bool diffuse_reproj_ok = false; // true when this pixel carried valid diffuse history (not a disocclusion).
 	// frame_index 0 has no history (the buffers were just cleared / are last frame's stale set);
 	// skip reprojection so the first frame is a pure INTEGRATE seed (n -> 1). The bounds guard
 	// keeps the reprojected fetch on-screen (off-screen history is a disocclusion -> reset).
@@ -619,6 +633,7 @@ void resolve_temporal_main(ivec2 pos) {
 			vec4 h = texelFetch(diffuse_history, prev, 0);
 			hist_d = h.rgb;
 			n_d = h.a * n_cap; // recover the stored sample count (.a == n / n_cap).
+			diffuse_reproj_ok = true;
 		}
 		// SPECULAR: reproject on the roughness-SELECTED position (hard branch, C17), then the
 		// SAME same-surface rejection at that reprojected pixel.
@@ -639,6 +654,14 @@ void resolve_temporal_main(ivec2 pos) {
 	vec3 os = mix(hist_s, cur_s.rgb, 1.0 / max(ns, 1.0));
 	imageStore(diffuse_gi_rw, pos, vec4(od, nd / n_cap));
 	imageStore(spec_gi_rw, pos, vec4(os, ns / n_cap));
+
+	// Cold-start age: reset to 0 on a disocclusion (diffuse history rejected), else advance by this
+	// frame's delta_time, clamped to fade_time. In-place (read+write the same pixel). Drives the
+	// COMPOSITE WRC lean; cleared to a large value at alloc so steady pixels read "old" (no lean).
+	float fade_time = max(pc.fade_time, 0.0);
+	float age_prev = imageLoad(age_image, pos).r;
+	float age_new = diffuse_reproj_ok ? min(age_prev + pc.delta_time, fade_time) : 0.0;
+	imageStore(age_image, pos, vec4(age_new, 0.0, 0.0, 0.0));
 }
 
 // DEBUG_GI: output the resolve's RAW output -- the channel selected by pc.debug_channel
