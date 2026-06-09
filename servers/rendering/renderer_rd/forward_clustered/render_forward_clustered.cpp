@@ -4047,7 +4047,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					rfp.spg_grid_h = sfp.grid_h;
 					rfp.spg_oct_res = (uint32_t)spg_params.oct_res;
 					rfp.spg_spacing_f = (uint32_t)spg_params.spacing_f;
-					rfp.delta_time = float(time_step);
 					// SPG getters source the SPATIAL-filtered atlas + the front headers (what
 					// this frame's placement+accumulate produced). WRC getters source the
 					// cache's front atlases for the fallback query. The material-guide albedo +

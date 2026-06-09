@@ -46,9 +46,11 @@ public:
 		float rough_spec_roughness_cutoff = 0.5f; // below = sharp-reflections domain (deferred).
 		bool rough_spec_enabled = true;
 		float history_rejection = 1.0f; // depth/normal/mesh-id tolerance scale.
-		// Cold-start fade: seconds over which a freshly disoccluded pixel's GI is eased in, hiding the
-		// SPG cold-start convergence noise. Where the WRC is warm (pans) the diffuse leans on the cache;
-		// on a hard cut (the WRC is cold too) the whole indirect fades in from zero. 0 disables.
+		// Cold-start hide: > 0 enables the COMPOSITE's fade-from-zero on freshly disoccluded pixels
+		// (load / camera cut), hiding the SPG cold-start convergence. The reveal pace is driven by
+		// the per-pixel convergence (the temporal sample count, advanced by the INTEGRATE source
+		// quality), NOT by this value; the knob is kept as a time for setting compatibility and
+		// acts as an on/off switch. 0 disables (A/B).
 		float cold_start_fade_time = 0.5f;
 	};
 
@@ -68,9 +70,6 @@ public:
 		uint32_t spg_grid_h = 0;
 		uint32_t spg_oct_res = 8;
 		uint32_t spg_spacing_f = 16;
-		// Frame delta-time (seconds), used by the TEMPORAL pass to advance the per-pixel
-		// disocclusion age in wall-clock so the cold-start fade is frame-rate independent.
-		float delta_time = 0.0f;
 	};
 
 	RTGIGIResolve();
@@ -181,12 +180,12 @@ private:
 		float history_rejection; // TEMPORAL (T2): depth/normal reproject tolerance scale (was pad0).
 		uint32_t write_reactive; // COMPOSITE: 1 = also write the GI-aware reactive mask (binding 16); 0 = skip (was pad1).
 		uint32_t pad2;
-		// Cold-start fade (mirrors the appended Params fields in rtgi_gi_resolve.glsl): fade_time =
-		// seconds of the disocclusion fade (0 disables); delta_time = this frame's seconds. 80 B -> 96 B.
+		// Cold-start hide enable (mirrors the appended Params fields in rtgi_gi_resolve.glsl): > 0
+		// turns on the COMPOSITE's convergence-gated fade-from-zero; 0 disables. 80 B -> 96 B.
 		float fade_time;
-		float delta_time;
 		uint32_t pad3;
 		uint32_t pad4;
+		uint32_t pad5;
 	};
 	static_assert(sizeof(PushConstant) == 96, "PushConstant must be 96 B to match the std430 Params block in rtgi_gi_resolve.glsl.");
 
@@ -250,8 +249,8 @@ private:
 	// runs IN-PLACE on [read_index] (imageLoad+imageStore the same rw image) blending the
 	// reprojected [1 - read_index] history into it. get_diffuse_gi()/get_spec_gi() return the
 	// front (read) set, which next frame becomes the [1 - read_index] history. SPATIAL (T3) TBD.
-	RID diffuse_gi[2]; // RGBA16F: rgb = lighting-space A, a = temporal sample count n/n_cap (1.0 raw from INTEGRATE; the T3 variance signal).
-	RID spec_gi[2]; // RGBA16F: rgb = rough-spec radiance, a = temporal sample count n/n_cap.
+	RID diffuse_gi[2]; // RGBA16F: rgb = lighting-space A, a = temporal sample count n/n_cap (transiently the INTEGRATE source quality before TEMPORAL overwrites it; the T3 variance signal).
+	RID spec_gi[2]; // RGBA16F: rgb = rough-spec radiance, a = temporal sample count n/n_cap (same transient quality discipline).
 	uint32_t read_index = 0;
 
 	// Dedicated scratch / debug-dest image (RGBA16F, render size), allocated alongside
@@ -272,12 +271,6 @@ private:
 	// never accessed. gi_debug_image (RGBA16F) cannot stand in here without a storage-image format
 	// mismatch. Allocated alongside the GI buffers; freed in free_resources(). Never read or written.
 	RID reactive_dummy;
-
-	// Cold-start disocclusion-age image (R16F, render size): per-pixel seconds since the last
-	// disocclusion. TEMPORAL updates it in place (binding 17); COMPOSITE reads it to drive the WRC
-	// lean. Single image (not ping-pong, not reprojected). Cleared to a large value at alloc so
-	// steady pixels read "old" -> no lean. Allocated alongside the GI buffers; freed in free_resources().
-	RID age_image;
 
 	GiResolveParams cached_params;
 	Size2i cached_render_size;

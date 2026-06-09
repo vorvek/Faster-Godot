@@ -38,12 +38,12 @@ layout(push_constant, std430) uniform Params {
 	float history_rejection;
 	uint write_reactive;
 	uint pad2;
-	// Cold-start fade fields: present ONLY to keep this block byte-identical to the unified
+	// Cold-start enable + pads: present ONLY to keep this block byte-identical to the unified
 	// rtgi_gi_resolve.glsl Params (the C++ pushes the full 96 B PushConstant). SPATIAL ignores them.
 	float fade_time;
-	float delta_time;
 	uint pad3;
 	uint pad4;
+	uint pad5;
 }
 pc;
 

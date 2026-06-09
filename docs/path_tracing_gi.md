@@ -389,23 +389,39 @@ reprojected history. The seed strength is a per-preset Screen Probe Gather
 setting, wrc_seed_samples, with an RTGI_SPG_WRC_SEED_SAMPLES environment override.
 
 The seed narrows the blotch but cannot remove it on a hard camera cut, because a
-cut turns everything cold at once. The screen probes reset, and the World
-Radiance Cache itself recenters and re-traces at the new view, so for the few
-frames that matter its probes near the new geometry are not written yet, and its
-irradiance query returns nothing there. With no smooth prior available, the
-composite splits the two cases by whether the cache has data at the pixel. Where
-it is warm, which covers camera pans and partial disocclusions, the disoccluded
-pixel's diffuse leans on the cache irradiance and ramps back to its own value
-over a short window, so the region stays correct and bright while the estimate
-settles. Where it is cold, the hard cut, the whole indirect contribution fades
-in from zero across that window instead. A contribution of zero cannot show a
-wrong value, so the biased cold-start estimate stays invisible until it
-converges, at the cost of the indirect light easing in over a fraction of a
-second rather than appearing at once. The window length is a per-preset
-GI-resolve setting, cold_start_fade_time, defaulting to half a second, with an
-RTGI_GI_FADE_TIME environment override; zero disables the fade. The fade is a
-read-time display lean, so it never feeds back into the stored history, and it
-goes inert on a static frame once the per-pixel disocclusion age saturates.
+cut turns everything cold at once. The screen probes reset, the World Radiance
+Cache recenters and re-traces at the new view, and the screen-space history is
+rejected wholesale. With no trustworthy prior anywhere, the composite hides the
+indirect contribution outright and fades it in from zero as the disoccluded
+pixels converge. A contribution of zero cannot show a wrong value, so the biased
+cold-start estimate stays invisible while it settles, at the cost of the
+indirect light easing in over a fraction of a second rather than appearing at
+once.
+
+The reveal is gated on convergence, not on time. A wall-clock window counts
+frames in which the pixel still shows an unverified prior: after a cut the
+seeded probes hold coarse cache data until their own rays land, and at the
+production trace rates each probe texel is re-traced only about every ten
+frames, so a timed reveal opens while the prior is still on screen and the
+residue shows up as soft, cell-sized light spots in dark areas. Instead, the
+integrate pass writes a source quality with each pixel: the cosine-weighted mean
+of the gathered probe texels' own sample counts, or a constant low value when
+the pixel fell back to the cache directly. The temporal pass advances the
+pixel's accumulated sample count by that quality rather than by one per frame,
+and the composite reveals on the accumulated count. The gate opens as traced
+rays replace the prior and behaves the same at any frame rate. A converged pixel
+pays nothing, since full quality advances the count exactly as a flat
+once-per-frame advance would. The hide is enabled by the per-preset GI-resolve
+setting cold_start_fade_time, with an RTGI_GI_FADE_TIME environment override;
+zero disables it. It is a read-time display gate only, so it never feeds back
+into the stored history.
+
+One reprojection detail matters on cuts. Static geometry writes no motion
+vectors, so the resolve reprojects it through the previous frame's camera, and a
+surface that lands behind that camera has no history at all and is treated as a
+true disocclusion. Falling back to the pixel's own screen position instead would
+compare the surface with itself, accept whatever the previous frame stored at
+that coordinate, and let the old view's lighting bleed through the gate.
 
 RTGI writes noisy radiance, depth, velocity, normal/roughness,
 albedo/metalness, view-Z, hit-distance, validity, and history ID guides at the

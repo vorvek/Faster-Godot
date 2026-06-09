@@ -62,6 +62,19 @@ layout(local_size_x = GROUP_SIZE, local_size_y = GROUP_SIZE, local_size_z = 1) i
 #define RESOLVE_MODE_TEMPORAL 1u
 #define RESOLVE_MODE_SPATIAL 2u
 #define RESOLVE_MODE_DEBUG_GI 3u
+
+// Source-quality floor for the temporal convergence advance. INTEGRATE writes into .a how much of
+// this frame's resolved value is VERIFIED traced data (the cosine-weighted mean of the gathered
+// probe texels' own n/n_cap; an unverified prior -- the WRC direct fallback or a freshly WRC-seeded
+// probe -- reports low). TEMPORAL advances the sample count by that quality instead of a flat +1,
+// so the composite's cold-start gate (cold_fade on nd/n_cap) opens only as traced rays actually
+// replace the prior: a flat +1/frame counted unverified-prior frames as convergence and revealed
+// the seed content mid-wash (the soft round cold-start blobs = one leaky WRC cell's trilinear
+// footprint). The floor guarantees progress for pixels that only ever have the prior (permanent
+// grid-edge / fallback): >= 0.25/frame still reaches full reveal in <= 4 * n_cap frames, a slow
+// deliberate ease-in, never stuck dark. Steady state (fully traced probes, quality = 1) advances
+// +1/frame -- bit-identical to the old behavior after warmup.
+#define RTGI_RESOLVE_QUALITY_FLOOR 0.25
 // COMPOSITE (A3-T4): the BEAUTY remod of the resolved GI -> dest_image (binding 13) for the
 // additive blit onto the raster-lit frame. out = albedo * diffuse_A + spec (background masked).
 #define RESOLVE_MODE_COMPOSITE 4u
@@ -102,13 +115,13 @@ layout(push_constant, std430) uniform Params {
 	float history_rejection; // TEMPORAL (T2): depth/normal reproject tolerance scale (was pad0).
 	uint write_reactive; // COMPOSITE: 1 = also write the GI-aware reactive mask (binding 16); 0 = skip (was pad1).
 	uint pad2;
-	// Cold-start fade (consumer-side WRC lean): fade_time = seconds of the disocclusion fade
-	// (0 disables); delta_time = this frame's seconds (TEMPORAL advances the per-pixel age by it).
+	// Cold-start hide enable: > 0 turns on the COMPOSITE's convergence-gated fade-from-zero (the
+	// reveal pace is driven by the temporal sample count, not this value; 0 disables for A/B).
 	// Grows the block 80 B -> 96 B (a multiple of 16); mirrors RTGIGIResolve::PushConstant EXACTLY.
 	float fade_time;
-	float delta_time;
 	uint pad3;
 	uint pad4;
+	uint pad5;
 }
 pc;
 
@@ -170,8 +183,10 @@ layout(set = 0, binding = 13, rgba16f) uniform restrict writeonly image2D dest_i
 layout(set = 0, binding = 14, std140) uniform GiResolveUBO {
 	mat4 inv_projection; // clip -> view.
 	mat4 inv_view; // view -> world (camera transform).
-	// PREVIOUS-frame world -> clip (prev_cam_projection * prev_cam_view). TEMPORAL camera-reprojects
-	// the static geometry the velocity buffer leaves at the (-1,-1) no-motion sentinel.
+	// PREVIOUS-frame world -> clip (prev_cam_projection * prev_cam_view). TEMPORAL uses it to
+	// camera-reproject the STATIC geometry the velocity buffer leaves at the (-1,-1) no-motion
+	// sentinel (static surfaces write no motion vector, color_pass_inclusion_mask 0). Jittered,
+	// to match the jittered history the resolve accumulated. 192 B total, a 16-byte multiple.
 	mat4 prev_view_projection;
 }
 ubo;
@@ -192,12 +207,6 @@ layout(set = 0, binding = 15) uniform sampler2D guide_orm;
 // reactive denoiser is off the caller binds a tiny format-matching r8 dummy here as a neutral
 // placeholder and the shader never touches it, so there is no aliasing in either case.
 layout(set = 0, binding = 16, r8) uniform writeonly image2D reactive_image;
-
-// Cold-start disocclusion age (binding 17): per-pixel seconds since the last disocclusion,
-// updated in-place by TEMPORAL (reset on history rejection, incremented by delta_time, clamped to
-// fade_time) and read by COMPOSITE to drive the WRC lean. r16f storage image. INTEGRATE/DEBUG_GI
-// do not touch it (bound for the union layout). NOT ping-pong / not reprojected (in-place).
-layout(set = 0, binding = 17, r16f) uniform restrict image2D age_image;
 
 // Split-sum environment-BRDF DFG approximation (Karis' analytic fit), returning the
 // (scale, bias) pair so the specular term is F0 * dfg.x + dfg.y. This is the SAME analytic
@@ -285,13 +294,19 @@ WrcParams resolve_wrc_params() {
 // gated on the UNION of the two acceptance tests, so each needed texel is fetched exactly once (the
 // two loops fetched their gate intersection twice).
 //   diffuse_irr / cos_norm: cosine-mean incident radiance (cos_norm == 0 -> no lit coverage).
+//   ndl_sum: the UNWEIGHTED cosine normalizer (sum of ndl with no rad.a). cos_norm / ndl_sum is the
+//     cosine-weighted mean of the tile's per-texel convergence .a (n/n_cap in the SPG atlas: 0
+//     unwritten, seed_n/n_cap freshly WRC-seeded, -> 1 fully traced) -- the probe's SOURCE QUALITY.
+//     The irradiance normalize cancels rad.a, so a freshly-seeded probe returns the pure WRC prior
+//     at FULL strength; this is the only signal that says how much of that value is verified.
 //   spec_pref  / lobe_norm: GGX-cone-prefiltered radiance (lobe_norm == 0 -> no cone coverage); the
 //     split-sum BRDF (F0 * dfg.x + dfg.y) is applied by the caller. Both spec outputs stay 0 when
 //     do_spec is false, so a smooth / spec-disabled pixel pays only the diffuse cost (the per-texel
 //     do_spec test is uniform across the tile, so it predicates cheaply).
 void resolve_probe_fused(ivec2 probe, vec3 probe_N, vec3 world_N, vec3 R, float roughness, bool do_spec,
-		out vec3 diffuse_irr, out float cos_norm, out vec3 spec_pref, out float lobe_norm) {
+		out vec3 diffuse_irr, out float cos_norm, out float ndl_sum, out vec3 spec_pref, out float lobe_norm) {
 	cos_norm = 0.0;
+	ndl_sum = 0.0;
 	diffuse_irr = vec3(0.0);
 	lobe_norm = 0.0;
 	spec_pref = vec3(0.0);
@@ -351,6 +366,7 @@ void resolve_probe_fused(ivec2 probe, vec3 probe_N, vec3 world_N, vec3 R, float 
 			if (ndl > 0.0) {
 				diffuse_irr += rad.rgb * (ndl * rad.a);
 				cos_norm += ndl * rad.a;
+				ndl_sum += ndl;
 			}
 			if (lobe > 0.0) {
 				float w = lobe * rad.a;
@@ -428,6 +444,10 @@ void resolve_integrate_main(ivec2 pos) {
 
 	vec3 A = vec3(0.0);
 	float wsum = 0.0;
+	// Source quality of the resolved value (see RTGI_RESOLVE_QUALITY_FLOOR): the bilinear blend of
+	// each probe's cosine-weighted mean texel convergence. 0.333 for freshly WRC-seeded probes
+	// (seed_n/n_cap), -> 1 as the gather rays re-trace the tile. Written to .a for TEMPORAL.
+	float q_sum = 0.0;
 	// Rough-spec prefiltered-radiance accumulator, bilinearly blended over the SAME qualifying
 	// probes as the diffuse A (its own normalizer `spec_wsum` so a probe with diffuse coverage
 	// but no spec-cone coverage does not bias the spec blend).
@@ -465,10 +485,11 @@ void resolve_integrate_main(ivec2 pos) {
 			// cosine-integrated diffuse radiance and (when do_spec) the GGX-cone-prefiltered spec
 			// radiance, instead of walking the tile twice (see resolve_probe_fused).
 			float cos_norm;
+			float ndl_sum;
 			float lobe_norm;
 			vec3 probe_irr;
 			vec3 probe_spec;
-			resolve_probe_fused(probe, probe_N, world_N, R, rough, do_spec, probe_irr, cos_norm, probe_spec, lobe_norm);
+			resolve_probe_fused(probe, probe_N, world_N, R, rough, do_spec, probe_irr, cos_norm, ndl_sum, probe_spec, lobe_norm);
 			if (cos_norm <= 0.0) {
 				// No lit-hemisphere coverage for this probe (skips spec too, exactly as before: the
 				// old code computed the spec prefilter only after this same continue).
@@ -477,6 +498,9 @@ void resolve_integrate_main(ivec2 pos) {
 
 			A += probe_irr * bw;
 			wsum += bw;
+			// cos_norm / ndl_sum = this probe's cosine-weighted mean texel convergence (ndl_sum > 0
+			// is implied by cos_norm > 0: every cos_norm contribution also added to ndl_sum).
+			q_sum += (cos_norm / ndl_sum) * bw;
 
 			// Rough-spec accumulate from the SAME walk. Only when the spec channel is active and the
 			// cone found usable (confidence-weighted) texels -- identical gate to the old two-pass path.
@@ -490,14 +514,20 @@ void resolve_integrate_main(ivec2 pos) {
 	// Fallback: all 4 probes failed (disocclusion / grid edge) -> direct WRC irradiance
 	// (already returns the cosine-average A). Mirrors the production consumer's fallback;
 	// the A2 debug consumer returned 0 here, but the production resolve has the WRC to lean on.
+	float q; // source quality -> .a (see RTGI_RESOLVE_QUALITY_FLOOR at the top).
 	if (wsum <= 0.0) {
 		float dconf;
 		A = rtgi_wrc_sample_irradiance(wrc_radiance, wrc_distance, resolve_wrc_params(), world_pos, world_N, dconf);
+		// The WRC prior is never "verified" by this pixel's own traced rays, so it advances the
+		// temporal count at the floor rate -- a slow ease-in for permanent-fallback pixels. (When
+		// dconf == 0 the value is black and revealing black is invisible, so one constant suffices.)
+		q = RTGI_RESOLVE_QUALITY_FLOOR;
 	} else {
 		A /= wsum;
+		q = q_sum / wsum;
 	}
 
-	imageStore(diffuse_gi_rw, pos, vec4(A, 1.0)); // lighting space; .a = confidence (1.0 = resolved).
+	imageStore(diffuse_gi_rw, pos, vec4(A, q)); // lighting space; .a = source quality (TEMPORAL consumes it).
 
 	// Rough-spec channel (A3-T1): apply the ENERGY-CONSERVING multi-scatter specular BRDF to the
 	// prefiltered radiance. spec_gi is RADIANCE space (NO demod) -- the env-BRDF factor already
@@ -513,9 +543,10 @@ void resolve_integrate_main(ivec2 pos) {
 		vec3 F0 = mix(vec3(0.04), albedo, metalness); // dielectric 4% -> albedo-tinted for metals.
 		spec = pref * resolve_env_brdf_specular(F0, rough, NoV); // FssEss + FmsEms.
 	}
-	// .a: INTEGRATE writes 1.0 (raw); TEMPORAL (T2) overwrites it with the sample-count
-	// fraction n/n_cap -- a confidence proxy that drives the T3 variance-weighted spatial filter.
-	imageStore(spec_gi_rw, pos, vec4(spec, 1.0));
+	// .a: INTEGRATE writes the source quality (the spec shares the diffuse's probes and prior
+	// fraction, so the same q applies); TEMPORAL overwrites it with the sample-count fraction
+	// n/n_cap -- a confidence proxy that drives the T3 variance-weighted spatial filter.
+	imageStore(spec_gi_rw, pos, vec4(spec, q));
 }
 
 // ---------------------------------------------------------------------------------------
@@ -628,10 +659,10 @@ void resolve_temporal_main(ivec2 pos) {
 	// velocity attachment's (-1,-1) clear sentinel forever. Reprojecting that sentinel naively
 	// (prev = pos + mv*screen) lands ~a full screen off, so every static pixel reads as a fresh
 	// disocclusion EVERY frame -- which (a) prevents temporal accumulation on the entire static
-	// world (boil), and (b) keeps the cold-start path engaged screen-wide. A static surface's only
-	// screen motion IS the camera's, so for the sentinel derive prev from the world position
-	// reprojected by the previous frame's view-projection. Dynamic objects (real velocity) keep
-	// prev = pos + mv*screen unchanged.
+	// world (boil), and (b) pins the sample count at 1 so the COMPOSITE's cold-start gate holds the
+	// indirect dark screen-wide. A static surface's only screen motion IS the camera's, so for the
+	// sentinel derive prev from the world position reprojected by the previous frame's
+	// view-projection. Dynamic objects (real velocity) keep prev = pos + mv*screen unchanged.
 	vec2 mv = texelFetch(velocity_buffer, pos, 0).xy;
 	ivec2 prev;
 	if (mv.x <= -1.0 && mv.y <= -1.0) {
@@ -647,11 +678,12 @@ void resolve_temporal_main(ivec2 pos) {
 		} else {
 			// Behind the old camera (a far cut: this surface was off-screen / behind the previous
 			// view) or sky. Emit an OUT-OF-BOUNDS sentinel so the bounds gate below rejects it as a
-			// TRUE disocclusion (n_d = 0 -> a fresh accumulate). NOT prev = pos: a self-fetch makes
-			// resolve_history_valid(pos, pos) trivially PASS (identical depth + normal -- there is
-			// one current-frame G-buffer, no prev-frame G-buffer), which FALSE-ACCEPTS the stale
-			// [prev_index] GI still sitting at this screen coord. That carried a high sample count,
-			// so the OLD camera's lighting showed through as a faint patch on far cuts.
+			// TRUE disocclusion (n_d = 0 -> conf = 1/n_cap -> cold_fade fades the GI in from 0). NOT
+			// prev = pos: a self-fetch makes resolve_history_valid(pos, pos) trivially PASS (identical
+			// depth + normal -- there is one current-frame G-buffer, no prev-frame G-buffer), which
+			// FALSE-ACCEPTS the stale [prev_index] GI still sitting at this screen coord. That carried
+			// a high sample count -> conf ~= 1 -> cold_fade ~= 1, defeating the cold-start gate, so the
+			// OLD camera's lighting showed through un-faded as a faint patch on far cuts.
 			prev = ivec2(-1);
 		}
 	} else {
@@ -662,7 +694,6 @@ void resolve_temporal_main(ivec2 pos) {
 	float n_s = 0.0;
 	vec3 hist_d = vec3(0.0);
 	vec3 hist_s = vec3(0.0);
-	bool diffuse_reproj_ok = false; // true when this pixel carried valid diffuse history (not a disocclusion).
 	// frame_index 0 has no history (the buffers were just cleared / are last frame's stale set);
 	// skip reprojection so the first frame is a pure INTEGRATE seed (n -> 1). The bounds guard
 	// keeps the reprojected fetch on-screen (off-screen history is a disocclusion -> reset).
@@ -674,7 +705,6 @@ void resolve_temporal_main(ivec2 pos) {
 			vec4 h = texelFetch(diffuse_history, prev, 0);
 			hist_d = h.rgb;
 			n_d = h.a * n_cap; // recover the stored sample count (.a == n / n_cap).
-			diffuse_reproj_ok = true;
 		}
 		// SPECULAR: reproject on the roughness-SELECTED position (hard branch, C17), then the
 		// SAME same-surface rejection at that reprojected pixel.
@@ -689,20 +719,19 @@ void resolve_temporal_main(ivec2 pos) {
 	// Sample-counted 1/n blend (n-capped), mirroring rtgi_spg_accumulate.glsl's BLEND: a fresh /
 	// rejected texel (n == 0 -> nd == 1 -> w == 1) takes cur outright; a converged one leans on
 	// its history. Store the new count back as .a == n / n_cap for next frame.
-	float nd = min(n_d + 1.0, n_cap);
-	float ns = min(n_s + 1.0, n_cap);
+	// The count advances by the SOURCE QUALITY INTEGRATE wrote into cur .a (how much of this
+	// frame's value is verified traced data) instead of a flat +1: an unverified prior (WRC seed /
+	// fallback) must not count as convergence, or the composite's cold-start gate opens while the
+	// pixel still shows the un-traced prior (the post-cut round blobs: one leaky WRC cell's
+	// trilinear footprint, revealed mid-wash). Floored so prior-only pixels still converge (see
+	// RTGI_RESOLVE_QUALITY_FLOOR); fully traced probes give quality 1 -> identical to the old
+	// +1/frame after warmup.
+	float nd = min(n_d + clamp(cur_d.a, RTGI_RESOLVE_QUALITY_FLOOR, 1.0), n_cap);
+	float ns = min(n_s + clamp(cur_s.a, RTGI_RESOLVE_QUALITY_FLOOR, 1.0), n_cap);
 	vec3 od = mix(hist_d, cur_d.rgb, 1.0 / max(nd, 1.0));
 	vec3 os = mix(hist_s, cur_s.rgb, 1.0 / max(ns, 1.0));
 	imageStore(diffuse_gi_rw, pos, vec4(od, nd / n_cap));
 	imageStore(spec_gi_rw, pos, vec4(os, ns / n_cap));
-
-	// Cold-start age: reset to 0 on a disocclusion (diffuse history rejected), else advance by this
-	// frame's delta_time, clamped to fade_time. In-place (read+write the same pixel). Drives the
-	// COMPOSITE WRC lean; cleared to a large value at alloc so steady pixels read "old" (no lean).
-	float fade_time = max(pc.fade_time, 0.0);
-	float age_prev = imageLoad(age_image, pos).r;
-	float age_new = diffuse_reproj_ok ? min(age_prev + pc.delta_time, fade_time) : 0.0;
-	imageStore(age_image, pos, vec4(age_new, 0.0, 0.0, 0.0));
 }
 
 // DEBUG_GI: output the resolve's RAW output -- the channel selected by pc.debug_channel
@@ -758,39 +787,27 @@ void resolve_composite_main(ivec2 pos) {
 	vec3 diffuse_albedo = albedo * (1.0 - metalness);
 	vec4 diffuse_sample = texelFetch(diffuse_history, pos, 0); // binding 11 = [read_index] diffuse.
 	vec3 A = diffuse_sample.rgb; // lighting-space A.
-	// Cold-start fade: hide the SPG cold-start convergence noise for the ~fade_time after a pixel is
-	// disoccluded (age < fade_time), with two regimes selected by whether the WRC has data here.
-	// Read-time only: the stored GI (diffuse_history) is untouched, so there is no history feedback.
-	// fade_time == 0 disables it.
-	//   * WARM WRC (pans / partial disocclusion, the cache stays valid): lean the diffuse toward the
-	//     smooth WRC irradiance and ramp back to the real value over fade_time -- the GI stays correct
-	//     and bright while the SPG settles, no darkening.
-	//   * COLD WRC (a HARD camera cut: SPG, WRC and screen history are ALL cold, so no prior of any
-	//     kind exists, and the cold-start GI is not just noisy but biased): fade the whole indirect in
-	//     from ZERO over fade_time. A GI of 0 cannot blotch; it ramps in as the estimate converges.
-	//     Brief -- the cache warms within a couple of frames, after which pixels take the warm branch.
-	float cold_fade = 1.0; // indirect opacity for the cold-cut fade-in (1 = full GI; default / steady).
+	// Cold-start hide. Read-time only (the stored GI is untouched -> no history feedback). The cold /
+	// still-biased GI is faded in from ZERO as the pixel's estimate actually CONVERGES, gated on the
+	// resolve temporal sample fraction (diffuse_sample.a == nd / n_cap, written by TEMPORAL), NOT a
+	// wall-clock timer. A 0 contribution cannot blotch, so the unconfident GI stays invisible until it
+	// has accumulated enough samples, then eases in -- a gentle bloom-in that reads as HDR adaptation
+	// rather than a cold-start smudge. On a load / disocclusion / cut the count resets to ~1/n_cap
+	// (TEMPORAL rejects history) -> cold_fade ~= 0, then climbs to 1 as the pixel settles. Driving the
+	// fade on the SAMPLE COUNT (not seconds) makes it frame-rate-independent: the old time-based fade
+	// released early at the low fps of a load/cut hitch, snapping the still-cold GI on (the blotch). It
+	// also lets the composite SKIP the per-pixel WRC irradiance gather it used to do here -- that
+	// ~512-tap gather over the disocclusion band, re-deriving a warm/cold signal INTEGRATE already had,
+	// was the motion-time FPS drop. In steady state diffuse_sample.a == 1 -> cold_fade == 1 -> full GI
+	// at ~no cost. pc.fade_time > 0 enables the hide (0 disables it for A/B).
+	float cold_fade = 1.0;
 	if (pc.fade_time > 0.0 && raw_depth > 0.0) {
-		float age = imageLoad(age_image, pos).r;
-		if (age < pc.fade_time) {
-			vec3 view_pos = resolve_reconstruct_view_position(pos, raw_depth);
-			vec3 world_pos = (ubo.inv_view * vec4(view_pos, 1.0)).xyz;
-			vec3 world_N;
-			if (resolve_world_normal(pos, world_N)) {
-				float wrc_conf = 0.0;
-				vec3 wrc_irr = rtgi_wrc_sample_irradiance(wrc_radiance, wrc_distance, resolve_wrc_params(), world_pos, world_N, wrc_conf);
-				float ramp = smoothstep(0.0, pc.fade_time, age); // 0 at the cut -> 1 at fade_time.
-				if (wrc_conf > 0.0) {
-					A = mix(wrc_irr, A, ramp); // warm: WRC at the cut, real value by fade_time.
-				} else {
-					cold_fade = ramp; // cold: indirect fades in from 0 -> full over fade_time.
-				}
-			}
-		}
+		float conf = clamp(diffuse_sample.a, 0.0, 1.0); // per-pixel GI convergence (accumulated nd / n_cap).
+		cold_fade = smoothstep(0.25, 0.95, conf); // held at 0 while cold / biased -> 1 once converged.
 	}
 	vec3 spec = texelFetch(spec_history, pos, 0).rgb; // binding 12 = [read_index] spec: radiance-space (BRDF applied).
 	// Mask the background so the additive composite does not lift the raster sky/clear color.
-	// cold_fade fades the whole indirect (diffuse + spec) in from 0 over fade_time on a hard cut.
+	// cold_fade fades the whole indirect (diffuse + spec) in from 0 as the GI converges (load/disocclusion/cut).
 	vec3 indirect = (raw_depth <= 0.0) ? vec3(0.0) : ((diffuse_albedo * A + spec) * cold_fade);
 
 	// GI-aware reactive mask ("poor-man's Ray Reconstruction"): diffuse_sample.a holds the
