@@ -426,7 +426,6 @@ void rt_wrc_probe_update_main() {
 	}
 
 	vec3 radiance = sanitize_payload_vec3(ps.radiance);
-	bool dynamic_hit = has_strc_dynamic_hit(ps.packed_bounces_flags);
 	float radiance_luma = rt_luminance(radiance);
 	uint source_mask = get_strc_source_mask(ps.packed_bounces_flags);
 	if (source_mask == 0u && radiance_luma > 0.0005) {
@@ -446,10 +445,10 @@ void rt_wrc_probe_update_main() {
 		source_quality = max(source_quality, 0.60);
 	}
 	float radiance_validity = smoothstep(0.0005, 0.0060, radiance_luma);
-	float confidence = radiance_validity * source_quality * (dynamic_hit ? 0.45 : 1.0);
+	float confidence = radiance_validity * source_quality;
 	rt_wrc_probe_ray_results[ray_index].radiance_distance = vec4(radiance, first_hit_distance);
 	rt_wrc_probe_ray_results[ray_index].normal_confidence = vec4(first_hit_normal * 0.5 + 0.5, confidence);
-	rt_wrc_probe_ray_results[ray_index].metadata = vec4(dynamic_hit ? 1.0 : 0.0, confidence, float(source_mask), float(update_index));
+	rt_wrc_probe_ray_results[ray_index].metadata = vec4(0.0, confidence, float(source_mask), float(update_index));
 }
 
 // Screen Probe Gather raygen (A2-T2). For each selected (screen-probe, octahedral

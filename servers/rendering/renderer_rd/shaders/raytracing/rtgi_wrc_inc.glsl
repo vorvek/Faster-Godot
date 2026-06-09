@@ -28,6 +28,17 @@
 #ifndef RTGI_WRC_INC_H
 #define RTGI_WRC_INC_H
 
+// A texel's .a stores per-direction confidence = n / n_cap, so any value above this
+// epsilon means the texel was written at least once (unwritten texels read exactly 0).
+// The query separates "written" (availability) from the .a MAGNITUDE (convergence):
+// a written probe is presented at full weight and .a is used only to weight the
+// directional value, so a young-but-correct probe contributes immediately instead of
+// fading in over n_cap frames (the cold-start "boil"). The radiance value is already
+// coverage-robust (cosine-mean normalized), so presenting it early is unbiased in
+// magnitude; residual single-sample noise is handled by the firefly clamp on the
+// accumulate side plus the downstream GI-resolve / TAA denoise.
+#define WRC_WRITTEN_EPS 1e-4
+
 // ---------------------------------------------------------------------------
 //  Parameter block (mirror of RtgiWrc::ClipmapParams + per-frame scalars)
 // ---------------------------------------------------------------------------
@@ -223,11 +234,19 @@ float wrc_chebyshev(vec2 moments, float dist_to_surface, float spacing, WrcParam
 void wrc_locate(WrcParams p, int cascade, vec3 world_pos, out ivec3 base_probe, out vec3 frac) {
 	float spacing = wrc_cascade_spacing(p, cascade);
 	float half_extent = wrc_cascade_half_extent(p, cascade);
+	// The producer snaps each cascade's center to its own probe lattice
+	// (cascade_center = floor(camera / spacing) * spacing; see the WRC probe-update
+	// raygen and recenter_delta() in rtgi_wrc_math.h, which only ever shifts the
+	// atlas by whole probes). The consumer MUST address from that same snapped
+	// center: using the raw camera slides the query lattice up to a full probe
+	// spacing off the deposited lattice and wobbles sub-cell as the camera moves,
+	// mis-selecting the 8 corners and corrupting their trilinear weights.
+	vec3 snapped_center = floor(p.camera_pos / spacing) * spacing;
 	// Position in grid space where probe centers sit on integer coordinates.
-	// grid_pos = (world - (camera - half_extent)) / spacing - 0.5
+	// grid_pos = (world - (snapped_center - half_extent)) / spacing - 0.5
 	// (the -0.5 puts the cell corners on integers so floor() picks the lower
 	// neighbouring probe and `frac` is the trilinear weight to the upper one).
-	vec3 grid_pos = (world_pos - (p.camera_pos - vec3(half_extent))) / spacing - vec3(0.5);
+	vec3 grid_pos = (world_pos - (snapped_center - vec3(half_extent))) / spacing - vec3(0.5);
 	vec3 base_f = floor(grid_pos);
 	frac = clamp(grid_pos - base_f, vec3(0.0), vec3(1.0));
 	ivec3 b = ivec3(base_f);
@@ -310,7 +329,10 @@ vec3 rtgi_wrc_sample_irradiance(
 		// Direction from this probe's center to the shading point, for the
 		// Chebyshev visibility test. Probe center world position:
 		float half_extent = wrc_cascade_half_extent(p, cascade);
-		vec3 probe_pos = (p.camera_pos - vec3(half_extent)) + (vec3(probe) + vec3(0.5)) * spacing;
+		// Snapped lattice center (see wrc_locate): the probe atlas was deposited from
+		// floor(camera / spacing) * spacing, so the per-corner probe world position
+		// must use the same snapped center or the Chebyshev distance/visibility is off.
+		vec3 probe_pos = (floor(p.camera_pos / spacing) * spacing - vec3(half_extent)) + (vec3(probe) + vec3(0.5)) * spacing;
 		vec3 to_surface = world_pos - probe_pos;
 		float dist_to_surface = length(to_surface);
 		vec3 vis_dir = (dist_to_surface > 0.0) ? (to_surface / dist_to_surface) : nN;
@@ -339,7 +361,7 @@ vec3 rtgi_wrc_sample_irradiance(
 				// coverage still yields the true cosine-mean radiance (~= L) rather than a
 				// value dimmed by the average confidence. (Previously += ndl -> dim GI.)
 				cos_norm += ndl * rad.a;
-				probe_conf += rad.a * ndl;
+				probe_conf += ndl * step(WRC_WRITTEN_EPS, rad.a); // availability (written?), not n_cap convergence -> present young probes at full weight
 				conf_norm += ndl;
 			}
 		}
@@ -347,7 +369,7 @@ vec3 rtgi_wrc_sample_irradiance(
 			continue; // No lit hemisphere coverage for this corner.
 		}
 		probe_irr /= cos_norm; // Confidence-weighted cosine-average radiance (~= L; coverage-robust).
-		probe_conf /= conf_norm; // Mean per-texel confidence over the lit hemisphere.
+		probe_conf /= conf_norm; // Coverage in [0,1]: fraction of the lit hemisphere with ANY data (availability, NOT convergence).
 
 		// Chebyshev visibility of the shading point from this probe.
 		vec2 vis_oct = wrc_dir_to_oct(vis_dir);
@@ -438,7 +460,10 @@ vec3 rtgi_wrc_sample_radiance(
 		ivec3 probe = base_probe + c;
 
 		float half_extent = wrc_cascade_half_extent(p, cascade);
-		vec3 probe_pos = (p.camera_pos - vec3(half_extent)) + (vec3(probe) + vec3(0.5)) * spacing;
+		// Snapped lattice center (see wrc_locate): the probe atlas was deposited from
+		// floor(camera / spacing) * spacing, so the per-corner probe world position
+		// must use the same snapped center or the Chebyshev distance/visibility is off.
+		vec3 probe_pos = (floor(p.camera_pos / spacing) * spacing - vec3(half_extent)) + (vec3(probe) + vec3(0.5)) * spacing;
 		vec3 to_surface = world_pos - probe_pos;
 		float dist_to_surface = length(to_surface);
 		vec3 vis_dir = (dist_to_surface > 0.0) ? (to_surface / dist_to_surface) : nD;
@@ -469,7 +494,7 @@ vec3 rtgi_wrc_sample_radiance(
 				vec4 rad = textureLod(radiance_atlas, uv, 0.0);
 				probe_rad += rad.rgb * (aw * rad.a);
 				rad_norm += aw * rad.a;
-				probe_conf += rad.a * aw;
+				probe_conf += aw * step(WRC_WRITTEN_EPS, rad.a); // availability (written?), not n_cap convergence -> present young probes at full weight
 				conf_norm += aw;
 			}
 		}

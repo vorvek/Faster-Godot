@@ -65,7 +65,7 @@ layout(set = 0, binding = 5, rgba8) uniform image2D metadata_write_image;
 // (3 x vec4 = 48 B). Only bound (and only read by mode 1) when rays_this_frame>0.
 //   radiance_distance : .rgb = radiance, .a = first-hit distance.
 //   normal_confidence : .rgb = encoded normal, .a = ray confidence.
-//   metadata          : .x = dynamic_hit, .y = confidence, .z = source_mask,
+//   metadata          : .x = unused (reserved), .y = confidence, .z = source_mask,
 //                       .w = update_index = (probe_index << 6) | dir_index.
 struct RTGIWRCProbeRayResult {
 	vec4 radiance_distance;
@@ -237,8 +237,38 @@ void wrc_accumulate_main() {
 	vec3 radiance_old = prev.rgb;
 	float conf_old = clamp(prev.a, 0.0, 1.0);
 
+	// Firefly clamp: once a texel has history, limit a single incoming sample's
+	// luminance to a few times the accumulated luminance. The de-gated WRC query now
+	// presents young texels at full weight, so an unclamped bright probe ray would flash
+	// the cell for a frame; this tames it while the 1/n blend converges. Only the incoming
+	// sample is clamped, never the stored radiance; a small floor still lets a dark texel
+	// brighten when a light genuinely turns on.
+	if (conf_old > 0.0) {
+		const vec3 luma_w = vec3(0.2126, 0.7152, 0.0722);
+		float lum_old = max(dot(radiance_old, luma_w), 0.0);
+		float lum_new = max(dot(radiance_new, luma_w), 0.0);
+		float lum_max = lum_old * 8.0 + 0.05;
+		if (lum_new > lum_max) {
+			radiance_new *= lum_max / max(lum_new, 1e-6);
+		}
+	}
+
 	// Sample-counted 1/n blend. conf encodes n / n_cap, so n = conf * n_cap.
 	float n = conf_old * n_cap;
+	// Adaptive hysteresis (DDGI-style): if the (firefly-clamped) sample disagrees with
+	// history, the indirect at this world point changed -- a moving light, or the dynamic
+	// character passing through -- so collapse the effective sample count and re-converge
+	// in a couple frames instead of trailing for n_cap. This is the dynamic-object
+	// ghosting fix; static, noise-only texels see a small rel_change and keep the full
+	// n_cap for stability. The reduced n raises the blend weight for radiance AND the
+	// distance moments below, so the whole probe response speeds up together.
+	if (conf_old > 0.0) {
+		const vec3 luma_w2 = vec3(0.2126, 0.7152, 0.0722);
+		float lo = max(dot(radiance_old, luma_w2), 0.0);
+		float ln = max(dot(radiance_new, luma_w2), 0.0);
+		float rel_change = abs(ln - lo) / (ln + lo + 1e-4);
+		n = min(n, mix(n_cap, 2.0, smoothstep(0.3, 0.6, rel_change)));
+	}
 	float n_new = min(n + 1.0, n_cap);
 	float w = 1.0 / max(n_new, 1.0);
 	vec3 radiance_acc = mix(radiance_old, radiance_new, w);

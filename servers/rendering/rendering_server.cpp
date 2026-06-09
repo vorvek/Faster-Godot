@@ -3897,19 +3897,19 @@ void RenderingServer::init() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/performance/octahedral_resolution", PROPERTY_HINT_RANGE, "4,16,1"), 8);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/world_radiance_cache/performance/base_spacing", PROPERTY_HINT_RANGE, "0.25,8.0,0.05"), 2.0);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/performance/rays_per_frame", PROPERTY_HINT_RANGE, "1024,32768,256"), 4096);
-	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/performance/temporal_sample_cap", PROPERTY_HINT_RANGE, "8,256,1"), 96);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/performance/temporal_sample_cap", PROPERTY_HINT_RANGE, "8,256,1"), 8);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/balanced/grid_size", PROPERTY_HINT_RANGE, "12,32,1"), 16);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/balanced/cascade_count", PROPERTY_HINT_RANGE, "1,4,1"), 4);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/balanced/octahedral_resolution", PROPERTY_HINT_RANGE, "4,16,1"), 8);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/world_radiance_cache/balanced/base_spacing", PROPERTY_HINT_RANGE, "0.25,8.0,0.05"), 1.5);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/balanced/rays_per_frame", PROPERTY_HINT_RANGE, "1024,32768,256"), 8192);
-	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/balanced/temporal_sample_cap", PROPERTY_HINT_RANGE, "8,256,1"), 64);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/balanced/temporal_sample_cap", PROPERTY_HINT_RANGE, "8,256,1"), 12);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/production/grid_size", PROPERTY_HINT_RANGE, "12,32,1"), 20);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/production/cascade_count", PROPERTY_HINT_RANGE, "1,4,1"), 4);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/production/octahedral_resolution", PROPERTY_HINT_RANGE, "4,16,1"), 8);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/world_radiance_cache/production/base_spacing", PROPERTY_HINT_RANGE, "0.25,8.0,0.05"), 1.25);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/production/rays_per_frame", PROPERTY_HINT_RANGE, "1024,32768,256"), 12288);
-	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/production/temporal_sample_cap", PROPERTY_HINT_RANGE, "8,256,1"), 48);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/world_radiance_cache/production/temporal_sample_cap", PROPERTY_HINT_RANGE, "8,256,1"), 16);
 
 	// RTGI Screen Probe Gather (SPG) per-preset tunables. The per-scene
 	// Environment.rtgi_quality_preset selector picks one of these tiers; the

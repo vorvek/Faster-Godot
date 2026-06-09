@@ -52,8 +52,7 @@
 #define RT_PARAM_RTGI_STRC_RAYS_PER_FRAME 33 // rt_params[8].y - Probe update ray budget
 #define RT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT 34 // rt_params[8].z - Probe temporal accumulation weight
 #define RT_PARAM_RTGI_BACKEND 35 // rt_params[8].w - RTGI backend
-#define RT_PARAM_RTGI_STRC_STATIC_VISUAL_LAYERS 36 // rt_params[9].x - Static STRC visual layer mask
-#define RT_PARAM_RTGI_STRC_DYNAMIC_VISUAL_LAYERS 37 // rt_params[9].y - Dynamic STRC visual layer mask
+// rt_params[9].x / [9].y (indices 36, 37): free (removed dead, never-wired STRC static / dynamic visual-layer masks).
 #define RT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES 38 // rt_params[9].z - Screen-space diffuse cache entry budget
 // Screen Probe Gather (SPG) params (indices 39..44). Renderer-internal RT-param slots
 // filled by update_uniform_set's RT_FLAG_SPG_GATHER override (the gather dispatch), not
@@ -249,13 +248,6 @@ bool has_primary_raster_gi_owner(uint packed) {
 	return (packed & PRIMARY_RASTER_GI_OWNER_FLAG) != 0u;
 }
 
-const uint STRC_DYNAMIC_HIT_FLAG = (1u << 28);
-uint set_strc_dynamic_hit(uint packed) {
-	return packed | STRC_DYNAMIC_HIT_FLAG;
-}
-bool has_strc_dynamic_hit(uint packed) {
-	return (packed & STRC_DYNAMIC_HIT_FLAG) != 0u;
-}
 
 const uint STRC_DIRECT_SOURCE_FLAG = (1u << 29);
 const uint STRC_EMISSIVE_SOURCE_FLAG = (1u << 30);
