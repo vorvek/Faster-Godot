@@ -1006,8 +1006,8 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_normal_roughness, RID p_
 		u.append_id(reactive_enabled ? p_reactive_out : reactive_dummy);
 		uniforms.push_back(u);
 	}
-	// Binding 17: the cold-start age image. COMPOSITE will read it to drive the WRC lean (the lean
-	// itself is a later step); bound now for the union set-0 layout. Bound as an IMAGE; never also
+	// Binding 17: the cold-start age image. COMPOSITE reads it to drive the cold-start fade (the WRC
+	// lean where the cache is warm, the fade-in from zero on a hard cut). Bound as an IMAGE; never also
 	// bound on a sampler, so no same-resource read+write hazard.
 	{
 		RD::Uniform u;
