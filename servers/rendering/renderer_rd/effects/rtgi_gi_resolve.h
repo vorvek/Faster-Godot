@@ -138,7 +138,7 @@ public:
 	// (1 - confidence) there for the temporal upscaler. RID() (the default + every non-reactive
 	// path) keeps the composite output byte-identical: the shader's write_reactive flag stays 0 and
 	// binding 16 is bound to the neutral gi_debug_image placeholder (never touched).
-	void render_composite(RID p_depth, RID p_guide_albedo, RID p_guide_orm, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count, RID p_fpt_primary_color = RID(), RID p_reactive_out = RID());
+	void render_composite(RID p_depth, RID p_normal_roughness, RID p_guide_albedo, RID p_guide_orm, RID p_wrc_radiance, RID p_wrc_distance, const GiResolveFrameParams &p_frame, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count, RID p_fpt_primary_color = RID(), RID p_reactive_out = RID());
 
 	// Composite the volumetric-fog froxel onto an RT color image. Full Path Tracing replaces the
 	// raster opaque pass, so the per-fragment froxel fog the raster path applies never runs on the

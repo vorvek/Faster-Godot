@@ -4047,6 +4047,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					rfp.spg_grid_h = sfp.grid_h;
 					rfp.spg_oct_res = (uint32_t)spg_params.oct_res;
 					rfp.spg_spacing_f = (uint32_t)spg_params.spacing_f;
+						rfp.delta_time = float(time_step);
 					// SPG getters source the SPATIAL-filtered atlas + the front headers (what
 					// this frame's placement+accumulate produced). WRC getters source the
 					// cache's front atlases for the fallback query. The material-guide albedo +
@@ -4207,7 +4208,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					use_rtgi_reactive = rtgi_reactive_out.is_valid();
 				}
 				RENDER_TIMESTAMP(rt_radiance_probes_fpt ? "RTGI Composite FPT" : "RTGI Composite Hybrid");
-				rtgi_resolve->render_composite(composite_depth, rb_data->rt_get_guide_albedo(), rb_data->rt_get_guide_orm(),
+				RendererRD::RTGIGIResolve::GiResolveFrameParams cfp;
+				cfp.wrc_grid = (uint32_t)wrc_params.grid;
+				cfp.wrc_cascade_count = (uint32_t)wrc_params.cascade_count;
+				cfp.wrc_base_spacing = wrc_params.base_spacing;
+				cfp.spg_oct_res = (uint32_t)spg_params.oct_res;
+				rtgi_resolve->render_composite(composite_depth, rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS),
+						rb_data->rt_get_guide_albedo(), rb_data->rt_get_guide_orm(),
+						rtgi_wrc->get_radiance_atlas(), rtgi_wrc->get_distance_atlas(), cfp,
 						rb->get_internal_size(), rb_data->get_color_only_fb(), p_render_data->scene_data->view_count, fpt_primary_color, rtgi_reactive_out);
 			}
 

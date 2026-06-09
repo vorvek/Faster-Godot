@@ -818,7 +818,7 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 	copy_effects->copy_to_fb_rect(gi_debug_image, p_dest_fb, Rect2i(Point2i(), size), false, false, false, false, RID(), multiview, false, false, false, Rect2(), 1.0, true, CopyEffects::COPY_TO_FB_FLAG_MODE_NONE);
 }
 
-void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, RID p_guide_orm, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count, RID p_fpt_primary_color, RID p_reactive_out) {
+void RTGIGIResolve::render_composite(RID p_depth, RID p_normal_roughness, RID p_guide_albedo, RID p_guide_orm, RID p_wrc_radiance, RID p_wrc_distance, const GiResolveFrameParams &p_frame, const Size2i &p_size, RID p_dest_color_fb, uint32_t p_view_count, RID p_fpt_primary_color, RID p_reactive_out) {
 	if (!resources_valid || !diffuse_gi[read_index].is_valid() || !spec_gi[read_index].is_valid()) {
 		return;
 	}
@@ -830,6 +830,9 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, RID p_guid
 	// image (binding 13), then ADDITIVELY blends it onto the raster-lit color FB. gi_debug_image is
 	// the same RGBA16F render-size scratch render_resolve_debug uses.
 	ERR_FAIL_COND(!gi_debug_image.is_valid());
+	ERR_FAIL_COND(p_normal_roughness.is_null());
+	ERR_FAIL_COND(p_wrc_radiance.is_null());
+	ERR_FAIL_COND(p_wrc_distance.is_null());
 
 	const Size2i size = Size2i(MAX(p_size.x, 1), MAX(p_size.y, 1));
 
@@ -872,12 +875,12 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, RID p_guid
 		uniforms.push_back(u);
 	}
 	{
-		// Binding 1: neutral (COMPOSITE does not read normal-roughness).
+		// Binding 1: the REAL normal-roughness (the cold-start lean reconstructs world_N from it).
 		RD::Uniform u;
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
 		u.binding = 1;
 		u.append_id(linear_sampler);
-		u.append_id(diffuse_gi[read_index]);
+		u.append_id(p_normal_roughness);
 		uniforms.push_back(u);
 	}
 	{
@@ -889,14 +892,32 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, RID p_guid
 		u.append_id(p_guide_albedo);
 		uniforms.push_back(u);
 	}
-	for (uint32_t b = 3; b <= 8; b++) {
-		// Bindings 3-8 (velocity, SPG atlas/headers, WRC atlases): neutral -- COMPOSITE ignores them,
-		// so they point at the resolved-diffuse read texture (a read texture on a sampler slot is safe).
+	for (uint32_t b = 3; b <= 6; b++) {
+		// Bindings 3-6 (velocity, SPG atlas/headers): neutral -- COMPOSITE ignores them, so they point
+		// at the resolved-diffuse read texture (a read texture on a sampler slot is safe).
 		RD::Uniform u;
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
 		u.binding = b;
 		u.append_id(linear_sampler);
 		u.append_id(diffuse_gi[read_index]);
+		uniforms.push_back(u);
+	}
+	{
+		// Binding 7: the REAL WRC radiance atlas (the cold-start lean queries rtgi_wrc_sample_irradiance).
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 7;
+		u.append_id(linear_sampler);
+		u.append_id(p_wrc_radiance);
+		uniforms.push_back(u);
+	}
+	{
+		// Binding 8: the REAL WRC distance atlas (Chebyshev visibility for the lean's WRC query).
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 8;
+		u.append_id(linear_sampler);
+		u.append_id(p_wrc_distance);
 		uniforms.push_back(u);
 	}
 	{
@@ -987,6 +1008,14 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_guide_albedo, RID p_guid
 	push_constant.screen_w = (uint32_t)size.x;
 	push_constant.screen_h = (uint32_t)size.y;
 	push_constant.write_reactive = reactive_enabled ? 1u : 0u;
+	// WRC clipmap scalars so resolve_wrc_params() resolves for the cold-start lean (run_resolve fills
+	// these for INTEGRATE/TEMPORAL; COMPOSITE builds its own push, so fill them here too). fade_time
+	// comes from the cached params (delta_time is unused by COMPOSITE -- the age is advanced in TEMPORAL).
+	push_constant.spg_oct_res = MAX(p_frame.spg_oct_res, 1u);
+	push_constant.wrc_grid = MAX(p_frame.wrc_grid, 1u);
+	push_constant.wrc_cascade_count = MAX(p_frame.wrc_cascade_count, 1u);
+	push_constant.wrc_base_spacing = p_frame.wrc_base_spacing;
+	push_constant.fade_time = MAX(cached_params.cold_start_fade_time, 0.0f);
 
 	RD::get_singleton()->draw_command_begin_label("RTGI Composite Hybrid");
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
