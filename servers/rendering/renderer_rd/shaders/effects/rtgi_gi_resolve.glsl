@@ -717,26 +717,26 @@ void resolve_composite_main(ivec2 pos) {
 	vec3 diffuse_albedo = albedo * (1.0 - metalness);
 	vec4 diffuse_sample = texelFetch(diffuse_history, pos, 0); // binding 11 = [read_index] diffuse.
 	vec3 A = diffuse_sample.rgb; // lighting-space A.
-		// Cold-start fade: for a freshly disoccluded pixel (age < fade_time) lean the lighting-space A
-		// toward the smooth WRC irradiance, decaying the lean to 0 over fade_time. Hides the SPG/resolve
-		// cold-start convergence noise behind the cache until it is gone. Read-time only: the stored GI
-		// (diffuse_history) is untouched, so there is no history feedback. fade_time == 0 disables it.
-		if (pc.fade_time > 0.0 && raw_depth > 0.0) {
-			float age = imageLoad(age_image, pos).r;
-			if (age < pc.fade_time) {
-				vec3 view_pos = resolve_reconstruct_view_position(pos, raw_depth);
-				vec3 world_pos = (ubo.inv_view * vec4(view_pos, 1.0)).xyz;
-				vec3 world_N;
-				if (resolve_world_normal(pos, world_N)) {
-					float wrc_conf = 0.0;
-					vec3 wrc_irr = rtgi_wrc_sample_irradiance(wrc_radiance, wrc_distance, resolve_wrc_params(), world_pos, world_N, wrc_conf);
-					if (wrc_conf > 0.0) {
-						float lean = 1.0 - smoothstep(0.0, pc.fade_time, age);
-						A = mix(A, wrc_irr, lean);
-					}
+	// Cold-start fade: for a freshly disoccluded pixel (age < fade_time) lean the lighting-space A
+	// toward the smooth WRC irradiance, decaying the lean to 0 over fade_time. Hides the SPG/resolve
+	// cold-start convergence noise behind the cache until it is gone. Read-time only: the stored GI
+	// (diffuse_history) is untouched, so there is no history feedback. fade_time == 0 disables it.
+	if (pc.fade_time > 0.0 && raw_depth > 0.0) {
+		float age = imageLoad(age_image, pos).r;
+		if (age < pc.fade_time) {
+			vec3 view_pos = resolve_reconstruct_view_position(pos, raw_depth);
+			vec3 world_pos = (ubo.inv_view * vec4(view_pos, 1.0)).xyz;
+			vec3 world_N;
+			if (resolve_world_normal(pos, world_N)) {
+				float wrc_conf = 0.0;
+				vec3 wrc_irr = rtgi_wrc_sample_irradiance(wrc_radiance, wrc_distance, resolve_wrc_params(), world_pos, world_N, wrc_conf);
+				if (wrc_conf > 0.0) {
+					float lean = 1.0 - smoothstep(0.0, pc.fade_time, age);
+					A = mix(A, wrc_irr, lean);
 				}
 			}
 		}
+	}
 	vec3 spec = texelFetch(spec_history, pos, 0).rgb; // binding 12 = [read_index] spec: radiance-space (BRDF applied).
 	// Mask the background so the additive composite does not lift the raster sky/clear color.
 	vec3 indirect = (raw_depth <= 0.0) ? vec3(0.0) : (diffuse_albedo * A + spec);

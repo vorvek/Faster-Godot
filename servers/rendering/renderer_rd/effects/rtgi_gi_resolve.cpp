@@ -7,6 +7,7 @@
 
 #include "rtgi_gi_resolve.h"
 
+#include "core/os/os.h"
 #include "servers/rendering/renderer_rd/effects/copy_effects.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
@@ -26,6 +27,18 @@ using namespace RendererRD;
 #define RESOLVE_MODE_COMPOSITE 4u
 // The per-mode pipeline array (pipelines[]) is indexed by these values; RESOLVE_MODE_COUNT must cover
 // 0..COMPOSITE (asserted in the constructor).
+
+// Live-tuning override for the cold-start fade duration (seconds), read once. -1 = unset (use the
+// per-preset cold_start_fade_time). Mirrors the FPT_TAA_* / RTGI_SPG_WRC_SEED_SAMPLES env knobs.
+static float rtgi_gi_fade_time_override() {
+	static const float s_override = []() -> float {
+		if (OS::get_singleton()->has_environment("RTGI_GI_FADE_TIME")) {
+			return OS::get_singleton()->get_environment("RTGI_GI_FADE_TIME").to_float();
+		}
+		return -1.0f;
+	}();
+	return s_override;
+}
 
 RTGIGIResolve::RTGIGIResolve() {
 	// Single compute shader with a `mode` push-constant (mirrors the SPG PLACE shader
@@ -525,7 +538,8 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	// TEMPORAL (A3-T2) reproject tolerance scale; carried for both dispatches (INTEGRATE ignores
 	// it). temporal_n_cap (set above) is the history responsiveness, also shared by both.
 	push_constant.history_rejection = cached_params.history_rejection;
-	push_constant.fade_time = MAX(cached_params.cold_start_fade_time, 0.0f);
+	const float fade_override = rtgi_gi_fade_time_override();
+	push_constant.fade_time = MAX(fade_override >= 0.0f ? fade_override : cached_params.cold_start_fade_time, 0.0f);
 	push_constant.delta_time = MAX(p_frame.delta_time, 0.0f);
 
 	// INTEGRATE -> barrier -> TEMPORAL, recorded back-to-back on ONE compute list with the SAME
@@ -861,9 +875,10 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_normal_roughness, RID p_
 	// diffuse), and binding 16 = the REAL reactive mask when p_reactive_out is valid. The reactive image
 	// at 16 is a DISTINCT write-only image (RB_TEX_RTGI_REACTIVE), never also bound as a sampler, so it
 	// adds no same-resource read+write hazard; when p_reactive_out is RID() it binds the neutral
-	// format-matching reactive_dummy and write_reactive stays 0, so binding 16 is never touched. All other sampler slots
-	// (1, 3, 4-8) stay neutral (point at diffuse_gi[read_index], a read texture) since COMPOSITE ignores
-	// them. The set provides exactly {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}.
+	// format-matching reactive_dummy and write_reactive stays 0, so binding 16 is never touched. After the
+	// cold-start lean binding 1 is the REAL normal-roughness and 7/8 are the REAL WRC atlases (read by the
+	// lean); only bindings 3-6 stay neutral (point at diffuse_gi[read_index], a read texture) since
+	// COMPOSITE ignores them. The set provides exactly {0..17} (binding 17 = the age image).
 	LocalVector<RD::Uniform> uniforms;
 	{
 		// Binding 0: the REAL depth buffer (COMPOSITE reads it to mask the background/sky).
@@ -1015,7 +1030,8 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_normal_roughness, RID p_
 	push_constant.wrc_grid = MAX(p_frame.wrc_grid, 1u);
 	push_constant.wrc_cascade_count = MAX(p_frame.wrc_cascade_count, 1u);
 	push_constant.wrc_base_spacing = p_frame.wrc_base_spacing;
-	push_constant.fade_time = MAX(cached_params.cold_start_fade_time, 0.0f);
+	const float fade_override = rtgi_gi_fade_time_override();
+	push_constant.fade_time = MAX(fade_override >= 0.0f ? fade_override : cached_params.cold_start_fade_time, 0.0f);
 
 	RD::get_singleton()->draw_command_begin_label("RTGI Composite Hybrid");
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
