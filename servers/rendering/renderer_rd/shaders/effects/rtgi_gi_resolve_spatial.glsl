@@ -15,7 +15,7 @@
 
 layout(local_size_x = GROUP_SIZE, local_size_y = GROUP_SIZE, local_size_z = 1) in;
 
-// Same 80-byte std430 Params block as rtgi_gi_resolve.glsl (the C++ pushes the full PushConstant). This
+// Same 96-byte std430 Params block as rtgi_gi_resolve.glsl (the C++ pushes the full PushConstant). This
 // shader reads only screen_w/h, spatial_iter, cur_iter; the rest keep the layout identical.
 layout(push_constant, std430) uniform Params {
 	uint mode;
@@ -38,6 +38,12 @@ layout(push_constant, std430) uniform Params {
 	float history_rejection;
 	uint write_reactive;
 	uint pad2;
+	// Cold-start fade fields: present ONLY to keep this block byte-identical to the unified
+	// rtgi_gi_resolve.glsl Params (the C++ pushes the full 96 B PushConstant). SPATIAL ignores them.
+	float fade_time;
+	float delta_time;
+	uint pad3;
+	uint pad4;
 }
 pc;
 
