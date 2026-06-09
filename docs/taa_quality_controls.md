@@ -18,8 +18,10 @@ from Project Settings under `rendering/anti_aliasing/quality`:
   - Adds optional clamp-aware sharpening during the TAA resolve. The default
     keeps official-like no-extra-sharpening behavior.
 - `taa_history_weight`
-  - Default: `0.9375`.
-  - Controls the base contribution from previous-frame history.
+  - Default: `0.875`.
+  - Controls the base contribution from previous-frame history for pure raster
+    rendering. When RTGI is active the resolve picks a per-mode history weight
+    instead (see RTGI TAA Profiles below).
 - `taa_disocclusion_threshold`
   - Default: `2.5` texels.
   - Controls how much motion-vector change is tolerated before history is
@@ -52,9 +54,32 @@ resolved + (resolved - neighborhood_average) * taa_sharpness
 The sharpened result is clamped back to the 3x3 neighborhood bounds to avoid
 obvious overshoot halos.
 
-RTGI has an additional internal stabilization path described in
-[path_tracing_gi.md](path_tracing_gi.md). That path can feed RTGI-specific
-reactivity into TAA without adding new public TAA or RTGI controls.
+### RTGI TAA Profiles
+
+When path-traced global illumination is active the resolve selects one of three
+profiles, because the fast path-traced primary and the reference path tracer
+have very different noise levels:
+
+- Full Path Tracing (fast) and Hybrid use a low-ghost profile. The path-traced
+  primary is already clean, so leaning on history mostly adds motion ghosting
+  rather than useful denoising. This profile lowers the history weight, weakens
+  the luminance flicker-reduction term, and rejects history on fast-moving
+  fragments (a velocity-driven cutoff after Playdead's INSIDE). Moving
+  characters keep far less ghosting while edge anti-aliasing still works.
+- The Full Path Tracing reference oracle uses a heavy-denoise profile. The
+  oracle is a very noisy, cache-free full path trace meant for A/B comparison,
+  so it keeps a high history weight and the full flicker-reduction term to calm
+  the noise. It overrides the viewport TAA setting and logs a one-time warning,
+  so the reference looks the same regardless of how a project configures its
+  viewport TAA. Its history weight is the
+  `rendering/rtgi/fpt_reference_taa/history_weight` project setting (default
+  `0.95`).
+- Pure raster keeps the stock resolve with the project history weight.
+
+During development the low-ghost profile can be tuned per knob with environment
+variables: `FPT_TAA_HISTORY` (history weight), `FPT_TAA_DIFF_STRENGTH`
+(flicker-reduction strength), and `FPT_TAA_KTRUST_LO` / `FPT_TAA_KTRUST_HI`
+(the velocity history-reject range in texels).
 
 Temporal upscalers keep their existing jitter behavior. FSR2 computes its own
 jitter phase count and ignores `taa_jitter_phase_count` and `taa_jitter_scale`.
@@ -78,11 +103,16 @@ jitter phase count and ignores `taa_jitter_phase_count` and `taa_jitter_scale`.
 - `servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.*`
   - Caches the TAA parameters in `RenderSceneBuffersRD`.
 - `servers/rendering/renderer_rd/effects/taa.*`
-  - Uses configurable TAA parameters and supports an internal RTGI reactivity
-    mask for RTGI-only resolves.
+  - Uses configurable TAA parameters, and selects the RTGI low-ghost or oracle
+    profile (per-mode history weight, flicker-reduction strength, and velocity
+    history-reject range), with environment-variable overrides for tuning.
 - `servers/rendering/renderer_rd/shaders/effects/taa_resolve.glsl`
   - Uses configurable history weight, disocclusion threshold, optional
-    sharpening, and optional RTGI reactivity.
+    sharpening, a per-profile anti-flicker strength, and a velocity-driven
+    history-reject.
+- `servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp`
+  - Picks the TAA profile from the active RTGI mode and applies the reference
+    oracle's viewport-TAA override.
 - `doc/classes/ProjectSettings.xml` and `doc/classes/Viewport.xml`
   - Document the public settings and official-like defaults.
 

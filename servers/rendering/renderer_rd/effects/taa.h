@@ -69,12 +69,16 @@ private:
 		float relax_agree_lo; // history-agreement gate: rel-distance(history, clamped) below this = full relax. Was _pad1.
 		float relax_agree_hi; // history-agreement gate: rel-distance above this = no relax (stock clamp -> no ghost). Was _pad2.
 		float relax_floor; // FPT relax: min per-frame blend on a fully-relaxed pixel = the held-pixel convergence rate. 0.02 ~= 2.5 s scene-change settle, 0.05 ~= 1 s. Sets the transient-vs-steady-calm tradeoff.
-		// std430 rounds the push-constant block up to a 16-byte multiple; the 17 used floats (68 B) round to
-		// 80 B, so pad the struct to 80 B to match the shader's declared push-constant size (else the dispatch
-		// fails with "requires (80) bytes ... supplied (68)" and TAA writes nothing -> black frame).
+		// std430 rounds the push-constant block up to a 16-byte multiple; the struct must match the shader's
+		// declared push-constant size or the dispatch fails ("requires (N) ... supplied (M)") and TAA writes
+		// nothing -> black frame. 22 used floats + 2 pad = 24 floats = 96 B.
 		float relax_change_gain; // FPT relax: box-independent spatial change-term weight (neighborhood mean + min vs history). 0 = prior rel-only gate. Was pad0.
 		float relax_dt_gain; // FPT relax: box-independent temporal-term weight (|current - history|); defaulted low. Was pad1.
-		float pad2; // keeps the struct at 80 B (16-byte multiple).
+		float diff_strength; // was pad2. 1.0 = stock anti-flicker; <1.0 weakens the toward-history pull on clean moving edges (low-ghost RTGI path).
+		float k_trust_lo; // INSIDE k_trust: velocity (texels) at which history-reject starts; <=0 disables.
+		float k_trust_hi; // velocity (texels) at which history is fully rejected.
+		float pad2;
+		float pad3; // keeps the struct at 96 B (24 floats, 16-byte multiple).
 	};
 
 	TaaResolveShaderRD taa_shader;

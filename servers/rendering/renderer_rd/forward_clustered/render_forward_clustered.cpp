@@ -4482,8 +4482,17 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// Hybrid / raster / the oracle (rt_fpt_reference) / multiview pass RID() + false, so their TAA stays
 			// byte-identical.
 			const RID rt_stable_for_taa = (rt_radiance_probes_fpt && !rt_fpt_reference && rtgi_primary_stabilize != nullptr && rtgi_primary_stabilize->has_stable() && p_render_data->scene_data->view_count == 1) ? rtgi_primary_stabilize->get_stable() : RID();
-			const bool fpt_taa_relax = rt_stable_for_taa.is_valid();
-			taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, false, RID(), RID(), RID(), RID(), 0.94f, RID(), rt_stable_for_taa, fpt_taa_relax);
+			// TAA profile: the noisy FPT-reference oracle gets a heavy-denoise profile (its own history weight +
+			// stock anti-flicker + firefly clamp) and OVERRIDES the viewport TAA; FPT-fast + Hybrid get the
+			// low-ghost profile (lower history + velocity k_trust + weaker anti-flicker); raster stays stock.
+			// rt_stable_for_taa is left computed but unused by the retired relax.
+			const bool taa_oracle = rt_fpt_reference;
+			const bool taa_low_ghost = rt_radiance_probes_composite && !rt_fpt_reference;
+			if (taa_oracle) {
+				WARN_PRINT_ONCE("FPT reference oracle overrides the viewport TAA with its own denoising profile (rendering/rtgi/fpt_reference_taa/*).");
+			}
+			const float taa_oracle_history = taa_oracle ? CLAMP((float)GLOBAL_GET("rendering/rtgi/fpt_reference_taa/history_weight"), 0.0f, 0.999f) : 0.94f;
+			taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, taa_oracle, RID(), RID(), RID(), RID(), taa_oracle_history, RID(), rt_stable_for_taa, taa_low_ghost);
 			RD::get_singleton()->draw_command_end_label();
 		}
 	}

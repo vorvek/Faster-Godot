@@ -87,7 +87,9 @@ void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_pr
 	// FPT confidence-relax (binding 10 carries the FPT primary stabilizer confidence in .a). Force the
 	// legacy reactivity-max OFF in this mode so the same binding-10 texel is never read with both signs
 	// (the relax wants MORE history on converged pixels; the reactivity-max wants more current).
-	push_constant.taa_confidence_relax_enabled = p_confidence_relax ? 1.0f : 0.0f;
+	// Old FPT stabilizer relax retired: the camera-cut boil it absorbed is GI convergence (not TAA-fixable) and
+	// it leaned on history, causing ghost. Forced off; p_confidence_relax now selects the low-ghost RTGI profile.
+	push_constant.taa_confidence_relax_enabled = 0.0f;
 	if (p_confidence_relax) {
 		push_constant.rt_taa_reactivity_enabled = 0.0f;
 	}
@@ -128,6 +130,30 @@ void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_pr
 	static const float s_taa_dt_gain = OS::get_singleton()->has_environment("FPT_TAA_DT_GAIN") ? OS::get_singleton()->get_environment("FPT_TAA_DT_GAIN").to_float() : 0.25f;
 	push_constant.relax_change_gain = p_confidence_relax ? CLAMP(s_taa_change_gain, 0.0f, 4.0f) : 0.0f;
 	push_constant.relax_dt_gain = p_confidence_relax ? CLAMP(s_taa_dt_gain, 0.0f, 4.0f) : 0.0f;
+
+	// RTGI low-ghost profile. p_confidence_relax now selects the low-ghost RTGI-normal profile (FPT-fast /
+	// Hybrid): tuned values (history 0.5, diff_strength 0.3, k_trust 4/12) cut ghosting on the clean
+	// path-traced primary. Raster + the oracle keep stock anti-flicker (diff 1.0), no velocity reject, and
+	// their own history weight. The FPT_TAA_* env vars override per knob for live tuning.
+	static const bool s_has_diff = OS::get_singleton()->has_environment("FPT_TAA_DIFF_STRENGTH");
+	static const float s_diff = s_has_diff ? OS::get_singleton()->get_environment("FPT_TAA_DIFF_STRENGTH").to_float() : 0.0f;
+	static const bool s_has_ktlo = OS::get_singleton()->has_environment("FPT_TAA_KTRUST_LO");
+	static const float s_ktlo = s_has_ktlo ? OS::get_singleton()->get_environment("FPT_TAA_KTRUST_LO").to_float() : 0.0f;
+	static const bool s_has_kthi = OS::get_singleton()->has_environment("FPT_TAA_KTRUST_HI");
+	static const float s_kthi = s_has_kthi ? OS::get_singleton()->get_environment("FPT_TAA_KTRUST_HI").to_float() : 12.0f;
+	static const bool s_has_hist = OS::get_singleton()->has_environment("FPT_TAA_HISTORY");
+	static const float s_hist = s_has_hist ? OS::get_singleton()->get_environment("FPT_TAA_HISTORY").to_float() : 0.0f;
+	const float diff_strength = s_has_diff ? s_diff : (p_confidence_relax ? 0.3f : 1.0f);
+	const float k_trust_lo = s_has_ktlo ? s_ktlo : (p_confidence_relax ? 4.0f : 0.0f);
+	const float k_trust_hi = s_has_kthi ? s_kthi : 12.0f;
+	push_constant.diff_strength = CLAMP(diff_strength, 0.0f, 1.0f);
+	push_constant.k_trust_lo = MAX(k_trust_lo, 0.0f);
+	push_constant.k_trust_hi = MAX(k_trust_hi, push_constant.k_trust_lo + 0.01f);
+	const float history_override = s_has_hist ? s_hist : (p_confidence_relax ? 0.5f : -1.0f);
+	if (history_override >= 0.0f) {
+		push_constant.history_weight = CLAMP(history_override, 0.0f, 0.99f);
+	}
+
 	if (p_raytracing_denoise) {
 		push_constant.history_weight = CLAMP(p_raytracing_history_weight, 0.0f, 0.999f);
 		push_constant.sharpness = 0.0f;

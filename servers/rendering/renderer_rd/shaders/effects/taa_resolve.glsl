@@ -80,7 +80,11 @@ layout(push_constant, std430) uniform Params {
 	float relax_floor; // FPT relax: min per-frame blend on a fully-relaxed pixel = held-pixel convergence rate (sets the scene-change transient length).
 	float relax_change_gain; // FPT relax: box-independent spatial change-term weight (neighborhood mean + min vs history). 0 = prior rel-only gate. Was pad0.
 	float relax_dt_gain; // FPT relax: box-independent temporal-term weight (|current - history|); defaulted low. Was pad1.
-	float pad2; // keeps the block at 80 B (std430 rounds the push constant up to a 16-byte multiple; matches the C++ TAAResolvePushConstant).
+	float diff_strength; // 1.0 = stock anti-flicker; <1.0 weakens the toward-history pull on clean moving edges.
+	float k_trust_lo; // INSIDE k_trust: history-reject start velocity (texels); <=0 disables.
+	float k_trust_hi; // full-reject velocity (texels).
+	float pad2;
+	float pad3; // 24 floats = 96 B (std430 16-byte multiple; matches the C++ TAAResolvePushConstant).
 }
 params;
 
@@ -643,7 +647,10 @@ vec3 temporal_antialiasing(ivec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_
 		float diff = abs(lum_color - lum_history) / max(lum_color, max(lum_history, 1.001));
 		diff = 1.0 - diff;
 		diff = diff * diff;
-		blend_factor = force_current ? 1.0 : mix(0.0, blend_factor, diff);
+		// diff_strength scales the anti-flicker toward-history pull: 1.0 = stock (full denoise, for the noisy
+		// oracle), 0.0 = no pull (low-ghost, for clean FPT-fast). diff_eff lerps diff toward 1.0 as strength drops.
+		float diff_eff = mix(1.0, diff, params.diff_strength);
+		blend_factor = force_current ? 1.0 : mix(0.0, blend_factor, diff_eff);
 		if (params.rt_taa_reactivity_enabled > 0.5) {
 			blend_factor = max(blend_factor, texelFetch(rt_taa_reactivity_buffer, ivec2(pos_screen), 0).r);
 		}
@@ -654,6 +661,15 @@ vec3 temporal_antialiasing(ivec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_
 		// conf == 0 (flag off, or any motion) leaves blend_factor unchanged, so non-FPT TAA is byte-identical.
 		if (params.taa_confidence_relax_enabled > 0.5 && !force_current) {
 			blend_factor = max(blend_factor * (1.0 - conf_eff), max(factor_disocclusion, params.relax_floor));
+		}
+
+		// Velocity history-reject (Playdead INSIDE k_trust): a fast-moving fragment fully rejects history to
+		// kill the trailing-edge ghost behind moving objects. blend_factor is the CURRENT-frame weight (1 = all
+		// current), so we floor it by k_trust. Disabled when k_trust_lo <= 0 (the raster / oracle default).
+		if (params.k_trust_lo > 0.0 && params.k_trust_hi > params.k_trust_lo) {
+			float speed_texels = length(velocity * params.resolution);
+			float k_trust = clamp((speed_texels - params.k_trust_lo) / (params.k_trust_hi - params.k_trust_lo), 0.0, 1.0);
+			blend_factor = max(blend_factor, k_trust);
 		}
 
 		// Lerp/blend

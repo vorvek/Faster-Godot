@@ -3829,7 +3829,7 @@ void RenderingServer::init() {
 
 	GLOBAL_DEF("rendering/anti_aliasing/quality/use_debanding", false);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/anti_aliasing/quality/taa_sharpness", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 0.0f);
-	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/anti_aliasing/quality/taa_history_weight", PROPERTY_HINT_RANGE, "0.0,0.99,0.001"), 0.9375f);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/anti_aliasing/quality/taa_history_weight", PROPERTY_HINT_RANGE, "0.0,0.99,0.001"), 0.875f);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/anti_aliasing/quality/taa_disocclusion_threshold", PROPERTY_HINT_RANGE, "0.0,8.0,0.01"), 2.5f);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/anti_aliasing/quality/taa_jitter_phase_count", PROPERTY_HINT_RANGE, "2,64,1"), 16);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/anti_aliasing/quality/taa_jitter_scale", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 1.0f);
@@ -3955,6 +3955,10 @@ void RenderingServer::init() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/gi_resolve/production/rough_spec_roughness_cutoff", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 0.4);
 	GLOBAL_DEF(PropertyInfo(Variant::BOOL, "rendering/rtgi/gi_resolve/production/rough_spec_enabled"), true);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/gi_resolve/production/history_rejection_strength", PROPERTY_HINT_RANGE, "0.25,4.0,0.05"), 1.25);
+
+	// FPT reference oracle TAA: the oracle is a very noisy full path trace used as an A/B reference, so it runs
+	// its own heavy-denoise TAA history weight and overrides the viewport TAA when active.
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/fpt_reference_taa/history_weight", PROPERTY_HINT_RANGE, "0.0,0.99,0.001"), 0.95);
 
 	// OpenGL limits
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/limits/opengl/max_renderable_elements", PROPERTY_HINT_RANGE, "1024,65536,1"), 65536);
