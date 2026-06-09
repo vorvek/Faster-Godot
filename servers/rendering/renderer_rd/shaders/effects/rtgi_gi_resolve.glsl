@@ -314,8 +314,14 @@ void resolve_probe_fused(ivec2 probe, vec3 probe_N, vec3 world_N, vec3 R, float 
 	for (int ty = 0; ty < res; ty++) {
 		for (int tx = 0; tx < res; tx++) {
 			vec2 local_oct = (vec2(tx, ty) + vec2(0.5)) * inv_res; // texel center.
-			vec3 local_dir = spg_hemioct_decode(local_oct); // local, +Z = probe_N.
-			vec3 world_dir = spg_local_to_world(local_dir, pt, pb, probe_N);
+			vec3 local_dir = spg_hemioct_decode(local_oct); // local, +Z = probe_N (unit).
+			// local->world WITHOUT the redundant normalize: (pt, pb, probe_N) is an orthonormal basis
+			// and local_dir is unit, so the rotated vector is already unit (spg_local_to_world's
+			// normalize only corrects FP epsilon). Dropping it saves a sqrt + divide on each of the
+			// up-to-256 texels/pixel in this INTEGRATE hot loop; ndl/lobe shift by < FP epsilon, so the
+			// resolved A is perceptually identical. (Hot-loop-scoped; the shared spg_local_to_world is
+			// unchanged for the placement/gather/accumulate callers.)
+			vec3 world_dir = pt * local_dir.x + pb * local_dir.y + probe_N * local_dir.z;
 
 			// Diffuse cosine weight toward the surface normal (resolve_integrate_probe).
 			float ndl = max(0.0, dot(world_N, world_dir));
