@@ -255,6 +255,7 @@ static RendererRD::RTGIGIResolve::GiResolveParams _resolve_gi_resolve_params(uin
 	params.rough_spec_roughness_cutoff = CLAMP(float(GLOBAL_GET(base + "rough_spec_roughness_cutoff")), 0.0f, 1.0f);
 	params.rough_spec_enabled = bool(GLOBAL_GET(base + "rough_spec_enabled"));
 	params.history_rejection = CLAMP(float(GLOBAL_GET(base + "history_rejection_strength")), 0.25f, 4.0f);
+	params.cold_start_fade_time = CLAMP(float(GLOBAL_GET(base + "cold_start_fade_time")), 0.0f, 1.0f);
 	return params;
 }
 

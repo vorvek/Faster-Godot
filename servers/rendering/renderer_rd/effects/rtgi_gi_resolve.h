@@ -46,6 +46,9 @@ public:
 		float rough_spec_roughness_cutoff = 0.5f; // below = sharp-reflections domain (deferred).
 		bool rough_spec_enabled = true;
 		float history_rejection = 1.0f; // depth/normal/mesh-id tolerance scale.
+		// Cold-start fade: seconds over which a freshly disoccluded pixel's diffuse GI leans on the
+		// smooth WRC and decays to the resolved SPG, hiding the cold-start convergence noise. 0 disables.
+		float cold_start_fade_time = 0.35f;
 	};
 
 	// Per-frame scalars handed to a single resolve dispatch. Mirrors how the A2
@@ -64,6 +67,9 @@ public:
 		uint32_t spg_grid_h = 0;
 		uint32_t spg_oct_res = 8;
 		uint32_t spg_spacing_f = 16;
+		// Frame delta-time (seconds), used by the TEMPORAL pass to advance the per-pixel
+		// disocclusion age in wall-clock so the cold-start fade is frame-rate independent.
+		float delta_time = 0.0f;
 	};
 
 	RTGIGIResolve();

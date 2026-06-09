@@ -3958,6 +3958,9 @@ void RenderingServer::init() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/gi_resolve/production/rough_spec_roughness_cutoff", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 0.4);
 	GLOBAL_DEF(PropertyInfo(Variant::BOOL, "rendering/rtgi/gi_resolve/production/rough_spec_enabled"), true);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/gi_resolve/production/history_rejection_strength", PROPERTY_HINT_RANGE, "0.25,4.0,0.05"), 1.25);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/gi_resolve/performance/cold_start_fade_time", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 0.35);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/gi_resolve/balanced/cold_start_fade_time", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 0.35);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/gi_resolve/production/cold_start_fade_time", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 0.35);
 
 	// FPT reference oracle TAA: the oracle is a very noisy full path trace used as an A/B reference, so it runs
 	// its own heavy-denoise TAA history weight and overrides the viewport TAA when active.
