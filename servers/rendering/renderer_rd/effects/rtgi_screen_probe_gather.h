@@ -97,7 +97,7 @@ public:
 	// screen motion, and writes the probe header. `p_velocity` may be a default
 	// black texture (motion reads 0) on a static scene. `p_inv_projection` is the
 	// clip->view inverse projection; `p_cam_transform` is the view->world transform.
-	void run_placement(Ref<RenderSceneBuffersRD> p_rb, RID p_depth, RID p_normal_roughness, RID p_velocity, const SpgFrameParams &p_frame, const Projection &p_inv_projection, const Transform3D &p_cam_transform, const Size2i &p_render_size);
+	void run_placement(Ref<RenderSceneBuffersRD> p_rb, RID p_depth, RID p_normal_roughness, RID p_velocity, const SpgFrameParams &p_frame, const Projection &p_inv_projection, const Transform3D &p_cam_transform, const Size2i &p_render_size, const Projection &p_prev_cam_projection, const Transform3D &p_prev_cam_transform);
 
 	// Record the temporal-accumulate + spatial-filter dispatches (A2-T3 + A2-T4) on a
 	// single compute list (barriers between): a REPROJECT pass over the whole radiance
@@ -201,6 +201,7 @@ private:
 	struct PlaceUBO {
 		float inv_projection[16];
 		float inv_view[16];
+		float prev_view_projection[16]; // offset 128: prev world->clip; camera-reproject for the velocity sentinel.
 		int screen_width;
 		int screen_height;
 		int pad0;

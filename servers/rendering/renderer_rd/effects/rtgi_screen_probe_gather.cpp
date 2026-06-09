@@ -220,7 +220,7 @@ bool RTGIScreenProbeGather::ensure_resources(Ref<RenderSceneBuffersRD> p_rb, con
 	return true;
 }
 
-void RTGIScreenProbeGather::run_placement(Ref<RenderSceneBuffersRD> p_rb, RID p_depth, RID p_normal_roughness, RID p_velocity, const SpgFrameParams &p_frame, const Projection &p_inv_projection, const Transform3D &p_cam_transform, const Size2i &p_render_size) {
+void RTGIScreenProbeGather::run_placement(Ref<RenderSceneBuffersRD> p_rb, RID p_depth, RID p_normal_roughness, RID p_velocity, const SpgFrameParams &p_frame, const Projection &p_inv_projection, const Transform3D &p_cam_transform, const Size2i &p_render_size, const Projection &p_prev_cam_projection, const Transform3D &p_prev_cam_transform) {
 	// THE FRAME SWAP: flip read_index here, BEFORE writing any headers, so this
 	// frame's placement/gather treat read_index as "current" and the accumulate reads
 	// 1 - read_index as "previous". Both ping-pong sets are allocated together, so the
@@ -313,6 +313,11 @@ void RTGIScreenProbeGather::run_placement(Ref<RenderSceneBuffersRD> p_rb, RID p_
 	memset(&ubo, 0, sizeof(PlaceUBO));
 	MaterialStorage::store_camera(p_inv_projection, ubo.inv_projection);
 	MaterialStorage::store_transform(p_cam_transform, ubo.inv_view);
+	// Previous-frame world -> clip (prev_proj * prev_view) so PLACE can camera-reproject the static
+	// geometry the velocity buffer leaves at the (-1,-1) sentinel. Jittered, matching the velocity-
+	// buffer convention so static and dynamic anchors reproject consistently.
+	const Projection prev_view_projection = p_prev_cam_projection * Projection(p_prev_cam_transform.affine_inverse());
+	MaterialStorage::store_camera(prev_view_projection, ubo.prev_view_projection);
 	ubo.screen_width = size.x;
 	ubo.screen_height = size.y;
 	RD::get_singleton()->buffer_update(place_ubo, 0, sizeof(PlaceUBO), &ubo);

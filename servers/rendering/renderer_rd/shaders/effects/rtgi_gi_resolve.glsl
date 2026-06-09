@@ -170,6 +170,9 @@ layout(set = 0, binding = 13, rgba16f) uniform restrict writeonly image2D dest_i
 layout(set = 0, binding = 14, std140) uniform GiResolveUBO {
 	mat4 inv_projection; // clip -> view.
 	mat4 inv_view; // view -> world (camera transform).
+	// PREVIOUS-frame world -> clip (prev_cam_projection * prev_cam_view). TEMPORAL camera-reprojects
+	// the static geometry the velocity buffer leaves at the (-1,-1) no-motion sentinel.
+	mat4 prev_view_projection;
 }
 ubo;
 
@@ -614,8 +617,40 @@ void resolve_temporal_main(ivec2 pos) {
 	// BOTH units and sign: a raw UV value ~0.01 rounded to 0, so the reproject never moved and the
 	// history smeared under motion.) On the static furnace mv == 0 -> prev == pos (identity
 	// reproject, byte-identical to before), so TEMPORAL degenerates to a stable in-place accumulate.
+	// The velocity buffer carries only per-OBJECT motion. Static geometry is rendered with NO
+	// motion-vector output (color_pass_inclusion_mask 0 in _fill_render_list), so it keeps the
+	// velocity attachment's (-1,-1) clear sentinel forever. Reprojecting that sentinel naively
+	// (prev = pos + mv*screen) lands ~a full screen off, so every static pixel reads as a fresh
+	// disocclusion EVERY frame -- which (a) prevents temporal accumulation on the entire static
+	// world (boil), and (b) keeps the cold-start path engaged screen-wide. A static surface's only
+	// screen motion IS the camera's, so for the sentinel derive prev from the world position
+	// reprojected by the previous frame's view-projection. Dynamic objects (real velocity) keep
+	// prev = pos + mv*screen unchanged.
 	vec2 mv = texelFetch(velocity_buffer, pos, 0).xy;
-	ivec2 prev = pos + ivec2(round(mv * vec2(pc.screen_w, pc.screen_h)));
+	ivec2 prev;
+	if (mv.x <= -1.0 && mv.y <= -1.0) {
+		float reproj_depth = texelFetch(depth_buffer, pos, 0).r;
+		vec4 prev_clip = vec4(0.0);
+		if (reproj_depth > 0.0) {
+			vec3 wpos = (ubo.inv_view * vec4(resolve_reconstruct_view_position(pos, reproj_depth), 1.0)).xyz;
+			prev_clip = ubo.prev_view_projection * vec4(wpos, 1.0);
+		}
+		if (prev_clip.w > 0.0) {
+			vec2 prev_uv = (prev_clip.xy / prev_clip.w) * 0.5 + 0.5;
+			prev = ivec2(floor(prev_uv * vec2(pc.screen_w, pc.screen_h)));
+		} else {
+			// Behind the old camera (a far cut: this surface was off-screen / behind the previous
+			// view) or sky. Emit an OUT-OF-BOUNDS sentinel so the bounds gate below rejects it as a
+			// TRUE disocclusion (n_d = 0 -> a fresh accumulate). NOT prev = pos: a self-fetch makes
+			// resolve_history_valid(pos, pos) trivially PASS (identical depth + normal -- there is
+			// one current-frame G-buffer, no prev-frame G-buffer), which FALSE-ACCEPTS the stale
+			// [prev_index] GI still sitting at this screen coord. That carried a high sample count,
+			// so the OLD camera's lighting showed through as a faint patch on far cuts.
+			prev = ivec2(-1);
+		}
+	} else {
+		prev = pos + ivec2(round(mv * vec2(pc.screen_w, pc.screen_h)));
+	}
 
 	float n_d = 0.0;
 	float n_s = 0.0;

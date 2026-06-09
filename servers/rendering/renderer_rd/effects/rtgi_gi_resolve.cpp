@@ -266,7 +266,8 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		RID p_guide_albedo, RID p_guide_orm,
 		RID p_spg_radiance, RID p_spg_header_plane, RID p_spg_header_aux,
 		RID p_wrc_radiance, RID p_wrc_distance,
-		const GiResolveFrameParams &p_frame, const Projection &p_inv_proj, const Transform3D &p_inv_view) {
+		const GiResolveFrameParams &p_frame, const Projection &p_inv_proj, const Transform3D &p_inv_view,
+		const Projection &p_prev_cam_projection, const Transform3D &p_prev_cam_transform) {
 	// THE FRAME SWAP (A3-T2): flip read_index ONCE at the TOP of the frame (mirrors
 	// RTGIScreenProbeGather::run_placement). AFTER the flip [read_index] is THIS frame's set
 	// (INTEGRATE writes it, TEMPORAL accumulates in place) and [1 - read_index] is the previous
@@ -515,6 +516,12 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	memset(&ubo, 0, sizeof(GiResolveUBO));
 	MaterialStorage::store_camera(p_inv_proj, ubo.inv_projection);
 	MaterialStorage::store_transform(p_inv_view, ubo.inv_view);
+	// Previous-frame world -> clip = prev_proj * prev_view (prev_view = inverse of the prev camera
+	// transform). TEMPORAL reprojects static geometry (the velocity sentinel) through this so the
+	// static world accumulates history. Built jittered, matching the jittered history the resolve
+	// stored.
+	const Projection prev_view_projection = p_prev_cam_projection * Projection(p_prev_cam_transform.affine_inverse());
+	MaterialStorage::store_camera(prev_view_projection, ubo.prev_view_projection);
 	RD::get_singleton()->buffer_update(resolve_ubo, 0, sizeof(GiResolveUBO), &ubo);
 
 	PushConstant push_constant;

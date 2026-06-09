@@ -72,6 +72,10 @@ layout(set = 0, binding = 4, rgba16f) uniform restrict writeonly image2D header_
 layout(set = 0, binding = 5, std140) uniform PlaceParams {
 	mat4 inv_projection; // clip -> view.
 	mat4 inv_view; // view -> world (camera transform).
+	// PREVIOUS-frame world -> clip (prev_cam_projection * prev_cam_view). Static geometry writes no
+	// motion vector (the velocity buffer keeps its (-1,-1) clear sentinel there), so for the sentinel
+	// the anchor's true screen motion is the CAMERA's: reproject the anchor world pos through this.
+	mat4 prev_view_projection;
 	int screen_width;
 	int screen_height;
 	int pad0;
@@ -159,7 +163,25 @@ void spg_place_main(ivec2 probe) {
 	// by the screen size to store header_aux.zw in PIXELS, which is what the SPG accumulate
 	// REPROJECT consumes (prev_cell = cell + motion_px / spacing). Storing the raw UV here is the
 	// bug that made the probe reproject round to 0 and smear the indirect under motion.
-	vec2 motion = texelFetch(velocity_buffer, found, 0).xy * vec2(place.screen_width, place.screen_height);
+	// STATIC geometry, however, writes NO motion vector (color_pass_inclusion_mask 0), so its
+	// velocity stays at the (-1,-1) clear sentinel -> a bogus ~full-screen motion that fails the
+	// reproject every frame, leaving the probe permanently reset to the WRC cold-start seed (it
+	// never accumulates/sharpens, and the seed runs full-cost forever). For the sentinel, the
+	// anchor's true screen motion is the CAMERA's: reproject its world pos through the previous
+	// view-projection. Dynamic anchors (real velocity) keep the velocity-buffer motion.
+	vec2 vel = texelFetch(velocity_buffer, found, 0).xy;
+	vec2 motion;
+	if (vel.x <= -1.0 && vel.y <= -1.0) {
+		vec4 prev_clip = place.prev_view_projection * vec4(world_pos, 1.0);
+		if (prev_clip.w > 0.0) {
+			vec2 prev_px = ((prev_clip.xy / prev_clip.w) * 0.5 + 0.5) * vec2(place.screen_width, place.screen_height);
+			motion = prev_px - (vec2(found) + vec2(0.5)); // prev - cur, in pixels (the stored convention).
+		} else {
+			motion = vec2(0.0); // anchor behind the previous camera: identity carry.
+		}
+	} else {
+		motion = vel * vec2(place.screen_width, place.screen_height);
+	}
 
 	imageStore(header_plane_image, probe, vec4(world_pos, linear_depth));
 	imageStore(header_aux_image, probe, vec4(vec3_to_oct(world_normal), motion));

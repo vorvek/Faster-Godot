@@ -100,7 +100,8 @@ public:
 			RID p_guide_albedo, RID p_guide_orm,
 			RID p_spg_radiance, RID p_spg_header_plane, RID p_spg_header_aux,
 			RID p_wrc_radiance, RID p_wrc_distance,
-			const GiResolveFrameParams &p_frame, const Projection &p_inv_proj, const Transform3D &p_inv_view);
+			const GiResolveFrameParams &p_frame, const Projection &p_inv_proj, const Transform3D &p_inv_view,
+			const Projection &p_prev_cam_projection, const Transform3D &p_prev_cam_transform);
 
 	RID get_diffuse_gi() const { return diffuse_gi[read_index]; } // RGBA16F: rgb = lighting-space A, a = confidence/variance.
 	RID get_spec_gi() const { return spec_gi[read_index]; } // RGBA16F: rgb = rough-spec radiance, a = variance.
@@ -197,6 +198,10 @@ private:
 	struct GiResolveUBO {
 		float inv_projection[16]; // offset 0: clip -> view.
 		float inv_view[16]; // offset 64: view -> world (camera transform).
+		// offset 128: PREVIOUS-frame world -> clip (prev_cam_projection * prev_cam_view). TEMPORAL
+		// camera-reprojects the static geometry the velocity buffer leaves at the (-1,-1) no-motion
+		// sentinel. 192 B total (a multiple of 16); matches the std140 GiResolveUBO in the .glsl.
+		float prev_view_projection[16];
 	};
 
 	RtgiGiResolveShaderRD shader;

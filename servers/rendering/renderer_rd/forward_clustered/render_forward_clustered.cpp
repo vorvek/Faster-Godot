@@ -3965,7 +3965,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				sfp.grid_h = (uint32_t)spg_grid.y;
 				sfp.rays_this_frame = (uint32_t)(spg_grid.x * spg_grid.y) * (uint32_t)spg_params.dirs_per_probe_per_frame;
 				sfp.frame_index = rt_state ? rt_state->frame_counter : 0;
-				rtgi_spg->run_placement(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), spg_vel, sfp, p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, spg_size);
+				rtgi_spg->run_placement(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), spg_vel, sfp, p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, spg_size, p_render_data->scene_data->prev_cam_projection, p_render_data->scene_data->prev_cam_transform);
 
 				// SPG gather (A2-T2): for each selected (probe, direction) this frame, query
 				// the WRC (cheap) and trace a HW-RT ray only when the cache is cold, writing
@@ -4064,7 +4064,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 								rb_data->rt_get_guide_albedo(), rb_data->rt_get_guide_orm(),
 								rtgi_spg->get_radiance_filtered(), rtgi_spg->get_header_plane(), rtgi_spg->get_header_aux(),
 								rtgi_wrc->get_radiance_atlas(), rtgi_wrc->get_distance_atlas(),
-								rfp, p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform);
+								rfp, p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform,
+								p_render_data->scene_data->prev_cam_projection, p_render_data->scene_data->prev_cam_transform);
 					}
 				}
 				RD::get_singleton()->draw_command_end_label();
