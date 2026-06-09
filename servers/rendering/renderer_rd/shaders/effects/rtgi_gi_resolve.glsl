@@ -717,10 +717,18 @@ void resolve_composite_main(ivec2 pos) {
 	vec3 diffuse_albedo = albedo * (1.0 - metalness);
 	vec4 diffuse_sample = texelFetch(diffuse_history, pos, 0); // binding 11 = [read_index] diffuse.
 	vec3 A = diffuse_sample.rgb; // lighting-space A.
-	// Cold-start fade: for a freshly disoccluded pixel (age < fade_time) lean the lighting-space A
-	// toward the smooth WRC irradiance, decaying the lean to 0 over fade_time. Hides the SPG/resolve
-	// cold-start convergence noise behind the cache until it is gone. Read-time only: the stored GI
-	// (diffuse_history) is untouched, so there is no history feedback. fade_time == 0 disables it.
+	// Cold-start fade: hide the SPG cold-start convergence noise for the ~fade_time after a pixel is
+	// disoccluded (age < fade_time), with two regimes selected by whether the WRC has data here.
+	// Read-time only: the stored GI (diffuse_history) is untouched, so there is no history feedback.
+	// fade_time == 0 disables it.
+	//   * WARM WRC (pans / partial disocclusion, the cache stays valid): lean the diffuse toward the
+	//     smooth WRC irradiance and ramp back to the real value over fade_time -- the GI stays correct
+	//     and bright while the SPG settles, no darkening.
+	//   * COLD WRC (a HARD camera cut: SPG, WRC and screen history are ALL cold, so no prior of any
+	//     kind exists, and the cold-start GI is not just noisy but biased): fade the whole indirect in
+	//     from ZERO over fade_time. A GI of 0 cannot blotch; it ramps in as the estimate converges.
+	//     Brief -- the cache warms within a couple of frames, after which pixels take the warm branch.
+	float cold_fade = 1.0; // indirect opacity for the cold-cut fade-in (1 = full GI; default / steady).
 	if (pc.fade_time > 0.0 && raw_depth > 0.0) {
 		float age = imageLoad(age_image, pos).r;
 		if (age < pc.fade_time) {
@@ -730,16 +738,19 @@ void resolve_composite_main(ivec2 pos) {
 			if (resolve_world_normal(pos, world_N)) {
 				float wrc_conf = 0.0;
 				vec3 wrc_irr = rtgi_wrc_sample_irradiance(wrc_radiance, wrc_distance, resolve_wrc_params(), world_pos, world_N, wrc_conf);
+				float ramp = smoothstep(0.0, pc.fade_time, age); // 0 at the cut -> 1 at fade_time.
 				if (wrc_conf > 0.0) {
-					float lean = 1.0 - smoothstep(0.0, pc.fade_time, age);
-					A = mix(A, wrc_irr, lean);
+					A = mix(wrc_irr, A, ramp); // warm: WRC at the cut, real value by fade_time.
+				} else {
+					cold_fade = ramp; // cold: indirect fades in from 0 -> full over fade_time.
 				}
 			}
 		}
 	}
 	vec3 spec = texelFetch(spec_history, pos, 0).rgb; // binding 12 = [read_index] spec: radiance-space (BRDF applied).
 	// Mask the background so the additive composite does not lift the raster sky/clear color.
-	vec3 indirect = (raw_depth <= 0.0) ? vec3(0.0) : (diffuse_albedo * A + spec);
+	// cold_fade fades the whole indirect (diffuse + spec) in from 0 over fade_time on a hard cut.
+	vec3 indirect = (raw_depth <= 0.0) ? vec3(0.0) : ((diffuse_albedo * A + spec) * cold_fade);
 
 	// GI-aware reactive mask ("poor-man's Ray Reconstruction"): diffuse_sample.a holds the
 	// post-TEMPORAL sample fraction n/n_cap in [0,1] (the resolve's per-pixel temporal CONFIDENCE).
