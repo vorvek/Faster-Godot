@@ -45,6 +45,10 @@ public:
 		float temporal_n_cap = 16.0f;
 		int spatial_radius = 1;
 		float rt_fallback_confidence = 0.5f;
+		// Cold-start WRC seed strength: effective sample count stamped into a freshly
+		// disoccluded probe so it is born smooth (seeded from the WRC) and sharpens into
+		// traced detail over ~seed_samples frames. 0 disables seeding.
+		float wrc_seed_samples = 4.0f;
 	};
 
 	// Per-frame scalars handed to a single SPG dispatch. `grid_w` / `grid_h` are

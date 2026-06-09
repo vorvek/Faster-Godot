@@ -227,6 +227,7 @@ static RendererRD::RTGIScreenProbeGather::SpgParams _resolve_spg_params(uint32_t
 	params.temporal_n_cap = float(CLAMP(int32_t(GLOBAL_GET(base + "temporal_sample_cap")), 4, 64));
 	params.spatial_radius = CLAMP(int32_t(GLOBAL_GET(base + "spatial_radius")), 0, 2);
 	params.rt_fallback_confidence = CLAMP(float(GLOBAL_GET(base + "rt_fallback_confidence")), 0.0f, 1.0f);
+	params.wrc_seed_samples = CLAMP(float(GLOBAL_GET(base + "wrc_seed_samples")), 0.0f, 16.0f);
 	// Keep the per-frame direction budget below the probe's full O*O direction count so
 	// the rotating scheduler maps each frame's slots to distinct directions (no double-
 	// sampling / starvation that would bias the T3 1/n blend). (Preserved from the stub.)

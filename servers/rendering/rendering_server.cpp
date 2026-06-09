@@ -3934,6 +3934,9 @@ void RenderingServer::init() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/screen_probe_gather/production/temporal_sample_cap", PROPERTY_HINT_RANGE, "4,64,1"), 12);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/screen_probe_gather/production/spatial_radius", PROPERTY_HINT_RANGE, "0,2,1"), 1);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/screen_probe_gather/production/rt_fallback_confidence", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 0.4);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/screen_probe_gather/performance/wrc_seed_samples", PROPERTY_HINT_RANGE, "0.0,16.0,0.5"), 4.0);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/screen_probe_gather/balanced/wrc_seed_samples", PROPERTY_HINT_RANGE, "0.0,16.0,0.5"), 4.0);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/screen_probe_gather/production/wrc_seed_samples", PROPERTY_HINT_RANGE, "0.0,16.0,0.5"), 4.0);
 
 	// RTGI GI-Resolve per-preset tunables. The same per-scene
 	// Environment.rtgi_quality_preset selector that picks the SPG tier also picks one
