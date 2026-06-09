@@ -231,7 +231,7 @@ void spg_reproject_main(ivec2 texel) {
 		if (wrc_conf > 0.0) {
 			float n_cap = max(params.temporal_n_cap, 1.0);
 			float seed_n = clamp(params.seed_samples, 0.0, n_cap - 1.0);
-			carried = vec4(seed_rgb, seed_n / n_cap);
+			carried = vec4(spg_sanitize_color(seed_rgb), seed_n / n_cap);
 		}
 	}
 	imageStore(radiance_cur, texel, carried);
