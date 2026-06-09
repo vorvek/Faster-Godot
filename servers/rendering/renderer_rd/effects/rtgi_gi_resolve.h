@@ -46,9 +46,10 @@ public:
 		float rough_spec_roughness_cutoff = 0.5f; // below = sharp-reflections domain (deferred).
 		bool rough_spec_enabled = true;
 		float history_rejection = 1.0f; // depth/normal/mesh-id tolerance scale.
-		// Cold-start fade: seconds over which a freshly disoccluded pixel's diffuse GI leans on the
-		// smooth WRC and decays to the resolved SPG, hiding the cold-start convergence noise. 0 disables.
-		float cold_start_fade_time = 0.35f;
+		// Cold-start fade: seconds over which a freshly disoccluded pixel's GI is eased in, hiding the
+		// SPG cold-start convergence noise. Where the WRC is warm (pans) the diffuse leans on the cache;
+		// on a hard cut (the WRC is cold too) the whole indirect fades in from zero. 0 disables.
+		float cold_start_fade_time = 0.5f;
 	};
 
 	// Per-frame scalars handed to a single resolve dispatch. Mirrors how the A2

@@ -378,6 +378,35 @@ oracle, and every other viewport keep the stock TAA path unchanged. Its threshol
 tunable through the FPT_TAA_CHANGE_GAIN, FPT_TAA_DT_GAIN, FPT_TAA_RELAX_FLOOR,
 FPT_TAA_AGREE_LO, FPT_TAA_AGREE_HI, and FPT_TAA_NORELAX environment variables.
 
+A freshly disoccluded screen probe has no accumulated history, so starting it
+from a single newly traced ray, which is high variance, left transient blotches
+in the resolved GI for a handful of frames until the probe filled in. Each such
+probe is now seeded from the World Radiance Cache, the coarse persistent clipmap
+the gather already maintains, so it starts at a smooth, plausible value and
+sharpens into its own traced detail over the next frames rather than rising up
+out of noise. This is the same fallback Lumen uses when a screen probe has no
+reprojected history. The seed strength is a per-preset Screen Probe Gather
+setting, wrc_seed_samples, with an RTGI_SPG_WRC_SEED_SAMPLES environment override.
+
+The seed narrows the blotch but cannot remove it on a hard camera cut, because a
+cut turns everything cold at once. The screen probes reset, and the World
+Radiance Cache itself recenters and re-traces at the new view, so for the few
+frames that matter its probes near the new geometry are not written yet, and its
+irradiance query returns nothing there. With no smooth prior available, the
+composite splits the two cases by whether the cache has data at the pixel. Where
+it is warm, which covers camera pans and partial disocclusions, the disoccluded
+pixel's diffuse leans on the cache irradiance and ramps back to its own value
+over a short window, so the region stays correct and bright while the estimate
+settles. Where it is cold, the hard cut, the whole indirect contribution fades
+in from zero across that window instead. A contribution of zero cannot show a
+wrong value, so the biased cold-start estimate stays invisible until it
+converges, at the cost of the indirect light easing in over a fraction of a
+second rather than appearing at once. The window length is a per-preset
+GI-resolve setting, cold_start_fade_time, defaulting to half a second, with an
+RTGI_GI_FADE_TIME environment override; zero disables the fade. The fade is a
+read-time display lean, so it never feeds back into the stored history, and it
+goes inert on a static frame once the per-pixel disocclusion age saturates.
+
 RTGI writes noisy radiance, depth, velocity, normal/roughness,
 albedo/metalness, view-Z, hit-distance, validity, and history ID guides at the
 scaled RT texture size. Hybrid RTGI maps those scaled GI pixels back onto the
