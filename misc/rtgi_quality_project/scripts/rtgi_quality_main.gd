@@ -1037,6 +1037,12 @@ func _run_capture() -> void:
 
 	var expected := _expected_metrics_for_scene(_load_expected_metrics())
 	var failures := _compare_metrics(metrics, expected)
+	# The fog-corridor gate is the FOGPAR verdict (it spans multiple runs, so it has
+	# no JSON thresholds); route it into the same failure list so a FAIL verdict
+	# reaches the exit code exactly like the threshold gates. The --rtgi-mode=off
+	# reference run records the baseline and sets no verdict key, so it stays green.
+	if str(metrics.get("fog_corridor_verdict", "")) == "FAIL":
+		failures.append("fog_corridor_fogpar_verdict FAIL (max_rel_err=%.6f)" % float(metrics.get("fog_corridor_max_rel_err", 1.0)))
 	metrics["expected_thresholds_applied"] = not expected.is_empty()
 	metrics["passed"] = failures.is_empty()
 	metrics["failures"] = failures

@@ -61,7 +61,12 @@ func measure_fog_parity(image: Image, output_dir: String, environment: Environme
 	var camera := get_viewport().get_camera_3d()
 	if camera == null:
 		push_error("fog_corridor: no active camera; cannot project probe rects.")
-		return {}
+		print("FOGPAR mode=unknown max_rel_err=1.0 seam=1.0 verdict=FAIL")
+		return {
+			"fog_corridor_verdict": "FAIL",
+			"fog_corridor_max_rel_err": 1.0,
+			"fog_corridor_no_camera": true,
+		}
 
 	var rect_lumas: Array[float] = []
 	for i in range(PROBE_DEPTHS.size()):
@@ -81,8 +86,16 @@ func measure_fog_parity(image: Image, output_dir: String, environment: Environme
 	}
 
 	var reference_path := "%s/%s" % [output_dir, REFERENCE_FILE_NAME]
-	var rtgi_off := environment == null or not environment.rtgi_enabled
-	if rtgi_off:
+	if environment == null:
+		# A null environment is a broken run, not the raster reference: there is no
+		# way to tell whether RTGI was on, so never record a reference from it.
+		push_error("fog_corridor: no Environment was resolved; cannot tell the raster reference run from an RTGI run.")
+		print("FOGPAR mode=unknown max_rel_err=1.0 seam=1.0 verdict=FAIL")
+		metrics["fog_corridor_verdict"] = "FAIL"
+		metrics["fog_corridor_max_rel_err"] = 1.0
+		metrics["fog_corridor_null_environment"] = true
+		return metrics
+	if not environment.rtgi_enabled:
 		_write_json(reference_path, {
 			"rect_lumas": rect_lumas,
 			"seam_glass_luma": glass_luma,
@@ -104,9 +117,22 @@ func measure_fog_parity(image: Image, output_dir: String, environment: Environme
 		return metrics
 
 	var raster_lumas: Array = reference["rect_lumas"]
+	var ref_width := int(reference.get("image_width", -1))
+	var ref_height := int(reference.get("image_height", -1))
+	if raster_lumas.size() != rect_lumas.size() or ref_width != image.get_width() or ref_height != image.get_height():
+		# A reference recorded with a different probe layout or capture resolution
+		# is stale; comparing a truncated subset would silently weaken the gate.
+		push_error("fog_corridor: stale raster reference '%s' (probes %d vs %d, image %dx%d vs %dx%d). Re-run --rtgi-mode=off into this output dir." % [
+				reference_path, raster_lumas.size(), rect_lumas.size(),
+				ref_width, ref_height, image.get_width(), image.get_height()])
+		print("FOGPAR mode=%d max_rel_err=1.0 seam=1.0 verdict=FAIL" % mode_id)
+		metrics["fog_corridor_verdict"] = "FAIL"
+		metrics["fog_corridor_max_rel_err"] = 1.0
+		metrics["fog_corridor_reference_stale"] = true
+		return metrics
 	var rel_errs: Array[float] = []
 	var max_rel_err := 0.0
-	for i in range(mini(rect_lumas.size(), raster_lumas.size())):
+	for i in range(rect_lumas.size()):
 		var raster := float(raster_lumas[i])
 		var rel_err: float = absf(rect_lumas[i] - raster) / maxf(raster, 1e-3)
 		rel_errs.append(rel_err)
