@@ -46,7 +46,7 @@ Useful options:
   flips imported Sponza normal-map green channels in the harness only)
 - `--rtgi-camera-pan`
 - `--rtgi-write-reference`
-- `--rtgi-mode=hybrid|fpt|reflections|off` (overrides the scene's authored RTGI mode; `off` disables RTGI for the run so per-scene comparisons can record a raster reference; left untouched when absent)
+- `--rtgi-mode=hybrid|fpt|fpt-reference|reflections|off` (overrides the scene's authored RTGI mode; `fpt-reference` selects the deep-path FPT oracle for informational A/B runs; `off` disables RTGI for the run so per-scene comparisons can record a raster reference; left untouched when absent)
 - `--rtgi-denoiser=asvfg|reactive|none` (overrides the scene's RTGI denoiser; left untouched when absent)
 - `--rtgi-resolution-scale=0.25..1.0` (scales the RTGI trace inside the 3D render; left untouched when absent)
 - `--rtgi-upscaler=none|taa|fsr2|xess` (configures the root viewport scaling; `none`/`taa` use bilinear, `taa` also enables built-in temporal AA; left untouched when absent)

@@ -100,6 +100,12 @@ func _apply_environment_overrides() -> void:
 			_environment.rtgi_mode = Environment.RTGI_MODE_HYBRID
 		"fpt":
 			_environment.rtgi_mode = Environment.RTGI_MODE_FULL_PATH_TRACING
+		"fpt-reference":
+			# Deep-path A/B oracle: the full per-pixel camera-ray path tracer with
+			# the probe composite bypassed. Used for informational A/B comparisons
+			# against the fast FPT path (for example recording the fog-model
+			# divergence); the per-scene gates are calibrated for the fast path.
+			_environment.rtgi_mode = Environment.RTGI_MODE_FULL_PATH_TRACING_REFERENCE
 		"reflections":
 			_environment.rtgi_mode = Environment.RTGI_MODE_REFLECTIONS_RT_ONLY
 		"off":
@@ -248,7 +254,7 @@ func _parse_args() -> void:
 			_specular_object_motion = true
 		elif arg.begins_with("--rtgi-mode="):
 			var mode := arg.trim_prefix("--rtgi-mode=").to_lower()
-			if mode in ["hybrid", "fpt", "reflections", "off"]:
+			if mode in ["hybrid", "fpt", "fpt-reference", "reflections", "off"]:
 				_rtgi_mode_override = mode
 			else:
 				push_warning("Unknown RTGI mode '%s'; leaving the scene-authored mode untouched." % mode)
