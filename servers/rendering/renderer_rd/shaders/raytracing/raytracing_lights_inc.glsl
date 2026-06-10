@@ -61,6 +61,23 @@ vec3 rt_light_area_ex(RTLightData l) { return l.spot_direction; }
 vec3 rt_light_area_ey(RTLightData l) { return vec3(l.radius, l.inv_spot_attenuation, l.cos_spot_angle); }
 vec3 rt_light_area_normal(RTLightData l) { return normalize(cross(rt_light_area_ex(l), rt_light_area_ey(l))); }
 
+// Directional-light accessors for fog_process (raytracing_fog_inc.glsl). Lifted here from
+// the closest-hit include so every stage that iterates rt_lights (closest hit AND the
+// FPT primary-direct raygen) shares one definition. The direction is returned in VIEW
+// space because fog_process compares it against the view vector normalize(vertex).
+vec3 fog_get_directional_color(uint index) {
+	return rt_lights[index].emission;
+}
+
+vec3 fog_get_directional_direction(uint index) {
+	vec3 world_dir = -normalize(rt_lights[index].position);
+	mat3 view_rot = transpose(mat3(
+			scene_data_block.data.view_matrix[0].xyz,
+			scene_data_block.data.view_matrix[1].xyz,
+			scene_data_block.data.view_matrix[2].xyz));
+	return view_rot * world_dir;
+}
+
 #include "area_light_sample_inc.glsl"
 
 // ============================================================================

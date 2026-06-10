@@ -377,19 +377,8 @@ vec2 rtgi_primary_diffuse_screen_probe_sample(HitData h, MaterialResult m, uint 
 // ============================================================================
 // ENVIRONMENT FOG (per ray segment)
 // ============================================================================
-
-vec3 fog_get_directional_color(uint index) {
-	return rt_lights[index].emission;
-}
-
-vec3 fog_get_directional_direction(uint index) {
-	vec3 world_dir = -normalize(rt_lights[index].position);
-	mat3 view_rot = transpose(mat3(
-			scene_data_block.data.view_matrix[0].xyz,
-			scene_data_block.data.view_matrix[1].xyz,
-			scene_data_block.data.view_matrix[2].xyz));
-	return view_rot * world_dir;
-}
+// fog_get_directional_color/direction live in raytracing_lights_inc.glsl (shared with the
+// FPT primary-direct raygen). This stage provides the FOG_HAS_RADIANCE sky sampler.
 
 #define FOG_HAS_RADIANCE
 

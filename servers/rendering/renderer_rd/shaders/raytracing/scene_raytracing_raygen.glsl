@@ -61,6 +61,24 @@ layout(set = 0, binding = 5, std430) readonly buffer MaterialBuffer {
 
 #include "raytracing_lights_inc.glsl"
 
+// Camera-segment fog for the FPT-fast primary surface (the rt_primary_direct_mode() block
+// in main). fog_process comes from raytracing_fog_inc.glsl; its aerial-perspective term
+// needs a stage-local fog_sample_radiance (gated by FOG_HAS_RADIANCE), mirroring the
+// closest-hit include but sampling THIS stage's sky octmap bindings
+// (rt_primary_radiance_octmap/rt_primary_radiance_sampler, set 0 bindings 7/8).
+#define FOG_HAS_RADIANCE
+
+vec3 fog_sample_radiance(vec3 vertex, float mip_level) {
+	vec3 cube_view = scene_data_block.data.radiance_inverse_xform * vertex;
+	float roughness_lod = mip_level * MAX_ROUGHNESS_LOD;
+	vec2 border = vec2(scene_data_block.data.radiance_border_size,
+			1.0 - scene_data_block.data.radiance_border_size * 2.0);
+	vec2 cube_uv = vec3_to_oct_with_border(cube_view, border);
+	return textureLod(sampler2D(rt_primary_radiance_octmap, rt_primary_radiance_sampler), cube_uv, roughness_lod).rgb;
+}
+
+#include "raytracing_fog_inc.glsl"
+
 // clang-format off
 layout(set = 0, binding = 32, std430) readonly buffer MotionTransforms {
 	InstanceMotionData motion_transforms[];
@@ -869,6 +887,22 @@ void main() {
 
 		radiance *= max(0.0, get_rt_param(RT_PARAM_ENERGY));
 		specular *= max(0.0, get_rt_param(RT_PARAM_ENERGY));
+
+		if ((RT_FLAGS & RT_FLAG_FOG_ENABLED) != 0u) {
+			// Camera-segment fog for the FPT primary surface: the exact raster formula
+			// (fog_process), applied ONCE at shade time, after the energy scale (the raster
+			// fogs the final shaded color; fog in-scatter is a scene constant and must not be
+			// energy-scaled). The in-scatter goes to the TOTAL radiance only; the specular
+			// split is ATTENUATED but never tinted, so the diffuse store below
+			// (radiance - specular) absorbs all of the in-scatter and the diffuse+specular ==
+			// total invariant is preserved (spec*(1-a) <= radiance*(1-a) + fog.rgb*a).
+			// The background branch above does NOT take this path: rt_primary_eval_sky
+			// already applies the miss-shader fog_sky_affect blend.
+			vec4 fog = fog_process(scene_data_block.data, rview_pos);
+			radiance = radiance * (1.0 - fog.a) + fog.rgb * fog.a;
+			specular = specular * (1.0 - fog.a);
+		}
+
 		radiance = sanitize_payload_vec3(radiance);
 		specular = min(sanitize_payload_vec3(specular), radiance);
 		imageStore(image, pixel_i, vec4(radiance, 1.0));
