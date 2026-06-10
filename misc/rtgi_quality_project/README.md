@@ -22,7 +22,7 @@ Use `--rtgi-output-dir=<path>` for an explicit output directory.
 
 Useful options:
 
-- `--rtgi-scene=stress|cornell|sponza|sdfgi|voxelgi|lightmap|lightprobe|path_traced_sdfgi_exclusive|cornell_box|specular_motion|reflective_pool`
+- `--rtgi-scene=stress|cornell|sponza|sdfgi|voxelgi|lightmap|lightprobe|path_traced_sdfgi_exclusive|cornell_box|specular_motion|reflective_pool|fog_corridor`
 - `--rtgi-denoise-strength=0.0..1.0`
 - `--rtgi-history-weight=0.0..0.98` (default `0.95` for split diffuse)
 - `--rtgi-firefly-suppression=0.0..1.0`
@@ -46,7 +46,7 @@ Useful options:
   flips imported Sponza normal-map green channels in the harness only)
 - `--rtgi-camera-pan`
 - `--rtgi-write-reference`
-- `--rtgi-mode=hybrid|fpt|reflections` (overrides the scene's authored RTGI mode; left untouched when absent)
+- `--rtgi-mode=hybrid|fpt|reflections|off` (overrides the scene's authored RTGI mode; `off` disables RTGI for the run so per-scene comparisons can record a raster reference; left untouched when absent)
 - `--rtgi-denoiser=asvfg|reactive|none` (overrides the scene's RTGI denoiser; left untouched when absent)
 - `--rtgi-resolution-scale=0.25..1.0` (scales the RTGI trace inside the 3D render; left untouched when absent)
 - `--rtgi-upscaler=none|taa|fsr2|xess` (configures the root viewport scaling; `none`/`taa` use bilinear, `taa` also enables built-in temporal AA; left untouched when absent)
@@ -206,7 +206,7 @@ Sources:
 
 ## Committed Weak-Spot Scenes
 
-Three extra scenes target specific RTGI weak spots. Unlike the runtime-built
+Four extra scenes target specific RTGI weak spots. Unlike the runtime-built
 modes above, these are committed static `.tscn` files under `scenes/`, so the
 harness loads them instead of rebuilding geometry each run. An earlier scene set
 was lost because it was only built at runtime in script and never committed;
@@ -228,6 +228,15 @@ keeping real `.tscn` files avoids that.
   sharp reflections of the emissives in the plane and emissive GI bleeding onto
   the plane, using a linear tonemapper. It measures reflection edge energy,
   reflected-firefly count, and the bled surface luma.
+- `fog_corridor`: a 40 m gray corridor with marker blocks every 4 m, one shadowed
+  OmniLight at the fixed camera, an alpha-blend glass pane at 8 m, and depth-mode
+  fog (begin 2 m, end 30 m). It checks that the ray-traced paths apply the same
+  fog the raster pipeline does. The comparison spans three runs sharing one
+  `--rtgi-output-dir`: run `--rtgi-mode=off` first to record the raster
+  reference, then `--rtgi-mode=hybrid` and `--rtgi-mode=fpt`. Each RTGI run
+  prints a `FOGPAR mode=<n> max_rel_err=<f> seam=<f> verdict=<PASS|FAIL>` line
+  comparing per-depth floor luminance (and the opaque/alpha seam at the glass
+  pane) against the reference; PASS requires `max_rel_err <= 0.10`.
 
 The `specular_motion` and `reflective_pool` animations are driven by an integer
 frame counter (never delta-time or wall-clock), so a captured run reproduces
@@ -250,9 +259,20 @@ D:\dev\faster-godot-4.6.3\bin\faster-godot.windows.editor.dev.x86_64.faster_godo
 D:\dev\faster-godot-4.6.3\bin\faster-godot.windows.editor.dev.x86_64.faster_godot.mono.console.exe --path D:\dev\faster-godot-4.6.3\misc\rtgi_quality_project --scene res://scenes/rtgi_quality_main.tscn --rtgi-scene=reflective_pool
 ```
 
-The thresholds for these three scenes in
+The fog-parity scene needs its three runs in order, sharing one output dir:
+
+```powershell
+$run = "D:\dev\faster-godot-4.6.3\bin\faster-godot.windows.editor.dev.x86_64.faster_godot.mono.console.exe --path D:\dev\faster-godot-4.6.3\misc\rtgi_quality_project --scene res://scenes/rtgi_quality_main.tscn --rtgi-scene=fog_corridor --rtgi-output-dir=<dir>"
+Invoke-Expression "$run --rtgi-mode=off"
+Invoke-Expression "$run --rtgi-mode=hybrid"
+Invoke-Expression "$run --rtgi-mode=fpt"
+```
+
+The thresholds for these scenes in
 `expected/rtgi_quality_expected.json` are initial, intentionally lenient
 baselines. Tighten them after a reviewed per-GPU baseline capture.
+`fog_corridor` carries no JSON thresholds; its gate is the FOGPAR verdict
+line, since the comparison spans multiple runs.
 
 ## Sponza
 

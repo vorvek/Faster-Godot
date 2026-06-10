@@ -102,6 +102,11 @@ func _apply_environment_overrides() -> void:
 			_environment.rtgi_mode = Environment.RTGI_MODE_FULL_PATH_TRACING
 		"reflections":
 			_environment.rtgi_mode = Environment.RTGI_MODE_REFLECTIONS_RT_ONLY
+		"off":
+			# Raster reference run: keep the scene as authored but disable RTGI
+			# entirely, so per-scene comparisons (for example fog parity) can
+			# record what the raster pipeline alone produces.
+			_environment.rtgi_enabled = false
 	match _rtgi_denoiser_override:
 		"asvfg":
 			_environment.rtgi_denoiser = Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL
@@ -197,7 +202,7 @@ func _parse_args() -> void:
 			_convergence_frames = clampi(arg.trim_prefix("--rtgi-convergence-frames=").to_int(), 0, 128)
 		elif arg.begins_with("--rtgi-scene="):
 			var requested_scene := arg.trim_prefix("--rtgi-scene=").to_lower()
-			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability", "offscreen_bounce", "cornell_box", "specular_motion", "reflective_pool"]:
+			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability", "offscreen_bounce", "cornell_box", "specular_motion", "reflective_pool", "fog_corridor"]:
 				_scene_mode = requested_scene
 			else:
 				push_warning("Unknown RTGI quality scene '%s'; using stress scene." % requested_scene)
@@ -243,7 +248,7 @@ func _parse_args() -> void:
 			_specular_object_motion = true
 		elif arg.begins_with("--rtgi-mode="):
 			var mode := arg.trim_prefix("--rtgi-mode=").to_lower()
-			if mode in ["hybrid", "fpt", "reflections"]:
+			if mode in ["hybrid", "fpt", "reflections", "off"]:
 				_rtgi_mode_override = mode
 			else:
 				push_warning("Unknown RTGI mode '%s'; leaving the scene-authored mode untouched." % mode)
@@ -374,7 +379,7 @@ func _build_scene() -> void:
 
 
 func _is_packed_test_scene() -> bool:
-	return _scene_mode in ["cornell_box", "specular_motion", "reflective_pool"]
+	return _scene_mode in ["cornell_box", "specular_motion", "reflective_pool", "fog_corridor"]
 
 
 # Loads one of the committed static test scenes (cornell_box, specular_motion,
@@ -986,6 +991,8 @@ func _run_capture() -> void:
 		metrics.merge(_measure_cornell_box_image(final_image), true)
 	elif _scene_mode == "reflective_pool":
 		metrics.merge(_measure_reflective_pool_image(final_image), true)
+	elif _scene_mode == "fog_corridor":
+		metrics.merge(_measure_fog_corridor_image(final_image), true)
 	elif _is_coexistence_scene():
 		metrics.merge(await _measure_coexistence_image(final_image, base_name), true)
 	metrics["denoise_strength"] = _denoise_strength
@@ -2596,6 +2603,19 @@ func _measure_reflective_pool_image(image: Image) -> Dictionary:
 		"reflective_pool_surface_mean_luma": pool_luma,
 		"reflective_pool_reflection_fireflies": reflection_fireflies,
 	}
+
+
+# Fog-parity measurement for the committed fog_corridor scene. The probe-rect
+# math and the machine-readable FOGPAR verdict line live in
+# scripts/fog_corridor_metric.gd on the scene root; the harness hands over the
+# capture, the output dir, and the live Environment. One invocation measures
+# one config: --rtgi-mode=off records the raster reference JSON, and the
+# hybrid/fpt runs compare their per-depth floor luminances against it.
+func _measure_fog_corridor_image(image: Image) -> Dictionary:
+	if _packed_scene_root != null and _packed_scene_root.has_method("measure_fog_parity"):
+		return _packed_scene_root.measure_fog_parity(image, _output_dir, _environment)
+	push_warning("fog_corridor scene root does not expose measure_fog_parity; regenerate the scene with tools/generate_test_scenes.gd.")
+	return {}
 
 
 func _measure_black_fraction(image: Image, x0: int, y0: int, x1: int, y1: int, threshold: float) -> float:

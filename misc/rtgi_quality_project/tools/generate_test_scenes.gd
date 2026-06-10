@@ -1,6 +1,6 @@
 extends SceneTree
 
-# Committed generator for the three RTGI weak-spot test scenes. It builds each
+# Committed generator for the RTGI weak-spot test scenes. It builds each
 # scene programmatically with the same node and material construction the
 # runtime harness uses (BoxMesh/SphereMesh primitives, StandardMaterial3D,
 # OmniLight3D, a WorldEnvironment with RTGI enabled), then packs and saves a
@@ -18,10 +18,12 @@ extends SceneTree
 #   res://scenes/cornell_box.tscn
 #   res://scenes/specular_motion.tscn
 #   res://scenes/reflective_pool.tscn
+#   res://scenes/fog_corridor.tscn
 
 const SCENES_DIR := "res://scenes"
 const SPECULAR_ANIM_SCRIPT := "res://scripts/specular_motion_anim.gd"
 const REFLECTIVE_ANIM_SCRIPT := "res://scripts/reflective_pool_anim.gd"
+const FOG_METRIC_SCRIPT := "res://scripts/fog_corridor_metric.gd"
 
 
 func _initialize() -> void:
@@ -29,6 +31,7 @@ func _initialize() -> void:
 	ok = _save_scene(_build_cornell_box_scene(), "%s/cornell_box.tscn" % SCENES_DIR) and ok
 	ok = _save_scene(_build_specular_motion_scene(), "%s/specular_motion.tscn" % SCENES_DIR) and ok
 	ok = _save_scene(_build_reflective_pool_scene(), "%s/reflective_pool.tscn" % SCENES_DIR) and ok
+	ok = _save_scene(_build_fog_corridor_scene(), "%s/fog_corridor.tscn" % SCENES_DIR) and ok
 	if ok:
 		print("RTGI test-scene generation complete.")
 	else:
@@ -436,5 +439,104 @@ func _build_reflective_pool_scene() -> Node3D:
 	root.add_child(camera)
 	_claim(root, camera)
 	camera.look_at(Vector3(0.0, 0.72, 0.0), Vector3.UP)
+
+	return root
+
+
+# --- Fog corridor -----------------------------------------------------------
+# Depth-fog parity scene: a 40 m gray corridor receding from a fixed camera,
+# marker blocks every 4 m from z = -2 to z = -38, one shadowed OmniLight at
+# the camera, and an alpha-blend glass pane over the left half of the corridor
+# at z = -8. The Environment authors depth-mode fog (begin 2 m, end 30 m,
+# density 1.0), so the raster reference shows a gentle near-to-far haze ramp.
+# A ray path that ignores fog_mode and applies exponential fog at density 1.0
+# grays the corridor out within a few meters instead, which is exactly what
+# fog_corridor_metric.gd (attached to the root) measures: per-depth floor
+# luminance against the raster (--rtgi-mode=off) reference, plus the
+# opaque/alpha seam either side of the glass pane. The shell albedo is kept
+# dark so the RTGI indirect bounce stays a small share of the floor signal;
+# the fog ramp is the comparison, not the GI lift. RTGI is authored to Full
+# Path Tracing; the harness overrides the mode per run.
+func _build_fog_corridor_scene() -> Node3D:
+	var root := Node3D.new()
+	root.name = "FogCorridor"
+	root.set_script(load(FOG_METRIC_SCRIPT))
+
+	var env := _make_rtgi_environment()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.4, 0.5, 0.7)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_DISABLED
+	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	env.tonemap_exposure = 1.0
+	env.fog_enabled = true
+	env.fog_mode = Environment.FOG_MODE_DEPTH
+	env.fog_density = 1.0
+	env.fog_depth_begin = 2.0
+	env.fog_depth_end = 30.0
+	env.fog_light_color = Color(0.8, 0.75, 0.7)
+	env.rtgi_mode = Environment.RTGI_MODE_FULL_PATH_TRACING
+	root.add_child(_make_world_environment(env))
+	_claim(root, root.get_node("RTGIWorldEnvironment"))
+
+	var shell := _make_flat_material(Color(0.30, 0.30, 0.30), 0.95, 0.0)
+	var marker_material := _make_flat_material(Color(0.45, 0.45, 0.45), 0.85, 0.0)
+
+	# Corridor shell: x in [-2.5, 2.5], floor at y = 0, ceiling at y = 4,
+	# running from z = +1 down to z = -43 with a far end cap.
+	_add_box(root, root, "Floor", Vector3(0.0, -0.1, -21.0), Vector3(5.0, 0.2, 44.0), shell)
+	_add_box(root, root, "Ceiling", Vector3(0.0, 4.1, -21.0), Vector3(5.0, 0.2, 44.0), shell)
+	_add_box(root, root, "LeftWall", Vector3(-2.6, 2.0, -21.0), Vector3(0.2, 4.4, 44.0), shell)
+	_add_box(root, root, "RightWall", Vector3(2.6, 2.0, -21.0), Vector3(0.2, 4.4, 44.0), shell)
+	_add_box(root, root, "EndCap", Vector3(0.0, 2.0, -43.1), Vector3(5.4, 4.4, 0.2), shell)
+
+	# Marker blocks every 4 m, alternating sides so every front face stays
+	# visible from the fixed camera. They give the captures readable depth
+	# steps; the measurement itself probes the open floor strip at
+	# x in [0.2, 0.7], which no marker body or marker shadow reaches (the
+	# light sits on the corridor axis, so marker shadows fall outward).
+	for i in range(10):
+		var z := -2.0 - 4.0 * float(i)
+		var side := -1.4 if i % 2 == 0 else 1.4
+		_add_box(root, root, "Marker_%02d" % i, Vector3(side, 0.6, z), Vector3(1.0, 1.2, 0.5), marker_material)
+
+	# Alpha-blend glass pane over the left half of the corridor at z = -8. The
+	# metric compares the floor seen through this pane against the clear right
+	# side at the same depth (the opaque/alpha fog seam check). Shadow casting
+	# is off so the pane does not darken the raster reference.
+	var glass := StandardMaterial3D.new()
+	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass.albedo_color = Color(0.85, 0.92, 1.0, 0.4)
+	glass.roughness = 0.08
+	glass.metallic = 0.0
+	var pane := _add_box(root, root, "GlassPane", Vector3(-1.225, 1.8, -8.0), Vector3(2.35, 3.6, 0.05), glass)
+	pane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+	# Single shadowed key light at the camera, per the fog-parity setup: the
+	# corridor is lit head-on, so the per-depth luminance ramp comes from the
+	# light falloff plus the fog, with no other emitters in play.
+	var light := OmniLight3D.new()
+	light.name = "CameraOmniLight"
+	light.position = Vector3(0.0, 1.7, 0.4)
+	light.light_energy = 4.0
+	light.omni_range = 46.0
+	light.shadow_enabled = true
+	root.add_child(light)
+	_claim(root, light)
+
+	var camera := Camera3D.new()
+	camera.name = "FogCorridorCamera"
+	camera.current = true
+	camera.fov = 60.0
+	camera.near = 0.05
+	camera.far = 80.0
+	camera.position = Vector3(0.0, 1.6, 0.0)
+	root.add_child(camera)
+	_claim(root, camera)
+	# Pitch down slightly so the nearest floor probe (about 3 m out) stays
+	# inside the bottom of the frame while the far end remains visible. This
+	# must be look_at_from_position: plain look_at silently does nothing here
+	# because the generated root is never inside a scene tree, which is also
+	# why the older scenes carry hand-tuned camera transforms.
+	camera.look_at_from_position(camera.position, Vector3(0.0, 0.0, -14.0), Vector3.UP)
 
 	return root

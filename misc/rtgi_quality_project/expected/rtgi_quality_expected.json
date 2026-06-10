@@ -131,6 +131,10 @@
 				"min_reflective_pool_surface_mean_luma": 0.01,
 				"max_reflective_pool_reflection_fireflies": 12.0
 			}
+		},
+		"fog_corridor": {
+			"_note": "Fog parity is gated by the FOGPAR verdict line the scene's metric script prints (PASS needs max_rel_err <= 0.10 against the --rtgi-mode=off raster reference). No JSON thresholds: the comparison spans multiple runs sharing one output dir, so a single-run threshold gate cannot express it.",
+			"thresholds": {}
 		}
 	}
 }
