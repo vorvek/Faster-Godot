@@ -38,6 +38,7 @@
 #include "core/input/input.h"
 #include "core/io/image.h"
 #include "core/os/os.h"
+#include "core/templates/local_vector.h"
 #include "drivers/wasapi/audio_driver_wasapi.h"
 #include "drivers/winmidi/midi_driver_winmidi.h"
 #include "servers/audio/audio_server.h"
@@ -536,6 +537,8 @@ class DisplayServerWindows : public DisplayServer {
 
 	void initialize_tts() const;
 	void process_raw_input();
+	void _process_raw_input_event(const RAWINPUT &p_raw, WindowID p_window_id);
+	LocalVector<uint8_t> raw_input_buffer;
 
 public:
 	LRESULT WndProcFileDialog(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
