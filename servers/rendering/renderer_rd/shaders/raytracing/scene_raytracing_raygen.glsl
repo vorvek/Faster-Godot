@@ -1258,7 +1258,7 @@ void main() {
 		sky_color = vec3(get_rt_param(RT_PARAM_BACKGROUND_R), get_rt_param(RT_PARAM_BACKGROUND_G), get_rt_param(RT_PARAM_BACKGROUND_B));
 	}
 
-	if ((RT_FLAGS & RT_FLAG_FOG_ENABLED) != 0u) {
+	if ((RT_FLAGS & RT_FLAG_FOG_ENABLED) != 0u && !rt_wrc_probe_update_mode() && !rt_spg_gather_mode()) {
 		vec3 fog_color = scene_data_block.data.fog_light_color;
 
 		if (background_uses_sky && scene_data_block.data.fog_aerial_perspective > 0.0) {

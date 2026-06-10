@@ -411,6 +411,13 @@ void apply_segment_fog(float segment_dist, inout vec3 radiance, inout vec3 throu
 		return;
 	}
 
+	if (rt_wrc_probe_update_mode() || rt_spg_gather_mode()) {
+		// Probe traces cache fog-free WORLD radiance; fog is a camera effect applied once at
+		// consume time (FPT primary raygen + composite transmittance). Baking camera-relative
+		// fog into the cache double-fogs every consumer.
+		return;
+	}
+
 	// Build a view-space vertex along the ray direction at the hit distance.
 	// fog_process needs view-space position for distance and height calculations.
 	mat4 view_mat = transpose(mat4(
