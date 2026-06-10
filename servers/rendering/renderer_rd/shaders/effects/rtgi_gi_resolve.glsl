@@ -130,11 +130,11 @@ pc;
 // rtgi_spg_accumulate.glsl declares its full layout). G-buffers (0-1), the material-guide
 // albedo (2), the velocity buffer (3, TEMPORAL), SPG atlas + headers (4-6), WRC atlases
 // (7-8), the GI read+write images (9-10), the GI history read samplers (11-12), the debug
-// dest image (13), the params UBO (14), the material-guide ORM (15), and the GI-aware reactive
-// mask output (16). INTEGRATE writes 9-10 and reads 0-2 + 4-8 + 15 (it ignores 3/11/12);
-// TEMPORAL reads 3 + 11-12 + the cur G-buffer and read-modify-writes 9-10 in place; DEBUG_GI
-// reads 11-12 and writes 13; COMPOSITE reads 0 + 2 + 11/12 + 15, writes 13, and (only when
-// pc.write_reactive == 1u) writes 16.
+// dest image (13), the params UBO (14), the material-guide ORM (15), the GI-aware reactive
+// mask output (16), and the composite fog UBO (17). INTEGRATE writes 9-10 and reads 0-2 + 4-8 +
+// 15 (it ignores 3/11/12); TEMPORAL reads 3 + 11-12 + the cur G-buffer and read-modify-writes
+// 9-10 in place; DEBUG_GI reads 11-12 and writes 13; COMPOSITE reads 0 + 2 + 11/12 + 15 + 17,
+// writes 13, and (only when pc.write_reactive == 1u) writes 16.
 layout(set = 0, binding = 0) uniform sampler2D depth_buffer;
 layout(set = 0, binding = 1) uniform sampler2D normal_roughness_buffer;
 // Material-guide albedo (A3-T1): rgb = base albedo, a = alpha. Populated by the "RTGI Material
@@ -207,6 +207,35 @@ layout(set = 0, binding = 15) uniform sampler2D guide_orm;
 // reactive denoiser is off the caller binds a tiny format-matching r8 dummy here as a neutral
 // placeholder and the shader never touches it, so there is no aliasing in either case.
 layout(set = 0, binding = 16, r8) uniform writeonly image2D reactive_image;
+
+// Camera-segment fog parameters (binding 17): COMPOSITE attenuates the composited indirect by the
+// camera-to-surface fog transmittance (1 - fog_amount), so GI stops glowing through fog. Only the
+// ATTENUATION side of the fog model lives here -- the in-scatter is NOT re-added (the raster
+// opaque pass carries it for Hybrid; the FPT primary-direct raygen applied it at shade time). The
+// fog_amount formulas mirror raytracing_fog_inc.glsl::fog_process exactly (depth mode = raster
+// smoothstep/pow/density; exponential otherwise; height fog maxed in). The surface distance is
+// linearized DIRECTLY from the [0,1] reverse-Z device depth via z_near/z_far + the projection
+// diagonal; it deliberately does NOT use resolve_reconstruct_view_position: ubo.inv_projection is
+// the inverse of the RAW (uncorrected, GL-convention) cam_projection, and feeding it the corrected
+// [0,1] reverse-Z device depth collapses every distance to ~2*z_near (measured on the fog
+// corridor: all reconstructed distances ~0.1 m -> fog_amount 0 -> identity).
+// Mirrors RTGIGIResolve::CompositeFogParams field-for-field (std140). Only COMPOSITE reads it; the
+// other modes bind a neutral buffer at this slot. fog_flags 0 (fog disabled) = identity multiply.
+layout(set = 0, binding = 17, std140) uniform CompositeFogParams {
+	uint fog_flags; // bit 0 = enabled, bit 1 = depth mode (ENV_FOG_MODE_DEPTH), bit 2 = orthographic.
+	float fog_density;
+	float fog_depth_begin;
+	float fog_depth_end;
+	float fog_depth_curve;
+	float fog_height;
+	float fog_height_density;
+	float fog_z_near;
+	float fog_z_far;
+	float fog_inv_proj_x; // 1 / P[0][0]
+	float fog_inv_proj_y; // 1 / P[1][1]
+	float fog_pad0;
+}
+composite_fog;
 
 // Split-sum environment-BRDF DFG approximation (Karis' analytic fit), returning the
 // (scale, bias) pair so the specular term is F0 * dfg.x + dfg.y. This is the SAME analytic
@@ -809,6 +838,55 @@ void resolve_composite_main(ivec2 pos) {
 	// Mask the background so the additive composite does not lift the raster sky/clear color.
 	// cold_fade fades the whole indirect (diffuse + spec) in from 0 as the GI converges (load/disocclusion/cut).
 	vec3 indirect = (raw_depth <= 0.0) ? vec3(0.0) : ((diffuse_albedo * A + spec) * cold_fade);
+
+	// Camera-segment fog transmittance (WS1): attenuate the indirect by 1 - fog_amount at the
+	// surface's camera distance, so the composited GI stops glowing through fog. This output is
+	// ONLY the probe indirect in BOTH modes -- Hybrid adds it onto the already-fogged raster
+	// opaque, FPT-replace adds it onto the already-fogged primary-direct (the C++ does the adds)
+	// -- so the multiply here never double-fogs the base layer, and the in-scatter those base
+	// layers carry is not re-added. fog_amount mirrors raytracing_fog_inc.glsl::fog_process: the
+	// depth mode uses the raster smoothstep/pow/density formula, the exponential mode
+	// 1 - exp(-dist * density), both clamped to a valid opacity, with the height-fog max applied
+	// after. The view position is linearized from the SAME raw_depth/pos the mask above used
+	// ([0,1] reverse-Z device depth in both modes: the raster depth for Hybrid, rt_depth_image --
+	// which stores the raster guide depth -- for FPT): the corrected device depth of a surface at
+	// view distance vz is d = n*(f - vz) / ((f - n)*vz), so vz = n*f / mix(n, f, d); the view xy
+	// come from the NDC ray through the projection diagonal (Vulkan NDC y is flipped vs the
+	// GL-convention projection, hence -ndc.y). See the CompositeFogParams comment for why
+	// resolve_reconstruct_view_position cannot be used here.
+	if ((composite_fog.fog_flags & 1u) != 0u && raw_depth > 0.0) {
+		vec2 fog_ndc = (2.0 * (vec2(pos) + vec2(0.5)) / vec2(pc.screen_w, pc.screen_h)) - 1.0;
+		vec3 fog_view_pos;
+		if ((composite_fog.fog_flags & 4u) != 0u) {
+			// Orthographic: device depth is linear in view z (d = (f - vz) / (f - n)).
+			float fog_vz = mix(composite_fog.fog_z_far, composite_fog.fog_z_near, raw_depth);
+			fog_view_pos = vec3(fog_ndc.x * composite_fog.fog_inv_proj_x, -fog_ndc.y * composite_fog.fog_inv_proj_y, -fog_vz);
+		} else {
+			float fog_vz = composite_fog.fog_z_near * composite_fog.fog_z_far / mix(composite_fog.fog_z_near, composite_fog.fog_z_far, raw_depth);
+			fog_view_pos = vec3(fog_ndc.x * composite_fog.fog_inv_proj_x * fog_vz, -fog_ndc.y * composite_fog.fog_inv_proj_y * fog_vz, -fog_vz);
+		}
+		float fog_dist = length(fog_view_pos);
+		float fog_amount;
+		if ((composite_fog.fog_flags & 2u) != 0u) {
+			// Raster depth-fog parity (the sc_use_depth_fog() branch of fog_process()).
+			float fog_z = smoothstep(composite_fog.fog_depth_begin, composite_fog.fog_depth_end, fog_dist);
+			fog_amount = pow(fog_z, composite_fog.fog_depth_curve) * composite_fog.fog_density;
+		} else {
+			fog_amount = 1.0 - exp(min(0.0, -fog_dist * composite_fog.fog_density));
+		}
+		// Keep the attenuation a valid opacity even when density > 1 pushes the depth formula
+		// past 1 (the same deliberate divergence from the raster's FP16 extrapolation that
+		// raytracing_fog_inc.glsl documents).
+		fog_amount = clamp(fog_amount, 0.0, 1.0);
+		if (abs(composite_fog.fog_height_density) >= 0.0001) {
+			// ubo.inv_view is the plain camera transform (no projection conventions involved),
+			// so it is safe for the world-y reconstruction.
+			float fog_world_y = (ubo.inv_view * vec4(fog_view_pos, 1.0)).y;
+			float y_dist = fog_world_y - composite_fog.fog_height;
+			fog_amount = max(fog_amount, 1.0 - exp(min(0.0, y_dist * composite_fog.fog_height_density)));
+		}
+		indirect *= 1.0 - fog_amount;
+	}
 
 	// GI-aware reactive mask ("poor-man's Ray Reconstruction"): diffuse_sample.a holds the
 	// post-TEMPORAL sample fraction n/n_cap in [0,1] (the resolve's per-pixel temporal CONFIDENCE).

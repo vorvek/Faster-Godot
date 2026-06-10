@@ -4214,6 +4214,34 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				cfp.wrc_cascade_count = (uint32_t)wrc_params.cascade_count;
 				cfp.wrc_base_spacing = wrc_params.base_spacing;
 				cfp.spg_oct_res = (uint32_t)spg_params.oct_res;
+				// Camera-segment fog attenuation for the composited indirect: without it the GI is
+				// added at full strength regardless of fog and glows through it (the raster opaque /
+				// FPT primary under it are already fogged). The composite multiplies the indirect by
+				// the camera-to-surface transmittance it derives from these params; in-scatter is NOT
+				// re-added there (the base layers carry it). Same depth_end/depth_begin conditioning
+				// as render_scene_data_rd.cpp so the formulas agree with the raster fog_process; when
+				// fog is disabled fog_flags stays 0 and the composite multiply is the identity.
+				if (p_render_data->environment.is_valid() && environment_get_fog_enabled(p_render_data->environment)) {
+					cfp.fog.fog_flags = 1u;
+					if (environment_get_fog_mode(p_render_data->environment) == RSE::EnvironmentFogMode::ENV_FOG_MODE_DEPTH) {
+						cfp.fog.fog_flags |= 2u;
+					}
+					if (p_render_data->scene_data->cam_projection.is_orthogonal()) {
+						cfp.fog.fog_flags |= 4u;
+					}
+					cfp.fog.fog_density = environment_get_fog_density(p_render_data->environment);
+					const float fog_depth_end_raw = environment_get_fog_depth_end(p_render_data->environment);
+					cfp.fog.fog_depth_end = fog_depth_end_raw > 0.0f ? fog_depth_end_raw : (float)p_render_data->scene_data->z_far;
+					cfp.fog.fog_depth_begin = MIN(environment_get_fog_depth_begin(p_render_data->environment), cfp.fog.fog_depth_end - 0.001f);
+					cfp.fog.fog_depth_curve = environment_get_fog_depth_curve(p_render_data->environment);
+					cfp.fog.fog_height = environment_get_fog_height(p_render_data->environment);
+					cfp.fog.fog_height_density = environment_get_fog_height_density(p_render_data->environment);
+					cfp.fog.z_near = (float)p_render_data->scene_data->z_near;
+					cfp.fog.z_far = (float)p_render_data->scene_data->z_far;
+					const Projection &fog_cam_proj = p_render_data->scene_data->cam_projection;
+					cfp.fog.inv_proj_x = fog_cam_proj.columns[0][0] != 0.0 ? (float)(1.0 / fog_cam_proj.columns[0][0]) : 1.0f;
+					cfp.fog.inv_proj_y = fog_cam_proj.columns[1][1] != 0.0 ? (float)(1.0 / fog_cam_proj.columns[1][1]) : 1.0f;
+				}
 				rtgi_resolve->render_composite(composite_depth, rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS),
 						rb_data->rt_get_guide_albedo(), rb_data->rt_get_guide_orm(),
 						rtgi_wrc->get_radiance_atlas(), rtgi_wrc->get_distance_atlas(), cfp,

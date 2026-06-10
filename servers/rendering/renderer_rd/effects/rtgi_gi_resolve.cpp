@@ -160,6 +160,10 @@ void RTGIGIResolve::free_resources() {
 		RD::get_singleton()->free_rid(resolve_ubo);
 		resolve_ubo = RID();
 	}
+	if (composite_fog_ubo.is_valid()) {
+		RD::get_singleton()->free_rid(composite_fog_ubo);
+		composite_fog_ubo = RID();
+	}
 	read_index = 0;
 	cached_render_size = Size2i();
 	resources_valid = false;
@@ -327,10 +331,11 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	// albedo (2), the velocity buffer (3, A3-T2), SPG atlas + headers (4-6), WRC atlases
 	// (7-8), the GI read+write images (9-10 = [read_index]), the GI HISTORY read samplers
 	// (11-12 = [prev_index]), the debug dest image (13), the params UBO (14), the
-	// material-guide ORM (15), and the reactive-mask image (16). ONE shared uniform set drives
+	// material-guide ORM (15), the reactive-mask image (16), and the composite fog UBO (17,
+	// bound neutrally here). ONE shared uniform set drives
 	// BOTH INTEGRATE and TEMPORAL: INTEGRATE writes 9-10 and reads 0-2 + 4-8 + 15 (it ignores
-	// 3/11/12/16); TEMPORAL reads 3 + 11-12 and read-modify-writes 9-10 in place. The set binds
-	// exactly {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}. NO same-resource sampler+image hazard:
+	// 3/11/12/16/17); TEMPORAL reads 3 + 11-12 and read-modify-writes 9-10 in place. The set binds
+	// exactly {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17}. NO same-resource sampler+image hazard:
 	// [read_index] appears ONLY at 9/10 (image), [prev_index] ONLY at 11/12 (sampler), and
 	// they are DIFFERENT buffers (the ping-pong sets); the debug dest image 13 is the
 	// untouched gi_debug_image; the reactive slot 16 is the untouched reactive_dummy (these
@@ -484,6 +489,16 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
 		u.binding = 16;
 		u.append_id(reactive_dummy);
+		uniforms.push_back(u);
+	}
+	// Binding 17: the COMPOSITE fog UBO. Only COMPOSITE reads it, so this slot binds resolve_ubo
+	// NEUTRALLY (a valid uniform buffer larger than the declared 32-byte block; never read by
+	// INTEGRATE/TEMPORAL). The shared set-0 layout must still provide the slot.
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
+		u.binding = 17;
+		u.append_id(resolve_ubo);
 		uniforms.push_back(u);
 	}
 	GiResolveUBO ubo;
@@ -694,7 +709,7 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 	// slot (16) points at the untouched r8 reactive_dummy, so NO texture is bound as both a
 	// sampler and a storage image in this set: read textures (diffuse/spec) appear only as
 	// samplers, gi_debug_image only as images. That avoids a same-resource read+write within one
-	// descriptor set. The set provides exactly {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16} -- the
+	// descriptor set. The set provides exactly {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17} -- the
 	// same layout run_resolve provides.
 	LocalVector<RD::Uniform> uniforms;
 	for (uint32_t b = 0; b <= 8; b++) {
@@ -774,6 +789,15 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 		u.append_id(reactive_dummy);
 		uniforms.push_back(u);
 	}
+	// Binding 17 (composite fog UBO): neutral here -- only COMPOSITE reads it, so it binds
+	// resolve_ubo (a valid uniform buffer covering the declared block; never read by DEBUG_GI).
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
+		u.binding = 17;
+		u.append_id(resolve_ubo);
+		uniforms.push_back(u);
+	}
 	PushConstant push_constant;
 	memset(&push_constant, 0, sizeof(PushConstant));
 	push_constant.mode = RESOLVE_MODE_DEBUG_GI;
@@ -825,6 +849,15 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_normal_roughness, RID p_
 		RD::get_singleton()->set_resource_name(resolve_ubo, "RTGI Resolve Params UBO");
 	}
 
+	// Camera-segment fog attenuation for the composited indirect (binding 17). Created lazily
+	// (same pattern as resolve_ubo) and refreshed every call from p_frame.fog; when fog is
+	// disabled the caller leaves fog_flags 0 and the shader's multiply is the identity.
+	if (composite_fog_ubo.is_null()) {
+		composite_fog_ubo = RD::get_singleton()->uniform_buffer_create(sizeof(CompositeFogParams));
+		RD::get_singleton()->set_resource_name(composite_fog_ubo, "RTGI Composite Fog UBO");
+	}
+	RD::get_singleton()->buffer_update(composite_fog_ubo, 0, sizeof(CompositeFogParams), &p_frame.fog);
+
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
@@ -848,7 +881,7 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_normal_roughness, RID p_
 	// format-matching reactive_dummy and write_reactive stays 0, so binding 16 is never touched. After the
 	// cold-start lean binding 1 is the REAL normal-roughness and 7/8 are the REAL WRC atlases (read by the
 	// lean); only bindings 3-6 stay neutral (point at diffuse_gi[read_index], a read texture) since
-	// COMPOSITE ignores them. The set provides exactly {0..17} (binding 17 = the age image).
+	// COMPOSITE ignores them. The set provides exactly {0..17} (binding 17 = the composite fog UBO).
 	LocalVector<RD::Uniform> uniforms;
 	{
 		// Binding 0: the REAL depth buffer (COMPOSITE reads it to mask the background/sky).
@@ -974,6 +1007,16 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_normal_roughness, RID p_
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
 		u.binding = 16;
 		u.append_id(reactive_enabled ? p_reactive_out : reactive_dummy);
+		uniforms.push_back(u);
+	}
+	// Binding 17: the REAL composite fog UBO (updated from p_frame.fog above). COMPOSITE
+	// multiplies the indirect by the camera-segment fog transmittance it derives from these
+	// params + the depth at binding 0; fog_flags 0 keeps the multiply an identity.
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
+		u.binding = 17;
+		u.append_id(composite_fog_ubo);
 		uniforms.push_back(u);
 	}
 	PushConstant push_constant;

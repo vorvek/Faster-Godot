@@ -54,6 +54,36 @@ public:
 		float cold_start_fade_time = 0.5f;
 	};
 
+	// Camera-segment fog parameters for the COMPOSITE: the composited indirect GI is attenuated
+	// by the camera-to-surface fog transmittance (1 - fog_amount), so GI stops glowing through
+	// fog. The in-scatter term is NOT re-added here (the raster opaque pass carries it for
+	// Hybrid; the FPT primary-direct raygen applied it at shade time), so the composite only
+	// needs the ATTENUATION side of the fog model. Disabled (fog_flags 0) = identity multiply.
+	// The surface camera distance is linearized in the shader DIRECTLY from the [0,1] reverse-Z
+	// device depth via z_near/z_far + the projection diagonal below. It deliberately does NOT
+	// go through the GiResolveUBO inv_projection: that matrix is the inverse of the RAW
+	// (uncorrected, GL-convention) cam_projection, and running the corrected [0,1] reverse-Z
+	// device depth through it collapses every reconstructed distance to ~2*z_near*z_far/z_far
+	// (~0.1 m), which silently zeroes the fog (measured: identity output on the fog corridor).
+	// Std140-mirrored by the CompositeFogParams block in rtgi_gi_resolve.glsl EXACTLY; a
+	// separate UBO because the resolve PushConstant is shared by two shaders and
+	// static_assert-guarded (do not grow it).
+	struct CompositeFogParams {
+		uint32_t fog_flags = 0; // bit 0 = enabled, bit 1 = depth mode (ENV_FOG_MODE_DEPTH), bit 2 = orthographic.
+		float fog_density = 0.0f;
+		float fog_depth_begin = 0.0f;
+		float fog_depth_end = 0.0f;
+		float fog_depth_curve = 1.0f;
+		float fog_height = 0.0f;
+		float fog_height_density = 0.0f;
+		float z_near = 0.05f; // camera near/far the depth buffer was projected with.
+		float z_far = 4000.0f;
+		float inv_proj_x = 1.0f; // 1 / P[0][0]: view-ray xy reconstruction from NDC for the
+		float inv_proj_y = 1.0f; // 1 / P[1][1]: camera DISTANCE (not just view z).
+		float pad0 = 0.0f;
+	};
+	static_assert(sizeof(CompositeFogParams) % 16 == 0, "CompositeFogParams must be 16-byte aligned (std140 UBO).");
+
 	// Per-frame scalars handed to a single resolve dispatch. Mirrors how the A2
 	// consumer's GiDebugUBO sourced the WRC clipmap params for the fallback sample +
 	// the SPG grid geometry for probe addressing; the tunables are carried on
@@ -70,6 +100,9 @@ public:
 		uint32_t spg_grid_h = 0;
 		uint32_t spg_oct_res = 8;
 		uint32_t spg_spacing_f = 16;
+		// COMPOSITE-only: camera-segment fog attenuation for the composited indirect (see above).
+		// Default (zeroed flags) keeps the composite an identity multiply.
+		CompositeFogParams fog;
 	};
 
 	RTGIGIResolve();
@@ -240,6 +273,12 @@ private:
 	// above for why a UBO and not a push constant). Created lazily on first run_resolve()
 	// and bound for the dispatch; freed in free_resources().
 	RID resolve_ubo;
+
+	// Uniform buffer carrying CompositeFogParams (binding 17, COMPOSITE only). Created lazily in
+	// render_composite() and buffer_update'd every call; freed in free_resources(). The other
+	// modes bind resolve_ubo neutrally at slot 17 (never read there), so this buffer exists only
+	// once a composite actually runs.
+	RID composite_fog_ubo;
 
 	// Ping-pong screen-GI buffers owned directly by the effect. THE FRAME SWAP: run_resolve
 	// flips read_index at its TOP, once per frame (mirrors RTGIScreenProbeGather::run_placement),
