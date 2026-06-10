@@ -244,10 +244,19 @@ func _build_cornell_box_scene() -> Node3D:
 	camera.fov = rad_to_deg(2.0 * atan(0.025 / (2.0 * 0.035)))
 	camera.near = 0.05
 	camera.far = 40.0
-	camera.position = Vector3(0.0, mid_y, half + 4.0)
+	# Hand-tuned framing, authored verbatim so regeneration round-trips the
+	# committed scenes/cornell_box.tscn exactly (head-on at mid height into the
+	# open front). Do not replace this with look_at(): the generated root is
+	# never inside a scene tree, so look_at() errors and leaves identity
+	# rotation. The .tscn Transform3D is row-major; this constructor takes
+	# basis columns.
+	camera.transform = Transform3D(
+			Vector3(1, 0, 0),
+			Vector3(0, 1, 0),
+			Vector3(0, 0, 1),
+			Vector3(0.0, 1.39, 5.39))
 	root.add_child(camera)
 	_claim(root, camera)
-	camera.look_at(Vector3(0.0, mid_y, 0.0), Vector3.UP)
 
 	return root
 
@@ -319,10 +328,19 @@ func _build_specular_motion_scene() -> Node3D:
 	camera.fov = 56.0
 	camera.near = 0.05
 	camera.far = 60.0
-	camera.position = Vector3(0.0, 3.1, 6.4)
+	# Hand-tuned framing (low eye at y = 1.54, pitched down about 11 degrees),
+	# authored verbatim so regeneration round-trips the committed
+	# scenes/specular_motion.tscn exactly. Do not replace this with look_at():
+	# the generated root is never inside a scene tree, so look_at() errors and
+	# leaves identity rotation. The .tscn Transform3D is row-major; this
+	# constructor takes basis columns.
+	camera.transform = Transform3D(
+			Vector3(0.99999994, 0, 0),
+			Vector3(0, 0.98162735, -0.19080889),
+			Vector3(0, 0.1908089, 0.9816273),
+			Vector3(0, 1.54, 6.4))
 	root.add_child(camera)
 	_claim(root, camera)
-	camera.look_at(Vector3(0.0, 0.7, 0.0), Vector3.UP)
 
 	return root
 
@@ -433,12 +451,20 @@ func _build_reflective_pool_scene() -> Node3D:
 	camera.fov = 52.0
 	camera.near = 0.05
 	camera.far = 90.0
-	# Framing set by hand in the editor (low eye, pitched down about 11 degrees) so
-	# each ball's lamp highlight sits on the pool just below it.
-	camera.position = Vector3(0.0, 1.54, 4.2)
+	# Hand-tuned framing (low eye at y = 1.54, pitched down about 11 degrees so
+	# each ball's lamp highlight sits on the pool just below it), authored
+	# verbatim so regeneration round-trips the committed
+	# scenes/reflective_pool.tscn exactly. Do not replace this with look_at():
+	# the generated root is never inside a scene tree, so look_at() errors and
+	# leaves identity rotation. The .tscn Transform3D is row-major; this
+	# constructor takes basis columns.
+	camera.transform = Transform3D(
+			Vector3(0.99999994, 0, 0),
+			Vector3(0, 0.98162735, -0.19080889),
+			Vector3(0, 0.1908089, 0.9816273),
+			Vector3(0, 1.54, 4.2))
 	root.add_child(camera)
 	_claim(root, camera)
-	camera.look_at(Vector3(0.0, 0.72, 0.0), Vector3.UP)
 
 	return root
 
@@ -534,9 +560,10 @@ func _build_fog_corridor_scene() -> Node3D:
 	_claim(root, camera)
 	# Pitch down slightly so the nearest floor probe (about 3 m out) stays
 	# inside the bottom of the frame while the far end remains visible. This
-	# must be look_at_from_position: plain look_at silently does nothing here
-	# because the generated root is never inside a scene tree, which is also
-	# why the older scenes carry hand-tuned camera transforms.
+	# must be look_at_from_position: plain look_at fails loudly with a "Node
+	# not inside tree" error here because the generated root is never inside a
+	# scene tree, which is also why the older scenes carry hand-tuned camera
+	# transforms.
 	camera.look_at_from_position(camera.position, Vector3(0.0, 0.0, -14.0), Vector3.UP)
 
 	return root
