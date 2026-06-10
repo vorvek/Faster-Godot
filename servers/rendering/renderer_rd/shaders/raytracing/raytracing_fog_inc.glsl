@@ -27,7 +27,18 @@ vec4 fog_process(SceneData scene_data, vec3 vertex) {
 		}
 	}
 
-	float fog_amount = 1.0 - exp(min(0.0, -length(vertex) * scene_data.fog_density));
+	float fog_amount;
+	if ((RT_FLAGS & RT_FLAG_FOG_DEPTH_MODE) != 0u) {
+		// Raster depth-fog parity: scene_forward_clustered.glsl:1140-1146 is the single source
+		// of truth for this formula. fog_depth_begin/end/curve are already in SceneData.
+		float fog_z = smoothstep(scene_data.fog_depth_begin, scene_data.fog_depth_end, length(vertex));
+		fog_amount = pow(fog_z, scene_data.fog_depth_curve) * scene_data.fog_density;
+	} else {
+		fog_amount = 1.0 - exp(min(0.0, -length(vertex) * scene_data.fog_density));
+	}
+	// The RT consumers use fog.a to attenuate throughput; keep it a valid opacity even when
+	// density > 1 pushes the depth formula past 1 (the raster's blend saturates implicitly).
+	fog_amount = clamp(fog_amount, 0.0, 1.0);
 
 	if (abs(scene_data.fog_height_density) >= 0.0001) {
 		mat4 inv_view_matrix = transpose(mat4(
