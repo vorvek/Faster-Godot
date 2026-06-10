@@ -3966,7 +3966,24 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				sfp.grid_h = (uint32_t)spg_grid.y;
 				sfp.rays_this_frame = (uint32_t)(spg_grid.x * spg_grid.y) * (uint32_t)spg_params.dirs_per_probe_per_frame;
 				sfp.frame_index = rt_state ? rt_state->frame_counter : 0;
-				rtgi_spg->run_placement(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), spg_vel, sfp, p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, spg_size, p_render_data->scene_data->prev_cam_projection, p_render_data->scene_data->prev_cam_transform);
+				// The depth buffer holds the CORRECTED [0,1] reverse-Z device depth (the raster
+				// projects through set_depth_correction + the TAA jitter; see
+				// RenderSceneDataRD::update_ubo), so position reconstruction must invert that SAME
+				// matrix. get_cam_projection() composes correction * cam_projection (jitter included),
+				// matching the SceneData UBO inv_projection_matrix the FPT raygen already
+				// reconstructs with. The RAW cam_projection.inverse() that used to be passed here
+				// collapsed every reconstructed position to a ~2*z_near shell around the camera
+				// (measured 0.10-0.11 m on cornell_box for surfaces 4.5-6.8 m away), which anchored
+				// every screen probe at the camera and broke the WRC queries' world positions.
+				const Projection rtgi_inv_projection = p_render_data->scene_data->get_cam_projection().inverse();
+				// The previous-frame world->clip the placement/resolve reproject through must use the
+				// SAME corrected convention (its NDC must map to y-down screen UVs like the current
+				// matrices do), built with the PREVIOUS frame's jitter to match the history.
+				Projection rtgi_prev_correction;
+				rtgi_prev_correction.set_depth_correction(p_render_data->scene_data->flip_y);
+				rtgi_prev_correction.add_jitter_offset(p_render_data->scene_data->prev_taa_jitter);
+				const Projection rtgi_prev_projection = rtgi_prev_correction * p_render_data->scene_data->prev_cam_projection;
+				rtgi_spg->run_placement(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), spg_vel, sfp, rtgi_inv_projection, p_render_data->scene_data->cam_transform, spg_size, rtgi_prev_projection, p_render_data->scene_data->prev_cam_transform);
 
 				// SPG gather (A2-T2): for each selected (probe, direction) this frame, query
 				// the WRC (cheap) and trace a HW-RT ray only when the cache is cold, writing
@@ -4064,8 +4081,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 								rb_data->rt_get_guide_albedo(), rb_data->rt_get_guide_orm(),
 								rtgi_spg->get_radiance_filtered(), rtgi_spg->get_header_plane(), rtgi_spg->get_header_aux(),
 								rtgi_wrc->get_radiance_atlas(), rtgi_wrc->get_distance_atlas(),
-								rfp, p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform,
-								p_render_data->scene_data->prev_cam_projection, p_render_data->scene_data->prev_cam_transform);
+								rfp, rtgi_inv_projection, p_render_data->scene_data->cam_transform,
+								rtgi_prev_projection, p_render_data->scene_data->prev_cam_transform);
 					}
 				}
 				RD::get_singleton()->draw_command_end_label();
@@ -4723,7 +4740,7 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 			RtgiWrc::ClipmapParams wrc_dbg_params = _resolve_wrc_params(dbg_pt ? dbg_pt->rtgi_quality_preset : 3u);
 			const float wrc_dbg_strength = dbg_pt ? dbg_pt->wrc_strength : 1.0f;
 			const Vector3 wrc_dbg_camera = p_render_data->scene_data->cam_transform.origin;
-			rtgi_wrc->render_gi_debug(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, wrc_dbg_params, wrc_dbg_camera, wrc_dbg_strength, fb, rb->get_internal_size());
+			rtgi_wrc->render_gi_debug(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), p_render_data->scene_data->get_cam_projection().inverse(), p_render_data->scene_data->cam_transform, wrc_dbg_params, wrc_dbg_camera, wrc_dbg_strength, fb, rb->get_internal_size());
 		}
 
 		// Screen Probe Gather (SPG) debug views (A2). RADIANCE blits the per-probe
@@ -4752,7 +4769,7 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 		// No demod/remod, no composite into beauty -- that is A3. The SPG has no artistic
 		// strength field (unlike the WRC's wrc_strength), so pass the raw 1.0 the gate reads.
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_GI && rtgi_spg != nullptr && rtgi_spg->get_radiance_filtered().is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
-			rtgi_spg->render_gi_debug(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, rb->get_internal_size(), 1.0f, fb);
+			rtgi_spg->render_gi_debug(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), p_render_data->scene_data->get_cam_projection().inverse(), p_render_data->scene_data->cam_transform, rb->get_internal_size(), 1.0f, fb);
 		}
 
 		// RTGI_RESOLVE_GI / RTGI_RESOLVE_SPEC are the A3 production-resolve debug views: they

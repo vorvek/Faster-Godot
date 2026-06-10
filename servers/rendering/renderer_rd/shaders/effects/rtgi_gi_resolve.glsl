@@ -32,8 +32,11 @@
 //
 // Coordinate-space contract (verified against rtgi_spg_gi_consumer.glsl +
 // rtgi_screen_probe_gather.glsl):
-//   * depth_buffer holds RAW reverse-Z hyperbolic depth; the cleared far/sky value is
-//     0.0. View position is inv_projection * vec4(2*uv-1, depth, 1) (homogeneous divide).
+//   * depth_buffer holds the CORRECTED [0,1] reverse-Z device depth; the cleared far/sky
+//     value is 0.0. View position is inv_projection * vec4(2*uv-1, depth, 1) (homogeneous
+//     divide), where inv_projection is the inverse of the CORRECTED projection
+//     (set_depth_correction + TAA jitter, the same convention as the SceneData UBO), so the
+//     reverse-Z/y-flip mapping is already encoded.
 //   * The normal-roughness G-buffer normal is in VIEW space (normalize(rgb*2-1)); we
 //     rotate it VIEW->WORLD via mat3(inv_view).
 //   * inv_view == the camera's view->world transform, so world pos is inv_view * view_pos
@@ -181,7 +184,7 @@ layout(set = 0, binding = 13, rgba16f) uniform restrict writeonly image2D dest_i
 // reconstruction matrices live in a UBO (uncapped). Layout matches RTGIGIResolve::GiResolveUBO
 // exactly: two 16-byte-aligned mat4s at offsets 0 and 64.
 layout(set = 0, binding = 14, std140) uniform GiResolveUBO {
-	mat4 inv_projection; // clip -> view.
+	mat4 inv_projection; // clip -> view: inverse of the CORRECTED (reverse-Z + y-flip + jitter) projection.
 	mat4 inv_view; // view -> world (camera transform).
 	// PREVIOUS-frame world -> clip (prev_cam_projection * prev_cam_view). TEMPORAL uses it to
 	// camera-reproject the STATIC geometry the velocity buffer leaves at the (-1,-1) no-motion
@@ -215,10 +218,9 @@ layout(set = 0, binding = 16, r8) uniform writeonly image2D reactive_image;
 // fog_amount formulas mirror raytracing_fog_inc.glsl::fog_process exactly (depth mode = raster
 // smoothstep/pow/density; exponential otherwise; height fog maxed in). The surface distance is
 // linearized DIRECTLY from the [0,1] reverse-Z device depth via z_near/z_far + the projection
-// diagonal; it deliberately does NOT use resolve_reconstruct_view_position: ubo.inv_projection is
-// the inverse of the RAW (uncorrected, GL-convention) cam_projection, and feeding it the corrected
-// [0,1] reverse-Z device depth collapses every distance to ~2*z_near (measured on the fog
-// corridor: all reconstructed distances ~0.1 m -> fog_amount 0 -> identity).
+// diagonal: the cheaper, endpoint-verified path for the fog. (It predates the fix that made
+// ubo.inv_projection the inverse of the CORRECTED projection; the helper would work now too,
+// but the direct linearization stays.)
 // Mirrors RTGIGIResolve::CompositeFogParams field-for-field (std140). Only COMPOSITE reads it; the
 // other modes bind a neutral buffer at this slot. fog_flags 0 (fog disabled) = identity multiply.
 layout(set = 0, binding = 17, std140) uniform CompositeFogParams {
@@ -852,8 +854,8 @@ void resolve_composite_main(ivec2 pos) {
 	// which stores the raster guide depth -- for FPT): the corrected device depth of a surface at
 	// view distance vz is d = n*(f - vz) / ((f - n)*vz), so vz = n*f / mix(n, f, d); the view xy
 	// come from the NDC ray through the projection diagonal (Vulkan NDC y is flipped vs the
-	// GL-convention projection, hence -ndc.y). See the CompositeFogParams comment for why
-	// resolve_reconstruct_view_position cannot be used here.
+	// GL-convention projection, hence -ndc.y). See the CompositeFogParams comment for why this
+	// linearizes directly instead of using resolve_reconstruct_view_position.
 	if ((composite_fog.fog_flags & 1u) != 0u && raw_depth > 0.0) {
 		vec2 fog_ndc = (2.0 * (vec2(pos) + vec2(0.5)) / vec2(pc.screen_w, pc.screen_h)) - 1.0;
 		vec3 fog_view_pos;

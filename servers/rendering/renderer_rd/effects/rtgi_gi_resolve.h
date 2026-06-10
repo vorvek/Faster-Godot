@@ -60,11 +60,11 @@ public:
 	// Hybrid; the FPT primary-direct raygen applied it at shade time), so the composite only
 	// needs the ATTENUATION side of the fog model. Disabled (fog_flags 0) = identity multiply.
 	// The surface camera distance is linearized in the shader DIRECTLY from the [0,1] reverse-Z
-	// device depth via z_near/z_far + the projection diagonal below. It deliberately does NOT
-	// go through the GiResolveUBO inv_projection: that matrix is the inverse of the RAW
-	// (uncorrected, GL-convention) cam_projection, and running the corrected [0,1] reverse-Z
-	// device depth through it collapses every reconstructed distance to ~2*z_near*z_far/z_far
-	// (~0.1 m), which silently zeroes the fog (measured: identity output on the fog corridor).
+	// device depth via z_near/z_far + the projection diagonal below. (Historical note: this
+	// bypass predates the fix that made the GiResolveUBO inv_projection the inverse of the
+	// CORRECTED projection; the UBO matrix used to be the raw GL-convention inverse, which
+	// collapsed every reconstructed distance to ~2*z_near. The direct linearization remains the
+	// cheaper, endpoint-verified path for the fog, so it stays.)
 	// Std140-mirrored by the CompositeFogParams block in rtgi_gi_resolve.glsl EXACTLY; a
 	// separate UBO because the resolve PushConstant is shared by two shaders and
 	// static_assert-guarded (do not grow it).
