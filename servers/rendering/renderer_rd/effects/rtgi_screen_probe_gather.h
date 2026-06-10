@@ -95,8 +95,11 @@ public:
 	// Record the PLACE dispatch: one thread per probe (gx, gy) finds the nearest
 	// valid G-buffer pixel in its tile, reconstructs the WORLD position + normal +
 	// screen motion, and writes the probe header. `p_velocity` may be a default
-	// black texture (motion reads 0) on a static scene. `p_inv_projection` is the
-	// clip->view inverse projection; `p_cam_transform` is the view->world transform.
+	// black texture (motion reads 0) on a static scene. `p_inv_projection` must be the
+	// inverse of the DEPTH-CORRECTED projection (RenderSceneDataRD::get_cam_projection(),
+	// the SceneData UBO convention): the raw cam_projection inverse collapses every
+	// reconstruction to ~2*z_near. `p_prev_cam_projection` is the same correction
+	// composed with the PREVIOUS frame's jitter. `p_cam_transform` is view->world.
 	void run_placement(Ref<RenderSceneBuffersRD> p_rb, RID p_depth, RID p_normal_roughness, RID p_velocity, const SpgFrameParams &p_frame, const Projection &p_inv_projection, const Transform3D &p_cam_transform, const Size2i &p_render_size, const Projection &p_prev_cam_projection, const Transform3D &p_prev_cam_transform);
 
 	// Record the temporal-accumulate + spatial-filter dispatches (A2-T3 + A2-T4) on a

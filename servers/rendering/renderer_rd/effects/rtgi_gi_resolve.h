@@ -126,8 +126,11 @@ public:
 	// per-pixel albedo/roughness/metalness come from the material-guide textures
 	// (`p_guide_albedo` rgb = albedo, `p_guide_orm` g = roughness, b = metallic), NOT
 	// the dead rt_albedo_metalness. TEMPORAL/SPATIAL (T2/T3) will ping-pong the GI
-	// buffers. `p_inv_proj` is the clip->view inverse projection; `p_inv_view` the
-	// view->world transform.
+	// buffers. `p_inv_proj` must be the inverse of the DEPTH-CORRECTED projection
+	// (RenderSceneDataRD::get_cam_projection(), the SceneData UBO convention); the raw
+	// cam_projection inverse collapses every reconstruction to ~2*z_near.
+	// `p_prev_cam_projection` carries the same correction with the PREVIOUS frame's
+	// jitter. `p_inv_view` is the view->world transform.
 	void run_resolve(RID p_depth, RID p_normal_roughness, RID p_velocity,
 			RID p_guide_albedo, RID p_guide_orm,
 			RID p_spg_radiance, RID p_spg_header_plane, RID p_spg_header_aux,
