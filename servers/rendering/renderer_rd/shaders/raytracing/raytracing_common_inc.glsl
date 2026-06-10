@@ -6,6 +6,7 @@
 layout(constant_id = 0) const uint RT_FLAGS = 0u;
 
 #define RT_FLAG_FOG_ENABLED (1u << 2)
+#define RT_FLAG_FOG_DEPTH_MODE (1u << 10)
 #define RT_FLAG_WRC_PROBE_UPDATE (1u << 7)
 #define RT_FLAG_SPG_GATHER (1u << 8)
 #define RT_FLAG_PRIMARY_DIRECT (1u << 9)

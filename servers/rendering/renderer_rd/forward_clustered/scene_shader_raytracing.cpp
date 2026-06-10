@@ -780,7 +780,7 @@ bool SceneShaderRaytracing::is_hg_ready_in_bundle(uint32_t p_slot_index, uint32_
 	return b.live_ready_mask[p_slot_index];
 }
 
-uint32_t SceneShaderRaytracing::compute_rt_flags(const float *p_env_params, bool p_fog_enabled) {
+uint32_t SceneShaderRaytracing::compute_rt_flags(const float *p_env_params, bool p_fog_enabled, bool p_fog_depth_mode) {
 	uint32_t flags = RT_FLAG_NONE;
 	uint32_t sample_count = 1;
 	uint32_t max_bounces = 3;
@@ -795,6 +795,10 @@ uint32_t SceneShaderRaytracing::compute_rt_flags(const float *p_env_params, bool
 
 	if (p_fog_enabled) {
 		flags |= RT_FLAG_FOG_ENABLED;
+	}
+
+	if (p_fog_enabled && p_fog_depth_mode) {
+		flags |= RT_FLAG_FOG_DEPTH_MODE;
 	}
 
 	// Keep SER disabled until the RD exposes a device capability bit and the

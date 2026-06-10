@@ -3336,7 +3336,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		const RTGIBackendCapabilities rt_backend_capabilities = raytracing->get_backend_capabilities(rt_backend_status.active_backend);
 		rt_requires_external_resource_exchange = rt_backend_capabilities.external_memory && rt_backend_capabilities.external_semaphore;
 		const bool fog_enabled = p_render_data && p_render_data->environment.is_valid() && environment_get_fog_enabled(p_render_data->environment);
-		rt_flags = SceneShaderRaytracing::compute_rt_flags(env_params, fog_enabled);
+		const bool fog_depth_mode = fog_enabled && environment_get_fog_mode(p_render_data->environment) == RSE::EnvironmentFogMode::ENV_FOG_MODE_DEPTH;
+		rt_flags = SceneShaderRaytracing::compute_rt_flags(env_params, fog_enabled, fog_depth_mode);
 
 		const float rt_overscan_horizontal = 0.0f;
 		const float rt_overscan_vertical = 0.0f;

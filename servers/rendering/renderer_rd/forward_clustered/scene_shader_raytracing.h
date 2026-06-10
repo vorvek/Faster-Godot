@@ -87,6 +87,10 @@ public:
 		// default RW buffer instead of the real probe buffers, so this full-screen dispatch
 		// declares no phantom RW dependency on the probe buffers it coexists with.
 		RT_FLAG_PRIMARY_DIRECT = (1 << 9),
+		// Environment fog_mode == ENV_FOG_MODE_DEPTH: fog_process uses the raster depth-fog
+		// formula (begin/end/curve) instead of the exponential model. Twin of the raster's
+		// sc_use_depth_fog() specialization constant.
+		RT_FLAG_FOG_DEPTH_MODE = (1 << 10),
 	};
 
 	constexpr static uint32_t RT_SAMPLE_COUNT_SHIFT = 21;
@@ -184,7 +188,7 @@ public:
 
 	// Build the full packed rt_flags from pathtracing environment params.
 	// `p_env_params` may be null (RT active with no pathtracing environment).
-	static uint32_t compute_rt_flags(const float *p_env_params, bool p_fog_enabled);
+	static uint32_t compute_rt_flags(const float *p_env_params, bool p_fog_enabled, bool p_fog_depth_mode);
 
 	struct ShaderSpecialization {
 		union {
