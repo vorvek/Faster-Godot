@@ -19,11 +19,12 @@
 //
 // Coordinate-space contract (verified against environment/gi.glsl +
 // scene_data_inc.glsl + storage_rd/render_scene_data_rd.cpp):
-//   * The depth buffer (RB_TEX_DEPTH) holds RAW reverse-Z hyperbolic depth; the
-//     far plane / cleared sky value is 0.0 (depth_pass clears to 0.0f). View
-//     position is inv_projection * vec4(2*uv-1, depth, 1) (homogeneous divide),
-//     exactly like gi.glsl::reconstruct_position's full-matrix branch -- the
-//     inverse projection already encodes the reverse-Z mapping, so no z remap.
+//   * The depth buffer (RB_TEX_DEPTH) holds the corrected [0,1] reverse-Z device
+//     depth; the far plane / cleared sky value is 0.0 (depth_pass clears to 0.0f).
+//     View position is inv_projection * vec4(2*uv-1, depth, 1) (homogeneous divide),
+//     exactly like gi.glsl::reconstruct_position's full-matrix branch -- the bound
+//     inv_projection must be the DEPTH-CORRECTED inverse (the SceneData UBO
+//     convention), which already encodes the reverse-Z mapping, so no z remap.
 //   * The normal-roughness G-buffer normal is in VIEW space (the scene shader
 //     writes (read_view_matrix * normal); gi.glsl rotates it to world via
 //     cam_transform). We decode normalize(rgb*2-1) then rotate VIEW->WORLD.

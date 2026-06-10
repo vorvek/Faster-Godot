@@ -114,7 +114,8 @@ public:
 	// SPG-GI debug view (A2-T5): the VALIDATION-ONLY per-pixel CONSUMER of the
 	// SPATIAL-filtered per-probe radiance atlas (the screen-probe analogue of
 	// RTGIWorldRadianceCache::render_gi_debug). For each screen pixel it reconstructs
-	// the WORLD position from `p_depth` (raw reverse-Z) + the camera matrices, decodes
+	// the WORLD position from `p_depth` (corrected reverse-Z device depth) + the
+	// depth-corrected camera matrices, decodes
 	// the WORLD normal from `p_normal_roughness` (a VIEW-space G-buffer normal rotated
 	// to world), locates the 4 surrounding probes, cosine-integrates each probe's
 	// hemioct tile against the surface normal (confidence-weighted normalizer, so

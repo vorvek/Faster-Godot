@@ -71,7 +71,8 @@ public:
 
 	// WRC-GI debug view (Task 7a): the first real per-pixel CONSUMER of the cache.
 	// For each screen pixel it reconstructs the WORLD position from `p_depth`
-	// (raw reverse-Z depth) + the camera matrices, decodes the WORLD normal from
+	// (corrected reverse-Z device depth) + the depth-corrected camera matrices,
+	// decodes the WORLD normal from
 	// `p_normal_roughness` (a VIEW-space G-buffer normal rotated to world), and
 	// samples rtgi_wrc_sample_irradiance() against the cache's cosine-integrated
 	// irradiance. The RAW linear irradiance is written to a debug image then

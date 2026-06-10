@@ -22,10 +22,11 @@
 //
 // Coordinate-space contract (verified against rtgi_wrc_gi_consumer.glsl +
 // rtgi_screen_probe_gather.glsl):
-//   * The depth buffer (RB_TEX_DEPTH) holds RAW reverse-Z hyperbolic depth; the
-//     cleared far/sky value is 0.0. View position is inv_projection * vec4(2*uv-1,
-//     depth, 1) (homogeneous divide) -- the inverse projection already encodes the
-//     reverse-Z mapping, so no z remap.
+//   * The depth buffer (RB_TEX_DEPTH) holds the corrected [0,1] reverse-Z device
+//     depth; the cleared far/sky value is 0.0. View position is inv_projection *
+//     vec4(2*uv-1, depth, 1) (homogeneous divide) -- the bound inv_projection must
+//     be the DEPTH-CORRECTED inverse (the SceneData UBO convention), which already
+//     encodes the reverse-Z mapping, so no z remap.
 //   * The normal-roughness G-buffer normal is in VIEW space (normalize(rgb*2-1));
 //     we rotate it VIEW->WORLD via mat3(inv_view).
 //   * inv_view == the camera's view->world transform, so world pos is inv_view *
