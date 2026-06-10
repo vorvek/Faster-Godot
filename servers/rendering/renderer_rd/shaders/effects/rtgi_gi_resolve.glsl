@@ -839,7 +839,7 @@ void resolve_composite_main(ivec2 pos) {
 	// cold_fade fades the whole indirect (diffuse + spec) in from 0 as the GI converges (load/disocclusion/cut).
 	vec3 indirect = (raw_depth <= 0.0) ? vec3(0.0) : ((diffuse_albedo * A + spec) * cold_fade);
 
-	// Camera-segment fog transmittance (WS1): attenuate the indirect by 1 - fog_amount at the
+	// Camera-segment fog transmittance: attenuate the indirect by 1 - fog_amount at the
 	// surface's camera distance, so the composited GI stops glowing through fog. This output is
 	// ONLY the probe indirect in BOTH modes -- Hybrid adds it onto the already-fogged raster
 	// opaque, FPT-replace adds it onto the already-fogged primary-direct (the C++ does the adds)

@@ -492,7 +492,7 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		uniforms.push_back(u);
 	}
 	// Binding 17: the COMPOSITE fog UBO. Only COMPOSITE reads it, so this slot binds resolve_ubo
-	// NEUTRALLY (a valid uniform buffer larger than the declared 32-byte block; never read by
+	// NEUTRALLY (a valid uniform buffer larger than the declared 48-byte block; never read by
 	// INTEGRATE/TEMPORAL). The shared set-0 layout must still provide the slot.
 	{
 		RD::Uniform u;
