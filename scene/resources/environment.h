@@ -328,6 +328,10 @@ protected:
 #ifndef DISABLE_DEPRECATED
 	// Kept for compatibility from 3.x to 4.0.
 	bool _set(const StringName &p_name, const Variant &p_value);
+
+	void _set_rtgi_wrc_strength_bind_compat_bc5243e(float p_strength);
+	float _get_rtgi_wrc_strength_bind_compat_bc5243e() const;
+	static void _bind_compatibility_methods();
 #endif
 
 public:

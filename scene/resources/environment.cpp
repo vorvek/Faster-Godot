@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "environment.h"
+#include "environment.compat.inc"
 
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
