@@ -13,6 +13,7 @@ desktop Forward+ profile. The detailed notes are split by change area:
 | Rapier 2D physics backend | [docs/rapier_2d_physics.md](docs/rapier_2d_physics.md) |
 | Rapier/Jolt physics profile | [docs/rapier_jolt_physics.md](docs/rapier_jolt_physics.md) |
 | Hardware RTGI, path tracing, RTGI denoising, and particle stability | [docs/path_tracing_gi.md](docs/path_tracing_gi.md) |
+| RTGI fog model (depth-fog support, single camera-segment application), probe depth reconstruction, alpha-scissor emissive sampling, and VoxelGI/SDFGI coexistence | [docs/path_tracing_gi.md](docs/path_tracing_gi.md) |
 | Area light (LTC AreaLight3D) port from 4.7, plus path-traced area lights under RTGI | [docs/arealight3d.md](docs/arealight3d.md) |
 | TAA quality controls | [docs/taa_quality_controls.md](docs/taa_quality_controls.md) |
 | Editor frame-rate limits while testing | [docs/editor_frame_rate_limits.md](docs/editor_frame_rate_limits.md) |

@@ -102,6 +102,7 @@
 		</member>
 		<member name="fog_enabled" type="bool" setter="set_fog_enabled" getter="is_fog_enabled" default="false">
 			If [code]true[/code], fog effects are enabled.
+			[b]Note:[/b] When RTGI is active (see [member rtgi_enabled]), fog is applied to the ray-traced output as a camera effect: the path-traced primary surface and the composited GI receive the same fog the rasterizer applies. The deep-path reference mode ([member rtgi_fpt_reference]) keeps per-segment fog participation along each path instead.
 		</member>
 		<member name="fog_height" type="float" setter="set_fog_height" getter="get_fog_height" default="0.0">
 			The height at which the height fog effect begins.
@@ -217,6 +218,7 @@
 		</member>
 		<member name="rtgi_mode" type="int" setter="set_rtgi_mode" getter="get_rtgi_mode" enum="Environment.RTGIMode" default="2">
 			Selects how RTGI contributes to the scene: specular/reflection paths only, hybrid secondary lighting traced from the raster G-buffer, or full-scene path-traced GI.
+			[b]Note:[/b] Under [constant RTGI_MODE_HYBRID] and [constant RTGI_MODE_FULL_PATH_TRACING], RTGI owns indirect lighting: [VoxelGI] is ignored and SDFGI ([member sdfgi_enabled]) is disabled, each with a one-shot warning. [constant RTGI_MODE_REFLECTIONS_RT_ONLY] leaves both untouched.
 		</member>
 		<member name="rtgi_samples_per_pixel" type="int" setter="set_rtgi_samples_per_pixel" getter="get_rtgi_samples_per_pixel" default="1">
 			Sets the RTGI ray samples per pixel. Higher values reduce noise, but increase GPU cost.

@@ -319,9 +319,41 @@ A baked `LightmapGI` does not disable RTGI. When `Hybrid RTGI` or `Full Path
 Tracing` composites, RTGI owns the diffuse indirect for the view, and the opaque
 pass skips the baked lightmap's contribution to ambient light so the two do not
 add up to a doubled result. Direct lighting, emission, and the environment
-specular path keep their raster values. `SDFGI` and `VoxelGI` still take
-precedence when active, since blending them against RTGI per pixel needs
-ownership tracking that does not exist yet.
+specular path keep their raster values.
+
+`VoxelGI` and `SDFGI` follow the same ownership rule. A culled-in `VoxelGI`
+instance, or SDFGI enabled alongside Hybrid, used to silently veto the whole
+RTGI composite while every RT dispatch kept running and was thrown away each
+frame. When a composite-active RTGI mode is set, VoxelGI is now excluded from
+the frame and SDFGI is disabled, each with a one-shot warning, so the composite
+the frame already paid for is the one on screen. `Reflections RT Only` does not
+composite and still coexists with both raster GI providers, unchanged. One cost
+is deferred: the cull-side `voxel_gi_update` work, the re-voxelization of
+probes whose dynamic objects moved, still runs while a VoxelGI node is in the
+tree; the render-side voxel work is skipped.
+
+Fog is a camera effect in the ray-traced modes, applied once where the raster
+path applies it. The RT fog helper used to evaluate only the exponential model,
+so a scene using depth fog (begin/end distances with a curve) rendered
+exponential fog at the same density value. The two models read the density
+control very differently: depth fog at density `1.0` means fully fogged at the
+end distance, while exponential fog at density `1.0` saturates within a few
+meters, so such a scene went from raster haze to a white blowout the moment
+RTGI turned on. The helper now branches on the depth-fog specialization flag
+and applies the raster formula, and a depth-fog scene at density `1.0` matches
+the raster haze.
+
+Where fog is applied matters as much as which model. The probe traces used to
+bake camera-relative fog into the world radiance caches, so every consumer of a
+cached probe received fog computed for someone else's view segment, and each
+bounce segment compounded it. The probe dispatches now trace fog-free, the
+path-traced primary applies camera-segment fog once at shade time, and the
+composite attenuates the indirect contribution by the camera transmittance, so
+fog touches the image exactly once. On the fog-parity corridor scene, the
+maximum relative error against the raster reference dropped from `0.68` to
+`0.049` for Full Path Tracing and from `0.36` to `0.096` for Hybrid RTGI. The
+deep-path reference oracle keeps per-segment fog participation along the full
+path, since it exists to integrate the transport rather than approximate it.
 
 3D MSAA runs together with RTGI. The raster passes anti-alias primary visibility
 at the sample count the viewport sets, while the ray-traced GI and its denoiser
@@ -337,6 +369,14 @@ of the TLAS and rendered as the normal Forward+ transparent pass after RT
 denoise, so they remain visible without contributing to RT GI, shadows, or
 reflections. This avoids particle-driven TLAS spikes and black RT speckle from
 billboard particle geometry.
+
+Alpha-scissor emissive materials participate in explicit emissive next-event
+estimation. They were excluded from the emissive candidate list and contributed
+only when a path happened to hit them, so a cut-out emitter such as a foliage
+card or a grate-shaped light lit the scene more dimly and more noisily than the
+same emitter without the scissor. The candidate texel sampler now zeroes
+cut-out texels with the same alpha chain the any-hit shader uses, so the
+explicit and BSDF sampling strategies integrate the same emission domain.
 
 Full Path Tracing shades the directly visible surface with a next-event-estimation
 direct term whose soft-shadow and area-light samples are reseeded every frame, so
@@ -377,6 +417,22 @@ limited to Full Path Tracing without a vendor upscaler; Hybrid RTGI, the referen
 oracle, and every other viewport keep the stock TAA path unchanged. Its thresholds are
 tunable through the FPT_TAA_CHANGE_GAIN, FPT_TAA_DT_GAIN, FPT_TAA_RELAX_FLOOR,
 FPT_TAA_AGREE_LO, FPT_TAA_AGREE_HI, and FPT_TAA_NORELAX environment variables.
+
+The screen-probe stack reconstructs world positions from device depth, and its
+consumers used to invert the raw GL-convention projection while reading the
+depth-corrected reverse-Z values the engine actually writes. Every
+reconstructed position collapsed to roughly twice the near plane: gather rays
+originated at the camera instead of the receiving surface, world-cache queries
+all read one near-camera cell, and the depth-rejection gates compared positions
+that were never apart, so they never fired. The probe placement, gather,
+resolve, and debug consumers now invert the depth-corrected projection that the
+SceneData convention provides, for the current and previous frame with their
+own jitters. On the Cornell scene this took fireflies from 982 and 417 per
+megapixel down to zero in both detection regions and cut the path-traced
+sparkle maximum from 692 to 129, and it restored real contact occlusion. The
+Screen Probe Gather pass had been degenerately cheap because every ray started
+at the camera; its cost rose from 0.08 ms to a real 2.0 ms at 1080p on a
+4080-class GPU, with the other RTGI passes net cheaper.
 
 A freshly disoccluded screen probe has no accumulated history, so starting it
 from a single newly traced ray, which is high variance, left transient blotches
