@@ -48,6 +48,12 @@ var _diffuse_cache := true
 var _diffuse_cache_max_entries := 262144
 var _strc_enabled := true
 var _warmup_frames := 120
+# When > 0, every settle renders EXACTLY this many frames instead of the
+# convergence-aware early stop. The early stop is content-dependent (a luma
+# delta crossing a threshold), so two otherwise identical runs can measure
+# different accumulation frames; bit-for-bit regression comparisons need the
+# capture frame pinned.
+var _settle_frames_override := 0
 var _output_dir := DEFAULT_OUTPUT_DIR
 var _debug_view := "beauty"
 # Per-debug-view captures and metric sweeps are diagnostic-only and cost
@@ -269,6 +275,8 @@ func _parse_args() -> void:
 			_strc_enabled = not (arg.trim_prefix("--rtgi-strc-enabled=").to_lower() in ["0", "false", "off", "disabled"])
 		elif arg.begins_with("--rtgi-warmup-frames="):
 			_warmup_frames = max(1, arg.trim_prefix("--rtgi-warmup-frames=").to_int())
+		elif arg.begins_with("--rtgi-settle-frames="):
+			_settle_frames_override = max(0, arg.trim_prefix("--rtgi-settle-frames=").to_int())
 		elif arg.begins_with("--rtgi-reference-spp="):
 			_reference_spp = clampi(arg.trim_prefix("--rtgi-reference-spp=").to_int(), 1, 128)
 		elif arg.begins_with("--rtgi-sparkle-frames="):
@@ -1017,7 +1025,10 @@ func _run_capture() -> void:
 	# least the floor, stop once the mean luma stabilizes, and never exceed the
 	# old fixed count (--rtgi-warmup-frames stays the cap, and acts as the floor
 	# when it is smaller, e.g. under --rtgi-fast).
-	_settle_frames_used = await _settle_until_converged(SETTLE_LOAD_FLOOR_FRAMES, _warmup_frames)
+	if _settle_frames_override > 0:
+		_settle_frames_used = await _settle_until_converged(_settle_frames_override, _settle_frames_override)
+	else:
+		_settle_frames_used = await _settle_until_converged(SETTLE_LOAD_FLOOR_FRAMES, _warmup_frames)
 
 	var output_dir_error := DirAccess.make_dir_recursive_absolute(_output_dir)
 	if output_dir_error != OK:
@@ -1042,7 +1053,10 @@ func _run_capture() -> void:
 		if i > 0:
 			_apply_rtgi_mode(mode)
 			# Settle again with the mode-switch floor/cap before measuring.
-			_settle_frames_used = await _settle_until_converged(SETTLE_MODE_SWITCH_FLOOR_FRAMES, SETTLE_MODE_SWITCH_CAP_FRAMES)
+			if _settle_frames_override > 0:
+				_settle_frames_used = await _settle_until_converged(_settle_frames_override, _settle_frames_override)
+			else:
+				_settle_frames_used = await _settle_until_converged(SETTLE_MODE_SWITCH_FLOOR_FRAMES, SETTLE_MODE_SWITCH_CAP_FRAMES)
 		var config_failures: Array[String] = await _capture_and_measure_config("_%s" % mode)
 		if _abort_run:
 			return
@@ -1180,6 +1194,7 @@ func _capture_and_measure_config(base_suffix: String) -> Array[String]:
 	metrics["ray_firefly_suppression"] = _ray_firefly_suppression
 	metrics["ray_max_radiance"] = _ray_max_radiance
 	metrics["warmup_frames"] = _warmup_frames
+	metrics["settle_frames_override"] = _settle_frames_override
 	metrics["settle_frames_used"] = _settle_frames_used
 	metrics["sparkle_frames"] = _sparkle_frames
 	metrics["convergence_frames"] = _convergence_frames

@@ -40,6 +40,10 @@ Useful options:
 - `--rtgi-diffuse-cache-max-entries=4096..4194304`
 - `--rtgi-warmup-frames=120` (upper bound; the settle stops early once the
   image converges, and the value also acts as the floor when it is smaller)
+- `--rtgi-settle-frames=<n>` (render EXACTLY n settle frames before every
+  measurement instead of the convergence-aware early stop; the early stop is
+  content-dependent, so bit-for-bit regression comparisons must pin the
+  capture frame with this flag. Regression-tier runs use 120.)
 - `--rtgi-reference-spp=16`
 - `--rtgi-debug-view=beauty|final|noisy|diffuse_noisy|specular_noisy|diffuse_final|specular_final|specular_guide|normal_roughness|normal_deviation|viewz_hitdist|motion_vectors|variance|history_length|rejection|disabled`
 - `--rtgi-gate-profile=strict|smoke`
