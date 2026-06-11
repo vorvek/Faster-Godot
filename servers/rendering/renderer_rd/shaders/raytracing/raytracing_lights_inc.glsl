@@ -579,10 +579,29 @@ vec3 rt_emissive_sample_triangle_bary(inout uint rng_state) {
 
 vec3 rt_emissive_candidate_evaluate_emission(MaterialData light_mat, GeometryData geom, uint i0, uint i1, uint i2, vec3 bary) {
 	vec3 emission = max(light_mat.emission_color * light_mat.emission_strength, vec3(0.0));
-	if ((light_mat.flags & RT_MAT_FLAG_HAS_EMISSION_TEX) != 0u) {
+	bool has_emission_tex = (light_mat.flags & RT_MAT_FLAG_HAS_EMISSION_TEX) != 0u;
+	bool alpha_test = (light_mat.flags & RT_MAT_FLAG_ALPHA_TEST) != 0u;
+	if (has_emission_tex || alpha_test) {
 		vec2 uv = fetch_uv(geom, i0, i1, i2, bary);
 		uv = uv * light_mat.uv1_scale + light_mat.uv1_offset;
-		emission *= sample_material_texture(light_mat.emission_texture_idx, uv, light_mat.flags).rgb;
+		if (alpha_test) {
+			// Alpha-scissor emitters: a cut-out texel emits nothing, exactly like
+			// the BSDF/any-hit view of the surface (the any-hit ignores it, so a
+			// BSDF path never collects its Le). Mirrors ray_query_alpha_test's
+			// opaque alpha; hash/custom-clip never get here (candidate builder
+			// rejects them). Mip 0, same as the any-hit cutout.
+			float alpha = light_mat.albedo_color.a;
+			alpha *= rt_material_vertex_color(light_mat, fetch_color(geom, i0, i1, i2, bary)).a;
+			if (light_mat.albedo_texture_idx != 0u) {
+				alpha *= sample_material_texture(light_mat.albedo_texture_idx, uv, light_mat.flags).a;
+			}
+			if (alpha < light_mat.alpha_scissor_threshold) {
+				return vec3(0.0); // cut-out texel: emits nothing
+			}
+		}
+		if (has_emission_tex) {
+			emission *= sample_material_texture(light_mat.emission_texture_idx, uv, light_mat.flags).rgb;
+		}
 	}
 	return emission * scene_data_block.data.emissive_exposure_normalization;
 }
@@ -644,7 +663,9 @@ bool rt_emissive_candidate_sample_bary_and_emission(
 		out vec3 emission,
 		out float texel_pdf_factor,
 		out float texel_debug) {
-	uint candidate_count = (light_mat.flags & RT_MAT_FLAG_HAS_EMISSION_TEX) != 0u ? 4u : 1u;
+	// Alpha-test emitters vary across the triangle through their cutout even with
+	// constant emission, so they get the texel reservoir too.
+	uint candidate_count = (light_mat.flags & (RT_MAT_FLAG_HAS_EMISSION_TEX | RT_MAT_FLAG_ALPHA_TEST)) != 0u ? 4u : 1u;
 	float reservoir_weight_sum = 0.0;
 	float selected_weight = 0.0;
 	bary = vec3(1.0, 0.0, 0.0);
@@ -726,8 +747,9 @@ float rt_lobe_specular_probability(vec3 specularF0, vec3 diffuseReflectance) {
 // would have produced for a BSDF-sampled hit on `geometry_idx`/`primitive_id`.
 // Returns 0.0 when the hit geometry is not an emissive candidate (then the BSDF
 // MIS weight collapses to 1.0). Texel pdf factor is approximated as 1.0 (exact
-// for untextured emitters incl. the furnace; textured emitters are approximated,
-// matching the small bias already present in the NEE-side texel reservoir).
+// for untextured opaque emitters incl. the furnace; textured and alpha-cutout
+// emitters are approximated, matching the small bias already present in the
+// NEE-side texel reservoir).
 float rt_emissive_nee_solid_angle_pdf_at_hit(
 		uint geometry_idx,
 		uint primitive_id,

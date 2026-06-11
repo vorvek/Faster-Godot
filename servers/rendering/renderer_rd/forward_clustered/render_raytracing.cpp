@@ -8587,7 +8587,10 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 		if ((p_geom.flags & rejected_geom_flags) != 0 || p_geom.vertex_buffer_address == 0 || p_geom.primitive_count == 0) {
 			return;
 		}
-		const uint32_t rejected_mat_flags = RT_MAT_FLAG_CUSTOM_SHADER | RT_MAT_FLAG_ALPHA_HASH | RT_MAT_FLAG_CUSTOM_ALPHA_CLIP | RT_MAT_FLAG_ALPHA_TEST;
+		// Alpha-scissor emitters are legal NEE candidates: the texel sampler zeroes
+		// cut-out texels, so NEE and the BSDF/any-hit view integrate the same
+		// alpha-modulated Le. Hash and custom-clip stay rejected (no cheap alpha eval).
+		const uint32_t rejected_mat_flags = RT_MAT_FLAG_CUSTOM_SHADER | RT_MAT_FLAG_ALPHA_HASH | RT_MAT_FLAG_CUSTOM_ALPHA_CLIP;
 		if ((p_mat.flags & rejected_mat_flags) != 0) {
 			return;
 		}
