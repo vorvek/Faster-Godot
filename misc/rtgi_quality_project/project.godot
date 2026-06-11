@@ -21,10 +21,6 @@ window/size/viewport_height=540
 window/size/resizable=false
 window/stretch/mode="viewport"
 
-[dotnet]
-
-project/assembly_name="RTGI Quality Harness"
-
 [rendering]
 
 renderer/rendering_method="forward_plus"
