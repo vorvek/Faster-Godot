@@ -3005,6 +3005,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		WARN_PRINT_ONCE("RTGI Full Path Tracing is running the deep-path reference oracle (Environment.rtgi_fpt_reference is enabled). This is a ground-truth path tracer for A/B validation: it traces one sample per frame, so it is noisy, unstable under temporal upscalers, and much slower than the real-time path. Set rtgi_fpt_reference to false for the production FPT-fast mode (analytic-light primary plus probe indirect).");
 	}
 	const uint32_t rt_denoiser = rt_env_params ? (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
+	// None inspects the accumulated signal without spatial polish: force the resolve's
+	// edge-aware a-trous pass to zero iterations (INTEGRATE/TEMPORAL/COMPOSITE stay).
+	if (rt_env_params && rt_denoiser == (uint32_t)RSE::PT_DENOISER_NONE) {
+		resolve_params.spatial_iterations = 0;
+	}
 	// GI-aware reactive denoise ("poor-man's Ray Reconstruction"): when the Reactive denoiser is
 	// selected, the RTGI resolve composite emits a per-pixel reactive mask (1 - GI confidence) that
 	// is routed into the FSR2 reactive channel / XeSS responsive-pixel mask below. This is a no-op for
@@ -4187,7 +4192,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// FPT pairs cleanly with no upscaler, native TAA, and XeSS; FSR2 specifically struggles with
 			// the stochastic primary, so Hybrid is the recommended mode under FSR2. Native TAA is NOT gated
 			// out (it converges the stabilized primary fine); the no-upscaler path benefits most.
-			const bool fpt_stabilize_ok = scale_type != SCALE_FSR2 && scale_type != SCALE_MFX;
+			// The None denoiser bypasses the stabilizer by request (debugging the raw accumulated signal).
+			const bool fpt_stabilize_ok = scale_type != SCALE_FSR2 && scale_type != SCALE_MFX &&
+					rt_denoiser != (uint32_t)RSE::PT_DENOISER_NONE;
 			RID rt_stabilized_primary;
 			if (fpt_stabilize_ok && rt_radiance_probes_fpt && !rt_fpt_reference && rt_state && rtgi_primary_stabilize != nullptr &&
 					rb_data->rt_has_texture() && rb_data->rt_has_history_validity() &&

@@ -2858,8 +2858,11 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 	if (p_viewport.is_valid()) {
 		bool rt_temporal_motion_vectors = false;
 		if (camera_data.view_count == 1 && environment.is_valid() && scene_render->environment_get_pathtracing_enabled(environment)) {
-			const RSE::PathtracingParams params = scene_render->environment_get_pathtracing_params(environment);
-			rt_temporal_motion_vectors = params.denoiser != RSE::PT_DENOISER_NONE;
+			// Temporal motion vectors stay on for every denoiser choice: the resolve temporal
+			// reprojection consumes velocity regardless, and None only bypasses the stabilizer
+			// and spatial polish, not the accumulation. Without this, moving meshes keep stale
+			// previous transforms and corrupt whatever velocity the frame renders.
+			rt_temporal_motion_vectors = true;
 		}
 		RSG::viewport->viewport_set_rt_temporal_motion_vectors(p_viewport, rt_temporal_motion_vectors);
 	}
