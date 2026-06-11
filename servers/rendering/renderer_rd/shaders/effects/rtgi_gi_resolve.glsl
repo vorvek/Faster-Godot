@@ -731,6 +731,7 @@ void resolve_temporal_main(ivec2 pos) {
 	// frame_index 0 has no history (the buffers were just cleared / are last frame's stale set);
 	// skip reprojection so the first frame is a pure INTEGRATE seed (n -> 1). The bounds guard
 	// keeps the reprojected fetch on-screen (off-screen history is a disocclusion -> reset).
+	// The CPU counter skips 0 on wrap, so this seed path runs once per context lifetime.
 	if (pc.frame_index > 0u &&
 			all(greaterThanEqual(prev, ivec2(0))) &&
 			prev.x < int(pc.screen_w) && prev.y < int(pc.screen_h)) {

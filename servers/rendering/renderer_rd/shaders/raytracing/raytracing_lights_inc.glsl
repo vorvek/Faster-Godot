@@ -299,6 +299,7 @@ bool lights_trace_shadow_ray(vec3 origin, vec3 direction, float max_dist, uint s
 	/// The miss shader writes radiance = vec3(1.0) for shadow rays (visible).
 	/// If an opaque hit occurs, miss is never called and radiance stays vec3(0.0).
 	// Save full payload, set up shadow ray, then restore after trace.
+	// saved_payload is opaque caller state: restored verbatim after the trace, never unpacked here; the only unpack below reads the freshly packed shadow payload.
 	PathPayload saved_payload = payload;
 
 	PathState shadow_ps;

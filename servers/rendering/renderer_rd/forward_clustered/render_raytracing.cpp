@@ -9879,6 +9879,11 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		// [16-19] = RTGI denoiser controls, [20] = RAY_FIREFLY_SUPPRESSION,
 		// [21] = RAY_MAX_RADIANCE, [22-24] = split-signal denoiser controls.
 		const uint32_t rt_frame_index = p_state->frame_counter++;
+		if (p_state->frame_counter == 0u) {
+			// frame_index 0 is the resolve's no-history seed signal (rtgi_gi_resolve.glsl TEMPORAL
+			// path); a uint32 wrap must not re-trigger a scene-wide GI reseed mid-session.
+			p_state->frame_counter = 1u;
+		}
 		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_FRAME_INDEX] = float(rt_frame_index);
 
 		bool background_uses_sky = false;

@@ -1139,6 +1139,7 @@ bool evalIndirectCombinedBRDF(float2 u, float3 shadingNormal, float3 geometryNor
 	const float3 Nlocal = float3(0.0f, 0.0f, 1.0f);
 
 	float3 rayDirectionLocal = float3(0.0f, 0.0f, 0.0f);
+	sampleWeight = float3(0.0f, 0.0f, 0.0f); // dead brdfType paths must reject, not read garbage.
 
 	if (brdfType == DIFFUSE_TYPE) {
 		// Sample diffuse ray using cosine-weighted hemisphere sampling

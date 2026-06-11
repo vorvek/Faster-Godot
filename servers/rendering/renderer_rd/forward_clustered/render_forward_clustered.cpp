@@ -4198,13 +4198,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// is never set in Hybrid, so the Hybrid composite stays byte-identical. The deep-path oracle
 			// (rt_fpt_reference) is excluded so its raw beauty stays un-stabilized. Multiview is not
 			// handled (single-layer ping-pong) -> falls through to the raw RT color, no crash.
-			// Gate OUT the temporal vendor upscalers (FSR2/XeSS/MetalFX): the path-traced primary is
-			// per-frame stochastic (NEE re-seed), and a feed-forward temporal upscaler cannot lock that
-			// stochastic base the way it locks a deterministic raster primary, so it boils. Pre-averaging
-			// the primary at the rt scale before the upscaler does not fix it (a reduced-strength
-			// accumulation was measured: FPT+FSR2 frame-to-frame delta was unchanged) and a full-strength
-			// average instead fights the upscaler's own jitter accumulation (ghosting), so under a vendor
-			// upscaler the composite uses the raw RT color. This is a structural upscaler-lock limitation:
+			// Gate OUT FSR2 and MetalFX (XeSS is deliberately NOT gated; it converges the stabilized
+			// primary cleanly): the path-traced primary is per-frame stochastic (NEE re-seed), and a
+			// feed-forward temporal upscaler like FSR2 cannot lock that stochastic base the way it
+			// locks a deterministic raster primary, so it boils; MetalFX shares the gate as the same
+			// class of upscaler. Pre-averaging the primary at the rt scale before the upscaler does
+			// not fix it (a reduced-strength accumulation was measured: FPT+FSR2 frame-to-frame delta
+			// was unchanged) and a full-strength average instead fights the upscaler's own jitter
+			// accumulation (ghosting), so under a gated upscaler the composite uses the raw RT color.
+			// This is a structural upscaler-lock limitation:
 			// FPT pairs cleanly with no upscaler, native TAA, and XeSS; FSR2 specifically struggles with
 			// the stochastic primary, so Hybrid is the recommended mode under FSR2. Native TAA is NOT gated
 			// out (it converges the stabilized primary fine); the no-upscaler path benefits most.
