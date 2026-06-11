@@ -3059,7 +3059,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		prepare_sdfgi_for_raster();
 
-		gi.setup_voxel_gi_instances(p_render_data, p_render_data->render_buffers, p_render_data->scene_data->cam_transform, *p_render_data->voxel_gi_instances, p_render_data->voxel_gi_count);
+		// VoxelGI is excluded from the frame while the RTGI composite owns indirect
+		// (warned once at the feature population below), so skip its per-frame
+		// update work too; voxel_gi_count stays 0.
+		if (!rt_radiance_probes_composite) {
+			gi.setup_voxel_gi_instances(p_render_data, p_render_data->render_buffers, p_render_data->scene_data->cam_transform, *p_render_data->voxel_gi_instances, p_render_data->voxel_gi_count);
+		}
 	} else {
 		ERR_PRINT("No render buffer nor reflection atlas, bug"); // Should never happen!
 		current_cluster_builder = nullptr;
@@ -3163,12 +3168,25 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 
 		if (p_render_data->voxel_gi_instances->size() > 0) {
-			scene_features.set(SCENE_FEATURE_VOXELGI);
+			if (rt_radiance_probes_composite) {
+				// RTGI owns indirect lighting; mixing providers needs per-pixel ownership
+				// (deferred). Previously this combination silently discarded the entire RTGI
+				// composite while still paying for every RT dispatch.
+				WARN_PRINT_ONCE("VoxelGI is not supported and will be ignored while RTGI is enabled.");
+			} else {
+				scene_features.set(SCENE_FEATURE_VOXELGI);
+			}
 		}
 
 		if (p_render_data->environment.is_valid()) {
 			if (environment_get_sdfgi_enabled(p_render_data->environment) && get_debug_draw_mode() != RSE::VIEWPORT_DEBUG_DRAW_UNSHADED) {
-				scene_features.set(SCENE_FEATURE_SDFGI);
+				// Same RTGI-owns-indirect rule as VoxelGI above. sdfgi_update() already
+				// warned and deallocated the SDFGI buffers for this combination; not
+				// setting the feature here keeps the stale flag from vetoing the RTGI
+				// composite below.
+				if (!rt_radiance_probes_composite) {
+					scene_features.set(SCENE_FEATURE_SDFGI);
+				}
 			}
 			if (environment_get_ssr_enabled(p_render_data->environment)) {
 				if (!p_render_data->transparent_bg) {
@@ -3213,7 +3231,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RD::get_singleton()->draw_command_begin_label("Render Setup");
 
 	_setup_lightmaps(p_render_data, *p_render_data->lightmaps, p_render_data->scene_data->cam_transform);
-	_setup_voxelgis(*p_render_data->voxel_gi_instances);
+	if (rt_radiance_probes_composite) {
+		// No pairing indices while RTGI owns indirect: with voxelgis_used == 0 the
+		// instance-data fill never sets INSTANCE_DATA_FLAG_USE_VOXEL_GI, so culled-in
+		// VoxelGIs stay out of the raster shading entirely.
+		scene_state.voxelgis_used = 0;
+	} else {
+		_setup_voxelgis(*p_render_data->voxel_gi_instances);
+	}
 
 	if (scene_features.rt) {
 		p_render_data->scene_data->directional_light_count = _count_directional_lights(p_render_data);
@@ -3764,12 +3789,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// supplies the environment-diffuse-indirect. Suppress the raster opaque pass's environment AMBIENT
 		// (diffuse) here so the two don't both apply sky/ambient irradiance (~2x double-count). The gate is
 		// a strict SUBSET of the composite-dispatch gate below: every precondition the composite requires
-		// (radiance-probes composite mode; no other whole-frame indirect provider SDFGI/VoxelGI/lightmap; a
+		// (radiance-probes composite mode; no SDFGI; a
 		// valid rtgi_resolve with a resolved diffuse-GI buffer; the NORMAL_ROUGHNESS G-buffer the
 		// resolve/composite read) is folded in here, PLUS one extra term (debug == DISABLED). So
 		// "ambient suppressed" strictly IMPLIES "composite fires": whenever the composite is skipped
 		// (a provider is active, the resolve is unavailable, or the G-buffer is missing) the
-		// env-ambient is left intact and SDFGI/VoxelGI/lightmap behave byte-for-byte as before. The
+		// env-ambient is left intact and SDFGI/lightmap behave byte-for-byte as before. The
 		// extra debug==DISABLED term only narrows the ambient side further (it never suppresses while
 		// the composite fires), so the RTGI debug views' opaque pass is unaffected. The opaque pass is
 		// the only _setup_environment call that receives this; the depth/guide/transparent passes (and
@@ -3781,11 +3806,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// A baked LightmapGI no longer blocks suppression: the opaque pass now skips the lightmap
 		// contribution (SCENE_DATA_FLAGS_SUPPRESS_LIGHTMAP, set in update_ubo whenever this is true) so
 		// the RTGI radiance-probes composite is the sole diffuse-indirect provider with a lightmap
-		// present, just as it already is for the environment ambient. SDFGI/VoxelGI still block it
-		// (they overwrite ambient_light in the shader and would need per-pixel ownership to coexist).
+		// present, just as it already is for the environment ambient. VoxelGI no longer blocks it
+		// either: while the composite is active a culled-in VoxelGI is excluded from the frame with a
+		// one-shot warning (feature population above), so using_voxelgi is always false here. SDFGI is
+		// likewise warned and disabled (sdfgi_update + the population above); the !using_sdfgi term
+		// stays as a defensive belt.
 		const bool suppress_environment_ambient_for_radiance_probes_hybrid =
 				rt_radiance_probes_composite &&
-				!using_sdfgi && !using_voxelgi &&
+				!using_sdfgi &&
 				get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_DISABLED &&
 				rtgi_resolve != nullptr && rtgi_resolve->get_diffuse_gi().is_valid() &&
 				rb_data.is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS);
@@ -4183,10 +4211,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// overwrites the raster opaque, then the probe indirect is added on top, so FPT beauty =
 			// PT primary-direct + probe indirect (distinct from Hybrid's raster-primary + additive).
 			// HYBRID passes RID() -> the proven additive-onto-raster path, byte-unchanged.
-			// Step 6 COEXISTENCE: this is a WHOLE-FRAME gate. Mixing probe-GI with SDFGI/VoxelGI/
-			// lightmaps requires PER-PIXEL indirect ownership (which provider owns each pixel) --
-			// a deferred follow-up; for now the composite is skipped whenever any of those other
-			// indirect sources is active (the A3 test scenes have none, so the gate passes).
+			// Step 6 COEXISTENCE: mixing probe-GI with SDFGI/VoxelGI requires PER-PIXEL indirect
+			// ownership (which provider owns each pixel), a deferred follow-up. Until then RTGI wins:
+			// a culled-in VoxelGI is excluded from the frame with a one-shot warning (feature
+			// population above) and SDFGI is warned and disabled (sdfgi_update), so neither can veto
+			// this composite anymore (previously they silently discarded it while every RT dispatch
+			// still ran). The !using_sdfgi term below is a defensive belt only; lightmaps coexist via
+			// SCENE_DATA_FLAGS_SUPPRESS_LIGHTMAP (see the ambient-suppression block above).
 			// T4 oracle: beauty = the raw deep path-traced color, with NO probe indirect. The probe
 			// dispatches + composite were skipped above (rt_fpt_reference gate), so just blit the
 			// deep-path RT color (written by the no-PRIMARY_DIRECT dispatch above) over the internal
@@ -4199,7 +4230,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					rtgi_resolve->get_diffuse_gi().is_valid() &&
 					rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS) &&
 					rb_data->rt_has_material_guides() &&
-					!using_sdfgi && !using_voxelgi) {
+					!using_sdfgi) {
 				// Prefer the temporally-stabilized primary-direct color (accumulated just above) so the
 				// final no-upscaler image is stable; fall back to the raw RT color when stabilization did
 				// not run (multiview, or the stabilizer has no buffer yet). Hybrid passes RID() either way.
@@ -6239,20 +6270,25 @@ void RenderForwardClustered::sdfgi_update(const Ref<RenderSceneBuffers> &p_rende
 	// fallback/multiview never loses SDFGI merely because Path Traced was requested.
 	bool needs_sdfgi = p_environment.is_valid() && environment_get_sdfgi_enabled(p_environment);
 
-	bool is_full_path_tracing = false;
+	// Any RTGI-composite-active mode (Full Path Tracing or Hybrid) owns indirect
+	// lighting, so SDFGI is warned about and disabled for both; the reflections-only
+	// mode does not composite and leaves SDFGI alone. Mirrors the VoxelGI exclusion
+	// in the render-scene feature population.
+	bool rtgi_composite_active = false;
 	if (p_environment.is_valid() && RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_enabled(p_environment)) {
 		float rt_env_params_storage[RSE::PT_PARAM_MAX];
 		const float *rt_env_params = _rtgi_shader_params_for_environment(p_environment, rt_env_params_storage);
-		if (rt_env_params && (uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING) {
-			if (rb->get_view_count() <= 1) {
-				is_full_path_tracing = true;
+		if (rt_env_params) {
+			const uint32_t rt_mode = (uint32_t)rt_env_params[RSE::PT_PARAM_MODE];
+			if ((rt_mode == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING || rt_mode == SceneShaderRaytracing::RT_MODE_HYBRID) && rb->get_view_count() <= 1) {
+				rtgi_composite_active = true;
 			}
 		}
 	}
 
-	if (is_full_path_tracing) {
+	if (rtgi_composite_active) {
 		if (needs_sdfgi) {
-			WARN_PRINT_ONCE("SDFGI is not supported and will be disabled when Full Path Tracing is enabled.");
+			WARN_PRINT_ONCE("SDFGI is not supported and will be disabled while RTGI is enabled.");
 		}
 		needs_sdfgi = false;
 	}

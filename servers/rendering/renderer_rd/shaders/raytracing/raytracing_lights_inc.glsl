@@ -589,7 +589,8 @@ vec3 rt_emissive_candidate_evaluate_emission(MaterialData light_mat, GeometryDat
 			// the BSDF/any-hit view of the surface (the any-hit ignores it, so a
 			// BSDF path never collects its Le). Mirrors ray_query_alpha_test's
 			// opaque alpha; hash/custom-clip never get here (candidate builder
-			// rejects them). Mip 0, same as the any-hit cutout.
+			// rejects them). Mip 0, same as the any-hit cutout (idx 0 = the
+			// default white texture, alpha 1).
 			float alpha = light_mat.albedo_color.a;
 			alpha *= rt_material_vertex_color(light_mat, fetch_color(geom, i0, i1, i2, bary)).a;
 			if (light_mat.albedo_texture_idx != 0u) {
