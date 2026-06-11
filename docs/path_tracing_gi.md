@@ -108,11 +108,11 @@ class reference.
     `0.0` disables this source-side clamp. The default is conservative and is
     intended to stop extreme path samples rather than flatten authored lighting.
 - `rtgi_denoiser`
-  - `ASVFG (Experimental)`: the default. Uses the built-in GPU ASVFG denoiser,
-    a vendor-neutral RD effect with guided stabilization, moment, variance,
-    and atrous passes. It uses RT velocity, normal/roughness,
-    albedo/metalness, linear view-Z, hit distance, validity masks, and history
-    IDs to preserve edges and reject invalid samples.
+  - `ASVFG (Experimental)`: the default. The built-in vendor-neutral denoise
+    chain: temporal accumulation and an a-trous spatial pass in the GI
+    resolve, plus a temporal stabilizer on the path-traced primary when no
+    temporal upscaler is active. It uses RT velocity, normal/roughness,
+    depth, and history validity to preserve edges and reject invalid samples.
   - `None`: bypasses the temporal stabilizer and the spatial denoise polish so
     the accumulated GI signal can be inspected. Temporal accumulation and
     compositing still run, so this does not show the raw per-frame samples
@@ -900,14 +900,16 @@ substituted, instead of staying silent:
   - Applies clean-room, biased linear-HDR contribution limits to extreme direct
     samples, secondary emissive/sky hits, and secondary path throughput before
     ASVFG history.
-- `servers/rendering/renderer_rd/effects/rtgi_denoise.*`
-  - Adds the ASVFG/RELAX-style RTGI denoiser as an RD effect path.
-    It maintains moments, variance, rejection, noisy-input, and guide textures,
-    then runs a current-frame guided stabilizer to reduce broad diffuse
-    blotches. Max denoiser strength uses stronger isolated-outlier suppression
-    instead of forcing an extra large-radius atrous pass.
-  - Builds the internal RTGI TAA reactivity mask from existing denoiser
-    diagnostics for Full Path Tracing and Hybrid RTGI resolves.
+- `servers/rendering/renderer_rd/effects/rtgi_gi_resolve.*` and
+  `servers/rendering/renderer_rd/effects/rtgi_fpt_stabilize.*`
+  - House the shipping denoise machinery: the resolve runs the temporal
+    accumulation and the a-trous spatial pass on the probe-composited GI, and
+    the stabilizer temporally accumulates the path-traced primary when no
+    temporal upscaler is active. Selecting the None denoiser bypasses the
+    stabilizer and the spatial pass while accumulation and compositing keep
+    running.
+  - The composite can also write a GI-confidence reactive mask for FSR 2 and
+    XeSS when the Reactive denoiser is selected from script.
 - `servers/rendering/renderer_rd/effects/taa.*`
   - Remains the normal viewport TAA path and fallback temporal resolve.
     RTGI-only resolves can consume the internal reactivity mask before the
