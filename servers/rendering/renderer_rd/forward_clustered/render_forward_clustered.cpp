@@ -2949,7 +2949,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		static bool rtgi_custom_preset_noted = false;
 		if (!rtgi_custom_preset_noted) {
 			rtgi_custom_preset_noted = true;
-			print_verbose("RTGI: the Custom quality preset keeps the Environment property values and uses the Balanced tier for the hidden pipeline settings (rendering/rtgi/* project settings).");
+			print_verbose("The Custom RTGI quality preset keeps the Environment property values and uses the Balanced tier for the hidden pipeline settings (rendering/rtgi/* project settings).");
 		}
 	}
 	uint32_t wrc_rays_per_frame;
@@ -2997,7 +2997,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// runs but the frame keeps the raster GI output. Warn once instead of discarding silently.
 	if (rt_gi_active && rt_env_params &&
 			(uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_REFLECTIONS_RT_ONLY) {
-		WARN_PRINT_ONCE("RTGI reflections-only mode currently produces no composited output; the frame uses raster GI. Use the Hybrid or Full Path Tracing RTGI mode to see RTGI output.");
+		WARN_PRINT_ONCE("The Reflections RT Only RTGI mode currently produces no composited output; the frame keeps raster GI. Set Environment.rtgi_mode to Hybrid RTGI or Full Scene Path-Traced GI to see RTGI output.");
 	}
 	// A4: true radiance_probes-FPT (FULL_PATH_TRACING only). Drives the extra full-screen
 	// primary-direct path-trace dispatch that coexists with the WRC/SPG probe dispatches.
@@ -4214,8 +4214,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// FSR2 cannot lock the stochastic path-traced primary (gate rationale above), so the
 			// stabilizer is skipped and FPT under FSR2 boils. Warn once; the None-denoiser bypass
 			// is a deliberate user choice and stays silent.
+			// SCALE_MFX stays silent on purpose: MetalFX is not reachable on this fork's platforms
+			// (Windows/Linux Vulkan; viewport coercion maps temporal-upscaler requests to FSR2), so
+			// the FSR2 message covers every reachable gated case.
 			if (rt_radiance_probes_fpt && !rt_fpt_reference && scale_type == SCALE_FSR2) {
-				WARN_PRINT_ONCE("The path-traced primary in RTGI Full Path Tracing is not temporally stabilized under FSR 2 and will look noisy. Hybrid is the recommended RTGI mode with FSR 2.");
+				WARN_PRINT_ONCE("The path-traced primary in Full Scene Path-Traced GI is not temporally stabilized under FSR 2 and will look noisy. Hybrid RTGI is the recommended RTGI mode with FSR 2.");
 			}
 			RID rt_stabilized_primary;
 			if (fpt_stabilize_ok && rt_radiance_probes_fpt && !rt_fpt_reference && rt_state && rtgi_primary_stabilize != nullptr &&

@@ -969,7 +969,7 @@ void Environment::_update_pathtracing() {
 		static bool editor_fallback_noted = false;
 		if (!editor_fallback_noted) {
 			editor_fallback_noted = true;
-			print_verbose("RTGI is enabled but rtgi_disable_in_editor keeps the editor viewport on the raster fallback; runtime output will differ from the editor preview.");
+			print_verbose("RTGI is enabled but Environment.rtgi_disable_in_editor keeps the editor viewport on the raster fallback; runtime output will differ from the editor preview.");
 		}
 	}
 	RS::get_singleton()->environment_set_pathtracing(environment, pathtracing_enabled && !editor_disabled);
