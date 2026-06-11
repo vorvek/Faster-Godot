@@ -80,7 +80,10 @@ public:
 		float z_far = 4000.0f;
 		float inv_proj_x = 1.0f; // 1 / P[0][0]: view-ray xy reconstruction from NDC for the
 		float inv_proj_y = 1.0f; // 1 / P[1][1]: camera DISTANCE (not just view z).
-		float pad0 = 0.0f;
+		// Artistic multiplier on the composited indirect GI (Environment rtgi_energy). The
+		// path-traced primary applies its own energy multiply in the raygen; this slot covers the
+		// probe-composited indirect, which previously ignored the knob.
+		float gi_energy = 1.0f;
 	};
 	static_assert(sizeof(CompositeFogParams) % 16 == 0, "CompositeFogParams must be 16-byte aligned (std140 UBO).");
 

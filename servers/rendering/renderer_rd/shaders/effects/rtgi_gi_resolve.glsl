@@ -235,7 +235,10 @@ layout(set = 0, binding = 17, std140) uniform CompositeFogParams {
 	float fog_z_far;
 	float fog_inv_proj_x; // 1 / P[0][0]
 	float fog_inv_proj_y; // 1 / P[1][1]
-	float fog_pad0;
+	// Artistic multiplier on the composited indirect GI (Environment rtgi_energy). The
+	// path-traced primary applies its own energy multiply in the raygen; this slot covers the
+	// probe-composited indirect, which previously ignored the knob.
+	float gi_energy;
 }
 composite_fog;
 
@@ -839,7 +842,11 @@ void resolve_composite_main(ivec2 pos) {
 	vec3 spec = texelFetch(spec_history, pos, 0).rgb; // binding 12 = [read_index] spec: radiance-space (BRDF applied).
 	// Mask the background so the additive composite does not lift the raster sky/clear color.
 	// cold_fade fades the whole indirect (diffuse + spec) in from 0 as the GI converges (load/disocclusion/cut).
-	vec3 indirect = (raw_depth <= 0.0) ? vec3(0.0) : ((diffuse_albedo * A + spec) * cold_fade);
+	// gi_energy is the Environment rtgi_energy multiplier on the INDIRECT only: this shader's
+	// output is purely the probe-composited indirect in both modes (the C++ adds it onto the
+	// base layer), and the FPT primary/deep-path base already applied its own energy multiply
+	// in the raygen, so scaling here covers every mode without double-applying to the base.
+	vec3 indirect = (raw_depth <= 0.0) ? vec3(0.0) : ((diffuse_albedo * A + spec) * cold_fade * composite_fog.gi_energy);
 
 	// Camera-segment fog transmittance: attenuate the indirect by 1 - fog_amount at the
 	// surface's camera distance, so the composited GI stops glowing through fog. This output is

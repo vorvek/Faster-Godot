@@ -1265,6 +1265,12 @@ func _capture_and_measure_config(base_suffix: String) -> Array[String]:
 				float(metrics.get("temporal_sparkle_per_megapixel_avg", 0.0))])
 
 	var expected := _expected_metrics_for_scene(_load_expected_metrics())
+	# A non-unit --rtgi-energy run is gated by the ENERGY verdict alone: the JSON
+	# thresholds are calibrated at energy 1.0, so a scaled run trips the sparkle and
+	# firefly gates spuriously. Skipping the comparison leaves expected empty, which
+	# records expected_thresholds_applied = false in this config's metrics below.
+	if not is_nan(_rtgi_energy_override) and not is_equal_approx(_rtgi_energy_override, 1.0):
+		expected = {}
 	var failures := _compare_metrics(metrics, expected)
 	# The fog-corridor gate is the FOGPAR verdict (it spans multiple runs, so it has
 	# no JSON thresholds); route it into the same failure list so a FAIL verdict
@@ -2841,6 +2847,13 @@ func _measure_cornell_box_image(image: Image) -> Dictionary:
 	# GI-only behavior such as rtgi_energy scaling. The rect is the projected
 	# face span (u 0.237..0.433, v 0.665..0.920) inset for safety.
 	var occluded_face := _measure_mean_luma(image, int(width * 0.27), int(height * 0.70), int(width * 0.40), int(height * 0.88))
+	# Linear-space twins of the floor / occluded-face lumas for the rtgi_energy
+	# scaling check. The capture is the tonemapped, sRGB-ENCODED final frame, so a
+	# 2x linear radiance change reads as ~1.42x in the encoded means above; ratios
+	# that should track rtgi_energy linearly must be formed from per-pixel
+	# linearized lumas instead (mean of linearized pixels, not a linearized mean).
+	var floor_linear_luma := _measure_mean_linear_luma(image, int(width * 0.22), int(height * 0.74), int(width * 0.78), int(height * 0.94))
+	var occluded_face_linear := _measure_mean_linear_luma(image, int(width * 0.27), int(height * 0.70), int(width * 0.40), int(height * 0.88))
 	return {
 		"cornell_box_red_wall_chroma_margin": left_wall.r - maxf(left_wall.g, left_wall.b),
 		"cornell_box_green_wall_chroma_margin": right_wall.g - maxf(right_wall.r, right_wall.b),
@@ -2849,6 +2862,8 @@ func _measure_cornell_box_image(image: Image) -> Dictionary:
 		"cornell_box_floor_mean_luma": floor_luma,
 		"cornell_box_back_wall_mean_luma": _luma(back_wall),
 		"cornell_box_occluded_face_mean_luma": occluded_face,
+		"cornell_box_floor_mean_linear_luma": floor_linear_luma,
+		"cornell_box_occluded_face_mean_linear_luma": occluded_face_linear,
 		"cornell_box_ceiling_hot_pixels": ceiling_hot_pixels,
 	}
 
@@ -2857,8 +2872,11 @@ func _measure_cornell_box_image(image: Image) -> Dictionary:
 # FOGPAR protocol: a --rtgi-energy=1.0 run records per-mode reference rect
 # lumas into the shared output dir, and a run at any other energy compares its
 # rect lumas against that reference. The occluded block face receives indirect
-# light only, so its mean luma must scale linearly with rtgi_energy; the
-# verdict checks that ratio against the requested multiplier. Hybrid gets a
+# light only, so its LINEAR mean luma must scale linearly with rtgi_energy. The
+# captured frame is sRGB-encoded, so the ratio is formed from the linearized
+# rect lumas (the encoded ratio of a clean 2x reads only ~1.42 and can never
+# reach the multiplier); the verdict checks that ratio against the requested
+# multiplier. Hybrid gets a
 # wider corridor than FPT because its indirect signal is probe-filtered. Prints
 # one machine-readable ENERGY line per config; FAIL routes into the exit code.
 # Configs that composite no RTGI GI print a SKIP verdict instead, and a
@@ -2874,8 +2892,8 @@ func _measure_energy_scaling(metrics: Dictionary, mode_label: String, image_size
 		print("ENERGY mode=%s energy=%.4f verdict=SKIP reason=no-rtgi-gi" % [mode_label, energy])
 		metrics["rtgi_energy_verdict"] = "SKIP"
 		return
-	var floor_luma := float(metrics.get("cornell_box_floor_mean_luma", 0.0))
-	var occluded_luma := float(metrics.get("cornell_box_occluded_face_mean_luma", 0.0))
+	var floor_luma := float(metrics.get("cornell_box_floor_mean_linear_luma", 0.0))
+	var occluded_luma := float(metrics.get("cornell_box_occluded_face_mean_linear_luma", 0.0))
 	var run_denoiser := int(metrics.get("applied_rtgi_denoiser", -1))
 	var run_resolution_scale := float(metrics.get("applied_rtgi_resolution_scale", -1.0))
 	var reference_path := "%s/energy_reference_%s.json" % [_output_dir, mode_label]
@@ -2883,8 +2901,8 @@ func _measure_energy_scaling(metrics: Dictionary, mode_label: String, image_size
 		_write_json(reference_path, {
 			"mode": mode_label,
 			"energy": energy,
-			"floor_mean_luma": floor_luma,
-			"occluded_face_mean_luma": occluded_luma,
+			"floor_mean_linear_luma": floor_luma,
+			"occluded_face_mean_linear_luma": occluded_luma,
 			"image_width": image_size.x,
 			"image_height": image_size.y,
 			"applied_rtgi_denoiser": run_denoiser,
@@ -2894,7 +2912,10 @@ func _measure_energy_scaling(metrics: Dictionary, mode_label: String, image_size
 		metrics["rtgi_energy_reference_recorded"] = true
 		return
 	var reference := _read_json_dictionary(reference_path)
-	if reference.is_empty() or not reference.has("occluded_face_mean_luma") or not reference.has("floor_mean_luma"):
+	# References from before the linear-luma fix carry encoded-space lumas under
+	# the old key names; the has() checks reject them as missing so a stale
+	# encoded reference can never silently shift the ratio baseline.
+	if reference.is_empty() or not reference.has("occluded_face_mean_linear_luma") or not reference.has("floor_mean_linear_luma"):
 		push_error("rtgi_energy check: reference '%s' is missing or unreadable. Run the same scene into this output dir with --rtgi-energy=1.0 first." % reference_path)
 		print("ENERGY mode=%s energy=%.4f floor_ratio=nan occluded_ratio=nan expected=%.4f verdict=FAIL" % [mode_label, energy, energy])
 		metrics["rtgi_energy_verdict"] = "FAIL"
@@ -2915,11 +2936,11 @@ func _measure_energy_scaling(metrics: Dictionary, mode_label: String, image_size
 		metrics["rtgi_energy_verdict"] = "FAIL"
 		metrics["rtgi_energy_reference_stale"] = true
 		return
-	var floor_ratio := floor_luma / maxf(float(reference["floor_mean_luma"]), 1e-6)
-	var occluded_ratio := occluded_luma / maxf(float(reference["occluded_face_mean_luma"]), 1e-6)
+	var floor_ratio := floor_luma / maxf(float(reference["floor_mean_linear_luma"]), 1e-6)
+	var occluded_ratio := occluded_luma / maxf(float(reference["occluded_face_mean_linear_luma"]), 1e-6)
 	# Corridor width follows the live applied mode enum, not the config label, so
 	# a scene-authored Hybrid run gets the Hybrid corridor too.
-	var tolerance := 0.25 if int(_environment.rtgi_mode) == Environment.RTGI_MODE_HYBRID else 0.10
+	var tolerance := 0.15 if int(_environment.rtgi_mode) == Environment.RTGI_MODE_HYBRID else 0.05
 	# Near zero the relative error degenerates (dividing by ~0 amplifies any
 	# residual into a guaranteed FAIL), so the corridor turns absolute there.
 	var rel_err := absf(occluded_ratio - energy)
@@ -3884,6 +3905,21 @@ func _measure_mean_luma(image: Image, x0: int, y0: int, x1: int, y1: int) -> flo
 	for y in range(y0, y1):
 		for x in range(x0, x1):
 			sum += _luma(image.get_pixel(x, y))
+			count += 1
+	return sum / max(float(count), 1.0)
+
+
+# Mean luma of the rect in LINEAR space: each pixel is decoded from the capture's
+# sRGB encoding before the luma weighting, so a k-times change in rendered
+# radiance reads as a k-times change here (the encoded mean above compresses it).
+# Per-pixel decode, then mean: linearizing the encoded mean would be wrong, the
+# transfer function does not commute with averaging.
+func _measure_mean_linear_luma(image: Image, x0: int, y0: int, x1: int, y1: int) -> float:
+	var sum := 0.0
+	var count := 0
+	for y in range(y0, y1):
+		for x in range(x0, x1):
+			sum += _luma(image.get_pixel(x, y).srgb_to_linear())
 			count += 1
 	return sum / max(float(count), 1.0)
 
