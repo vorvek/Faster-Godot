@@ -1895,7 +1895,8 @@ void Environment::_bind_methods() {
 	// Reactive (RR-style) denoiser (enum value 11) is intentionally not exposed here. It was explored
 	// as a poor-man's Ray Reconstruction (feed a GI-confidence reactive mask to FSR2/XeSS) but measured
 	// WORSE than ASVFG under disocclusion (the reactive channel makes the upscaler trust the noisy
-	// current frame exactly where the GI is noisiest), so it is kept inert and out of the inspector.
+	// current frame exactly where the GI is noisiest), so it is kept out of the inspector; setting
+	// it from script still arms the reactive-mask path in the renderer.
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "ASVFG:8,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_debug_mode", PROPERTY_HINT_ENUM, "Disabled,Mirror Reflection,Geometry Normals,Final Normals,Normal Map,Tangent,Bitangent,UV,Albedo,ORM,Diffuse Albedo,Specular Albedo,Normal+Roughness,Specular Hit Dist,Metalness,Roughness,View Normals,Diffuse+Specular,Fresnel F0,Front/Back Face,Depth,Emissive,BRDF Rejection,Normal Deviation,Specular Reflection Direction,Specular Reflected Hit Distance,Specular Reflected Hit Normal"), "set_rtgi_debug_mode", "get_rtgi_debug_mode");
 
