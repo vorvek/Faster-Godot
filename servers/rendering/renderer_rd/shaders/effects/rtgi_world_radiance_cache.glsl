@@ -13,9 +13,8 @@
 //   mode 0 -- scroll/recenter the previous-frame cache into the write atlas.
 //   mode 1 -- accumulate this frame's probe-ray radiance into the write atlas.
 //
-// Task 6a fills in both kernel bodies (Task 4 shipped empty stubs). The
-// binding-agnostic query API in ../raytracing/rtgi_wrc_inc.glsl is for the
-// downstream consumers (Task 7); it is intentionally NOT included here -- the
+// The binding-agnostic query API in ../raytracing/rtgi_wrc_inc.glsl is for the
+// downstream consumers; it is intentionally NOT included here -- the
 // tile layout below is replicated inline to match RtgiWrc::atlas_coord exactly.
 //
 // Atlas layout (mirror of RtgiWrc::atlas_coord / wrc_atlas_tile_origin):
@@ -23,8 +22,8 @@
 //   tiles_per_row = ceil(sqrt(cascade_count * grid^3))
 //   tile          = (linear % tiles_per_row, linear / tiles_per_row)
 //   texel         = tile * oct_res + (dir % oct_res, dir / oct_res)
-// This is the SAME `probe_index = (((cascade*grid+z)*grid+y)*grid+x)` the Task-5b
-// producer packs into update_index = (probe_index << 6) | dir, so the forward
+// This is the SAME `probe_index = (((cascade*grid+z)*grid+y)*grid+x)` the WRC
+// probe-update raygen packs into update_index = (probe_index << 6) | dir, so the forward
 // map (mode 1) and inverse map (mode 0) round-trip a texel <-> probe exactly.
 
 #define GROUP_SIZE 8
@@ -121,7 +120,7 @@ float wrc_sanitize_scalar(float v) {
 // integer scroll delta, and copy the matching FRONT texel back. Out-of-grid (or
 // frontier tiles beyond cascade_count*grid^3) are cleared so stale data never
 // leaks across a recenter. When scroll_delta is zero this is the identity copy
-// FRONT->BACK that the ping-pong relies on (NO skip-when-zero here -- Task 9).
+// FRONT->BACK that the ping-pong relies on (NO skip-when-zero here).
 void wrc_scroll_main(ivec2 coord) {
 	uint oct_res = max(params.oct_res, 1u);
 	uint grid = max(params.grid, 1u);

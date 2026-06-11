@@ -4,7 +4,7 @@
 
 #VERSION_DEFINES
 
-// Screen Probe Gather (SPG) GI debug consumer (A2-T5).
+// Screen Probe Gather (SPG) GI debug consumer.
 //
 // VALIDATION-ONLY per-pixel CONSUMER of the SPG per-probe radiance atlas: for each
 // screen pixel it reconstructs the WORLD-space surface position from the depth
@@ -13,11 +13,11 @@
 // HEMISPHERE-octahedral radiance tile against the surface normal, and bilinearly
 // blends them (weighted by plane/normal compatibility). The RAW cosine-mean
 // incident radiance is written straight to the output image -- NOT multiplied by
-// albedo and NOT tonemapped -- so the A2-T6 furnace oracle gate can compare the
+// albedo and NOT tonemapped -- so the furnace oracle gate can compare the
 // sphere-pixel value directly against the known environment radiance L (linear).
 //
 // This is the SCREEN-PROBE analogue of rtgi_wrc_gi_consumer.glsl. It is NOT the
-// production per-pixel resolve (that is A3): there is no demod/remod and no
+// production per-pixel resolve (rtgi_gi_resolve.glsl): there is no demod/remod and no
 // composite into beauty. It exists only so the furnace metric has a consumer.
 //
 // Coordinate-space contract (verified against rtgi_wrc_gi_consumer.glsl +

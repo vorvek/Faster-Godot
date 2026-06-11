@@ -56,7 +56,7 @@ bool RTGIWorldRadianceCache::ensure_ray_result_buffer(uint32_t p_rays_per_frame)
 	}
 
 	// 3 x vec4 = 48 bytes per entry, identical to STRC's RTGISTRCProbeRayResult
-	// so the GLSL RTGIWRCProbeRayResult struct and Task 6's accumulate match.
+	// so the GLSL RTGIWRCProbeRayResult struct and the WRC accumulate match.
 	const uint32_t result_stride = sizeof(float) * 12u;
 	ray_result_buffer = RD::get_singleton()->storage_buffer_create(uint64_t(capacity) * result_stride);
 	RD::get_singleton()->set_resource_name(ray_result_buffer, "RTGI WRC Probe Ray Results");

@@ -838,7 +838,7 @@ float rt_emissive_nee_solid_angle_pdf_at_hit(
 		return 0.0;
 	}
 
-	// abs() matches the two-sided NEE flip (T3): emitter cosine is taken on the
+	// abs() matches the two-sided NEE flip: emitter cosine is taken on the
 	// face that faces the receiver, so direction sign is irrelevant here.
 	float light_cos = max(abs(dot(normalize(hit_geom_normal), ray_dir)), 1e-4);
 	float dist_sq = hit_distance * hit_distance;

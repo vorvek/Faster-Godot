@@ -18,9 +18,9 @@ namespace RendererRD {
 
 // Per-frame scalars + clipmap recenter deltas for the World Radiance Cache.
 // The clipmap is camera-centered; `scroll_delta[k]` is the integer probe-space
-// shift of cascade `k` since last frame (see RtgiWrc::recenter_delta). The real
-// per-frame cascade/scroll math is wired in Task 5; Task 4 fills defaults so the
-// scroll/accumulate dispatches run as no-ops.
+// shift of cascade `k` since last frame (see RtgiWrc::recenter_delta). The
+// zero-filled defaults keep the scroll/accumulate dispatches no-ops until the
+// caller fills the real per-frame values.
 struct WRCFrameParams {
 	Vector3 camera_pos;
 	int32_t scroll_delta[4][3];
@@ -40,8 +40,8 @@ struct WRCFrameParams {
 // Structure: a single compute shader
 // with a `mode` push-constant driving scroll (mode 0) and accumulate (mode 1)
 // dispatches over the atlas, with ping-pong read/write atlases swapped per
-// update. Task 4 ships the structure with EMPTY kernels; the probe-ray update
-// (Task 5) and the real accumulate/recenter kernels (Task 6) come later.
+// update. The probe rays themselves are traced by the WRC raygen dispatch
+// (scene_raytracing_raygen.glsl); the accumulate folds its ray results in.
 class RTGIWorldRadianceCache {
 public:
 	RTGIWorldRadianceCache();
@@ -54,32 +54,34 @@ public:
 	bool ensure_resources(Ref<RenderSceneBuffersRD> p_render_buffers, const RtgiWrc::ClipmapParams &p_params, int p_view_count);
 
 	// Allocate (or reallocate on growth) the per-frame probe-update ray-result
-	// SSBO consumed by the WRC accumulate kernel (Task 6). One entry per ray ==
+	// SSBO consumed by the WRC accumulate kernel. One entry per ray ==
 	// one (probe, direction) octahedral texel; layout mirrors STRC's
 	// RTGISTRCProbeRayResult (3 x vec4 = 48 bytes). Returns true on (re)alloc.
 	bool ensure_ray_result_buffer(uint32_t p_rays_per_frame);
 	RID get_ray_result_buffer() const { return ray_result_buffer; }
 
 	// Record the scroll (mode 0) + accumulate (mode 1) compute dispatches and
-	// swap the ping-pong atlases. `p_tlas` / `p_scene_uniform_set` are unused by
-	// the Task 4 empty kernels (no probe tracing yet) and reserved for Task 5.
+	// swap the ping-pong atlases. `p_tlas` / `p_scene_uniform_set` are accepted
+	// for signature parity but unused: the probe rays are traced by the WRC
+	// raygen dispatch, which fills the ray-result SSBO the accumulate consumes.
 	void update(RID p_tlas, RID p_scene_uniform_set, const WRCFrameParams &p_frame_params);
 
 	// Current read (front) atlases. Valid only after ensure_resources().
 	RID get_radiance_atlas() const { return radiance_atlas[read_index]; }
 	RID get_distance_atlas() const { return distance_atlas[read_index]; }
 
-	// WRC-GI debug view (Task 7a): the first real per-pixel CONSUMER of the cache.
+	// WRC-GI debug view: a VALIDATION per-pixel CONSUMER of the cache.
 	// For each screen pixel it reconstructs the WORLD position from `p_depth`
 	// (corrected reverse-Z device depth) + the depth-corrected camera matrices,
 	// decodes the WORLD normal from
 	// `p_normal_roughness` (a VIEW-space G-buffer normal rotated to world), and
 	// samples rtgi_wrc_sample_irradiance() against the cache's cosine-integrated
 	// irradiance. The RAW linear irradiance is written to a debug image then
-	// blitted (un-tonemapped) to `p_dest_fb`, so the Task-7b furnace gate can read
+	// blitted (un-tonemapped) to `p_dest_fb`, so the furnace gate can read
 	// measurable linear values. `p_params` MUST be the same ClipmapParams the
-	// atlases were built from; `p_camera_pos` is the clipmap center (cam origin);
-	// `p_strength` is the artistic WRC irradiance multiplier (Task 8).
+	// atlases were built from; `p_camera_pos` is the clipmap center (cam origin).
+	// `p_strength` is retained for the debug UBO layout; callers always pass 1.0
+	// since the artistic strength knob was removed.
 	void render_gi_debug(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_depth, RID p_normal_roughness, const Projection &p_inv_projection, const Transform3D &p_cam_transform, const RtgiWrc::ClipmapParams &p_params, const Vector3 &p_camera_pos, float p_strength, RID p_dest_fb, const Size2i &p_size);
 
 	void free_resources();
@@ -107,7 +109,7 @@ private:
 	RID shader_version;
 	RID pipeline;
 
-	// WRC-GI debug consumer (Task 7a): its own full-screen compute shader that
+	// WRC-GI debug consumer: its own full-screen compute shader that
 	// reads depth + normal-roughness and samples the cache's irradiance. Set up in
 	// the constructor exactly like the update `shader` above.
 	//

@@ -81,7 +81,7 @@ public:
 		RT_FLAG_SER_ENABLED = (1 << 3),
 		RT_FLAG_WRC_PROBE_UPDATE = (1 << 7),
 		RT_FLAG_SPG_GATHER = (1 << 8),
-		// A4: full-screen FPT primary-direct dispatch. Caps indirect bounces to 0 in the
+		// Full-screen FPT primary-direct dispatch. Caps indirect bounces to 0 in the
 		// raygen (primary hit -> NEE direct + emissive + sky-on-miss only) AND tells
 		// update_uniform_set to bind the WRC/SPG ray-result buffers (107/108) to the
 		// default RW buffer instead of the real probe buffers, so this full-screen dispatch

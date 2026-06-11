@@ -16,13 +16,13 @@
 using namespace RendererRD;
 
 // Mode selectors. These EXACTLY match the RESOLVE_MODE_* defines in rtgi_gi_resolve.glsl.
-// T0 implements INTEGRATE (0) + DEBUG_GI (3); TEMPORAL (1) + SPATIAL (2) are declared so
-// the numbering is stable but their kernels land in T2/T3.
+// INTEGRATE (0) + DEBUG_GI (3) landed first; TEMPORAL (1) + SPATIAL (2) were declared
+// up front so the numbering stayed stable while their kernels landed later.
 #define RESOLVE_MODE_INTEGRATE 0u
 #define RESOLVE_MODE_TEMPORAL 1u
 #define RESOLVE_MODE_SPATIAL 2u
 #define RESOLVE_MODE_DEBUG_GI 3u
-// COMPOSITE (A3-T4): BEAUTY remod (albedo * diffuse_A + spec) -> gi_debug_image for the
+// COMPOSITE: BEAUTY remod (albedo * diffuse_A + spec) -> gi_debug_image for the
 // additive blit onto the raster-lit frame. EXACTLY matches RESOLVE_MODE_COMPOSITE in the GLSL.
 #define RESOLVE_MODE_COMPOSITE 4u
 // The per-mode pipeline array (pipelines[]) is indexed by these values; RESOLVE_MODE_COUNT must cover
@@ -178,7 +178,7 @@ void RTGIGIResolve::_allocate(const Size2i &p_render_size) {
 
 	// RGBA16F at the INTERNAL render size, STORAGE (INTEGRATE/TEMPORAL/SPATIAL write
 	// it) + SAMPLING (DEBUG_GI + the later beauty composite read it) + COPY both ways
-	// (parity with the SPG atlases). Both diffuse + spec are ping-ponged so T2's
+	// (parity with the SPG atlases). Both diffuse + spec are ping-ponged so the
 	// temporal accumulate can read the previous frame's resolved GI.
 	const uint32_t usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT |
 			RD::TEXTURE_USAGE_SAMPLING_BIT |
@@ -257,7 +257,7 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		RID p_wrc_radiance, RID p_wrc_distance,
 		const GiResolveFrameParams &p_frame, const Projection &p_inv_proj, const Transform3D &p_inv_view,
 		const Projection &p_prev_cam_projection, const Transform3D &p_prev_cam_transform) {
-	// THE FRAME SWAP (A3-T2): flip read_index ONCE at the TOP of the frame (mirrors
+	// THE FRAME SWAP: flip read_index ONCE at the TOP of the frame (mirrors
 	// RTGIScreenProbeGather::run_placement). AFTER the flip [read_index] is THIS frame's set
 	// (INTEGRATE writes it, TEMPORAL accumulates in place) and [1 - read_index] is the previous
 	// frame's accumulated result (the history TEMPORAL reprojects + blends). Both ping-pong sets
@@ -328,7 +328,7 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 
 	// Set 0 declares EVERY binding any mode of rtgi_gi_resolve.glsl uses (one GLSL
 	// shader's set-0 layout must declare all of them): G-buffers (0-1), the material-guide
-	// albedo (2), the velocity buffer (3, A3-T2), SPG atlas + headers (4-6), WRC atlases
+	// albedo (2), the velocity buffer (3), SPG atlas + headers (4-6), WRC atlases
 	// (7-8), the GI read+write images (9-10 = [read_index]), the GI HISTORY read samplers
 	// (11-12 = [prev_index]), the debug dest image (13), the params UBO (14), the
 	// material-guide ORM (15), the reactive-mask image (16), and the composite fog UBO (17,
@@ -358,7 +358,7 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		u.append_id(p_normal_roughness);
 		uniforms.push_back(u);
 	}
-	// Binding 2: material-guide albedo (A3-T1; INTEGRATE reads it for the rough-spec F0 mix).
+	// Binding 2: material-guide albedo (INTEGRATE reads it for the rough-spec F0 mix).
 	// guide_albedo_rid falls back to the WHITE default when p_guide_albedo is null (see above).
 	{
 		RD::Uniform u;
@@ -368,7 +368,7 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		u.append_id(guide_albedo_rid);
 		uniforms.push_back(u);
 	}
-	// Binding 3: velocity buffer (A3-T2; TEMPORAL reprojects the history with it). Now declared
+	// Binding 3: velocity buffer (TEMPORAL reprojects the history with it). Declared
 	// by the shader, so it is bound here from p_velocity. INTEGRATE ignores it.
 	{
 		RD::Uniform u;
@@ -469,7 +469,7 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		u.append_id(resolve_ubo);
 		uniforms.push_back(u);
 	}
-	// Binding 15: material-guide ORM (A3-T1; INTEGRATE reads g = roughness, b = metallic).
+	// Binding 15: material-guide ORM (INTEGRATE reads g = roughness, b = metallic).
 	// guide_orm_rid falls back to the WHITE default when p_guide_orm is null (see above).
 	{
 		RD::Uniform u;
@@ -531,7 +531,7 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	push_constant.wrc_grid = MAX(p_frame.wrc_grid, 1u);
 	push_constant.wrc_cascade_count = MAX(p_frame.wrc_cascade_count, 1u);
 	push_constant.wrc_base_spacing = p_frame.wrc_base_spacing;
-	// TEMPORAL (A3-T2) reproject tolerance scale; carried for both dispatches (INTEGRATE ignores
+	// TEMPORAL reproject tolerance scale; carried for both dispatches (INTEGRATE ignores
 	// it). temporal_n_cap (set above) is the history responsiveness, also shared by both.
 	push_constant.history_rejection = cached_params.history_rejection;
 	const float fade_override = rtgi_gi_fade_time_override();
@@ -549,7 +549,7 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, resolve_set, 0);
 
 	// INTEGRATE: one thread per screen pixel -> this frame's RAW resolved GI.
-	// Finer GPU-profiler bracket (A3-T8): the next RENDER_TIMESTAMP ("RTGI Resolve Temporal")
+	// Finer GPU-profiler bracket: the next RENDER_TIMESTAMP ("RTGI Resolve Temporal")
 	// closes this region, so INTEGRATE is a distinct profiler area (mirrors gi.cpp's use of
 	// RENDER_TIMESTAMP around its SDFGI compute sub-stages).
 	RENDER_TIMESTAMP("RTGI Resolve Integrate");
@@ -562,7 +562,7 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	RD::get_singleton()->compute_list_add_barrier(compute_list);
 
 	// TEMPORAL: one thread per screen pixel -> motion-reprojected history accumulate, in place.
-	// Finer GPU-profiler bracket (A3-T8): this RENDER_TIMESTAMP ends the INTEGRATE region above;
+	// Finer GPU-profiler bracket: this RENDER_TIMESTAMP ends the INTEGRATE region above;
 	// the SPATIAL label (or compute_list_end when SPATIAL is skipped) closes this one.
 	RENDER_TIMESTAMP("RTGI Resolve Temporal");
 	// The barrier above re-bound the INTEGRATE pipeline (compute_list_add_barrier restores the prior
@@ -573,7 +573,7 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(PushConstant));
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, size.x, size.y, 1);
 
-	// SPATIAL (A3-T3): ONE joint (diffuse + spec) edge-aware a-trous filter, run
+	// SPATIAL: ONE joint (diffuse + spec) edge-aware a-trous filter, run
 	// `spatial_iterations` times after TEMPORAL (0 = skip; 1 = default; 2 = escalation). The
 	// a-trous reads NEIGHBORS, so it CANNOT run in place -- each iteration reads a SOURCE set and
 	// writes a DISTINCT DEST set, ping-ponging between [read_index] (the TEMPORAL output / running
@@ -592,7 +592,7 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	// after the compute list (a GPU blit; the buffers carry CAN_COPY_FROM/TO). The default (1) is
 	// odd. A third scratch pair is avoided -- [prev] suffices.
 	const uint32_t spatial_iterations = (uint32_t)MAX(cached_params.spatial_iterations, 0);
-	// Finer GPU-profiler bracket (A3-T8): ONE label covers all the SPATIAL iterations as a single
+	// Finer GPU-profiler bracket: ONE label covers all the SPATIAL iterations as a single
 	// profiler area (mirrors gi.cpp, which labels an iterative jump-flood pass once before its loop).
 	// The RENDER_TIMESTAMP is issued INSIDE the loop on iteration 0, right after that iteration's
 	// barrier, NOT here before the loop: capturing a timestamp on an active compute list is only
@@ -715,7 +715,7 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 	for (uint32_t b = 0; b <= 8; b++) {
 		// Samplers 0-8 (incl. binding 2 the material-guide albedo and binding 3 the velocity
 		// buffer) all point at the resolved-diffuse read texture (neutral; DEBUG_GI does not read
-		// them). Binding 3 is now DECLARED by the shader (A3-T2), so it MUST be provided here too
+		// them). Binding 3 is DECLARED by the shader (TEMPORAL reads it), so it MUST be provided here too
 		// or the uniform set would not match the reflected layout -- it is bound neutrally like the
 		// rest (a read texture on a sampler slot is safe).
 		RD::Uniform u;
@@ -803,7 +803,7 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 	push_constant.mode = RESOLVE_MODE_DEBUG_GI;
 	push_constant.screen_w = (uint32_t)size.x;
 	push_constant.screen_h = (uint32_t)size.y;
-	// Channel select (A3-T1): 0 = diffuse-only (RESOLVE_GI), 1 = spec-only (RESOLVE_SPEC),
+	// Channel select: 0 = diffuse-only (RESOLVE_GI), 1 = spec-only (RESOLVE_SPEC),
 	// else = combined. rough_cutoff/rough_enabled stay 0 (memset): DEBUG_GI does not read them
 	// (only INTEGRATE uses them for the rough-spec gate); the fields stay in the PushConstant.
 	push_constant.debug_channel = p_debug_channel;
@@ -1045,7 +1045,7 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_normal_roughness, RID p_
 	CopyEffects *copy_effects = CopyEffects::get_singleton();
 	ERR_FAIL_NULL(copy_effects);
 	if (p_fpt_primary_color.is_valid()) {
-		// A4 FPT REPLACE: opaque = per-pixel path-traced primary-direct + probe indirect. First
+		// FPT REPLACE: opaque = per-pixel path-traced primary-direct + probe indirect. First
 		// overwrite the dest with the primary-direct color (rt_get_texture, written by the FPT
 		// primary-direct dispatch this frame) -- discarding the raster opaque, which FPT does not
 		// use -- then additively add the resolved indirect (gi_debug_image, masked to 0 on the

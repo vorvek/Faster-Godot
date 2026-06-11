@@ -33,7 +33,7 @@ RTGIScreenProbeGather::RTGIScreenProbeGather() {
 	accum_shader_version = accum_shader.version_create();
 	accum_pipeline = RD::get_singleton()->compute_pipeline_create(accum_shader.version_get_shader(accum_shader_version, 0));
 
-	// SPG-GI debug consumer shader (A2-T5; separate set-0 layout again -- see header).
+	// SPG-GI debug consumer shader (separate set-0 layout again -- see header).
 	// First compile of rtgi_spg_gi_consumer.glsl (and thus of its rtgi_spg_inc.glsl /
 	// oct_inc.glsl include usage in a consumer context), so a GLSL error there trips here.
 	gi_debug_shader.initialize({ "" });
@@ -58,8 +58,8 @@ bool RTGIScreenProbeGather::ensure_ray_result_buffer(uint32_t p_rays_per_frame) 
 		ray_result_buffer = RID();
 	}
 
-	// 2 x vec4 = 32 bytes per entry. Consumed by the SPG gather kernel (T2); the
-	// stride is pinned here so the GLSL ray-result struct and T2's gather match.
+	// 2 x vec4 = 32 bytes per entry. Consumed by the SPG gather kernel; the
+	// stride is pinned here so the GLSL ray-result struct and the gather match.
 	const uint32_t result_stride = sizeof(float) * 8u;
 	ray_result_buffer = RD::get_singleton()->storage_buffer_create(uint64_t(capacity) * result_stride);
 	RD::get_singleton()->set_resource_name(ray_result_buffer, "RTGI SPG Gather Ray Results");
@@ -173,7 +173,7 @@ void RTGIScreenProbeGather::_allocate(const SpgParams &p_params, const Size2i &p
 		RD::get_singleton()->texture_clear(header_aux[i], Color(0, 0, 0, 0), 0, 1, 0, 1);
 	}
 
-	// SPATIAL output (A2-T4): same format/size/usage as the radiance atlas, but a single
+	// SPATIAL output: same format/size/usage as the radiance atlas, but a single
 	// (non-ping-pong) texture -- the SPATIAL pass of run_accumulate fully rewrites every
 	// texel each frame from the current atlas, so no history set is needed.
 	radiance_filtered = RD::get_singleton()->texture_create(radiance_format, RD::TextureView());
@@ -184,7 +184,7 @@ void RTGIScreenProbeGather::_allocate(const SpgParams &p_params, const Size2i &p
 	resources_valid = true;
 
 	// Log total VRAM. RGBA16F = 8 B/texel, RGBA32F = 16 B/texel; radiance atlas and
-	// both headers are ping-ponged (x2), plus one non-ping-pong filtered atlas (A2-T4).
+	// both headers are ping-ponged (x2), plus one non-ping-pong filtered atlas.
 	const uint64_t atlas_texels = uint64_t(atlas_size.x) * uint64_t(atlas_size.y);
 	const uint64_t header_texels = uint64_t(grid_size.x) * uint64_t(grid_size.y);
 	const uint64_t bytes_per_set = atlas_texels * 8ULL + header_texels * (16ULL + 8ULL); // radiance(16F)=8; per probe: header_plane(32F)=16 + header_aux(16F)=8.
@@ -428,7 +428,7 @@ void RTGIScreenProbeGather::run_accumulate(const SpgFrameParams &p_frame, const 
 	push_constant.atlas_height = (uint32_t)atlas_size.y;
 	push_constant.rays_this_frame = p_frame.rays_this_frame;
 	push_constant.temporal_n_cap = MAX(cached_params.temporal_n_cap, 1.0f);
-	// SPATIAL filter radius (A2-T4). Clamped >= 0 here; the shader additionally caps it
+	// SPATIAL filter radius. Clamped >= 0 here; the shader additionally caps it
 	// to a sane neighbor reach. Radius 0 -> SPATIAL is a straight copy of the atlas.
 	push_constant.spatial_radius = (uint32_t)MAX(cached_params.spatial_radius, 0);
 	push_constant.wrc_cascade_count = (uint32_t)MAX(p_wrc_seed.cascade_count, 1);
@@ -467,11 +467,11 @@ void RTGIScreenProbeGather::run_accumulate(const SpgFrameParams &p_frame, const 
 		RD::get_singleton()->compute_list_add_barrier(compute_list);
 	}
 
-	// SPATIAL (A2-T4): one thread per radiance-atlas texel. Smooth each probe's octahedron
+	// SPATIAL: one thread per radiance-atlas texel. Smooth each probe's octahedron
 	// against its 3x3 same-surface neighbor probes (plane-matched, re-oriented on read) of
 	// the just-accumulated radiance_cur into radiance_filtered. ALWAYS dispatched -- with
 	// spatial_radius 0 the shader copies radiance_cur straight through, so radiance_filtered
-	// is a valid consumer target every frame (A3 + the debug-integrate read it).
+	// is a valid consumer target every frame (the resolve + the debug-integrate read it).
 	push_constant.mode = SPG_MODE_SPATIAL;
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(AccumPushConstant));
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, atlas_size.x, atlas_size.y, 1);
@@ -540,7 +540,7 @@ void RTGIScreenProbeGather::render_gi_debug(Ref<RenderSceneBuffersRD> p_rb, RID 
 	// Set 0: SPATIAL-filtered radiance atlas + the two probe headers (sampler+texture),
 	// depth + normal-roughness G-buffers (sampler+texture), the output storage image,
 	// and the params UBO. Sourcing get_radiance_filtered() matches the SPG_RADIANCE blit
-	// + what A3 will consume.
+	// + what the resolve integrate consumes.
 	LocalVector<RD::Uniform> uniforms;
 	{
 		RD::Uniform u;
@@ -621,7 +621,7 @@ void RTGIScreenProbeGather::render_gi_debug(Ref<RenderSceneBuffersRD> p_rb, RID 
 	RD::get_singleton()->draw_command_end_label();
 
 	// Blit the raw linear incident radiance to the destination framebuffer. No sRGB, no
-	// LOG_LUMINANCE: keep values linear/measurable for the A2-T6 furnace gate (mirrors
+	// LOG_LUMINANCE: keep values linear/measurable for the furnace gate (mirrors
 	// the WRC-GI consumer blit + the SPG_RADIANCE raw-linear blit).
 	CopyEffects *copy_effects = CopyEffects::get_singleton();
 	ERR_FAIL_NULL(copy_effects);

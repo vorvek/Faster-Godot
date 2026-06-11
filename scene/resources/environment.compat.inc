@@ -33,6 +33,8 @@
 void Environment::_set_rtgi_wrc_strength_bind_compat_bc5243e(float p_strength) {
 	// Removed property; kept resolvable for prebuilt GDExtensions that bind the
 	// old API (the bundled rapier_2d resolves it eagerly at load). Does nothing.
+	// Delete this file and the environment.h declarations once the bundled
+	// rapier_2d is rebuilt against the current extension_api.
 }
 
 float Environment::_get_rtgi_wrc_strength_bind_compat_bc5243e() const {

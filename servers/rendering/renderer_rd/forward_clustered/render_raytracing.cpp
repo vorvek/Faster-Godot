@@ -5575,7 +5575,7 @@ RTGIBackendDispatchResult RenderRaytracing::dispatch_path_trace_backend(RTGIBack
 }
 
 RTGIBackendDispatchResult RenderRaytracing::dispatch_primary_direct_backend(RTGIBackendFrameContext &p_context, uint32_t p_primary_direct_flags) {
-	// A4: the true radiance_probes-FPT primary-direct full-screen path-trace. It must
+	// The true radiance_probes-FPT primary-direct full-screen path-trace. It must
 	// COEXIST with the WRC/SPG probe dispatches already recorded this frame, so it REUSES
 	// the backend frame context's already-built viewport_state/TLAS -- re-running
 	// prepare_backend_frame would rebuild the in-flight TLAS the probe dispatches reference
@@ -9840,7 +9840,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		}
 		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_BACKEND] = float(active_backend);
 		// WRC probe-update needs the WRC's own clipmap values (which the WRC atlas was
-		// sized from) for probe-addressing. A3-T9 moved these off the borrowed STRC slots
+		// sized from) for probe-addressing. These were moved off the borrowed STRC slots
 		// onto the WRC producer-owned RT_PARAM_RTGI_WRC_* slots, so the STRC slots are no
 		// longer touched by any radiance_probes path (the STRC effect can be deleted later
 		// without touching this producer). The dispatch site channels these values through
@@ -9853,10 +9853,10 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_WRC_BASE_SPACING] = p_state->wrc_base_spacing;
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_WRC_RAYS] = float(p_state->wrc_rays_per_frame);
 		}
-		// SPG gather (A2-T2) writes (a) the WRC producer-owned grid/cascade/spacing slots so
+		// The SPG gather writes (a) the WRC producer-owned grid/cascade/spacing slots so
 		// the WRC radiance query inside the gather addresses the SAME atlas the WRC was sized
 		// from (mirrors the WRC override above, sourced from the same wrc_* fields the dispatch
-		// site set; A3-T9 migrated these off the borrowed STRC slots, values unchanged), AND
+		// site set; migrated off the borrowed STRC slots, values unchanged), AND
 		// (b) the dedicated RT_PARAM_RTGI_SPG_* slots for the gather's own grid/oct/dir budget
 		// + WRC-query oct_res. Gated on the SPG flag + spg_grid_w > 0 sentinel so STRC/WRC/main
 		// dispatches stay byte-identical.
@@ -10217,11 +10217,11 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		uniforms.push_back(u);
 	}
 
-	// A4: the full-screen FPT primary-direct dispatch (RT_FLAG_PRIMARY_DIRECT) binds the
+	// The full-screen FPT primary-direct dispatch (RT_FLAG_PRIMARY_DIRECT) binds the
 	// WRC/SPG ray-result buffers (107/108) to the *default* RW buffer instead of the real
 	// probe buffers. The primary-direct raygen never touches 107/108, but binding the real
 	// buffers RW would record this full-screen dispatch as a phantom WRITER of the probe
-	// buffers in the draw graph -- the A4 coexistence root cause (it zeroed the gather /
+	// buffers in the draw graph -- the coexistence root cause (it zeroed the gather /
 	// GPU-hung). Pointing them at the default buffer removes that phantom dependency while
 	// keeping the descriptor layout the pipeline expects.
 	const bool primary_direct_dispatch = (p_rt_flags & SceneShaderRaytracing::RT_FLAG_PRIMARY_DIRECT) != 0;
@@ -10247,11 +10247,11 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		uniforms.push_back(u);
 	}
 
-	// Binding 108: RTGI Screen Probe Gather (SPG) gather ray-result buffer (A2-T2).
-	// Written by the SPG gather raygen when RT_FLAG_SPG_GATHER is set; read by the T3
+	// Binding 108: RTGI Screen Probe Gather (SPG) gather ray-result buffer.
+	// Written by the SPG gather raygen when RT_FLAG_SPG_GATHER is set; read by the SPG
 	// accumulate. Mirrors the WRC binding-107 wiring, including the *writable* default-
 	// buffer fallback (NOT the read-only default) for the same single-usage reason
-	// documented on binding 107, and the A4 primary-direct decoupling documented above.
+	// documented on binding 107, and the primary-direct decoupling documented above.
 	{
 		RD::Uniform u;
 		u.binding = 108;

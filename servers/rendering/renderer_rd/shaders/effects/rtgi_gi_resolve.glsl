@@ -4,12 +4,12 @@
 
 #VERSION_DEFINES
 
-// RTGI GI Resolve compute shader (A3-T0).
+// RTGI GI Resolve compute shader.
 //
-// The PRODUCTION per-pixel CONSUMER of the SPG/WRC probes (promoted from the A2
+// The PRODUCTION per-pixel CONSUMER of the SPG/WRC probes (promoted from the SPG
 // debug-only consumer rtgi_spg_gi_consumer.glsl). It runs under the radiance_probes
 // pipeline AFTER the Screen Probe Gather and resolves the screen GI into its own
-// ping-pong buffers, BEFORE any beauty composite (the composite lands in T4/T5).
+// ping-pong buffers, BEFORE any beauty composite (the COMPOSITE mode below).
 //
 // Modes (match RESOLVE_MODE_* in rtgi_gi_resolve.cpp):
 //   * INTEGRATE (0): per pixel -> 4 surrounding SPG probes, plane-weighted, cosine-
@@ -17,17 +17,18 @@
 //     weighted normalizer), bilinearly blend, fall back to the WRC irradiance when no
 //     probe qualifies. Writes LIGHTING-SPACE A (the confidence-weighted cosine-average
 //     of incident radiance) to diffuse_gi_rw -- NO albedo, NO extra 1/PI (the demod
-//     is PI-free at storage; the surface adds L_o = albedo * A). spec_gi_rw holds the T1
+//     is PI-free at storage; the surface adds L_o = albedo * A). spec_gi_rw holds the
 //     rough-spec radiance.
 //   * TEMPORAL (1): motion-reproject the PREVIOUS frame's accumulated GI (the [1-read_index]
 //     history at 11/12), reject bad history on a same-surface depth+normal AND-gate, and blend
-//     with a sample-counted 1/n weight, IN-PLACE on diffuse_gi_rw/spec_gi_rw (A3-T2). SPATIAL
-//     (2) is declared for numbering stability; implemented in T3.
+//     with a sample-counted 1/n weight, IN-PLACE on diffuse_gi_rw/spec_gi_rw. SPATIAL
+//     (2) is declared for numbering stability; its kernel is the standalone
+//     rtgi_gi_resolve_spatial.glsl.
 //   * DEBUG_GI (3): output the resolve's RAW lighting-space output -> out = diffuse_gi.rgb +
-//     spec_gi.rgb (spec is 0 in T0), written RAW (linear) for the furnace gate. NO albedo:
-//     remodulation by the pixel albedo belongs at the COMPOSITE (T4/T5), where the full
+//     spec_gi.rgb, written RAW (linear) for the furnace gate. NO albedo:
+//     remodulation by the pixel albedo belongs at the COMPOSITE, where the full
 //     G-buffer albedo exists (the forced depth-prepass debug-view path does not populate
-//     rt_albedo_metalness). On the furnace A ~= L (albedo-independent), matching the A2
+//     rt_albedo_metalness). On the furnace A ~= L (albedo-independent), matching the
 //     SPG-GI gate (rtgi_spg_gi_consumer.glsl, which likewise outputs raw incident radiance).
 //
 // Coordinate-space contract (verified against rtgi_spg_gi_consumer.glsl +
@@ -78,7 +79,7 @@ layout(local_size_x = GROUP_SIZE, local_size_y = GROUP_SIZE, local_size_z = 1) i
 // deliberate ease-in, never stuck dark. Steady state (fully traced probes, quality = 1) advances
 // +1/frame -- bit-identical to the old behavior after warmup.
 #define RTGI_RESOLVE_QUALITY_FLOOR 0.25
-// COMPOSITE (A3-T4): the BEAUTY remod of the resolved GI -> dest_image (binding 13) for the
+// COMPOSITE: the BEAUTY remod of the resolved GI -> dest_image (binding 13) for the
 // additive blit onto the raster-lit frame. out = albedo * diffuse_A + spec (background masked).
 #define RESOLVE_MODE_COMPOSITE 4u
 
@@ -107,15 +108,15 @@ layout(push_constant, std430) uniform Params {
 	uint spg_oct_res;
 	uint spg_spacing_f;
 	float temporal_n_cap;
-	float rough_cutoff; // INTEGRATE: roughness cutoff (T1 rough-spec gate). Unused by DEBUG_GI.
+	float rough_cutoff; // INTEGRATE: roughness cutoff (rough-spec gate). Unused by DEBUG_GI.
 	uint rough_enabled; // INTEGRATE: 0 disables the rough-spec channel (writes spec 0).
 	uint wrc_grid;
 	uint wrc_cascade_count;
 	float wrc_base_spacing;
-	// DEBUG_GI channel select (T1): 0 = diffuse_gi only, 1 = spec_gi only, else = combined.
+	// DEBUG_GI channel select: 0 = diffuse_gi only, 1 = spec_gi only, else = combined.
 	// Unused by INTEGRATE. write_reactive + the trailing pad uint keep the block a 16-byte multiple (80 B).
 	uint debug_channel;
-	float history_rejection; // TEMPORAL (T2): depth/normal reproject tolerance scale (was pad0).
+	float history_rejection; // TEMPORAL: depth/normal reproject tolerance scale (was pad0).
 	uint write_reactive; // COMPOSITE: 1 = also write the GI-aware reactive mask (binding 16); 0 = skip (was pad1).
 	uint pad2;
 	// Cold-start hide enable: > 0 turns on the COMPOSITE's convergence-gated fade-from-zero (the
@@ -140,15 +141,15 @@ pc;
 // writes 13, and (only when pc.write_reactive == 1u) writes 16.
 layout(set = 0, binding = 0) uniform sampler2D depth_buffer;
 layout(set = 0, binding = 1) uniform sampler2D normal_roughness_buffer;
-// Material-guide albedo (A3-T1): rgb = base albedo, a = alpha. Populated by the "RTGI Material
+// Material-guide albedo: rgb = base albedo, a = alpha. Populated by the "RTGI Material
 // Guide Prepass" (RB_TEX_RT_GUIDE_ALBEDO). INTEGRATE reads it for the rough-spec F0 mix; the
-// composite (T4/T5) reuses it for the diffuse remod. NOT the dead rt_albedo_metalness.
+// composite reuses it for the diffuse remod. NOT the dead rt_albedo_metalness.
 layout(set = 0, binding = 2) uniform sampler2D guide_albedo;
-// Velocity buffer (A3-T2): .xy = screen-space motion in UV (prev_uv - cur_uv), the standard
+// Velocity buffer: .xy = screen-space motion in UV (prev_uv - cur_uv), the standard
 // RB_TEX_VELOCITY convention (TAA reads prev_uv = cur_uv + mv). Consumed by the TEMPORAL mode,
 // which scales it to PIXELS (* screen size) and reprojects prev = pos + mv*size; INTEGRATE/
 // DEBUG_GI ignore it. Bound by run_resolve from p_velocity (the SPG anchor motion in
-// header_aux.zw uses the SAME source, pre-scaled to pixels at PLACE). (Was reserved in T0/T1.)
+// header_aux.zw uses the SAME source, pre-scaled to pixels at PLACE).
 layout(set = 0, binding = 3) uniform sampler2D velocity_buffer;
 // SPG SPATIAL-filtered per-probe radiance atlas (grid_w*oct_res x grid_h*oct_res): each
 // probe owns an oct_res x oct_res HEMISPHERE-octahedral tile (local +Z = anchor normal),
@@ -167,7 +168,7 @@ layout(set = 0, binding = 8) uniform sampler2D wrc_distance;
 // `writeonly` qualifier is therefore DROPPED (an imageLoad on a writeonly image is illegal);
 // INTEGRATE still only stores, which is fine for a plain (non-writeonly) storage image.
 // diffuse_gi_rw: .rgb = lighting-space A, .a = confidence/n. spec_gi_rw: .rgb = rough-spec
-// radiance (A3-T1; BRDF applied), .a = variance/n.
+// radiance (BRDF applied), .a = variance/n.
 layout(set = 0, binding = 9, rgba16f) uniform restrict image2D diffuse_gi_rw;
 layout(set = 0, binding = 10, rgba16f) uniform restrict image2D spec_gi_rw;
 // GI HISTORY read samplers (the [1 - read_index] set: the previous frame's ACCUMULATED
@@ -194,7 +195,7 @@ layout(set = 0, binding = 14, std140) uniform GiResolveUBO {
 }
 ubo;
 
-// Material-guide ORM (A3-T1): r = ao, g = roughness, b = metallic, a = sss (the packing the
+// Material-guide ORM: r = ao, g = roughness, b = metallic, a = sss (the packing the
 // material guide / scene_forward_clustered.glsl writes). Populated by the "RTGI Material Guide
 // Prepass" (RB_TEX_RT_GUIDE_ORM). INTEGRATE reads g (roughness) + b (metallic) for the
 // rough-spec cone + F0; declared at binding 15 (after the UBO) to keep the existing 0-14
@@ -293,12 +294,12 @@ vec3 resolve_reconstruct_view_position(ivec2 pos, float raw_depth) {
 	return view.xyz / view.w;
 }
 
-// Build the binding-agnostic WrcParams for the fallback query. Mirrors the A2 WRC
+// Build the binding-agnostic WrcParams for the fallback query. Mirrors the WRC debug
 // consumer's GiDebugUBO source: cascade/grid/base_spacing from the push, the clipmap
 // center (camera_pos) from inv_view's translation column (== cam_transform.origin, the
 // clipmap center the atlas was built around), and the sane default occlusion-bias /
 // min-variance the WRC consumer used. The WRC tile oct_res is not carried separately in
-// the T0 push, so it reuses spg_oct_res (both atlases use the same octahedral resolution
+// the push, so it reuses spg_oct_res (both atlases use the same octahedral resolution
 // under the project defaults); revisit if the two ever diverge.
 WrcParams resolve_wrc_params() {
 	WrcParams wp;
@@ -444,14 +445,14 @@ void resolve_integrate_main(ivec2 pos) {
 	float pixel_linear_depth = -view_pos.z;
 	vec3 world_N = normalize(mat3(ubo.inv_view) * view_normal);
 
-	// Rough-spec view + reflection vectors (A3-T1). The camera world position is inv_view's
+	// Rough-spec view + reflection vectors. The camera world position is inv_view's
 	// translation column (the same clipmap center the WRC params use). V points from the
 	// surface toward the eye; R is the mirror reflection of -V about the surface normal.
 	vec3 cam_pos = ubo.inv_view[3].xyz;
 	vec3 V = normalize(cam_pos - world_pos);
 	vec3 R = reflect(-V, world_N);
 
-	// Per-pixel material guide (A3-T1): roughness (ORM.g) + metallic (ORM.b) drive the
+	// Per-pixel material guide: roughness (ORM.g) + metallic (ORM.b) drive the
 	// rough-spec cone + F0; albedo (guide RGB) is the metallic tint of F0. The dead
 	// rt_albedo_metalness is NOT used -- these come from the material-guide prepass.
 	vec4 orm = texelFetch(guide_orm, pos, 0); // r=ao, g=roughness, b=metallic, a=sss.
@@ -460,7 +461,7 @@ void resolve_integrate_main(ivec2 pos) {
 	vec3 albedo = texelFetch(guide_albedo, pos, 0).rgb;
 	// Gate the rough-spec channel: only the rough domain (roughness >= cutoff) is resolved from
 	// the diffuse-style probe octahedra; the sharp domain (below cutoff) is a separate mirror /
-	// ray-traced reflection path (T-later) and stays 0 here. Also honors the global enable.
+	// ray-traced reflection path (deferred) and stays 0 here. Also honors the global enable.
 	bool do_spec = (pc.rough_enabled != 0u) && (rough >= pc.rough_cutoff);
 
 	// Locate the 4 surrounding probes. Probe (gx, gy) anchors near tile center
@@ -506,7 +507,7 @@ void resolve_integrate_main(ivec2 pos) {
 			}
 
 			// Plane compatibility: reject probes on a different surface (relative depth +
-			// hemisphere-ish normal cosine), verbatim from the A2 consumer.
+			// hemisphere-ish normal cosine), verbatim from the SPG debug consumer.
 			float depth_diff = abs(plane.w - pixel_linear_depth);
 			if (depth_diff > 0.1 * plane.w) {
 				continue;
@@ -547,7 +548,7 @@ void resolve_integrate_main(ivec2 pos) {
 
 	// Fallback: all 4 probes failed (disocclusion / grid edge) -> direct WRC irradiance
 	// (already returns the cosine-average A). Mirrors the production consumer's fallback;
-	// the A2 debug consumer returned 0 here, but the production resolve has the WRC to lean on.
+	// the SPG debug consumer returned 0 here, but the production resolve has the WRC to lean on.
 	float q; // source quality -> .a (see RTGI_RESOLVE_QUALITY_FLOOR at the top).
 	if (wsum <= 0.0) {
 		float dconf;
@@ -563,7 +564,7 @@ void resolve_integrate_main(ivec2 pos) {
 
 	imageStore(diffuse_gi_rw, pos, vec4(A, q)); // lighting space; .a = source quality (TEMPORAL consumes it).
 
-	// Rough-spec channel (A3-T1): apply the ENERGY-CONSERVING multi-scatter specular BRDF to the
+	// Rough-spec channel: apply the ENERGY-CONSERVING multi-scatter specular BRDF to the
 	// prefiltered radiance. spec_gi is RADIANCE space (NO demod) -- the env-BRDF factor already
 	// carries the BRDF, so the composite adds spec_gi directly (unlike diffuse A, which the
 	// composite remods by albedo). The factor is FssEss + FmsEms (Fdez-Aguera 2019 multi-scatter),
@@ -579,12 +580,12 @@ void resolve_integrate_main(ivec2 pos) {
 	}
 	// .a: INTEGRATE writes the source quality (the spec shares the diffuse's probes and prior
 	// fraction, so the same q applies); TEMPORAL overwrites it with the sample-count fraction
-	// n/n_cap -- a confidence proxy that drives the T3 variance-weighted spatial filter.
+	// n/n_cap -- a confidence proxy that drives the variance-weighted SPATIAL filter.
 	imageStore(spec_gi_rw, pos, vec4(spec, q));
 }
 
 // ---------------------------------------------------------------------------------------
-// TEMPORAL (A3-T2): motion-reprojected history accumulation with rejection.
+// TEMPORAL: motion-reprojected history accumulation with rejection.
 //
 // After INTEGRATE writes this frame's RAW resolved GI into the [read_index] rw images (9/10),
 // the TEMPORAL pass runs IN-PLACE on those same images: it imageLoads this frame's value
@@ -772,7 +773,7 @@ void resolve_temporal_main(ivec2 pos) {
 // DEBUG_GI: output the resolve's RAW output -- the channel selected by pc.debug_channel
 // (diffuse-space A, the rough-spec radiance, or their sum) -- written RAW (linear) for the
 // blit. The .a keeps the diffuse confidence for inspection. NO albedo remodulation: the per-surface remod by
-// albedo (L_o = albedo * A) is applied at the COMPOSITE (Hybrid/FPT in T4/T5), which runs in
+// albedo (L_o = albedo * A) is applied at the COMPOSITE (Hybrid/FPT), which runs in
 // the full render where the G-buffer albedo genuinely exists -- the forced depth-prepass that
 // this debug view triggers does NOT populate rt_albedo_metalness (it reads 0, which would
 // black out the whole view). This mirrors rtgi_spg_gi_consumer.glsl's debug view, which also
@@ -785,7 +786,7 @@ void resolve_debug_gi_main(ivec2 pos) {
 	// the selected channel (an unreferenced sampler would be stripped from the reflected layout).
 	vec4 diffuse = texelFetch(diffuse_history, pos, 0);
 	vec3 spec = texelFetch(spec_history, pos, 0).rgb;
-	// Channel select (A3-T1): 0 = diffuse-only (RESOLVE_GI view), 1 = spec-only (RESOLVE_SPEC
+	// Channel select: 0 = diffuse-only (RESOLVE_GI view), 1 = spec-only (RESOLVE_SPEC
 	// view), else = combined. Diffuse is lighting-space A (no albedo); spec is radiance-space
 	// (BRDF already applied). Written RAW (linear) for the furnace gate.
 	vec3 result;
@@ -799,7 +800,7 @@ void resolve_debug_gi_main(ivec2 pos) {
 	imageStore(dest_image, pos, vec4(result, diffuse.a)); // .a = post-TEMPORAL sample-count fraction n/n_cap (inspection).
 }
 
-// COMPOSITE (A3-T4): the BEAUTY remod of the resolved screen GI, written to dest_image (13) for the
+// COMPOSITE: the BEAUTY remod of the resolved screen GI, written to dest_image (13) for the
 // additive blit onto the raster-lit opaque frame. This is the surface light-out the DEBUG_GI view
 // deferred: L_indirect = albedo * A + spec, where A is the LIGHTING-SPACE diffuse incident radiance
 // (no albedo, PI-free at storage -> the per-surface remod is the albedo multiply HERE) and spec is

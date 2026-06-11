@@ -3,7 +3,7 @@
 // This include is the GLSL counterpart of the CPU math contract in
 //   servers/rendering/renderer_rd/effects/rtgi_wrc_math.h
 // and provides the query API consumed by the screen-probe gather / probe-update
-// raygen (Task 5), the resolve shader (Task 6) and the ray-hit fallback.
+// raygen, the resolve shader and the ray-hit fallback.
 //
 // The WRC is a camera-centered cascaded clipmap of octahedral-radiance probes:
 //  - Cascade `k` has uniform probe spacing `base_spacing * 2^k`.

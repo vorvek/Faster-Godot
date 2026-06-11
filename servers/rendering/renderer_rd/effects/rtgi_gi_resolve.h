@@ -17,16 +17,15 @@
 namespace RendererRD {
 
 // RTGI GI Resolve RD effect: the production per-pixel CONSUMER of the SPG/WRC
-// probes (A3). It promotes the A2 thin debug-integrate (rtgi_spg_gi_consumer.glsl)
+// probes. It promotes the thin SPG debug-integrate (rtgi_spg_gi_consumer.glsl)
 // into a real module with its OWN ping-pong screen-GI buffers and a debug view,
 // run under the radiance_probes pipeline AFTER the Screen Probe Gather. Unlike the
 // debug-only consumer, INTEGRATE writes a LIGHTING-SPACE diffuse buffer (the
 // confidence-weighted cosine-average A of incident radiance, with NO albedo and NO
 // extra 1/PI -- the demod is PI-free at storage, so L_o = albedo * A); the debug
 // view shows that RAW lighting-space output (no albedo) -- the per-surface remod by
-// albedo lands at the composite (T4/T5). The spec buffer is written 0
-// in T0 (T1 fills the rough-spec radiance). The temporal (T2) + spatial (T3) modes
-// are declared here but NOT implemented in T0.
+// albedo lands at the composite. INTEGRATE also fills the rough-spec radiance into
+// the spec buffer; the TEMPORAL + SPATIAL modes then refine both ping-pong buffers.
 //
 // Structure mirrors RTGIScreenProbeGather: a single compute shader with a `mode`
 // push-constant, realloc-guarded ensure_resources(), an _allocate() that
@@ -36,10 +35,10 @@ namespace RendererRD {
 // the WRC consumer's GiDebugUBO.
 class RTGIGIResolve {
 public:
-	// Per-frame resolve tunables (resolved from the per-preset Project Settings in
-	// T7; for now the defaults below are used). spatial_iterations drives the a-trous
-	// passes (T3), temporal_n_cap the history responsiveness (T2), and the rough-spec
-	// fields the deferred sharp-reflections domain (T1).
+	// Per-frame resolve tunables (resolved from the per-preset hidden Project Settings
+	// tiers; the defaults below are the fallbacks). spatial_iterations drives the
+	// a-trous passes (SPATIAL), temporal_n_cap the history responsiveness (TEMPORAL),
+	// and the rough-spec fields the deferred sharp-reflections domain.
 	struct GiResolveParams {
 		int spatial_iterations = 1; // a-trous iters (0 = off; 1 default; 2 = escalation).
 		float temporal_n_cap = 16.0f; // history responsiveness.
@@ -89,14 +88,14 @@ public:
 	};
 	static_assert(sizeof(CompositeFogParams) % 16 == 0, "CompositeFogParams must be 16-byte aligned (std140 UBO).");
 
-	// Per-frame scalars handed to a single resolve dispatch. Mirrors how the A2
+	// Per-frame scalars handed to a single resolve dispatch. Mirrors how the SPG debug
 	// consumer's GiDebugUBO sourced the WRC clipmap params for the fallback sample +
 	// the SPG grid geometry for probe addressing; the tunables are carried on
 	// `params` (refreshed every frame by ensure_resources, the single source of truth).
 	struct GiResolveFrameParams {
 		uint32_t frame_index = 0;
 		GiResolveParams params;
-		// WRC clipmap params for the fallback sample (mirror the A2 consumer's GiDebugUBO source):
+		// WRC clipmap params for the fallback sample (mirror the SPG debug consumer's GiDebugUBO source):
 		uint32_t wrc_grid = 16;
 		uint32_t wrc_cascade_count = 4;
 		float wrc_base_spacing = 0.0f;
@@ -125,12 +124,12 @@ public:
 	// SPG probes, cosine-integrates each probe's hemioct tile against the surface
 	// normal (confidence-weighted normalizer), bilinearly blends them, falls back to
 	// the WRC irradiance when no probe qualifies, and writes the LIGHTING-SPACE A to
-	// the diffuse buffer. A3-T1 also resolves a rough-spec channel: it cone-prefilters
+	// the diffuse buffer. INTEGRATE also resolves a rough-spec channel: it cone-prefilters
 	// the SAME probe octahedra around the reflection vector and applies the split-sum
 	// specular BRDF, writing RADIANCE-space spec (no demod) to the spec buffer. The
 	// per-pixel albedo/roughness/metalness come from the material-guide textures
 	// (`p_guide_albedo` rgb = albedo, `p_guide_orm` g = roughness, b = metallic), NOT
-	// the dead rt_albedo_metalness. TEMPORAL/SPATIAL (T2/T3) will ping-pong the GI
+	// the dead rt_albedo_metalness. TEMPORAL/SPATIAL ping-pong the GI
 	// buffers. `p_inv_proj` must be the inverse of the DEPTH-CORRECTED projection
 	// (RenderSceneDataRD::get_cam_projection(), the SceneData UBO convention); the raw
 	// cam_projection inverse collapses every reconstruction to ~2*z_near.
@@ -146,19 +145,19 @@ public:
 	RID get_diffuse_gi() const { return diffuse_gi[read_index]; } // RGBA16F: rgb = lighting-space A, a = confidence/variance.
 	RID get_spec_gi() const { return spec_gi[read_index]; } // RGBA16F: rgb = rough-spec radiance, a = variance.
 
-	// RTGI-RESOLVE debug views (A3): the VALIDATION per-pixel views of the resolved
+	// RTGI-RESOLVE debug views: the VALIDATION per-pixel views of the resolved
 	// screen GI (the resolve analogue of RTGIScreenProbeGather::render_gi_debug). It
 	// blits the RAW linear value (no albedo, no tonemap) of the channel selected by
 	// `p_debug_channel`: 0 = diffuse-only (RESOLVE_GI view), 1 = spec-only (RESOLVE_SPEC
 	// view), else = combined. NO albedo remodulation on the diffuse channel: the
-	// per-surface remod (L_o = albedo * A) is applied at the composite (T4/T5), where the
+	// per-surface remod (L_o = albedo * A) is applied at the composite, where the
 	// full G-buffer albedo exists (this view forces a depth-prepass that does not populate
 	// rt_albedo_metalness). The spec channel is already radiance-space (BRDF applied). On
 	// the furnace A ~= L (albedo-independent), matching the SPG-GI gate. `p_size` is the
 	// consumed G-buffer (internal) size.
 	void render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const Size2i &p_size, RID p_dest_fb, uint32_t p_debug_channel);
 
-	// RTGI Hybrid BEAUTY composite (A3-T4): the production CONSUMER of the resolved screen GI.
+	// RTGI Hybrid BEAUTY composite: the production CONSUMER of the resolved screen GI.
 	// Dispatches RESOLVE_MODE_COMPOSITE (BEAUTY remod L_indirect = albedo * diffuse_A + spec, the
 	// remod the DEBUG_GI view deferred) into gi_debug_image, then ADDITIVELY blends that onto
 	// p_dest_color_fb (the internal HDR linear color FB the raster opaque pass already wrote -- the
@@ -169,7 +168,7 @@ public:
 	// gi_debug_image only on images (same discipline as render_resolve_debug). p_size is the consumed
 	// (internal) size; p_view_count drives the multiview additive blit.
 	//
-	// A4: when p_fpt_primary_color is valid (radiance_probes-FPT), the composite is REPLACE
+	// Full Path Tracing: when p_fpt_primary_color is valid (radiance_probes-FPT), the composite is REPLACE
 	// rather than additive: the per-pixel path-traced primary-direct color (rt_get_texture, written
 	// by the FPT primary-direct dispatch) overwrites p_dest_color_fb first (discarding the raster
 	// opaque), THEN the resolved probe indirect (gi_debug_image) is added on top -> opaque =
@@ -218,7 +217,7 @@ private:
 		uint32_t wrc_cascade_count;
 		float wrc_base_spacing;
 		uint32_t debug_channel; // DEBUG_GI: 0 = diffuse only, 1 = spec only, else = combined.
-		float history_rejection; // TEMPORAL (T2): depth/normal reproject tolerance scale (was pad0).
+		float history_rejection; // TEMPORAL: depth/normal reproject tolerance scale (was pad0).
 		uint32_t write_reactive; // COMPOSITE: 1 = also write the GI-aware reactive mask (binding 16); 0 = skip (was pad1).
 		uint32_t pad2;
 		// Cold-start hide enable (mirrors the appended Params fields in rtgi_gi_resolve.glsl): > 0
@@ -292,11 +291,12 @@ private:
 	// flips read_index at its TOP, once per frame (mirrors RTGIScreenProbeGather::run_placement),
 	// so AFTER the flip `[read_index]` is THIS frame's (front) set and `[1 - read_index]` is the
 	// previous frame's ACCUMULATED result (the history TEMPORAL reprojects). INTEGRATE writes
-	// diffuse_gi[read_index] + spec_gi[read_index] (this frame's RAW resolve); TEMPORAL (T2) then
+	// diffuse_gi[read_index] + spec_gi[read_index] (this frame's RAW resolve); TEMPORAL then
 	// runs IN-PLACE on [read_index] (imageLoad+imageStore the same rw image) blending the
 	// reprojected [1 - read_index] history into it. get_diffuse_gi()/get_spec_gi() return the
-	// front (read) set, which next frame becomes the [1 - read_index] history. SPATIAL (T3) TBD.
-	RID diffuse_gi[2]; // RGBA16F: rgb = lighting-space A, a = temporal sample count n/n_cap (transiently the INTEGRATE source quality before TEMPORAL overwrites it; the T3 variance signal).
+	// front (read) set, which next frame becomes the [1 - read_index] history. SPATIAL then
+	// a-trous-filters the result (see run_resolve for its ping-pong + parity copy).
+	RID diffuse_gi[2]; // RGBA16F: rgb = lighting-space A, a = temporal sample count n/n_cap (transiently the INTEGRATE source quality before TEMPORAL overwrites it; the SPATIAL variance signal).
 	RID spec_gi[2]; // RGBA16F: rgb = rough-spec radiance, a = temporal sample count n/n_cap (same transient quality discipline).
 	uint32_t read_index = 0;
 

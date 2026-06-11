@@ -628,14 +628,17 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	float sampling_roughness = max(material_roughness, path_min_roughness);
 	uint rtgi_sampling_controls = uint(get_rt_param(RT_PARAM_RTGI_SAMPLING_CONTROLS));
 	uint rt_mode = uint(get_rt_param(RT_PARAM_MODE));
-	// Single-sample stabilization gates (here and rtgi_primary_rough_diffuse_sequence below):
-	// with one camera sample per pixel there is no averaging, so the first hit re-seeds from
-	// the SURFACE (world-stable noise) and rough-diffuse primaries use a low-discrepancy
-	// temporal sequence. At sample counts > 1 the raygen loop averages independent streams,
-	// which replaces the stabilization. The probe-feed pipelines (WRC probe update + SPG
-	// gather) never loop the sample count, so the CPU pins their packed sample count to 1
-	// (rt_flags_with_single_sample) and these gates stay in the stabilized configuration
-	// for probe rays at any user rtgi_samples_per_pixel.
+	// Single-sample stabilization gates. THREE sites key off RT_GET_SAMPLE_COUNT(): the
+	// surface-stable primary RNG re-seed (here), the rough-diffuse low-discrepancy sequence
+	// (rtgi_primary_rough_diffuse_sequence below), and the >= 16u path-roughness floor
+	// (path_min_roughness above) -- the same inventory rt_flags_with_single_sample documents
+	// in scene_shader_raytracing.h. With one camera sample per pixel there is no averaging,
+	// so the first hit re-seeds from the SURFACE (world-stable noise) and rough-diffuse
+	// primaries use a low-discrepancy temporal sequence. At sample counts > 1 the raygen
+	// loop averages independent streams, which replaces the stabilization. The probe-feed
+	// pipelines (WRC probe update + SPG gather) never loop the sample count, so the CPU pins
+	// their packed sample count to 1 (rt_flags_with_single_sample) and these gates stay in
+	// the stabilized configuration for probe rays at any user rtgi_samples_per_pixel.
 	if (total_bounces == 0u && rt_mode == RT_MODE_PATH_TRACED && RT_GET_SAMPLE_COUNT() == 1u) {
 		ps.rng_state = rtgi_primary_surface_rng_seed(h, m, uint(get_rt_param(RT_PARAM_FRAME_INDEX)));
 	}

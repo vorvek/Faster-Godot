@@ -978,11 +978,11 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 			distance = omni_light_sort[index].depth;
 		}
 
-		// Area lights have no forward_id yet (no FORWARD_ID_TYPE_AREA_LIGHT until T8) and
+		// Area lights have no forward_id yet (there is no FORWARD_ID_TYPE_AREA_LIGHT) and
 		// their forward_id is -1; routing them here would mislabel them as spot and index
 		// the forward-id map by -1. forward_ids are Mobile-only in this fork (clustered's
 		// uses_forward_ids() is false), so this is currently unreachable on Forward+, but
-		// guard explicitly to keep it safe. T8 adds proper area-light forward-id support.
+		// guard explicitly to keep it safe until proper area-light forward-id support exists.
 		if (using_forward_ids && type != RS::LIGHT_AREA) {
 			forward_id_storage->map_forward_id(type == RS::LIGHT_OMNI ? RendererRD::FORWARD_ID_TYPE_OMNI_LIGHT : RendererRD::FORWARD_ID_TYPE_SPOT_LIGHT, light_instance->forward_id, index, light_instance->last_pass);
 		}

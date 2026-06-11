@@ -17,7 +17,7 @@
 namespace RendererRD {
 
 // Screen Probe Gather (SPG) RD effect: places one screen probe per F x F tile of
-// the primary-visibility G-buffer and (in later tasks) gathers incident radiance
+// the primary-visibility G-buffer and gathers incident radiance
 // into a per-probe octahedral atlas. Unlike the World Radiance Cache (which owns
 // world-space ping-pong atlases), the SPG grid is SCREEN-space: it is rebuilt
 // every frame from the depth + normal-roughness + velocity G-buffers, so its
@@ -27,17 +27,17 @@ namespace RendererRD {
 // realloc-guarded ensure_resources(), and an _allocate() that texture_create()s +
 // texture_clear()s the grid textures. The PLACE pass (mode 0) lives in
 // rtgi_screen_probe_gather.glsl; the temporal accumulate (REPROJECT + BLEND) plus the
-// same-surface 3x3 spatial filter (SPATIAL, A2-T4) live in their OWN shader
+// same-surface 3x3 spatial filter (SPATIAL) live in their OWN shader
 // rtgi_spg_accumulate.glsl with a distinct set-0 layout / pipeline (it binds the
 // radiance ping-pong + ray-result SSBO + the filtered-atlas output, which PLACE never
 // touches, so separate shaders keep each pass binding exactly what it uses).
 class RTGIScreenProbeGather {
 public:
-	// Per-quality tunables (resolved from per-preset Project Settings in T7; for
-	// now the defaults below are used). `spacing_f` is the tile edge in pixels
-	// (one probe per spacing_f x spacing_f tile); `oct_res` is the per-probe
+	// Per-quality tunables (resolved from the per-preset hidden Project Settings
+	// tiers; the defaults below are the fallbacks). `spacing_f` is the tile edge in
+	// pixels (one probe per spacing_f x spacing_f tile); `oct_res` is the per-probe
 	// octahedral tile resolution; the remainder drive the gather/accumulate/spatial
-	// passes wired in later tasks.
+	// passes.
 	struct SpgParams {
 		int spacing_f = 16;
 		int oct_res = 8;
@@ -53,7 +53,7 @@ public:
 
 	// Per-frame scalars handed to a single SPG dispatch. `grid_w` / `grid_h` are
 	// the probe-grid dimensions (ceil(render_size / spacing_f)); `rays_this_frame`
-	// is consumed by the gather pass (T2).
+	// is consumed by the gather pass.
 	struct SpgFrameParams {
 		uint32_t grid_w = 0;
 		uint32_t grid_h = 0;
@@ -87,7 +87,7 @@ public:
 	bool ensure_resources(Ref<RenderSceneBuffersRD> p_rb, const SpgParams &p_params, const Size2i &p_render_size);
 
 	// Allocate (or grow) the per-frame gather ray-result SSBO consumed by the SPG
-	// gather kernel (T2). 32-byte stride == 2 x vec4 per ray. Grow-only. Returns
+	// gather kernel. 32-byte stride == 2 x vec4 per ray. Grow-only. Returns
 	// true on (re)alloc.
 	bool ensure_ray_result_buffer(uint32_t p_rays_per_frame);
 	RID get_ray_result_buffer() const { return ray_result_buffer; }
@@ -102,7 +102,7 @@ public:
 	// composed with the PREVIOUS frame's jitter. `p_cam_transform` is view->world.
 	void run_placement(Ref<RenderSceneBuffersRD> p_rb, RID p_depth, RID p_normal_roughness, RID p_velocity, const SpgFrameParams &p_frame, const Projection &p_inv_projection, const Transform3D &p_cam_transform, const Size2i &p_render_size, const Projection &p_prev_cam_projection, const Transform3D &p_prev_cam_transform);
 
-	// Record the temporal-accumulate + spatial-filter dispatches (A2-T3 + A2-T4) on a
+	// Record the temporal-accumulate + spatial-filter dispatches on a
 	// single compute list (barriers between): a REPROJECT pass over the whole radiance
 	// atlas (motion-reproject + plane-match + re-orient-on-read of the previous frame's
 	// radiance), then a BLEND pass over this frame's gather rays (sample-counted 1/n
@@ -114,7 +114,7 @@ public:
 	// ray-result SSBO for this frame. A no-op if resources are invalid.
 	void run_accumulate(const SpgFrameParams &p_frame, const WrcSeedInputs &p_wrc_seed);
 
-	// SPG-GI debug view (A2-T5): the VALIDATION-ONLY per-pixel CONSUMER of the
+	// SPG-GI debug view: the VALIDATION-ONLY per-pixel CONSUMER of the
 	// SPATIAL-filtered per-probe radiance atlas (the screen-probe analogue of
 	// RTGIWorldRadianceCache::render_gi_debug). For each screen pixel it reconstructs
 	// the WORLD position from `p_depth` (corrected reverse-Z device depth) + the
@@ -123,12 +123,13 @@ public:
 	// to world), locates the 4 surrounding probes, cosine-integrates each probe's
 	// hemioct tile against the surface normal (confidence-weighted normalizer, so
 	// partial coverage still yields ~= L), bilinearly blends them, and blits the RAW
-	// linear incident radiance (no albedo, no tonemap) to `p_dest_fb` so the A2-T6
+	// linear incident radiance (no albedo, no tonemap) to `p_dest_fb` so the
 	// furnace gate can read measurable linear values. This is NOT the production
-	// resolve (A3): no demod/remod, no composite into beauty. `p_inv_projection` is the
+	// resolve: no demod/remod, no composite into beauty. `p_inv_projection` is the
 	// clip->view inverse projection; `p_cam_transform` is the view->world transform;
-	// `p_size` is the consumed G-buffer (internal) size; `p_strength` is an artistic
-	// multiplier (1.0 = raw, what the gate reads).
+	// `p_size` is the consumed G-buffer (internal) size. `p_strength` is retained for
+	// the debug UBO layout; callers always pass 1.0 (the raw value the gate reads)
+	// since the artistic strength knob was removed.
 	void render_gi_debug(Ref<RenderSceneBuffersRD> p_rb, RID p_depth, RID p_normal_roughness, const Projection &p_inv_projection, const Transform3D &p_cam_transform, const Size2i &p_size, float p_strength, RID p_dest_fb);
 
 	// Current read (front) grid textures. Valid only after ensure_resources().
@@ -136,7 +137,7 @@ public:
 	RID get_header_aux() const { return header_aux[read_index]; } // RGBA16F: xy = oct_normal, zw = screen_motion.
 	RID get_radiance_atlas() const { return radiance_atlas[read_index]; } // RGBA16F: rgb = radiance, a = confidence.
 
-	// SPATIAL output (A2-T4); A3 + the debug-integrate read this. Falls back to the
+	// SPATIAL output; the resolve + the debug-integrate read this. Falls back to the
 	// unfiltered current atlas until radiance_filtered is allocated.
 	RID get_radiance_filtered() const { return radiance_filtered.is_valid() ? radiance_filtered : radiance_atlas[read_index]; }
 
@@ -179,7 +180,7 @@ private:
 		float temporal_n_cap;
 		// std430 rounds a push-constant block up to a multiple of 16 bytes, so the
 		// shader's pipeline requires 48 B (40 rounded up). The first trailing slot
-		// (formerly pad0) carries the SPATIAL filter radius (A2-T4); pad1 is the second
+		// (formerly pad0) carries the SPATIAL filter radius; pad1 is the second
 		// pad slot. Keep sizeof(AccumPushConstant) == 48 so the dispatch matches.
 		uint32_t spatial_radius;
 		uint32_t pad1;
@@ -216,7 +217,7 @@ private:
 	RID shader_version;
 	RID pipeline;
 
-	// Temporal-accumulate shader/pipeline (A2-T3). A SEPARATE shader from PLACE: its
+	// Temporal-accumulate shader/pipeline. A SEPARATE shader from PLACE: its
 	// set-0 layout (radiance ping-pong images + prev/cur headers + ray-result SSBO)
 	// differs from PLACE's (G-buffer samplers + header writes + camera UBO), and a
 	// single GLSL shader cannot declare two different set-0 layouts. Set up in the
@@ -225,7 +226,7 @@ private:
 	RID accum_shader_version;
 	RID accum_pipeline;
 
-	// SPG-GI debug consumer (A2-T5): its OWN full-screen compute shader that reads the
+	// SPG-GI debug consumer: its OWN full-screen compute shader that reads the
 	// SPATIAL-filtered atlas + headers + depth + normal-roughness and writes the raw
 	// integrated incident radiance. A SEPARATE shader from PLACE/accumulate (its set-0
 	// layout binds the filtered atlas + headers as samplers, a dest image, and a params
@@ -284,13 +285,13 @@ private:
 	RID header_aux[2]; // RGBA16F, .xy = octahedral world normal, .zw = screen motion.
 	uint32_t read_index = 0;
 
-	// SPATIAL output (A2-T4): the SPATIAL pass of run_accumulate writes the same-surface
+	// SPATIAL output: the SPATIAL pass of run_accumulate writes the same-surface
 	// 3x3-filtered radiance here (RGBA16F, same format/size as radiance_atlas). NOT
-	// ping-ponged -- it is a pure per-frame derivative of the current atlas that A3 +
-	// the debug-integrate consume via get_radiance_filtered().
+	// ping-ponged -- it is a pure per-frame derivative of the current atlas that the
+	// resolve + the debug-integrate consume via get_radiance_filtered().
 	RID radiance_filtered;
 
-	// Per-frame gather ray results consumed by the SPG gather kernel (T2). 32-byte
+	// Per-frame gather ray results consumed by the SPG gather kernel. 32-byte
 	// stride (2 x vec4). Reallocated only when the requested ray count exceeds
 	// capacity (grow-only).
 	RID ray_result_buffer;

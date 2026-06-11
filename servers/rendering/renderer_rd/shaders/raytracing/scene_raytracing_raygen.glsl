@@ -85,7 +85,7 @@ layout(set = 0, binding = 32, std430) readonly buffer MotionTransforms {
 };
 // clang-format on
 
-// SPG gather (A2-T2): hemi-oct basis math + the binding-agnostic WRC query API.
+// SPG gather: hemi-oct basis math + the binding-agnostic WRC query API.
 // rtgi_wrc_inc is binding-agnostic (atlas samplers passed as params), so it is safe
 // to include after raytracing_common_inc declares the SPG/WRC sampler bindings above.
 #include "rtgi_spg_inc.glsl"
@@ -359,15 +359,16 @@ void rtgi_store_raster_guides(ivec2 pixel, vec2 visible_uv, float depth, vec3 vi
 	}
 }
 
-// World Radiance Cache probe-update raygen. Task 5b: the WRC probe-ray PRODUCER
+// World Radiance Cache probe-update raygen: the WRC probe-ray PRODUCER. It
 // uses a cubic probe grid with 8x8 octahedral directions, a round-robin/view-biased
 // scheduler, and a full-path-trace + NEE shading body. It reads the WRC's OWN param
 // slots (RT_PARAM_RTGI_WRC_*) and uses the WRC-named scheduler (rt_wrc_select_update_index).
 // The C++ WRC dispatch site fills those slots with the WRC clipmap params so
-// probe-addressing matches the WRC atlas (A3-T9 migrated these off the borrowed
+// probe-addressing matches the WRC atlas (these slots were migrated off the borrowed
 // STRC slots; values are unchanged, only the slot names/numbers + scheduler name).
 // The WRC's real divergence (octahedral integration, sample-counted accumulate,
-// integrating consumer) lives in Tasks 6/7, NOT here. No WRC atlas sampling / cache
+// integrating consumer) lives in the WRC accumulate (rtgi_world_radiance_cache.glsl)
+// + consumer shaders, NOT here. No WRC atlas sampling / cache
 // feedback: the full path trace already yields ground-truth multi-bounce radiance.
 void rt_wrc_probe_update_main() {
 	uint ray_index = gl_LaunchIDEXT.x;
@@ -469,16 +470,16 @@ void rt_wrc_probe_update_main() {
 	rt_wrc_probe_ray_results[ray_index].metadata = vec4(0.0, confidence, float(source_mask), float(update_index));
 }
 
-// Screen Probe Gather raygen (A2-T2). For each selected (screen-probe, octahedral
+// Screen Probe Gather raygen. For each selected (screen-probe, octahedral
 // direction) this frame: query the World Radiance Cache (cheap, no ray); if the cache
 // is cold (confidence below the SPG fallback threshold) trace a full HW-RT path
 // (ground-truth radiance, identical to the WRC producer's loop) instead. The result is
-// written to the SPG ray-result SSBO; the T3 accumulate folds it into the atlas.
+// written to the SPG ray-result SSBO; the SPG accumulate folds it into the atlas.
 
 // Fills WrcParams for the WRC radiance query. cascade/grid/spacing come from the WRC's
 // OWN param slots (RT_PARAM_RTGI_WRC_*), which the SPG dispatch's update_uniform_set
 // override fills with the WRC's clipmap values, exactly as the WRC probe-update pass does
-// (A3-T9 migrated these off the borrowed STRC slots; values unchanged). oct_res comes from
+// (migrated off the borrowed STRC slots; values unchanged). oct_res comes from
 // the dedicated SPG_WRC_OCT_RES param; camera + bias are constants matching the WRC
 // consumer (rtgi_wrc_gi_consumer / render_gi_debug).
 WrcParams spg_make_wrc_params() {
@@ -509,8 +510,8 @@ void rt_spg_gather_main() {
 	uint probe_linear = ray_index / dirs_per_frame;
 	uint slot = ray_index % dirs_per_frame;
 	uint dir_total = oct_res * oct_res;
-	// Rotate the per-frame dir subset across the full O*O set so temporal accumulation
-	// (T3) integrates all directions over frames.
+	// Rotate the per-frame dir subset across the full O*O set so the SPG temporal
+	// accumulate integrates all directions over frames.
 	uint dir_index = (slot * (dir_total / max(dirs_per_frame, 1u)) + frame_index * 7u + slot * 13u) % dir_total;
 	ivec2 probe = ivec2(int(probe_linear % grid_w), int(probe_linear / grid_w));
 
@@ -825,7 +826,6 @@ void main() {
 		}
 		// ----------------------------------------------------------------------------------------
 
-		uint pd_frame_index = uint(get_rt_param(RT_PARAM_FRAME_INDEX));
 		uint rtgi_sampling_controls = uint(get_rt_param(RT_PARAM_RTGI_SAMPLING_CONTROLS));
 		float pd_roughness = brdf_mat.roughness;
 		float pd_metalness = brdf_mat.metalness;
@@ -847,7 +847,8 @@ void main() {
 			// individually before the average. The sample count is a specialization
 			// constant, so at 1 the loop and the divide fold away (byte-identical).
 			const uint pd_sample_count = RT_GET_SAMPLE_COUNT();
-			vec3 pd_direct_sum = vec3(0.0);
+			uint pd_frame_index = uint(get_rt_param(RT_PARAM_FRAME_INDEX));
+			vec3 pd_total_sum = vec3(0.0); // diffuse + specular total; pd_specular_sum keeps the spec share.
 			vec3 pd_specular_sum = vec3(0.0);
 			[[dont_unroll]] for (uint pd_sample = 0u; pd_sample < pd_sample_count; pd_sample++) {
 				uint rng = init_blue_noise_rng(rng_pixel, pd_frame_index, pd_sample);
@@ -884,17 +885,17 @@ void main() {
 						d_slot_spatial_reject, d_slot_visibility_failures);
 				vec3 direct_diffuse = rt_clamp_path_contribution(direct_light.diffuse, pd_roughness, pd_metalness, false, false);
 				vec3 direct_specular = rt_clamp_path_contribution(direct_light.specular, pd_roughness, pd_metalness, false, false);
-				pd_direct_sum += direct_diffuse + direct_specular;
+				pd_total_sum += direct_diffuse + direct_specular;
 				pd_specular_sum += direct_specular;
 			}
-			radiance += pd_direct_sum / float(pd_sample_count);
+			radiance += pd_total_sum / float(pd_sample_count);
 			specular += pd_specular_sum / float(pd_sample_count);
 		}
 		// First-hit emission: a directly-visible emissive surface shows its own Le (the guide
 		// emission G-buffer, binding 115), exactly as the Hybrid raster opaque pass does.
 		// The emissive AREA-LIGHT NEE that the closest-hit does is DELIBERATELY OMITTED at the
 		// primary here: the WRC/SPG probes already gather emissive surfaces as part of the unified
-		// environment-indirect (see the rtgi-hybrid-gi-model + the A3 emissive-mesh fix), so doing
+		// environment-indirect (emissive meshes are first-class probe content), so doing
 		// emissive NEE at the primary too DOUBLE-COUNTS the emitter (it blew the emissive furnace to
 		// ~80x L). Analytic-light direct (above) does NOT double-count -- the probes gather analytic
 		// lights' bounced/indirect contribution, not the abstract lights, so primary direct + probe
@@ -1112,7 +1113,7 @@ void main() {
 		if (sample0_has_hit) {
 			// This (else) branch is now ONLY the deep-path oracle / REFLECTIONS path: FPT-fast
 			// primary visibility is handled by the rt_primary_direct_mode() block above (raster
-			// surface + the matching rt_depth_image guide store). The A4 sample-0 depth write that
+			// surface + the matching rt_depth_image guide store). The sample-0 depth write that
 			// previously lived here is removed -- it only existed to make the PT primary's depth
 			// mask consistent with rt_color, which the guide-surface primary now does by construction.
 			vec4 normal_roughness = imageLoad(rt_normal_roughness_image, pixel_i);
@@ -1278,7 +1279,7 @@ void main() {
 	// supplies the background for the per-pixel beauty path. But the radiance_probes WRC/SPG
 	// gather rays run through this SAME miss to build the GI, and a probe ray that directly
 	// sees the sky (a bounce-0 miss) IS the first-bounce environment the GI must capture
-	// (A3-T4: GI = the unified environment-indirect provider). Excluding the probe-update /
+	// (GI = the unified environment-indirect provider). Excluding the probe-update /
 	// gather modes lets those rays fall through to the sky term below, so radiance_probes-Hybrid
 	// gathers the environment exactly as FPT does (where this gate is inactive). The per-pixel
 	// primary miss (neither probe mode) still gets the raster background as before.

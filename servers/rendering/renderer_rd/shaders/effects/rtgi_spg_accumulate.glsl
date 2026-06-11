@@ -4,11 +4,10 @@
 
 #VERSION_DEFINES
 
-// Screen Probe Gather (SPG) temporal-accumulate + spatial-filter compute shader
-// (A2-T3 + A2-T4).
+// Screen Probe Gather (SPG) temporal-accumulate + spatial-filter compute shader.
 //
 // Folds this frame's gather ray results (the RTGISPGRayResult SSBO produced by the
-// T2 raygen) into the per-probe octahedral radiance atlas with a sample-counted 1/n
+// SPG gather raygen) into the per-probe octahedral radiance atlas with a sample-counted 1/n
 // temporal blend, motion-reprojected from the previous frame, then same-surface 3x3
 // spatial-filters that atlas into a separate output. Three modes selected by the
 // `mode` push-constant drive THREE dispatches recorded back-to-back (barriers
@@ -41,7 +40,7 @@
 // pass reads radiance_prev/header_*_prev = the (1 - read_index) set, writes
 // radiance_cur = the read_index set (REPROJECT + BLEND), and writes radiance_filtered
 // (SPATIAL); it performs NO swap. radiance_filtered is what get_radiance_filtered()
-// returns to A3 + the debug blit.
+// returns to the resolve + the debug blit.
 //
 // This is the per-probe-local-hemioct analogue of the WRC update shader's mode-0
 // (full-atlas carry) + mode-1 (per-ray 1/n accumulate) pair; the structure (full
@@ -79,7 +78,7 @@ layout(push_constant, std430) uniform Params {
 	uint atlas_height;
 	uint rays_this_frame;
 	float temporal_n_cap;
-	uint spatial_radius; // SPATIAL (A2-T4) 3x3 neighbor reach; 0 -> straight copy. (Was pad0.)
+	uint spatial_radius; // SPATIAL 3x3 neighbor reach; 0 -> straight copy. (Was pad0.)
 	uint pad1; // std430 rounds the push-constant block to a multiple of 16 (40 -> 48 B);
 	// WRC cold-start seed: WrcParams scalars + the effective seed sample count. Block
 	// grows 48 B -> 80 B (still a multiple of 16). Mirrors AccumPushConstant in
@@ -109,7 +108,7 @@ layout(set = 0, binding = 3, rgba16f) uniform restrict readonly image2D header_a
 layout(set = 0, binding = 4, rgba32f) uniform restrict readonly image2D header_plane_prev;
 layout(set = 0, binding = 5, rgba16f) uniform restrict readonly image2D header_aux_prev;
 
-// Per-frame gather ray results produced by the T2 SPG raygen. One entry per ray;
+// Per-frame gather ray results produced by the SPG gather raygen. One entry per ray;
 // matches RTGISPGRayResult in raytracing_common_inc.glsl (2 x vec4 = 32 B) and
 // RTGIScreenProbeGather::ensure_ray_result_buffer.
 //   radiance_distance : .rgb = incident radiance, .a = hit distance (-1 = WRC-sourced).
@@ -123,9 +122,9 @@ layout(set = 0, binding = 6, std430) readonly buffer SPGRayResults {
 	RTGISPGRayResult results[];
 };
 
-// SPATIAL output (A2-T4): the same-surface 3x3-filtered radiance atlas. Written only by
-// the SPATIAL mode (REPROJECT/BLEND leave it untouched); consumed by A3 + the debug
-// integrate via get_radiance_filtered(). Same RGBA16F layout as radiance_cur.
+// SPATIAL output: the same-surface 3x3-filtered radiance atlas. Written only by
+// the SPATIAL mode (REPROJECT/BLEND leave it untouched); consumed by the resolve + the
+// debug integrate via get_radiance_filtered(). Same RGBA16F layout as radiance_cur.
 layout(set = 0, binding = 7, rgba16f) uniform restrict writeonly image2D radiance_filtered;
 
 // WRC atlases for the cold-start seed (REPROJECT reset path only). sampler2D
@@ -274,7 +273,7 @@ void spg_blend_main() {
 	imageStore(radiance_cur, texel, vec4(acc, n_new / n_cap));
 }
 
-// SPATIAL (A2-T4): one thread per radiance-atlas texel. Smooth this texel against the
+// SPATIAL: one thread per radiance-atlas texel. Smooth this texel against the
 // SAME texel-direction sampled from the 3x3 neighbor probes, but only across neighbors
 // that lie on the SAME SURFACE (plane-matched on depth + world-pos + normal, the same
 // tolerances REPROJECT uses) so radiance never leaks across a silhouette. Because

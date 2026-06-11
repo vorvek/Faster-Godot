@@ -11,11 +11,11 @@
 // its tile, reconstructs the WORLD position + normal + screen motion, and writes the
 // probe header. This shader runs ONLY the PLACE pass (mode 0). The temporal
 // accumulate (motion-reproject + 1/n blend of the gather ray results into the
-// radiance atlas, A2-T3) lives in its OWN shader, rtgi_spg_accumulate.glsl: that
+// radiance atlas) lives in its OWN shader, rtgi_spg_accumulate.glsl: that
 // pass binds a different set of resources (the radiance ping-pong + ray-result
 // SSBO), so a SEPARATE set-0 layout / pipeline keeps each pass binding exactly what
 // it uses (mirrors how the WRC update shader binds all of its declared bindings on
-// every dispatch). The spatial filter (A2-T4) lands later.
+// every dispatch). The spatial filter also lives there.
 //
 // Coordinate-space contract (verified against rtgi_wrc_gi_consumer.glsl):
 //   * The depth buffer (RB_TEX_DEPTH) holds the CORRECTED [0,1] reverse-Z device depth;
@@ -32,15 +32,15 @@
 
 layout(local_size_x = GROUP_SIZE, local_size_y = GROUP_SIZE, local_size_z = 1) in;
 
-// Shared SPG hemi-oct basis math (local +Z = anchor normal) used by the gather /
-// accumulate passes wired in later tasks.
+// Shared SPG hemi-oct basis math (local +Z = anchor normal), shared with the
+// gather / accumulate passes.
 #include "../raytracing/rtgi_spg_inc.glsl"
 // Full-sphere octahedral encode (vec3_to_oct) for the probe header normal.
 #include "../oct_inc.glsl"
 
 // Mode selector (matches SPG_MODE_PLACE in rtgi_screen_probe_gather.cpp). This
-// shader runs only PLACE; the temporal accumulate is a separate shader
-// (rtgi_spg_accumulate.glsl) and the spatial filter lands in T4.
+// shader runs only PLACE; the temporal accumulate and the spatial filter live in
+// a separate shader (rtgi_spg_accumulate.glsl).
 #define SPG_MODE_PLACE 0u
 
 layout(push_constant, std430) uniform Params {
@@ -198,7 +198,7 @@ void main() {
 		return;
 	}
 
-	// This shader only runs PLACE; the temporal accumulate lives in
-	// rtgi_spg_accumulate.glsl and the spatial filter (T4) lands later.
+	// This shader only runs PLACE; the temporal accumulate and the spatial
+	// filter live in rtgi_spg_accumulate.glsl.
 	return;
 }

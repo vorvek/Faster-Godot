@@ -60,7 +60,7 @@ bool rt_spg_gather_mode() {
 	return (RT_FLAGS & RT_FLAG_SPG_GATHER) != 0u;
 }
 
-// A4: the full-screen FPT primary-direct dispatch (FULL_PATH_TRACING only). Indirect
+// The full-screen FPT primary-direct dispatch (FULL_PATH_TRACING only). Indirect
 // bounces are capped to 0 so the camera ray does primary hit (NEE direct + emissive)
 // + sky-on-miss only; the resolved probe indirect is added at the composite.
 bool rt_primary_direct_mode() {
@@ -291,7 +291,7 @@ layout(set = 0, binding = 76, std430) readonly buffer RTEmissivePrimitiveDistrib
 };
 
 // World Radiance Cache probe-update ray results. 48-byte 3xvec4 layout used by
-// Task 6's accumulate texel-mapping convention: one ray == one (probe, direction)
+// the WRC accumulate's texel-mapping convention: one ray == one (probe, direction)
 // == one octahedral texel. metadata.w holds the WRC update_index (probe_linear << 6
 // | dir_index for the default oct_res 8 => 64 dirs => 6 bits).
 struct RTGIWRCProbeRayResult {
@@ -304,8 +304,8 @@ layout(set = 0, binding = 107, std430) buffer RTGIWRCProbeRayResultBuffer {
 	RTGIWRCProbeRayResult rt_wrc_probe_ray_results[];
 };
 
-// Screen Probe Gather (SPG) gather ray results (A2-T2). One entry per selected
-// (screen-probe, octahedral direction) this frame; the T3 accumulate folds these
+// Screen Probe Gather (SPG) gather ray results. One entry per selected
+// (screen-probe, octahedral direction) this frame; the SPG accumulate folds these
 // into the per-probe octahedral radiance atlas. 32-byte stride (2 x vec4) matches
 // RTGIScreenProbeGather::ensure_ray_result_buffer.
 struct RTGISPGRayResult {

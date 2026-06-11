@@ -41,7 +41,7 @@
 // The WRC is a camera-centered cascaded clipmap of octahedral-radiance probes.
 // This header is header-only and depends only on Godot core math types so it
 // can be reasoned about on the CPU (cascade/scroll selection by the RD effect)
-// and mirrored faithfully in GLSL (Task 3). Every routine here is intentionally
+// and mirrored faithfully in GLSL (rtgi_wrc_inc.glsl). Every routine here is intentionally
 // branch-light and free of STL so the GLSL port is a near-literal translation.
 //
 // Coordinate conventions:

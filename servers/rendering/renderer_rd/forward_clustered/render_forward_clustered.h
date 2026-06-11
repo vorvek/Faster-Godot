@@ -166,7 +166,7 @@ public:
 			RTGI_RECONSTRUCTION_GUIDE_QUALITY_UNSET = 0xffffffffu,
 		};
 		uint32_t rt_reconstruction_guide_quality = RTGI_RECONSTRUCTION_GUIDE_QUALITY_UNSET;
-		// World Radiance Cache clipmap recenter state (Task 5). The previous frame's
+		// World Radiance Cache clipmap recenter state. The previous frame's
 		// camera position; RtgiWrc::recenter_delta(prev, cur) yields the per-cascade
 		// integer scroll (floor(cur/spacing) - floor(prev/spacing)). Zero-initialized
 		// and only read once rt_wrc_scroll_valid is true (false on the first frame /

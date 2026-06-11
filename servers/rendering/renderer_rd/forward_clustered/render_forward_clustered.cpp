@@ -230,7 +230,7 @@ static RendererRD::RTGIScreenProbeGather::SpgParams _resolve_spg_params(uint32_t
 	params.wrc_seed_samples = CLAMP(float(GLOBAL_GET(base + "wrc_seed_samples")), 0.0f, 16.0f);
 	// Keep the per-frame direction budget below the probe's full O*O direction count so
 	// the rotating scheduler maps each frame's slots to distinct directions (no double-
-	// sampling / starvation that would bias the T3 1/n blend). (Preserved from the stub.)
+	// sampling / starvation that would bias the accumulate's 1/n blend).
 	params.dirs_per_probe_per_frame = CLAMP(params.dirs_per_probe_per_frame, 1, params.oct_res * params.oct_res - 1);
 	return params;
 }
@@ -2936,7 +2936,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 	// Single clamped ClipmapParams used for BOTH atlas sizing and scroll/dispatch so
 	// the two never diverge (prior-review unification). Sourced from the per-preset
-	// Project Settings via _resolve_wrc_params (Task 8); the active tier is the
+	// Project Settings via _resolve_wrc_params; the active tier is the
 	// Environment's rtgi_quality_preset carried on the params struct (default
 	// Production when no params are present). The WRC results SSBO is sized to
 	// exactly wrc_rays_per_frame entries and the dispatch launches exactly that many
@@ -2956,10 +2956,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	float wrc_n_cap;
 	RtgiWrc::ClipmapParams wrc_params = _resolve_wrc_params(rtgi_quality_preset_sel, &wrc_rays_per_frame, &wrc_n_cap);
 	// SPG params (hoisted next to wrc_params so the PLACE dispatch site below reads the
-	// SAME tunables the grid was sized from). T1 returns defaults for every preset.
+	// SAME tunables the grid was sized from).
 	RendererRD::RTGIScreenProbeGather::SpgParams spg_params = _resolve_spg_params(rtgi_quality_preset_sel);
-	// GI-Resolve params (A3). Hoisted alongside spg_params for the resolve dispatch site
-	// below. T0 returns defaults for every preset (real per-preset body in T7).
+	// GI-Resolve params. Hoisted alongside spg_params for the resolve dispatch site
+	// below; spatial_iterations is overridden below once the denoiser is known.
 	RendererRD::RTGIGIResolve::GiResolveParams resolve_params = _resolve_gi_resolve_params(rtgi_quality_preset_sel);
 	if (rt_gi_active) {
 		if (rtgi_wrc != nullptr && rb.is_valid()) {
@@ -2972,7 +2972,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// SPG screen-probe grid. Sized from the internal render size; the gather ray
 		// buffer is ensured AFTER ensure_resources for the same reason as the WRC
 		// (a grid realloc frees the ray buffer). One gather ray per probe per
-		// dirs_per_probe_per_frame slot (T2 consumes this buffer).
+		// dirs_per_probe_per_frame slot (the SPG gather raygen consumes this buffer).
 		if (rtgi_spg != nullptr && rb.is_valid()) {
 			rtgi_spg->ensure_resources(rb, spg_params, rb->get_internal_size());
 			// Derive the ray count from the effect's own integer-ceil grid (the single
@@ -2983,13 +2983,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 	}
 	const float *rt_env_params = scene_features.rt ? _rtgi_shader_params_for_environment(p_render_data->environment, rt_env_params_storage) : nullptr;
-	// RTGI radiance-probes composite BEAUTY path (A3-T4/T5): active when the Environment's
+	// RTGI radiance-probes composite BEAUTY path: active when the Environment's
 	// RT mode is HYBRID *or* FULL_PATH_TRACING. This drives the SPG/guide/resolve chain +
 	// the additive GI composite onto the raster-lit frame in plain (no debug-view, no SSx)
 	// rendering. Additive only -- the debug-view path keeps using spg_debug_active untouched.
-	// (A3-T5) FPT-fast reuses this exact Hybrid composite (raster primary-direct + probe
-	// indirect, no path-trace dispatch); the true PT-primary-direct FPT under radiance_probes
-	// is the A4 sub-project, so for now FPT and HYBRID behave identically here.
+	// FULL_PATH_TRACING shares this exact chain; its extras (the full-screen primary-direct
+	// path-trace dispatch + the REPLACE composite) are gated on rt_radiance_probes_fpt below.
 	const bool rt_radiance_probes_composite = rt_gi_active && rt_env_params &&
 			((uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_HYBRID ||
 					(uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING);
@@ -2999,12 +2998,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			(uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_REFLECTIONS_RT_ONLY) {
 		WARN_PRINT_ONCE("The Reflections RT Only RTGI mode currently produces no composited output; the frame keeps raster GI. Set Environment.rtgi_mode to Hybrid RTGI or Full Scene Path-Traced GI to see RTGI output.");
 	}
-	// A4: true radiance_probes-FPT (FULL_PATH_TRACING only). Drives the extra full-screen
+	// True radiance_probes-FPT (FULL_PATH_TRACING only). Drives the extra full-screen
 	// primary-direct path-trace dispatch that coexists with the WRC/SPG probe dispatches.
 	// HYBRID never sets this, so its proven path is byte-unchanged.
 	const bool rt_radiance_probes_fpt = rt_radiance_probes_composite &&
 			(uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING;
-	// T4: FPT deep-path reference oracle (FULL_PATH_TRACING only; opt-in Environment.rtgi_fpt_reference,
+	// FPT deep-path reference oracle (FULL_PATH_TRACING only; opt-in Environment.rtgi_fpt_reference,
 	// serialized into repurposed slot 28). When set, the FPT dispatch drops RT_FLAG_PRIMARY_DIRECT so the
 	// raygen runs the deep camera-ray path tracer at the full bounce budget, and the probe/GI composite is
 	// bypassed -- beauty becomes the raw deep path-traced color (NO probe indirect), an A/B reference for
@@ -3020,10 +3019,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// mistaken for the production Full Path Tracing mode.
 		WARN_PRINT_ONCE("RTGI Full Path Tracing is running the deep-path reference oracle (Environment.rtgi_fpt_reference is enabled). This is a ground-truth path tracer for A/B validation: it traces one sample per frame, so it is noisy, unstable under temporal upscalers, and much slower than the real-time path. Set rtgi_fpt_reference to false for the production FPT-fast mode (analytic-light primary plus probe indirect).");
 	}
+	// The NONE fallback only matters with no RTGI environment, when no consumer dispatches.
 	const uint32_t rt_denoiser = rt_env_params ? (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;
 	// None inspects the accumulated signal without spatial polish: force the resolve's
 	// edge-aware a-trous pass to zero iterations (INTEGRATE/TEMPORAL/COMPOSITE stay).
-	if (rt_env_params && rt_denoiser == (uint32_t)RSE::PT_DENOISER_NONE) {
+	if (rt_env_params && rt_denoiser == RSE::PT_DENOISER_NONE) {
 		resolve_params.spatial_iterations = 0;
 	}
 	// GI-aware reactive denoise ("poor-man's Ray Reconstruction"): when the Reactive denoiser is
@@ -3445,7 +3445,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					using_sdfgi ||
 					scene_features.has(SCENE_FEATURE_SSAO) ||
 					using_ssil ||
-					// RTGI radiance-probes composite BEAUTY (A3-T4/T5; Hybrid AND FPT-fast): the SPG
+					// RTGI radiance-probes composite BEAUTY (Hybrid AND FPT-fast): the SPG
 					// placement + the GI-resolve INTEGRATE reconstruct the world normal from this
 					// G-buffer, so a plain composite furnace (no debug view, no SSx) must still force
 					// the normal-roughness prepass -- otherwise it gets a plain PASS_MODE_DEPTH and the
@@ -3453,15 +3453,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					rt_radiance_probes_composite ||
 					ce_needs_normal_roughness ||
 					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_NORMAL_BUFFER ||
-					// WRC-GI debug consumer (Task 7a) reads the world normal from this
+					// The WRC-GI debug consumer reads the world normal from this
 					// G-buffer, so force the normal-roughness prepass when it is active
 					// (radiance-probes mode otherwise leaves it unpopulated).
 					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_WRC_GI ||
-					// SPG (A2) placement reads the world normal from this G-buffer too;
+					// SPG placement reads the world normal from this G-buffer too;
 					// force the prepass when either SPG debug view is active.
 					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_GI ||
 					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_RADIANCE ||
-					// RTGI Resolve (A3) reconstructs the world normal from this G-buffer
+					// The RTGI Resolve reconstructs the world normal from this G-buffer
 					// (its INTEGRATE runs on the SPG path), so force the prepass for its views
 					// (diffuse RESOLVE_GI + rough-spec RESOLVE_SPEC).
 					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_RESOLVE_GI ||
@@ -3668,7 +3668,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	bool using_ssao = using_depth_prepass && scene_features.has(SCENE_FEATURE_SSAO);
 
 	// Hoisted from the SPG-active block below (~SPG placement site) so the additive
-	// material-guide prepass (A3-T1a, inserted right after the depth prepass) can share
+	// material-guide prepass (inserted right after the depth prepass) can share
 	// the same SPG-active gate. These depend only on get_debug_draw_mode(), so computing
 	// them here is equivalent; their use at the SPG block is unchanged.
 	const bool resolve_debug_active = get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_RESOLVE_GI || get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_RESOLVE_SPEC;
@@ -3715,16 +3715,17 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 	}
 
-	// Material-guide prepass (A3-T1a): under radiance_probes the FPT primary-shading dispatch
+	// Material-guide prepass: under radiance_probes the FPT primary-shading dispatch
 	// that would fill the albedo G-buffer is gated off, so populate the per-pixel albedo+ORM
-	// material guide here for the GI-resolve's upcoming rough-spec F0 + composite remod. Runs
-	// when an SPG-active debug view drives the resolve OR (A3-T4/T5) the radiance-probes composite
+	// material guide here for the GI-resolve's rough-spec F0 + composite remod. Runs
+	// when an SPG-active debug view drives the resolve OR the radiance-probes composite
 	// BEAUTY path is active (Hybrid AND FPT-fast) -- the composite reads this guide albedo to remod
 	// the resolved diffuse A (cost-free in plain rendering with neither). SUPPLEMENTAL to the raster
 	// depth-normal prepass (which still fills RB_TEX_NORMAL_ROUGHNESS for SPG + the SPG-active guard);
 	// writes only the guide color attachments and re-establishes the guide FB's own depth from the
 	// same opaque geometry (identical to the raster depth already resolved, so SPG/resolve depth reads
-	// are unaffected). POPULATE ONLY -- no consumer is wired here (resolve binding is task T1).
+	// are unaffected). POPULATE ONLY -- the consumers (the resolve INTEGRATE + the composite) bind
+	// these guide textures at their own dispatch sites.
 	if (rt_gi_active && (spg_debug_active || rt_radiance_probes_composite) && rb_data.is_valid()) {
 		// MANDATORY: SHADER_VERSION_DEPTH_PASS_WITH_MATERIAL lives in SHADER_GROUP_ADVANCED;
 		// without enabling it the DEPTH_PASS_WITH_MATERIAL pipeline isn't compiled and the draw
@@ -3805,7 +3806,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// Shadow pass can change the base uniform set samplers.
 		_update_render_base_uniform_set();
 
-		// RTGI radiance-probes composite (A3-T4/T5; Hybrid AND FPT-fast): under this render the additive
+		// RTGI radiance-probes composite (Hybrid AND FPT-fast): under this render the additive
 		// GI composite (see the "RTGI radiance-probes composite BEAUTY" block below, ~render_composite)
 		// supplies the environment-diffuse-indirect. Suppress the raster opaque pass's environment AMBIENT
 		// (diffuse) here so the two don't both apply sky/ambient irradiance (~2x double-count). The gate is
@@ -3940,7 +3941,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			} else {
 				rt_state = nullptr;
 			}
-			// T4 oracle: the WRC/SPG probe dispatches only feed the (now-bypassed) probe-indirect
+			// Deep-path oracle: the WRC/SPG probe dispatches only feed the (now-bypassed) probe-indirect
 			// composite, so skip them for the deep-path reference -- UNLESS a probe debug view is active
 			// (spg_debug_active, hoisted above the depth prepass), which still needs the probes populated.
 			// The ray-result buffer *ensure* blocks above are NOT skipped, so the deep dispatch's uniform
@@ -3972,7 +3973,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				wrc_frame.camera_pos = wrc_cur_camera;
 				wrc_frame.frame_index = rt_state->frame_counter;
 				wrc_frame.rays_this_frame = wrc_rays_per_frame;
-				wrc_frame.temporal_n_cap = wrc_n_cap; // per-preset 1/n accumulate blend cap (Task 8).
+				wrc_frame.temporal_n_cap = wrc_n_cap; // per-preset 1/n accumulate blend cap.
 				for (uint32_t cascade = 0; cascade < 4; cascade++) {
 					const Vector3i scroll = rb_data->rt_wrc_scroll_valid ? RtgiWrc::recenter_delta(wrc_params, (int)cascade, rb_data->rt_wrc_prev_camera, wrc_cur_camera) : Vector3i();
 					wrc_frame.scroll_delta[cascade][0] = scroll.x;
@@ -3989,17 +3990,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				rb_data->rt_wrc_scroll_valid = false;
 			}
 
-			// SPG (A2) screen-probe placement. A2: SPG is consumed only by its debug
-			// views; A3 promotes it to always-on with the production resolve + production
-			// G-buffer. Gated to run only in radiance-probes mode AND when an SPG debug
-			// view is active, so it costs nothing in normal rendering. rt_state is valid
-			// here (set inside this rt_resources_ready block). The RTGI-Resolve (A3) debug
-			// view also depends on the SPG atlas, so it counts as an SPG-active view here
-			// (the resolve dispatch below reads the SPG getters this placement+accumulate
-			// fills); A3 later promotes both SPG + resolve to always-on for the composite.
+			// SPG screen-probe placement. Gated to run only when an SPG debug view is active
+			// OR the radiance-probes composite is on, so it costs nothing in plain raster
+			// rendering. rt_state is valid here (set inside this rt_resources_ready block).
+			// The RTGI-Resolve debug view also depends on the SPG atlas, so it counts as an
+			// SPG-active view here (the resolve dispatch below reads the SPG getters this
+			// placement+accumulate fills).
 			// resolve_debug_active / spg_debug_active are hoisted above the depth prepass
 			// (shared with the additive material-guide prepass); see their declaration there.
-			// T4 oracle: drop the composite-driven SPG/resolve work for the deep-path reference (the
+			// Deep-path oracle: drop the composite-driven SPG/resolve work for the deep-path reference (the
 			// composite it feeds is bypassed), but keep it for probe debug views (spg_debug_active).
 			if ((spg_debug_active || (rt_radiance_probes_composite && !rt_fpt_reference)) && rtgi_spg && rtgi_spg->get_radiance_atlas().is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
 				RD::get_singleton()->draw_command_begin_label("RTGI SPG");
@@ -4012,7 +4011,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				// Probe-grid dims + this frame's gather ray count come from the effect's
 				// own integer-ceil grid (single source of truth, cannot drift from the
 				// allocated atlas). rays_this_frame is set now (PLACE ignores it) so the
-				// T2 gather dispatch reads a correct count.
+				// gather dispatch reads a correct count.
 				const Size2i spg_grid = rtgi_spg->get_grid_size();
 				sfp.grid_w = (uint32_t)spg_grid.x;
 				sfp.grid_h = (uint32_t)spg_grid.y;
@@ -4037,16 +4036,16 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				const Projection rtgi_prev_projection = rtgi_prev_correction * p_render_data->scene_data->prev_cam_projection;
 				rtgi_spg->run_placement(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), spg_vel, sfp, rtgi_inv_projection, p_render_data->scene_data->cam_transform, spg_size, rtgi_prev_projection, p_render_data->scene_data->prev_cam_transform);
 
-				// SPG gather (A2-T2): for each selected (probe, direction) this frame, query
+				// SPG gather: for each selected (probe, direction) this frame, query
 				// the WRC (cheap) and trace a HW-RT ray only when the cache is cold, writing
-				// the result to the SPG ray-result SSBO (T3 accumulates it into the atlas).
+				// the result to the SPG ray-result SSBO (the accumulate folds it into the atlas).
 				// Reuses the flag-generic backend dispatch (same as the WRC probe-update).
 				// The render graph auto-synchronizes the header textures run_placement just
 				// wrote before the gather samples them (same graph resource tracking the WRC
 				// probe-update + accumulate rely on), so no manual barrier is needed. The
 				// gather also queries the WRC atlas, so feed the WRC clipmap values through
 				// the rt_state wrc_* fields (the SPG override addresses the WRC atlas via the
-				// STRC slots, exactly like the WRC probe-update pass).
+				// WRC's own param slots, exactly like the WRC probe-update pass).
 				// rt_state IS rt_backend_context.viewport_state, but is null when resources
 				// weren't ready this frame (set at the top of this rt_gi_active
 				// block); gate on it before the dispatch (mirrors the WRC block's rt_state
@@ -4071,7 +4070,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					rt_state = rt_backend_context.viewport_state;
 				}
 
-				// SPG temporal accumulate (A2-T3): motion-reproject the previous radiance
+				// SPG temporal accumulate: motion-reproject the previous radiance
 				// atlas + plane-match + re-orient-on-read, then fold this frame's gather
 				// rays in with a 1/n sample-counted blend. Runs every SPG-debug frame
 				// regardless of the gather guard above (the REPROJECT pass still carries
@@ -4093,16 +4092,16 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				wrc_seed.seed_samples = spg_params.wrc_seed_samples;
 				rtgi_spg->run_accumulate(sfp, wrc_seed);
 
-				// RTGI GI Resolve (A3-T0): the production per-pixel consumer of the SPG/WRC
+				// RTGI GI Resolve: the production per-pixel consumer of the SPG/WRC
 				// probes. INTEGRATE reconstructs world pos/normal from the SAME raster
 				// G-buffers the SPG placement used, gathers the 4 surrounding probes
 				// (plane-weighted, confidence-weighted cosine normalizer), falls back to the
-				// WRC irradiance, and writes the LIGHTING-SPACE diffuse A (no albedo) to its
-				// own ping-pong buffer; the spec buffer is 0 (T1). No beauty composite yet
-				// (T4/T5) -- the RESOLVE_GI debug view (in _render_buffers_debug_draw)
-				// remodulates by albedo + blits. Runs only when an SPG-active view is on
-				// (resolve_debug_active is folded into spg_debug_active above, so the SPG
-				// atlas this reads is populated). The render graph auto-synchronizes the SPG
+				// WRC irradiance, and writes the LIGHTING-SPACE diffuse A (no albedo) plus
+				// the rough-spec radiance to its own ping-pong buffers; the remod by albedo
+				// lands at the beauty composite below (the RESOLVE_GI debug view blits the
+				// raw lighting-space value). Runs under the same gate as the SPG above
+				// (an SPG-active debug view or the composite), so the SPG atlas this reads
+				// is populated. The render graph auto-synchronizes the SPG
 				// atlas + headers before this samples them (same resource tracking the SPG
 				// accumulate relies on).
 				if (rtgi_resolve != nullptr && rtgi_wrc != nullptr && rtgi_wrc->get_radiance_atlas().is_valid() && rtgi_wrc->get_distance_atlas().is_valid()) {
@@ -4121,10 +4120,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					// SPG getters source the SPATIAL-filtered atlas + the front headers (what
 					// this frame's placement+accumulate produced). WRC getters source the
 					// cache's front atlases for the fallback query. The material-guide albedo +
-					// ORM (A3-T1; populated by the "RTGI Material Guide Prepass" above) feed the
+					// ORM (populated by the "RTGI Material Guide Prepass" above) feed the
 					// rough-spec F0 + roughness/metallic; INTEGRATE's diffuse still takes no albedo
 					// (the debug view shows the raw lighting-space output, and remod-by-albedo
-					// lands at the composite in T4/T5).
+					// lands at the composite).
 					// The resolve consumes the material guides (rough-spec F0). Skip it if they are not
 					// allocated this frame (a scene or mode switch can tear the RT buffers down between
 					// the guide prepass and here); a later frame re-runs the prepass. This keeps a
@@ -4141,23 +4140,23 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				RD::get_singleton()->draw_command_end_label();
 			}
 
-			// A4: true radiance_probes-FPT primary-direct dispatch (FULL_PATH_TRACING only). Trace a
+			// True radiance_probes-FPT primary-direct dispatch (FULL_PATH_TRACING only). Trace a
 			// full-screen primary-direct path (NEE direct + emissive + sky-on-miss, indirect bounces
 			// capped to 0 via RT_FLAG_PRIMARY_DIRECT) that COEXISTS with the WRC/SPG probe dispatches
-			// recorded above. The A4 coexistence fix is that dispatch_primary_direct_backend REUSES
-			// the already-built per-frame viewport_state/TLAS instead of re-preparing the frame: the
-			// deleted T5-era attempt re-prepared (rebuilding the in-flight TLAS, which build_tlas does
+			// recorded above. The coexistence constraint is that dispatch_primary_direct_backend REUSES
+			// the already-built per-frame viewport_state/TLAS instead of re-preparing the frame: a
+			// deleted earlier attempt re-prepared (rebuilding the in-flight TLAS, which build_tlas does
 			// not frame-cache), corrupting the probe dispatches recorded against it -> zeroed gather +
 			// GPU hang. The pd uniform set additionally binds the probe ray-result buffers (107/108)
 			// to the default RW buffer so this full-screen dispatch declares no phantom probe-buffer
 			// dependency in the draw graph (a complementary correctness measure). Runs after the
 			// resolve (the probe gather is complete), writing the RT color texture the FPT
-			// replace-composite consumes (T6). HYBRID never sets rt_radiance_probes_fpt, so its proven
+			// replace-composite consumes. HYBRID never sets rt_radiance_probes_fpt, so its proven
 			// raster-primary + additive composite path is byte-unchanged.
 			if (rt_radiance_probes_fpt && rt_state) {
 				RENDER_TIMESTAMP("RTGI FPT Primary-Direct");
 				RD::get_singleton()->draw_command_begin_label("RTGI FPT Primary-Direct");
-				// T4 oracle: when rt_fpt_reference is set, OMIT RT_FLAG_PRIMARY_DIRECT so the raygen falls
+				// Deep-path oracle: when rt_fpt_reference is set, OMIT RT_FLAG_PRIMARY_DIRECT so the raygen falls
 				// through to the deep camera-ray path tracer (full RT_GET_MAX_BOUNCES bounces packed in
 				// rt_flags), writing the deep-path beauty the oracle composite blits below. Otherwise keep
 				// PRIMARY_DIRECT for the normal FPT-fast guide-surface NEE primary (indirect bounces == 0).
@@ -4171,7 +4170,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// scene shader applies never runs on the path-traced primary. Re-apply it onto the RT primary
 			// color here (sampling the SAME froxel volume the raster path built), BEFORE the stabilize and
 			// beauty composite consume it, so distant FPT surfaces fog like Hybrid/raster ones do. Restores
-			// the application the legacy rtgi_denoise effect performed before the A3 cleanup removed it;
+			// the application the legacy rtgi_denoise effect performed before that effect was removed;
 			// FPT-only (Hybrid fogs per-fragment in the raster opaque pass, byte-unchanged).
 			if (rt_radiance_probes_fpt && rt_state && rtgi_resolve != nullptr && rb_data->rt_has_texture() && rb->has_custom_data(RB_SCOPE_FOG)) {
 				Ref<RendererRD::Fog::VolumetricFog> rt_fog = rb->get_custom_data(RB_SCOPE_FOG);
@@ -4189,7 +4188,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				}
 			}
 
-			// A4 FPT-fast: temporally stabilize the per-frame-stochastic primary-direct color BEFORE the
+			// FPT-fast: temporally stabilize the per-frame-stochastic primary-direct color BEFORE the
 			// composite blits it, so the final no-upscaler image is stable (the primary boils otherwise: the NEE soft-
 			// shadow / area-light sampling re-seeds every frame from the frame index). RTGIFPTStabilize
 			// reprojects the previous accumulated color, accepts it on a same-surface depth + normal
@@ -4210,9 +4209,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// FPT pairs cleanly with no upscaler, native TAA, and XeSS; FSR2 specifically struggles with
 			// the stochastic primary, so Hybrid is the recommended mode under FSR2. Native TAA is NOT gated
 			// out (it converges the stabilized primary fine); the no-upscaler path benefits most.
-			// The None denoiser bypasses the stabilizer by request (debugging the raw accumulated signal).
+			// The None denoiser is the raw-inspection mode: it bypasses the stabilizer here and the
+			// resolve's spatial pass (forced to 0 iterations where rt_denoiser is read).
 			const bool fpt_stabilize_ok = scale_type != SCALE_FSR2 && scale_type != SCALE_MFX &&
-					rt_denoiser != (uint32_t)RSE::PT_DENOISER_NONE;
+					rt_denoiser != RSE::PT_DENOISER_NONE;
 			// FSR2 cannot lock the stochastic path-traced primary (gate rationale above), so the
 			// stabilizer is skipped and FPT under FSR2 boils. Warn once; the None-denoiser bypass
 			// is a deliberate user choice and stays silent.
@@ -4238,25 +4238,25 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				}
 			}
 
-			// RTGI radiance-probes composite BEAUTY (A3-T4/T5; Hybrid AND FPT-fast): additively
+			// RTGI radiance-probes composite BEAUTY (Hybrid AND FPT-fast): additively
 			// composite the resolved indirect GI (albedo * diffuse_A + rough_spec) onto the raster-lit
 			// opaque frame, producing BEAUTY. Runs in the plain composite path (the SPG/guide/resolve
 			// chain above also gated on rt_radiance_probes_composite populated the resolve buffers
 			// + the guide albedo). The dest is get_color_only_fb() -- the SAME internal HDR linear color
 			// FB the opaque pass wrote (and that the legacy additive_blend composited into).
-			// A4: in FULL_PATH_TRACING the composite is REPLACE -- the per-pixel path-traced
+			// In FULL_PATH_TRACING the composite is REPLACE -- the per-pixel path-traced
 			// primary-direct color (rt_get_texture, from the FPT primary-direct dispatch above)
 			// overwrites the raster opaque, then the probe indirect is added on top, so FPT beauty =
 			// PT primary-direct + probe indirect (distinct from Hybrid's raster-primary + additive).
 			// HYBRID passes RID() -> the proven additive-onto-raster path, byte-unchanged.
-			// Step 6 COEXISTENCE: mixing probe-GI with SDFGI/VoxelGI requires PER-PIXEL indirect
+			// PROVIDER COEXISTENCE: mixing probe-GI with SDFGI/VoxelGI requires PER-PIXEL indirect
 			// ownership (which provider owns each pixel), a deferred follow-up. Until then RTGI wins:
 			// a culled-in VoxelGI is excluded from the frame with a one-shot warning (feature
 			// population above) and SDFGI is warned and disabled (sdfgi_update), so neither can veto
 			// this composite anymore (previously they silently discarded it while every RT dispatch
 			// still ran). The !using_sdfgi term below is a defensive belt only; lightmaps coexist via
 			// SCENE_DATA_FLAGS_SUPPRESS_LIGHTMAP (see the ambient-suppression block above).
-			// T4 oracle: beauty = the raw deep path-traced color, with NO probe indirect. The probe
+			// Deep-path oracle: beauty = the raw deep path-traced color, with NO probe indirect. The probe
 			// dispatches + composite were skipped above (rt_fpt_reference gate), so just blit the
 			// deep-path RT color (written by the no-PRIMARY_DIRECT dispatch above) over the internal
 			// color FB the opaque pass wrote -- the probe-indirect composite is fully bypassed. This is
@@ -4275,7 +4275,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				const RID fpt_primary_color = (rt_radiance_probes_fpt && rb_data->rt_has_texture())
 						? (rt_stabilized_primary.is_valid() ? rt_stabilized_primary : rb_data->rt_get_texture())
 						: RID();
-				// A4: the composite masks the indirect to 0 on background pixels via the depth (raw
+				// The composite masks the indirect to 0 on background pixels via the depth (raw
 				// reverse-Z, sky == 0). For FPT the background is defined by the PATH-TRACE primary
 				// visibility (rt_get_depth_texture: real depth on hit, 0 on sky-miss), NOT the raster
 				// coverage -- at silhouettes the PT center-sample and raster coverage disagree, and
@@ -4787,7 +4787,7 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 		// mode, is SPARSELY populated -- only the camera-front probes the view-biased
 		// scheduler reaches converge quickly, so the blit looks MOSTLY DARK with a
 		// region/scatter of non-black 8x8 probe tiles. That is EXPECTED: non-black
-		// tiles == Task 6a's accumulate is writing radiance into the atlas.
+		// tiles == the WRC accumulate is writing radiance into the atlas.
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_WRC_RADIANCE && rtgi_wrc != nullptr && rtgi_wrc->get_radiance_atlas().is_valid()) {
 			copy_effects->copy_to_fb_rect(rtgi_wrc->get_radiance_atlas(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_LOG_LUMINANCE);
 		}
@@ -4796,37 +4796,38 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 			copy_effects->copy_to_fb_rect(rtgi_wrc->get_radiance_atlas(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_ALPHA_TO_LUMINANCE);
 		}
 
-		// WRC-GI debug view (Task 7a): the first real per-pixel CONSUMER of the
+		// WRC-GI debug view: a VALIDATION per-pixel CONSUMER of the
 		// cache. Unlike the RADIANCE/CONFIDENCE atlas blits above, this runs a
 		// full-screen compute pass that reconstructs world position from depth +
 		// the world normal from the normal-roughness G-buffer, samples the cache's
 		// cosine-integrated irradiance, and blits the RAW linear irradiance (no
-		// albedo, no tonemap) for the Task-7b furnace gate. Guard on the G-buffers
+		// albedo, no tonemap) for the furnace gate. Guard on the G-buffers
 		// it consumes: depth always exists post-opaque, and normal-roughness is
 		// forced on for this debug mode at the depth-prepass-mode selection site.
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_WRC_GI && rtgi_wrc != nullptr && rtgi_wrc->get_radiance_atlas().is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
 			// Recover the SAME clamped ClipmapParams used at the WRC dispatch site by
-			// resolving the active preset's Project Settings (Task 8); these MUST match
+			// resolving the active preset's Project Settings; these MUST match
 			// the atlas the query addresses. Keep in lock-step with the wrc_params block
-			// in _render_scene. The debug query only needs the ClipmapParams.
+			// in _render_scene. The debug query only needs the ClipmapParams. The literal
+			// 1.0f strength below is the raw value the furnace gate reads (the artistic
+			// strength knob was removed; the param is kept for the debug UBO layout).
 			const RSE::PathtracingParams *dbg_pt = p_render_data->environment.is_valid() ? RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment) : nullptr;
 			RtgiWrc::ClipmapParams wrc_dbg_params = _resolve_wrc_params(dbg_pt ? dbg_pt->rtgi_quality_preset : 3u);
 			const Vector3 wrc_dbg_camera = p_render_data->scene_data->cam_transform.origin;
 			rtgi_wrc->render_gi_debug(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), p_render_data->scene_data->get_cam_projection().inverse(), p_render_data->scene_data->cam_transform, wrc_dbg_params, wrc_dbg_camera, 1.0f, fb, rb->get_internal_size());
 		}
 
-		// Screen Probe Gather (SPG) debug views (A2). RADIANCE blits the per-probe
-		// octahedral radiance atlas (.rgb) log-luminance tonemapped, mirroring the WRC
-		// RADIANCE blit. The atlas is one oct_res x oct_res tile per probe and, in T1,
-		// is still all-zero (the gather lands in T2) -- the blit is wired now so the
-		// view exists; non-black tiles appear once T2+ populates radiance.
+		// Screen Probe Gather (SPG) debug views. RADIANCE blits the per-probe
+		// octahedral radiance atlas (.rgb, raw linear; see the blit-mode note below).
+		// The atlas is one oct_res x oct_res tile per probe; tiles stay black until
+		// the gather populates them.
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_RADIANCE && rtgi_spg != nullptr && rtgi_spg->get_radiance_atlas().is_valid()) {
 			// Raw linear copy (not LOG_LUMINANCE): the SPG incident radiance is typically
 			// sub-1.0 (e.g. ~0.6 on the uniform furnace), which log2(luminance) would clamp
 			// to black. Matches the WRC-GI consumer view's raw-linear blit so the atlas is
 			// visible/measurable for the furnace validation. Sources the SPATIAL-filtered
-			// atlas (A2-T4) so the view reflects the final same-surface-smoothed radiance A3
-			// consumes; falls back to the unfiltered atlas until radiance_filtered allocates.
+			// atlas so the view reflects the final same-surface-smoothed radiance the
+			// resolve consumes; falls back to the unfiltered atlas until radiance_filtered allocates.
 			copy_effects->copy_to_fb_rect(rtgi_spg->get_radiance_filtered(), fb, Rect2(Vector2(), rtsize), false, true, false, false, RID(), false, false, false, false, Rect2(), 1.0, true, RendererRD::CopyEffects::COPY_TO_FB_FLAG_MODE_NONE);
 		}
 
@@ -4835,23 +4836,23 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 		// position + normal from the G-buffers, locates the 4 surrounding screen probes,
 		// cosine-integrates each probe's hemioct radiance tile against the surface normal,
 		// bilinearly blends them, and blits the RAW linear incident radiance (no albedo, no
-		// tonemap) for the A2-T6 furnace gate. Guard mirrors the WRC-GI block: the SPATIAL
+		// tonemap) for the furnace gate. Guard mirrors the WRC-GI block: the SPATIAL
 		// atlas (via get_radiance_filtered()) + normal-roughness (forced on for this debug
 		// mode at the depth-prepass-mode selection site; depth always exists post-opaque).
-		// No demod/remod, no composite into beauty -- that is A3. Like the WRC-GI view,
+		// No demod/remod, no composite into beauty -- that is the production resolve. Like the WRC-GI view,
 		// the blit has no artistic strength scaling, so pass the raw 1.0 the gate reads.
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_GI && rtgi_spg != nullptr && rtgi_spg->get_radiance_filtered().is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
 			rtgi_spg->render_gi_debug(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), p_render_data->scene_data->get_cam_projection().inverse(), p_render_data->scene_data->cam_transform, rb->get_internal_size(), 1.0f, fb);
 		}
 
-		// RTGI_RESOLVE_GI / RTGI_RESOLVE_SPEC are the A3 production-resolve debug views: they
+		// RTGI_RESOLVE_GI / RTGI_RESOLVE_SPEC are the production-resolve debug views: they
 		// blit the resolve's RAW linear output (no albedo, no tonemap) for the furnace gate.
 		// RESOLVE_GI shows the diffuse channel only (lighting-space A, debug_channel 0);
 		// RESOLVE_SPEC shows the rough-spec channel only (radiance-space, BRDF applied,
 		// debug_channel 1). NO albedo remodulation on the diffuse channel: that lands at the
-		// composite (T4/T5), where the full G-buffer albedo exists (this view forces a
+		// composite, where the full G-buffer albedo exists (this view forces a
 		// depth-prepass that does not populate rt_albedo_metalness). On the furnace A ~= L
-		// (albedo-independent), matching the A2 SPG-GI gate. Both GI buffers were filled by
+		// (albedo-independent), matching the SPG-GI gate. Both GI buffers were filled by
 		// run_resolve on the SPG path in _render_scene (gated to run for these views too);
 		// guard on the resolved buffer for the active channel.
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_RESOLVE_GI && rtgi_resolve != nullptr && rtgi_resolve->get_diffuse_gi().is_valid()) {

@@ -73,8 +73,9 @@ layout(set = 0, binding = 5, std140) uniform GiDebugParams {
 	int screen_height;
 
 	// camera_pos (clipmap center) packed as 3 floats; the trailing scalar packs into
-	// the vec3's 4th slot (vec3 is 16-byte aligned in std140). Reused as the artistic
-	// WRC strength multiplier (Task 8) applied to the sampled irradiance below.
+	// the vec3's 4th slot (vec3 is 16-byte aligned in std140). Reused as the WRC
+	// strength multiplier applied to the sampled irradiance below (always 1.0 now;
+	// the artistic knob was removed -- the slot is kept for the std140 layout).
 	vec3 camera_pos;
 	float strength;
 
