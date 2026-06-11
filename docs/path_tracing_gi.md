@@ -11,36 +11,8 @@ indirect light reliably.
 ## User-Facing Controls
 
 The feature is exposed on `Environment`, so it appears through the same
-`WorldEnvironment` workflow as SDFGI:
-
-- `rtgi_enabled`
-- `rtgi_backend`
-  - `Vulkan Generic`
-- `rtgi_quality_preset`
-  - `Custom`
-  - `Performance`
-  - `Balanced`
-  - `Production`
-- `rtgi_mode`
-  - `Reflections RT Only`
-  - `Hybrid RTGI`
-  - `Full Scene Path-Traced GI`
-  - `Full Scene Path-Traced GI (Reference)`
-- `rtgi_samples_per_pixel`
-- `rtgi_max_bounces`
-- `rtgi_energy`
-- `rtgi_resolution_scale`
-- `rtgi_disable_in_editor`
-- `rtgi_ray_firefly_suppression`
-- `rtgi_ray_max_radiance`
-- `rtgi_denoiser`
-  - `ASVFG (Experimental)`
-  - `NVIDIA`
-  - `AMD`
-  - `Intel`
-  - `None`
-- RTGI debug draw modes for noisy input, guides, motion vectors, variance,
-  history length, rejection mask, and final denoised output.
+`WorldEnvironment` workflow as SDFGI. Each control and its options are
+described in the next section.
 
 ## RTGI Panel Option Differences
 
@@ -55,11 +27,16 @@ The feature is exposed on `Environment`, so it appears through the same
 - `rtgi_quality_preset`
   - Applies named quality bundles for the probe and denoise settings that the
     renderer resolves per tier. It does not change `rtgi_mode`; selecting
-    `Full Scene Path-Traced GI` remains an explicit mode choice.
+    `Full Scene Path-Traced GI` remains an explicit mode choice. The `Custom`
+    preset keeps the `Environment` property values as authored, while the
+    hidden `rendering/rtgi/*` pipeline project settings resolve to the
+    `Balanced` tier; with `--verbose`, the renderer notes this substitution.
 - `rtgi_mode`
   - `Reflections RT Only`: keeps the normal Forward+ raster path and raster GI
-    systems responsible for diffuse GI, then uses ray tracing for specular and
-    reflection paths only.
+    systems responsible for diffuse GI, with ray tracing intended for specular
+    and reflection paths only. This mode currently produces no composited RTGI
+    output: the frame keeps the raster GI, and the engine warns once while the
+    mode is active.
   - `Hybrid RTGI`: keeps the normal Forward+ raster opaque pass and traces RTGI
     against raster G-buffer guides, then denoises and blends the RTGI
     contribution into the raster frame. This is the default mode.
@@ -75,16 +52,34 @@ The feature is exposed on `Environment`, so it appears through the same
     a hidden flag; folding it into the mode list keeps it a normal, reversible choice
     rather than a value a saved scene could hold with no way to clear it in the editor.
 - `rtgi_samples_per_pixel`
-  - Controls how many RT samples are traced per pixel each frame. Higher values
-    reduce raw noise but cost more GPU time. Lower values rely more heavily on
-    the internal temporal denoiser and current-frame spatial filtering.
+  - Sets the per-pixel sample count of the path-traced primary lighting
+    estimate in `Full Scene Path-Traced GI` and of the deep-path reference.
+    Higher values reduce raw primary lighting noise at extra GPU cost; the
+    temporal stabilizer and the denoiser run downstream, so the visible gain
+    is smaller than the raw metric. On the Cornell test scene at 1080p on an
+    RTX 4080 SUPER, the temporal sparkle maximum per megapixel went from
+    `128.9` at 1 sample to `61.0` at 2 samples (+0.26 ms) and `6.8` at
+    4 samples (+0.71 ms). Probe rays always trace a single sample: higher
+    counts made their stabilized sample sequences noisier while costing more.
+    Every quality preset pins this control to `1`; the `Custom` preset
+    exposes it.
 - `rtgi_max_bounces`
-  - Controls the maximum indirect bounce depth. One bounce is cheaper and works
-    well for most local-light GI; extra bounces can brighten enclosed scenes but
-    increase cost and noise.
+  - Controls the maximum bounce depth of the GI probe paths and of the
+    deep-path reference. The path-traced primary lighting is not affected;
+    its indirect light comes from the probe gather, which this control bounds.
+    One bounce is cheaper and works well for most local-light GI; extra
+    bounces can brighten enclosed scenes but increase cost and noise.
 - `rtgi_energy`
-  - Multiplies the RT lighting contribution after tracing. This is an artistic
-    intensity control, not a replacement for physically scaled light energy.
+  - Multiplies the composited indirect GI in every mode. In `Hybrid RTGI` it
+    scales only the indirect GI that RTGI adds and leaves the raster direct
+    lighting untouched; in `Full Scene Path-Traced GI` it scales the whole
+    ray-traced frame, the primary in the raygen and the indirect at the
+    composite. It is an artistic multiplier on the GI contribution, not an
+    exposure control. Earlier builds scaled only the path-traced primary in
+    `Full Scene Path-Traced GI` and did nothing in `Hybrid RTGI`; on the
+    Cornell scene, the occluded-region linear-luma ratio at energy `2.0` is
+    now `2.00` in `Full Scene Path-Traced GI` and `1.98` in `Hybrid RTGI`,
+    where it used to stay at `1.00`.
 - `rtgi_resolution_scale`
   - Scales the internal RTGI render size before denoising and temporal
     stabilization, then reconstructs the result to the viewport's internal
@@ -108,26 +103,24 @@ The feature is exposed on `Environment`, so it appears through the same
     `0.0` disables this source-side clamp. The default is conservative and is
     intended to stop extreme path samples rather than flatten authored lighting.
 - `rtgi_denoiser`
-  - `ASVFG (Experimental)`: uses the built-in GPU ASVFG denoiser. It is a
-    vendor-neutral RD effect with guided stabilization, moment, variance, and
-    atrous passes. It uses RT velocity, normal/roughness, albedo/metalness,
-    linear view-Z, hit distance, validity masks, and history IDs to preserve
-    edges and reject invalid samples.
-  - `Internal Signal Decomposition`: uses the internal multi-signal denoise and
-    recomposition path. Direct light, emissive, indirect, sky, diffuse, and
-    specular radiance keep separate temporal/spatial resources before the final
-    internal composite pass.
-  - `NVIDIA`: requests the NVIDIA denoiser path. NRD and DLSS Ray
-    Reconstruction remain gated by the NRD runtime and the experimental RTXPT
-    module, which are off by default. Until available, this warns once and falls
-    back to ASVFG without rewriting the scene.
-  - Legacy `FidelityFX`, `AMD`, and `Intel` constants are accepted for older
-    scenes and scripts, warn once, and normalize to `Internal Signal
-    Decomposition`. They do not call an external FidelityFX, AMD, or Intel
-    denoiser backend.
-  - `None`: disables the RT denoiser so the raw sampled RT result is visible.
-    This is useful for debugging sample distribution, material hits, and TLAS
-    coverage, but it is expected to show more noise.
+  - `ASVFG (Experimental)`: the default. Uses the built-in GPU ASVFG denoiser,
+    a vendor-neutral RD effect with guided stabilization, moment, variance,
+    and atrous passes. It uses RT velocity, normal/roughness,
+    albedo/metalness, linear view-Z, hit distance, validity masks, and history
+    IDs to preserve edges and reject invalid samples.
+  - `None`: bypasses the temporal stabilizer and the spatial denoise polish so
+    the accumulated GI signal can be inspected. Temporal accumulation and
+    compositing still run, so this does not show the raw per-frame samples
+    either. Expect visible noise; it is a debugging value, not a shipping
+    configuration.
+  - `Reactive`: not in the inspector dropdown, but accepted from scripts. Runs
+    ASVFG and additionally derives a reactive mask from the RTGI resolve's
+    per-pixel temporal confidence, then feeds it to the FSR2 reactive channel
+    and the XeSS responsive-pixel mask.
+  - Deprecated values (`SVGF`, `Internal Signal Decomposition`, the legacy
+    serialized `None`, and the old vendor selections) are accepted on load and
+    normalize to ASVFG or to the current `None` without rewriting the scene.
+    They do not call an external vendor denoiser backend.
 
 ## Backend Capability Contract
 
@@ -309,9 +302,11 @@ ownership for diffuse lighting and suppresses diffuse RT paths, `Hybrid RTGI`
 adds denoised ray-traced GI onto the raster frame, and `Full Path Tracing`
 disables incompatible baked and screen-space GI contributions for the view.
 
-`Reflections RT Only` writes ray-traced specular/reflection lighting into the
-existing Forward+ composition path. `Hybrid RTGI` writes a denoised RTGI
-contribution before additive blending. `Full Path Tracing` routes full lighting
+`Reflections RT Only` is intended to write ray-traced specular/reflection
+lighting into the existing Forward+ composition path, but it currently
+produces no composited RTGI output; the frame keeps the raster GI and the
+engine warns once. `Hybrid RTGI` writes a denoised RTGI contribution before
+additive blending. `Full Path Tracing` routes full lighting
 through the ray tracing path and disables incompatible screen-space or baked GI
 contributions for that view.
 
@@ -825,13 +820,11 @@ lighting follows the surface as the camera or an object moves. Builds before thi
 the buffer as if it were already in pixels, so the per-frame offset rounded to zero and
 the low-frequency indirect smeared across the screen under motion.
 
-The Internal Signal Decomposition path runs a separate RTGI denoise graph for
-the split lighting signals. Low-frequency diffuse GI, dominant direct light,
-emissive, sky, and specular radiance each keep their own temporal/spatial
-resources, then an internal composite pass remodulates the denoised signals into
-the final RTGI output. Switching between ASVFG, Internal Signal Decomposition,
-legacy vendor selections, and raw output clears the inactive denoiser resources
-so stale histories are not reused across modes.
+The multi-signal Internal Signal Decomposition denoiser was removed: it
+rendered identically to ASVFG, so its serialized value and the old vendor
+selections normalize to ASVFG on load. Switching between ASVFG, the None
+bypass, and the script-only Reactive value clears the inactive denoiser
+resources so stale histories are not reused across modes.
 
 The ray tracing path now applies optional source-side contribution clamping in
 linear HDR space before denoising. The high-strength denoiser path
@@ -845,6 +838,21 @@ flattened by max-strength filtering.
 If the GPU or driver does not expose the required Vulkan ray tracing features,
 the settings remain visible, a warning is printed, and rendering falls back to
 the existing non-ray-traced path instead of destructively changing scene data.
+
+## Diagnostics
+
+The engine reports once per session when RTGI output is discarded or
+substituted, instead of staying silent:
+
+- `Reflections RT Only` warns that it produces no composited RTGI output; the
+  frame keeps the raster GI.
+- `Full Scene Path-Traced GI` under FSR 2 warns that the path-traced primary
+  is not temporally stabilized there and recommends `Hybrid RTGI`.
+- With `--verbose`, the `Custom` quality preset notes that the hidden
+  `rendering/rtgi/*` pipeline settings resolve to the `Balanced` tier.
+- With `--verbose`, `rtgi_disable_in_editor` notes that the editor viewport
+  previews the raster fallback, so the preview differs from the running
+  project.
 
 ## Code Changes
 
@@ -888,8 +896,7 @@ the existing non-ray-traced path instead of destructively changing scene data.
     samples, secondary emissive/sky hits, and secondary path throughput before
     ASVFG history.
 - `servers/rendering/renderer_rd/effects/rtgi_denoise.*`
-  - Adds the ASVFG/RELAX-style RTGI denoiser and Internal Signal Decomposition
-    denoiser as separate RD effect paths.
+  - Adds the ASVFG/RELAX-style RTGI denoiser as an RD effect path.
     It maintains moments, variance, rejection, noisy-input, and guide textures,
     then runs a current-frame guided stabilizer to reduce broad diffuse
     blotches. Max denoiser strength uses stronger isolated-outlier suppression
@@ -947,8 +954,7 @@ Current RTGI buffer coverage compared with NRD:
 - Missing for SIGMA import: dedicated penumbra/translucency shadow inputs and
   a shadow denoiser dispatch path.
 
-The default shipped RTGI denoiser is now ASVFG for interactive motion stability,
-with Internal Signal Decomposition available as the multi-signal alternative.
+The default shipped RTGI denoiser is ASVFG for interactive motion stability.
 Future NRD or vendor-specific work should start from the existing guide
 textures, split diffuse/specular signals to match the target backend's resource
 model, then add an optional backend that consumes those guides without changing

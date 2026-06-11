@@ -59,6 +59,7 @@
 		<member name="ambient_light_sky_contribution" type="float" setter="set_ambient_light_sky_contribution" getter="get_ambient_light_sky_contribution" default="1.0">
 			Defines the amount of light that the sky brings on the scene. A value of [code]0.0[/code] means that the sky's light emission has no effect on the scene illumination, thus all ambient illumination is provided by the ambient light. On the contrary, a value of [code]1.0[/code] means that [i]all[/i] the light that affects the scene is provided by the sky, thus the ambient light parameter has no effect on the scene.
 			[b]Note:[/b] [member ambient_light_sky_contribution] is internally clamped between [code]0.0[/code] and [code]1.0[/code] (inclusive).
+			[b]Note:[/b] While an RTGI composite supplies ambient lighting ([member rtgi_enabled] with [constant RTGI_MODE_HYBRID] or [constant RTGI_MODE_FULL_PATH_TRACING]), environment ambient light does not apply, so this property has no effect for that view.
 		</member>
 		<member name="ambient_light_source" type="int" setter="set_ambient_source" getter="get_ambient_source" enum="Environment.AmbientSource" default="0">
 			The ambient light source to use for rendering materials and global illumination.
@@ -207,11 +208,11 @@
 			Selects the RTGI backend. [constant RTGI_BACKEND_VULKAN_GENERIC] is the built-in Vulkan ray tracing path and the only exposed backend.
 		</member>
 		<member name="rtgi_quality_preset" type="int" setter="set_rtgi_quality_preset" getter="get_rtgi_quality_preset" enum="Environment.RTGIQualityPreset" default="3">
-			Applies a named RTGI quality bundle to the low-level RTGI controls without changing [member rtgi_mode]. The controls remain editable; changing a covered control switches this property to [constant RTGI_QUALITY_PRESET_CUSTOM].
-				[b]Note:[/b] The presets trade GI accuracy and VRAM, not frame time. Higher tiers raise ray, probe, and denoiser budgets (sharper, less noisy GI, more memory), but the dominant GI cost — the per-pixel resolve and composite — scales with the render resolution rather than with this preset. To scale GI cost for performance, lower the viewport's internal 3D render resolution ([code]rendering/scaling_3d/scale[/code]): RTGI renders at that internal resolution and the viewport's upscaler produces the final image. Lower-end GPUs may need a reduced internal resolution.
+			Applies a named RTGI quality bundle to the low-level RTGI controls without changing [member rtgi_mode]. The controls remain editable; changing a covered control switches this property to [constant RTGI_QUALITY_PRESET_CUSTOM]. Under [constant RTGI_QUALITY_PRESET_CUSTOM], the [Environment] RTGI properties keep their authored values while the hidden [code]rendering/rtgi/*[/code] pipeline project settings resolve to the [constant RTGI_QUALITY_PRESET_BALANCED] tier.
+				[b]Note:[/b] The presets trade GI accuracy and VRAM, not frame time. Higher tiers raise ray, probe, and denoiser budgets (sharper, less noisy GI, more memory), but the dominant GI cost, the per-pixel resolve and composite, scales with the render resolution rather than with this preset. To scale GI cost for performance, lower the viewport's internal 3D render resolution ([code]rendering/scaling_3d/scale[/code]): RTGI renders at that internal resolution and the viewport's upscaler produces the final image. Lower-end GPUs may need a reduced internal resolution.
 		</member>
 		<member name="rtgi_disable_in_editor" type="bool" setter="set_rtgi_disable_in_editor" getter="is_rtgi_disabled_in_editor" default="true">
-			If [code]true[/code], disables RTGI only while this environment is previewed in the editor. Running projects and exported builds still use [member rtgi_enabled].
+			If [code]true[/code], disables RTGI only while this environment is previewed in the editor: the editor viewport shows the raster fallback, so the preview differs from the running project. Running projects and exported builds still use [member rtgi_enabled].
 		</member>
 		<member name="rtgi_enabled" type="bool" setter="set_rtgi_enabled" getter="is_rtgi_enabled" default="false">
 			If [code]true[/code], enables hardware ray-traced global illumination for this environment when the active renderer and GPU support Vulkan ray tracing.
@@ -221,19 +222,20 @@
 			[b]Note:[/b] Under [constant RTGI_MODE_HYBRID] and [constant RTGI_MODE_FULL_PATH_TRACING], RTGI owns indirect lighting: [VoxelGI] is ignored and SDFGI ([member sdfgi_enabled]) is disabled, each with a one-shot warning. [constant RTGI_MODE_REFLECTIONS_RT_ONLY] leaves both untouched.
 		</member>
 		<member name="rtgi_samples_per_pixel" type="int" setter="set_rtgi_samples_per_pixel" getter="get_rtgi_samples_per_pixel" default="1">
-			Sets the RTGI ray samples per pixel. Higher values reduce noise, but increase GPU cost.
+			Sets the per-pixel sample count of the path-traced primary lighting estimate in [constant RTGI_MODE_FULL_PATH_TRACING] and of the reference oracle ([member rtgi_fpt_reference]). Higher values reduce raw primary lighting noise at additional GPU cost; the temporal stabilizer and the denoiser run downstream, so the visible gain is smaller than the raw noise reduction. Probe rays always trace a single sample, since their stabilized sample sequences degrade at higher counts.
+			[b]Note:[/b] Every quality preset pins this value to [code]1[/code]. It takes effect under [constant RTGI_QUALITY_PRESET_CUSTOM].
 		</member>
 		<member name="rtgi_max_bounces" type="int" setter="set_rtgi_max_bounces" getter="get_rtgi_max_bounces" default="4">
-			Sets the maximum RTGI ray bounce count. Higher values can add secondary light, but increase cost and noise.
+			Sets the maximum ray bounce depth of the GI probe paths and of the reference oracle ([member rtgi_fpt_reference]). The path-traced primary lighting is not affected; its indirect light comes from the probe gather, which this property bounds. Higher values can add secondary light, but increase cost and noise.
 		</member>
 		<member name="rtgi_energy" type="float" setter="set_rtgi_energy" getter="get_rtgi_energy" default="1.0">
-			Multiplier applied to the denoised RTGI contribution before composition.
+			Multiplier applied to the composited indirect GI contribution in every RTGI mode. Under [constant RTGI_MODE_HYBRID], it scales only the indirect GI that RTGI adds; the raster direct lighting is untouched. Under [constant RTGI_MODE_FULL_PATH_TRACING], it scales the whole ray-traced frame: the path-traced primary lighting and the composited indirect GI. This is an artistic multiplier on the GI contribution, not an exposure control.
 		</member>
 		<member name="rtgi_resolution_scale" type="float" setter="set_rtgi_resolution_scale" getter="get_rtgi_resolution_scale" default="0.67">
 			Scales the internal RTGI render resolution before denoising, temporal stabilization, and full-resolution reconstruction. Lower values reduce ray-tracing cost and can improve temporal stability, but rely more heavily on reconstruction; [code]1.0[/code] traces at the viewport's internal 3D resolution. This is an RTGI-specific subsample of the ray trace, independent of the viewport's overall 3D render scale ([code]rendering/scaling_3d/scale[/code]) which scales the entire render.
 		</member>
 		<member name="rtgi_denoiser" type="int" setter="set_rtgi_denoiser" getter="get_rtgi_denoiser" enum="Environment.RTGIDenoiser" default="8">
-			Selects the RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser, and [constant RTGI_DENOISER_NONE] shows the raw sampled result.
+			Selects the RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser, and [constant RTGI_DENOISER_NONE] bypasses the temporal stabilizer and the spatial denoise polish so the accumulated GI signal can be inspected.
 		</member>
 		<member name="rtgi_debug_mode" type="int" setter="set_rtgi_debug_mode" getter="get_rtgi_debug_mode" default="0">
 			Selects the RTGI debug visualization. Use it to inspect sampled buffers, material guides, rejection data, and reflection diagnostics.
@@ -526,9 +528,11 @@
 		</constant>
 		<constant name="RTGI_MODE_REFLECTIONS_RT_ONLY" value="0" enum="RTGIMode">
 			Use RTGI for specular/reflection paths only while diffuse GI remains owned by raster GI systems.
+			[b]Note:[/b] This mode currently produces no composited RTGI output: the frame keeps the raster GI, and the engine warns once when the mode is active. Use [constant RTGI_MODE_HYBRID] or [constant RTGI_MODE_FULL_PATH_TRACING] to see RTGI output.
 		</constant>
 		<constant name="RTGI_MODE_FULL_PATH_TRACING" value="1" enum="RTGIMode">
 			Use full-scene path-traced GI for opaque diffuse and specular lighting.
+			[b]Note:[/b] Under FSR 2, the path-traced primary lighting is not temporally stabilized and looks noisy; the engine warns once. [constant RTGI_MODE_HYBRID] is the recommended RTGI mode with FSR 2.
 		</constant>
 		<constant name="RTGI_MODE_HYBRID" value="2" enum="RTGIMode">
 			Uses raster G-buffer primary hits and traces RTGI diffuse/specular secondary lighting as a composite contribution.
@@ -537,7 +541,7 @@
 			Deprecated compatibility alias for [constant RTGI_MODE_FULL_PATH_TRACING].
 		</constant>
 		<constant name="RTGI_QUALITY_PRESET_CUSTOM" value="0" enum="RTGIQualityPreset">
-			Custom RTGI settings. Selecting this preset does not modify existing low-level RTGI controls.
+			Custom RTGI settings. Selecting this preset does not modify existing low-level RTGI controls; the [Environment] RTGI properties keep their authored values, while the hidden [code]rendering/rtgi/*[/code] pipeline project settings resolve to the [constant RTGI_QUALITY_PRESET_BALANCED] tier.
 		</constant>
 		<constant name="RTGI_QUALITY_PRESET_PERFORMANCE" value="1" enum="RTGIQualityPreset">
 			Lower-cost RTGI quality bundle using split internal denoising, diffuse cache, STRC, and temporal reconstruction at a lower internal resolution.
@@ -555,7 +559,7 @@
 			Deprecated compatibility alias for [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL].
 		</constant>
 		<constant name="RTGI_DENOISER_NONE" value="9" enum="RTGIDenoiser">
-			Disable RTGI denoising. The legacy serialized value [code]5[/code] is accepted as a migration shim and normalized to this value.
+			Bypasses the temporal stabilizer and the spatial denoise polish so the accumulated GI signal can be inspected. Temporal accumulation and compositing still run, so this does not show the raw per-frame samples. Expect visible noise; this value is intended for debugging. The legacy serialized value [code]5[/code] is accepted as a migration shim and normalized to this value.
 		</constant>
 		<constant name="RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION" value="14" enum="RTGIDenoiser">
 			Deprecated. The multi-signal RTGI denoiser was removed; it produced the same result as [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL], so this value now normalizes to it on load.
