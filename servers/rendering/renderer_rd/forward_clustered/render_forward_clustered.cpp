@@ -3014,10 +3014,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			rt_env_params[RSE::PT_PARAM_RTGI_FPT_REFERENCE] > 0.5f;
 	if (rt_fpt_reference) {
 		// The deep-path oracle is a brute-force ground-truth path tracer meant for A/B validation,
-		// not gameplay. It is single-sample-per-frame, so it looks noisy, boils under temporal
+		// not gameplay. It accumulates rtgi_samples_per_pixel deep-path samples each frame and
+		// converges over many frames, so it looks noisy until it settles, boils under temporal
 		// upscalers (FSR2/XeSS), and is far slower than the real-time path. Warn once so it is not
 		// mistaken for the production Full Path Tracing mode.
-		WARN_PRINT_ONCE("RTGI Full Path Tracing is running the deep-path reference oracle (Environment.rtgi_fpt_reference is enabled). This is a ground-truth path tracer for A/B validation: it traces one sample per frame, so it is noisy, unstable under temporal upscalers, and much slower than the real-time path. Set rtgi_fpt_reference to false for the production FPT-fast mode (analytic-light primary plus probe indirect).");
+		WARN_PRINT_ONCE("RTGI Full Path Tracing is running the deep-path reference oracle (Environment.rtgi_fpt_reference is enabled). This is a ground-truth path tracer for A/B validation: it converges over many frames, accumulating the configured rtgi_samples_per_pixel samples each frame, so it is noisy until it settles, unstable under temporal upscalers, and much slower than the real-time path. Set rtgi_fpt_reference to false for the production FPT-fast mode (analytic-light primary plus probe indirect).");
 	}
 	// The NONE fallback only matters with no RTGI environment, when no consumer dispatches.
 	const uint32_t rt_denoiser = rt_env_params ? (uint32_t)rt_env_params[RSE::PT_PARAM_DENOISER] : (uint32_t)RSE::PT_DENOISER_NONE;

@@ -11,10 +11,15 @@ indirect light reliably.
 ## User-Facing Controls
 
 The feature is exposed on `Environment`, so it appears through the same
-`WorldEnvironment` workflow as SDFGI. Each control and its options are
-described in the next section.
+`WorldEnvironment` workflow as SDFGI. The main controls are described in the
+next section, and the RTGI debug draw modes are listed under Backend
+Capability Contract. Two further toggles,
+`rtgi_analytic_light_sampling_enabled` and
+`rtgi_explicit_emissive_sampling_enabled`, switch the two explicit
+light-sampling strategies on and off; they are documented in the `Environment`
+class reference.
 
-## RTGI Panel Option Differences
+## RTGI Controls
 
 - `rtgi_enabled`
   - Turns the hardware RTGI/path tracing path on for this environment when the
