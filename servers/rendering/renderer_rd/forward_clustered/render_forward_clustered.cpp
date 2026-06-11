@@ -3172,7 +3172,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				// RTGI owns indirect lighting; mixing providers needs per-pixel ownership
 				// (deferred). Previously this combination silently discarded the entire RTGI
 				// composite while still paying for every RT dispatch.
-				WARN_PRINT_ONCE("VoxelGI is not supported and will be ignored while RTGI is enabled.");
+				WARN_PRINT_ONCE("VoxelGI is not supported and will be ignored while RTGI global illumination is active.");
 			} else {
 				scene_features.set(SCENE_FEATURE_VOXELGI);
 			}
@@ -3789,8 +3789,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// supplies the environment-diffuse-indirect. Suppress the raster opaque pass's environment AMBIENT
 		// (diffuse) here so the two don't both apply sky/ambient irradiance (~2x double-count). The gate is
 		// a strict SUBSET of the composite-dispatch gate below: every precondition the composite requires
-		// (radiance-probes composite mode; no SDFGI; a
-		// valid rtgi_resolve with a resolved diffuse-GI buffer; the NORMAL_ROUGHNESS G-buffer the
+		// (radiance-probes composite mode; no SDFGI; a valid rtgi_resolve with a resolved
+		// diffuse-GI buffer; the NORMAL_ROUGHNESS G-buffer the
 		// resolve/composite read) is folded in here, PLUS one extra term (debug == DISABLED). So
 		// "ambient suppressed" strictly IMPLIES "composite fires": whenever the composite is skipped
 		// (a provider is active, the resolve is unavailable, or the G-buffer is missing) the
@@ -6265,9 +6265,12 @@ void RenderForwardClustered::sdfgi_update(const Ref<RenderSceneBuffers> &p_rende
 		sdfgi = rb->get_custom_data(RB_SCOPE_SDFGI);
 	}
 
-	// Keep SDFGI allocation tied to the raster environment state. Path Traced
-	// RTGI only suppresses it after RT setup succeeds for the frame, so raster
-	// fallback/multiview never loses SDFGI merely because Path Traced was requested.
+	// Keep SDFGI allocation tied to the raster environment state. The RTGI
+	// suppression below keys on the ENVIRONMENT INTENT (a composite-active RTGI
+	// mode requested), not on per-frame RT setup success: multiview keeps SDFGI
+	// (the view_count gate), but hardware without ray tracing loses it too and
+	// falls back to raster with no GI provider (both warnings fire). Folding an
+	// RT-availability check into the composite signal is a recorded follow-up.
 	bool needs_sdfgi = p_environment.is_valid() && environment_get_sdfgi_enabled(p_environment);
 
 	// Any RTGI-composite-active mode (Full Path Tracing or Hybrid) owns indirect
@@ -6288,7 +6291,7 @@ void RenderForwardClustered::sdfgi_update(const Ref<RenderSceneBuffers> &p_rende
 
 	if (rtgi_composite_active) {
 		if (needs_sdfgi) {
-			WARN_PRINT_ONCE("SDFGI is not supported and will be disabled while RTGI is enabled.");
+			WARN_PRINT_ONCE("SDFGI is not supported and will be disabled while RTGI global illumination is active.");
 		}
 		needs_sdfgi = false;
 	}
