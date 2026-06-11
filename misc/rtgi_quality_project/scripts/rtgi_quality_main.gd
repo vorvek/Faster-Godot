@@ -2838,22 +2838,32 @@ func _measure_cornell_box_image(image: Image) -> Dictionary:
 	var left_floor := _measure_mean_color(image, int(width * 0.07), int(height * 0.66), int(width * 0.24), int(height * 0.84))
 	var right_floor := _measure_mean_color(image, int(width * 0.76), int(height * 0.66), int(width * 0.93), int(height * 0.84))
 	var back_wall := _measure_mean_color(image, int(width * 0.36), int(height * 0.30), int(width * 0.64), int(height * 0.58))
-	var floor_luma := _measure_mean_luma(image, int(width * 0.22), int(height * 0.74), int(width * 0.78), int(height * 0.94))
+	var floor_x0 := int(width * 0.22)
+	var floor_y0 := int(height * 0.74)
+	var floor_x1 := int(width * 0.78)
+	var floor_y1 := int(height * 0.94)
+	var floor_luma := _measure_mean_luma(image, floor_x0, floor_y0, floor_x1, floor_y1)
 	var ceiling_hot_pixels := _count_isolated_hot_pixels(image, int(width * 0.36), int(height * 0.02), int(width * 0.64), int(height * 0.14))
 	# Front face of the short block (the face turned toward the camera). Its
 	# normal points away from both ceiling lights (N dot L < 0 for the area
 	# panel and the key omni), so the face receives no direct light at all:
-	# everything on it is indirect bounce. That makes it the cleanest probe for
-	# GI-only behavior such as rtgi_energy scaling. The rect is the projected
-	# face span (u 0.237..0.433, v 0.665..0.920) inset for safety.
-	var occluded_face := _measure_mean_luma(image, int(width * 0.27), int(height * 0.70), int(width * 0.40), int(height * 0.88))
+	# everything on it is indirect bounce. The rect is the projected face span
+	# (u 0.237..0.433, v 0.665..0.920) inset for safety. This encoded mean is
+	# informational; the linear twin below is the one the energy check gates on.
+	var face_x0 := int(width * 0.27)
+	var face_y0 := int(height * 0.70)
+	var face_x1 := int(width * 0.40)
+	var face_y1 := int(height * 0.88)
+	var occluded_face := _measure_mean_luma(image, face_x0, face_y0, face_x1, face_y1)
 	# Linear-space twins of the floor / occluded-face lumas for the rtgi_energy
 	# scaling check. The capture is the tonemapped, sRGB-ENCODED final frame, so a
 	# 2x linear radiance change reads as ~1.42x in the encoded means above; ratios
 	# that should track rtgi_energy linearly must be formed from per-pixel
 	# linearized lumas instead (mean of linearized pixels, not a linearized mean).
-	var floor_linear_luma := _measure_mean_linear_luma(image, int(width * 0.22), int(height * 0.74), int(width * 0.78), int(height * 0.94))
-	var occluded_face_linear := _measure_mean_linear_luma(image, int(width * 0.27), int(height * 0.70), int(width * 0.40), int(height * 0.88))
+	# Since the occluded face is indirect-only, its linear luma is the cleanest
+	# probe for GI-only behavior such as rtgi_energy scaling.
+	var floor_linear_luma := _measure_mean_linear_luma(image, floor_x0, floor_y0, floor_x1, floor_y1)
+	var occluded_face_linear := _measure_mean_linear_luma(image, face_x0, face_y0, face_x1, face_y1)
 	return {
 		"cornell_box_red_wall_chroma_margin": left_wall.r - maxf(left_wall.g, left_wall.b),
 		"cornell_box_green_wall_chroma_margin": right_wall.g - maxf(right_wall.r, right_wall.b),
@@ -2876,9 +2886,9 @@ func _measure_cornell_box_image(image: Image) -> Dictionary:
 # captured frame is sRGB-encoded, so the ratio is formed from the linearized
 # rect lumas (the encoded ratio of a clean 2x reads only ~1.42 and can never
 # reach the multiplier); the verdict checks that ratio against the requested
-# multiplier. Hybrid gets a
-# wider corridor than FPT because its indirect signal is probe-filtered. Prints
-# one machine-readable ENERGY line per config; FAIL routes into the exit code.
+# multiplier. Hybrid gets a wider corridor than FPT because its indirect
+# signal is probe-filtered. Prints one machine-readable ENERGY line per
+# config; FAIL routes into the exit code.
 # Configs that composite no RTGI GI print a SKIP verdict instead, and a
 # reference recorded at a different resolution, denoiser, or RTGI resolution
 # scale is rejected as stale (mirroring the FOGPAR probe-layout check).
@@ -3913,7 +3923,9 @@ func _measure_mean_luma(image: Image, x0: int, y0: int, x1: int, y1: int) -> flo
 # sRGB encoding before the luma weighting, so a k-times change in rendered
 # radiance reads as a k-times change here (the encoded mean above compresses it).
 # Per-pixel decode, then mean: linearizing the encoded mean would be wrong, the
-# transfer function does not commute with averaging.
+# transfer function does not commute with averaging. The proportionality claim
+# also relies on the scene using a linear tonemapper (cornell_box pins it in
+# the committed .tscn); a nonlinear tonemap would break it before the encode.
 func _measure_mean_linear_luma(image: Image, x0: int, y0: int, x1: int, y1: int) -> float:
 	var sum := 0.0
 	var count := 0

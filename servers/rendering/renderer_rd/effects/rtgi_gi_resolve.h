@@ -67,7 +67,9 @@ public:
 	// cheaper, endpoint-verified path for the fog, so it stays.)
 	// Std140-mirrored by the CompositeFogParams block in rtgi_gi_resolve.glsl EXACTLY; a
 	// separate UBO because the resolve PushConstant is shared by two shaders and
-	// static_assert-guarded (do not grow it).
+	// static_assert-guarded (do not grow it). The block also carries the composite's
+	// gi_energy scalar (Environment rtgi_energy) in a former pad slot; that is a per-frame
+	// composite scalar, not a fog term.
 	struct CompositeFogParams {
 		uint32_t fog_flags = 0; // bit 0 = enabled, bit 1 = depth mode (ENV_FOG_MODE_DEPTH), bit 2 = orthographic.
 		float fog_density = 0.0f;

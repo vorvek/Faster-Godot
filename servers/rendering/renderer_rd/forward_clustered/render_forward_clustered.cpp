@@ -4265,7 +4265,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				// Environment rtgi_energy scales the composited indirect (the only output of the
 				// composite shader). The FPT primary-direct/deep-path base already applies its own
 				// energy multiply in the raygen, so this never double-applies to the base layer.
-				cfp.fog.gi_energy = rt_env_params ? MAX(0.0f, rt_env_params[RSE::PT_PARAM_ENERGY]) : 1.0f;
+				cfp.fog.gi_energy = MAX(0.0f, rt_env_params[RSE::PT_PARAM_ENERGY]);
 				// Camera-segment fog attenuation for the composited indirect: without it the GI is
 				// added at full strength regardless of fog and glows through it (the raster opaque /
 				// FPT primary under it are already fogged). The composite multiplies the indirect by

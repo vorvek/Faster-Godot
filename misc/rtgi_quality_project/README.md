@@ -264,12 +264,18 @@ keeping real `.tscn` files avoids that.
   and a later run with any other `--rtgi-energy` divides its floor and
   occluded-face rect lumas by the recorded reference values and prints
   `ENERGY mode=<mode> energy=<e> floor_ratio=<r1> occluded_ratio=<r2> expected=<e> verdict=<PASS|FAIL>`
-  per config. Since the occluded face is indirect-only, its luma must scale
-  linearly with `rtgi_energy`: PASS requires the occluded ratio within 10% of
-  the multiplier for `fpt` and within 25% for `hybrid` (the hybrid indirect
-  signal is probe-filtered, so it earns a wider corridor). A missing or
-  unreadable reference is a FAIL. ENERGY failures route into the process exit
-  code exactly like FOGPAR failures.
+  per config. The ratios are formed from per-pixel LINEARIZED rect lumas: the
+  capture is the tonemapped sRGB-encoded frame, where ratios cap below the
+  multiplier (a doubled linear signal reads about 1.42x encoded), which is why
+  the check linearizes each pixel before averaging. Since the occluded face is
+  indirect-only, its linear luma must scale linearly with `rtgi_energy`: PASS
+  requires the occluded ratio within 5% of the multiplier for `fpt` and within
+  15% for `hybrid` (the hybrid indirect signal is probe-filtered, so it earns
+  a wider corridor). A missing or unreadable reference is a FAIL. A non-unit
+  `--rtgi-energy` run also skips the calibrated per-scene threshold gates,
+  which are tuned at energy 1.0, and records `expected_thresholds_applied =
+  false` in its metrics JSON; the ENERGY verdict is that run's gate. ENERGY
+  failures route into the process exit code exactly like FOGPAR failures.
 - `specular_motion`: a large matte floor with four low-roughness metallic spheres
   that orbit the center while four colored `OmniLight3D` nodes orbit on opposing
   paths, sweeping specular highlights across the spheres every frame. This is the
