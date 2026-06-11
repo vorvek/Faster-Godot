@@ -2942,6 +2942,16 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// exactly wrc_rays_per_frame entries and the dispatch launches exactly that many
 	// rays, so every gl_LaunchIDEXT.x indexes a valid results slot (the raygen stub
 	// relies on that 1:1 launch==capacity invariant).
+	// The Custom preset (0) has no rendering/rtgi/* tier of its own, so the three
+	// _resolve_* helpers below substitute the Balanced tier for the hidden pipeline
+	// settings. Legitimate, but surprising enough to note once in verbose output.
+	if (rt_gi_active && rtgi_quality_preset_sel == 0u) {
+		static bool rtgi_custom_preset_noted = false;
+		if (!rtgi_custom_preset_noted) {
+			rtgi_custom_preset_noted = true;
+			print_verbose("RTGI: the Custom quality preset keeps the Environment property values and uses the Balanced tier for the hidden pipeline settings (rendering/rtgi/* project settings).");
+		}
+	}
 	uint32_t wrc_rays_per_frame;
 	float wrc_n_cap;
 	RtgiWrc::ClipmapParams wrc_params = _resolve_wrc_params(rtgi_quality_preset_sel, &wrc_rays_per_frame, &wrc_n_cap);
@@ -2983,6 +2993,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	const bool rt_radiance_probes_composite = rt_gi_active && rt_env_params &&
 			((uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_HYBRID ||
 					(uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING);
+	// Mode 0 (REFLECTIONS_RT_ONLY) is excluded from the composite gate above: the RT work
+	// runs but the frame keeps the raster GI output. Warn once instead of discarding silently.
+	if (rt_gi_active && rt_env_params &&
+			(uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_REFLECTIONS_RT_ONLY) {
+		WARN_PRINT_ONCE("RTGI reflections-only mode currently produces no composited output; the frame uses raster GI. Use the Hybrid or Full Path Tracing RTGI mode to see RTGI output.");
+	}
 	// A4: true radiance_probes-FPT (FULL_PATH_TRACING only). Drives the extra full-screen
 	// primary-direct path-trace dispatch that coexists with the WRC/SPG probe dispatches.
 	// HYBRID never sets this, so its proven path is byte-unchanged.
@@ -4195,6 +4211,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// The None denoiser bypasses the stabilizer by request (debugging the raw accumulated signal).
 			const bool fpt_stabilize_ok = scale_type != SCALE_FSR2 && scale_type != SCALE_MFX &&
 					rt_denoiser != (uint32_t)RSE::PT_DENOISER_NONE;
+			// FSR2 cannot lock the stochastic path-traced primary (gate rationale above), so the
+			// stabilizer is skipped and FPT under FSR2 boils. Warn once; the None-denoiser bypass
+			// is a deliberate user choice and stays silent.
+			if (rt_radiance_probes_fpt && !rt_fpt_reference && scale_type == SCALE_FSR2) {
+				WARN_PRINT_ONCE("The path-traced primary in RTGI Full Path Tracing is not temporally stabilized under FSR 2 and will look noisy. Hybrid is the recommended RTGI mode with FSR 2.");
+			}
 			RID rt_stabilized_primary;
 			if (fpt_stabilize_ok && rt_radiance_probes_fpt && !rt_fpt_reference && rt_state && rtgi_primary_stabilize != nullptr &&
 					rb_data->rt_has_texture() && rb_data->rt_has_history_validity() &&

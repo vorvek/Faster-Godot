@@ -963,6 +963,15 @@ Environment::PathtracingDebugMode Environment::get_rtgi_debug_mode() const {
 
 void Environment::_update_pathtracing() {
 	const bool editor_disabled = Engine::get_singleton()->is_editor_hint() && rtgi_disable_in_editor;
+	if (editor_disabled && pathtracing_enabled) {
+		// Editor-only, one-shot: the exported project ignores rtgi_disable_in_editor, so the
+		// editor preview (raster fallback) will not match the runtime output.
+		static bool editor_fallback_noted = false;
+		if (!editor_fallback_noted) {
+			editor_fallback_noted = true;
+			print_verbose("RTGI is enabled but rtgi_disable_in_editor keeps the editor viewport on the raster fallback; runtime output will differ from the editor preview.");
+		}
+	}
 	RS::get_singleton()->environment_set_pathtracing(environment, pathtracing_enabled && !editor_disabled);
 
 	RSE::PathtracingParams params;
