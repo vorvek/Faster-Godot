@@ -186,6 +186,19 @@ public:
 		return result;
 	}
 
+	// Re-pack the sample-count bits to 1 for pipelines that never loop the per-pixel
+	// sample count. The probe-feed dispatches (WRC probe update + SPG gather) trace a
+	// fixed per-frame ray budget, one path per ray slot, so the camera-facing
+	// rtgi_samples_per_pixel must not reach their specialization constant: the
+	// closest-hit stage keys its single-sample stabilization on RT_GET_SAMPLE_COUNT()
+	// (the surface-stable primary RNG re-seed, the rough-diffuse low-discrepancy
+	// sequence, and the path roughness floor), and a sample count > 1 would switch the
+	// probe rays to the multi-sample-averaging configuration without any averaging
+	// actually happening (measured as more sparkle at zero extra rays).
+	static inline uint32_t rt_flags_with_single_sample(uint32_t p_flags) {
+		return (p_flags & ~(RT_SAMPLE_COUNT_MASK << RT_SAMPLE_COUNT_SHIFT)) | (1u << RT_SAMPLE_COUNT_SHIFT);
+	}
+
 	// Build the full packed rt_flags from pathtracing environment params.
 	// `p_env_params` may be null (RT active with no pathtracing environment).
 	static uint32_t compute_rt_flags(const float *p_env_params, bool p_fog_enabled, bool p_fog_depth_mode);

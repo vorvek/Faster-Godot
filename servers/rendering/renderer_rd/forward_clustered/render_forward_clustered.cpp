@@ -3927,7 +3927,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			if (rt_resources_ready && rt_state && rtgi_wrc && rtgi_wrc->get_ray_result_buffer().is_valid() && (!rt_fpt_reference || spg_debug_active)) {
 				RD::get_singleton()->draw_command_begin_label("RTGI WRC Probe Update");
 				RENDER_TIMESTAMP("RTGI WRC Probe Update");
-				const uint32_t wrc_flags = rt_flags | SceneShaderRaytracing::RT_FLAG_WRC_PROBE_UPDATE;
+				// Probe feeds pin the packed sample count to 1 (see rt_flags_with_single_sample):
+				// they trace one path per ray slot, so the camera's rtgi_samples_per_pixel must not
+				// flip the closest-hit single-sample stabilization off for probe rays.
+				const uint32_t wrc_flags = SceneShaderRaytracing::rt_flags_with_single_sample(rt_flags) | SceneShaderRaytracing::RT_FLAG_WRC_PROBE_UPDATE;
 				// Channel the WRC's own clipmap values into the params UBO the probe-update
 				// raygen reads (via update_uniform_set's RT_FLAG_WRC_PROBE_UPDATE override),
 				// so probe-addressing matches the atlas that was sized from wrc_params. rt_state
@@ -4041,7 +4044,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					rt_state->spg_dirs_per_frame = (uint32_t)spg_params.dirs_per_probe_per_frame;
 					rt_state->spg_fallback_conf = spg_params.rt_fallback_confidence;
 					rt_state->spg_wrc_oct_res = (uint32_t)wrc_params.oct_res; // WRC atlas oct_res for the query.
-					const uint32_t spg_flags = rt_flags | SceneShaderRaytracing::RT_FLAG_SPG_GATHER;
+					// Same probe-feed sample-count pin as the WRC probe update above.
+					const uint32_t spg_flags = SceneShaderRaytracing::rt_flags_with_single_sample(rt_flags) | SceneShaderRaytracing::RT_FLAG_SPG_GATHER;
 					raytracing->dispatch_probe_update_backend(rt_backend_context, spg_flags, rtgi_spg->get_ray_result_buffer(), sfp.rays_this_frame);
 					rt_state = rt_backend_context.viewport_state;
 				}

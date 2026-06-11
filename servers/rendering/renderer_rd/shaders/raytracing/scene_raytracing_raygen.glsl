@@ -825,7 +825,7 @@ void main() {
 		}
 		// ----------------------------------------------------------------------------------------
 
-		uint rng = init_blue_noise_rng(rng_pixel, uint(get_rt_param(RT_PARAM_FRAME_INDEX)), 0u);
+		uint pd_frame_index = uint(get_rt_param(RT_PARAM_FRAME_INDEX));
 		uint rtgi_sampling_controls = uint(get_rt_param(RT_PARAM_RTGI_SAMPLING_CONTROLS));
 		float pd_roughness = brdf_mat.roughness;
 		float pd_metalness = brdf_mat.metalness;
@@ -838,41 +838,57 @@ void main() {
 		// the RT shadow ray traced inside lights_evaluate_direct_lighting_split via the payload.
 		uint pd_light_count = uint(get_rt_param(RT_PARAM_LIGHT_COUNT));
 		if (pd_light_count > 0u && (rtgi_sampling_controls & RTGI_SAMPLING_ANALYTIC_LIGHTS_BIT) != 0u) {
-			uint d_source_key = 0u;
-			uint d_slot_source_key = 0u;
-			float d_slot_pdf = 0.0;
-			RTDirectLighting d_slot_light = rt_direct_lighting_zero();
-			bool d_slot_stochastic = false;
-			float d_slot_reservoir_m = 0.0;
-			float d_slot_reservoir_weight_sum = 0.0;
-			float d_slot_target = 0.0;
-			bool d_slot_temporal_accepted = false;
-			bool d_slot_spatial_accepted = false;
-			uint d_slot_temporal_reject = RT_SOURCE_REJECT_PREV_UV;
-			uint d_slot_spatial_reject = RT_SOURCE_REJECT_PREV_UV;
-			uint d_slot_visibility_failures = 0u;
-			// receiver_layer_mask = all-layers: the raster-surface primary carries no geometry index
-			// (unlike the closest-hit's geometries[h.geometry_idx].layer_mask), so no per-layer shadow
-			// culling is applied at the FPT primary -- conservative (all lights shadow all surfaces).
-			// The d_slot_* reservoir out-params below are populated but NOT recorded back into the
-			// ReSTIR direct-light reservoir (the closest-hit's rt_source_*_candidate_record): the FPT
-			// primary-direct therefore gets no temporal/spatial ReSTIR reuse (it resamples each frame).
-			// The evaluator's reject logic keeps this CORRECT (a stale/unwritten reservoir is rejected
-			// -> fresh sample), so it is a convergence/noise optimization for many-light scenes, left as
-			// a follow-up (negligible for the few-light validation scenes; furnace/white_room/Cornell pass).
-			// geom_N (the relief-FREE geometric normal) as the geometry_normal arg, N_bent (the relief
-			// normal bent toward geom_N in grazing-lit crevices) as the shading-normal arg. The shared
-			// evaluator is otherwise UNCHANGED. The bent N also flows into the area-light branch -- intended.
-			RTDirectLighting direct_light = lights_evaluate_direct_lighting_split(
-					rworld_pos, geom_N, N_bent, V, brdf_mat, rng, /*is_indirect=*/false, /*receiver_layer_mask=*/0xFFFFFFFFu, pd_light_count,
-					d_source_key, d_slot_source_key, d_slot_pdf, d_slot_light, d_slot_stochastic,
-					d_slot_reservoir_m, d_slot_reservoir_weight_sum, d_slot_target,
-					d_slot_temporal_accepted, d_slot_spatial_accepted, d_slot_temporal_reject,
-					d_slot_spatial_reject, d_slot_visibility_failures);
-			vec3 direct_diffuse = rt_clamp_path_contribution(direct_light.diffuse, pd_roughness, pd_metalness, false, false);
-			vec3 direct_specular = rt_clamp_path_contribution(direct_light.specular, pd_roughness, pd_metalness, false, false);
-			radiance += direct_diffuse + direct_specular;
-			specular += direct_specular;
+			// rtgi_samples_per_pixel at the FPT-fast primary: average RT_GET_SAMPLE_COUNT()
+			// INDEPENDENT runs of the same single-sample NEE estimator. Only the stochastic
+			// lighting estimate loops; the surface reconstruction, guide stores, first-hit
+			// emission, energy scale, fog and image stores stay single-shot outside. Each
+			// iteration draws a fresh sample-indexed RNG stream (the deep-path loop's
+			// decorrelation convention) and the firefly clamp protects each sample
+			// individually before the average. The sample count is a specialization
+			// constant, so at 1 the loop and the divide fold away (byte-identical).
+			const uint pd_sample_count = RT_GET_SAMPLE_COUNT();
+			vec3 pd_direct_sum = vec3(0.0);
+			vec3 pd_specular_sum = vec3(0.0);
+			[[dont_unroll]] for (uint pd_sample = 0u; pd_sample < pd_sample_count; pd_sample++) {
+				uint rng = init_blue_noise_rng(rng_pixel, pd_frame_index, pd_sample);
+				uint d_source_key = 0u;
+				uint d_slot_source_key = 0u;
+				float d_slot_pdf = 0.0;
+				RTDirectLighting d_slot_light = rt_direct_lighting_zero();
+				bool d_slot_stochastic = false;
+				float d_slot_reservoir_m = 0.0;
+				float d_slot_reservoir_weight_sum = 0.0;
+				float d_slot_target = 0.0;
+				bool d_slot_temporal_accepted = false;
+				bool d_slot_spatial_accepted = false;
+				uint d_slot_temporal_reject = RT_SOURCE_REJECT_PREV_UV;
+				uint d_slot_spatial_reject = RT_SOURCE_REJECT_PREV_UV;
+				uint d_slot_visibility_failures = 0u;
+				// receiver_layer_mask = all-layers: the raster-surface primary carries no geometry index
+				// (unlike the closest-hit's geometries[h.geometry_idx].layer_mask), so no per-layer shadow
+				// culling is applied at the FPT primary -- conservative (all lights shadow all surfaces).
+				// The d_slot_* reservoir out-params below are populated but NOT recorded back into the
+				// ReSTIR direct-light reservoir (the closest-hit's rt_source_*_candidate_record): the FPT
+				// primary-direct therefore gets no temporal/spatial ReSTIR reuse (it resamples each frame).
+				// The evaluator's reject logic keeps this CORRECT (a stale/unwritten reservoir is rejected
+				// -> fresh sample), so it is a convergence/noise optimization for many-light scenes, left as
+				// a follow-up (negligible for the few-light validation scenes; furnace/white_room/Cornell pass).
+				// geom_N (the relief-FREE geometric normal) as the geometry_normal arg, N_bent (the relief
+				// normal bent toward geom_N in grazing-lit crevices) as the shading-normal arg. The shared
+				// evaluator is otherwise UNCHANGED. The bent N also flows into the area-light branch -- intended.
+				RTDirectLighting direct_light = lights_evaluate_direct_lighting_split(
+						rworld_pos, geom_N, N_bent, V, brdf_mat, rng, /*is_indirect=*/false, /*receiver_layer_mask=*/0xFFFFFFFFu, pd_light_count,
+						d_source_key, d_slot_source_key, d_slot_pdf, d_slot_light, d_slot_stochastic,
+						d_slot_reservoir_m, d_slot_reservoir_weight_sum, d_slot_target,
+						d_slot_temporal_accepted, d_slot_spatial_accepted, d_slot_temporal_reject,
+						d_slot_spatial_reject, d_slot_visibility_failures);
+				vec3 direct_diffuse = rt_clamp_path_contribution(direct_light.diffuse, pd_roughness, pd_metalness, false, false);
+				vec3 direct_specular = rt_clamp_path_contribution(direct_light.specular, pd_roughness, pd_metalness, false, false);
+				pd_direct_sum += direct_diffuse + direct_specular;
+				pd_specular_sum += direct_specular;
+			}
+			radiance += pd_direct_sum / float(pd_sample_count);
+			specular += pd_specular_sum / float(pd_sample_count);
 		}
 		// First-hit emission: a directly-visible emissive surface shows its own Le (the guide
 		// emission G-buffer, binding 115), exactly as the Hybrid raster opaque pass does.
