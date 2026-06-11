@@ -94,6 +94,9 @@ var _settle_frames_used := 0
 var _abort_run := false
 var _rtgi_denoiser_override := ""
 var _rtgi_resolution_scale_override := NAN
+var _rtgi_energy_override := NAN
+# 0 means "absent"; requested values are clamped to 1..16.
+var _rtgi_samples_per_pixel_override := 0
 var _upscaler_override := ""
 var _scale_3d_override := NAN
 var _camera: Camera3D
@@ -165,6 +168,15 @@ func _apply_environment_overrides() -> void:
 			_environment.rtgi_denoiser = Environment.RTGI_DENOISER_NONE
 	if not is_nan(_rtgi_resolution_scale_override):
 		_environment.rtgi_resolution_scale = _rtgi_resolution_scale_override
+	if not is_nan(_rtgi_energy_override):
+		_environment.rtgi_energy = _rtgi_energy_override
+	if _rtgi_samples_per_pixel_override > 0:
+		# Every quality preset pins rtgi_samples_per_pixel to 1, so switch the
+		# environment to the Custom preset FIRST or the requested value is
+		# discarded. The metrics JSON records the read-back value, which makes
+		# any remaining preset pin visible.
+		_environment.rtgi_quality_preset = Environment.RTGI_QUALITY_PRESET_CUSTOM
+		_environment.rtgi_samples_per_pixel = _rtgi_samples_per_pixel_override
 
 
 # Applies one RTGI mode config to the live environment. Non-off modes force
@@ -350,6 +362,10 @@ func _parse_args() -> void:
 				push_warning("Unknown RTGI denoiser '%s'; leaving the scene-authored denoiser untouched." % denoiser)
 		elif arg.begins_with("--rtgi-resolution-scale="):
 			_rtgi_resolution_scale_override = clampf(arg.trim_prefix("--rtgi-resolution-scale=").to_float(), 0.25, 1.0)
+		elif arg.begins_with("--rtgi-energy="):
+			_rtgi_energy_override = clampf(arg.trim_prefix("--rtgi-energy=").to_float(), 0.0, 16.0)
+		elif arg.begins_with("--rtgi-samples-per-pixel="):
+			_rtgi_samples_per_pixel_override = clampi(arg.trim_prefix("--rtgi-samples-per-pixel=").to_int(), 1, 16)
 		elif arg.begins_with("--rtgi-upscaler="):
 			var upscaler := arg.trim_prefix("--rtgi-upscaler=").to_lower()
 			if upscaler in ["none", "taa", "fsr2"]:
@@ -1226,6 +1242,21 @@ func _capture_and_measure_config(base_suffix: String) -> Array[String]:
 		metrics.merge(await _measure_signal_debug_views(), true)
 		metrics["rtgi_instability_attribution"] = _source_attribution_summary(metrics)
 
+	# The energy-scaling gate spans multiple runs sharing one output dir
+	# (FOGPAR-style), so it has no JSON thresholds; it only arms when
+	# --rtgi-energy was given on the cornell_box scene.
+	if _scene_mode == "cornell_box" and not is_nan(_rtgi_energy_override):
+		_measure_energy_scaling(metrics, _config_mode_label(base_suffix))
+	# Informational samples-per-pixel line: pairs the requested and read-back
+	# spp with the temporal sparkle of this config, so an spp sweep shows at a
+	# glance whether extra samples changed the per-frame noise at all.
+	if _rtgi_samples_per_pixel_override > 0:
+		var spp_effective := int(_environment.rtgi_samples_per_pixel) if _environment != null else -1
+		print("SPP scene=%s mode=%s spp_requested=%d spp_effective=%d sparkle_max=%s sparkle_avg=%s" % [
+				_scene_mode, _config_mode_label(base_suffix), _rtgi_samples_per_pixel_override, spp_effective,
+				str(float(metrics.get("temporal_sparkle_per_megapixel_max", 0.0))),
+				str(float(metrics.get("temporal_sparkle_per_megapixel_avg", 0.0)))])
+
 	var expected := _expected_metrics_for_scene(_load_expected_metrics())
 	var failures := _compare_metrics(metrics, expected)
 	# The fog-corridor gate is the FOGPAR verdict (it spans multiple runs, so it has
@@ -1234,6 +1265,10 @@ func _capture_and_measure_config(base_suffix: String) -> Array[String]:
 	# reference run records the baseline and sets no verdict key, so it stays green.
 	if str(metrics.get("fog_corridor_verdict", "")) == "FAIL":
 		failures.append("fog_corridor_fogpar_verdict FAIL (max_rel_err=%.6f)" % float(metrics.get("fog_corridor_max_rel_err", 1.0)))
+	# The ENERGY verdict routes into the exit code the same way as FOGPAR.
+	if str(metrics.get("rtgi_energy_verdict", "")) == "FAIL":
+		failures.append("rtgi_energy_scaling_verdict FAIL (occluded_ratio=%.6f expected=%.6f)" % [
+				float(metrics.get("rtgi_energy_occluded_ratio", 0.0)), _rtgi_energy_override])
 	metrics["expected_thresholds_applied"] = not expected.is_empty()
 	metrics["passed"] = failures.is_empty()
 	metrics["failures"] = failures
@@ -1249,6 +1284,17 @@ func _capture_and_measure_config(base_suffix: String) -> Array[String]:
 
 	print("RTGI quality metrics: %s" % JSON.stringify(metrics))
 	return failures
+
+
+# The mode label used in per-config protocol lines and cross-run reference file
+# names: the multi-config suffix when present, else the single-mode override,
+# else "scene" for runs that keep the scene-authored mode.
+func _config_mode_label(base_suffix: String) -> String:
+	if not base_suffix.is_empty():
+		return base_suffix.trim_prefix("_")
+	if not _rtgi_mode_override.is_empty():
+		return _rtgi_mode_override
+	return "scene"
 
 
 func _animate_camera(frame: int) -> void:
@@ -1366,6 +1412,9 @@ func _collect_applied_override_metrics() -> Dictionary:
 		applied["applied_rtgi_mode"] = int(_environment.rtgi_mode)
 		applied["applied_rtgi_denoiser"] = int(_environment.rtgi_denoiser)
 		applied["applied_rtgi_resolution_scale"] = _environment.rtgi_resolution_scale
+		applied["applied_rtgi_energy"] = _environment.rtgi_energy
+		applied["applied_rtgi_samples_per_pixel"] = int(_environment.rtgi_samples_per_pixel)
+		applied["applied_rtgi_quality_preset"] = int(_environment.rtgi_quality_preset)
 	var viewport := get_viewport()
 	if viewport != null:
 		applied["applied_upscaler_scaling_3d_mode"] = int(viewport.scaling_3d_mode)
@@ -1375,6 +1424,8 @@ func _collect_applied_override_metrics() -> Dictionary:
 	applied["override_rtgi_mode"] = _rtgi_mode_override
 	applied["override_rtgi_denoiser"] = _rtgi_denoiser_override
 	applied["override_rtgi_resolution_scale"] = _rtgi_resolution_scale_override if not is_nan(_rtgi_resolution_scale_override) else null
+	applied["override_rtgi_energy"] = _rtgi_energy_override if not is_nan(_rtgi_energy_override) else null
+	applied["override_rtgi_samples_per_pixel"] = _rtgi_samples_per_pixel_override if _rtgi_samples_per_pixel_override > 0 else null
 	applied["override_upscaler"] = _upscaler_override
 	applied["override_scale_3d"] = _scale_3d_override if not is_nan(_scale_3d_override) else null
 	return applied
@@ -2771,6 +2822,13 @@ func _measure_cornell_box_image(image: Image) -> Dictionary:
 	var back_wall := _measure_mean_color(image, int(width * 0.36), int(height * 0.30), int(width * 0.64), int(height * 0.58))
 	var floor_luma := _measure_mean_luma(image, int(width * 0.22), int(height * 0.74), int(width * 0.78), int(height * 0.94))
 	var ceiling_hot_pixels := _count_isolated_hot_pixels(image, int(width * 0.36), int(height * 0.02), int(width * 0.64), int(height * 0.14))
+	# Front face of the short block (the face turned toward the camera). Its
+	# normal points away from both ceiling lights (N dot L < 0 for the area
+	# panel and the key omni), so the face receives no direct light at all:
+	# everything on it is indirect bounce. That makes it the cleanest probe for
+	# GI-only behavior such as rtgi_energy scaling. The rect is the projected
+	# face span (u 0.237..0.433, v 0.665..0.920) inset for safety.
+	var occluded_face := _measure_mean_luma(image, int(width * 0.27), int(height * 0.70), int(width * 0.40), int(height * 0.88))
 	return {
 		"cornell_box_red_wall_chroma_margin": left_wall.r - maxf(left_wall.g, left_wall.b),
 		"cornell_box_green_wall_chroma_margin": right_wall.g - maxf(right_wall.r, right_wall.b),
@@ -2778,8 +2836,53 @@ func _measure_cornell_box_image(image: Image) -> Dictionary:
 		"cornell_box_right_floor_green_bleed_margin": right_floor.g - maxf(right_floor.r, right_floor.b),
 		"cornell_box_floor_mean_luma": floor_luma,
 		"cornell_box_back_wall_mean_luma": _luma(back_wall),
+		"cornell_box_occluded_face_mean_luma": occluded_face,
 		"cornell_box_ceiling_hot_pixels": ceiling_hot_pixels,
 	}
+
+
+# Cross-run rtgi_energy scaling check for the cornell_box scene, following the
+# FOGPAR protocol: a --rtgi-energy=1.0 run records per-mode reference rect
+# lumas into the shared output dir, and a run at any other energy compares its
+# rect lumas against that reference. The occluded block face receives indirect
+# light only, so its mean luma must scale linearly with rtgi_energy; the
+# verdict checks that ratio against the requested multiplier. Hybrid gets a
+# wider corridor than FPT because its indirect signal is probe-filtered. Prints
+# one machine-readable ENERGY line per config; FAIL routes into the exit code.
+func _measure_energy_scaling(metrics: Dictionary, mode_label: String) -> void:
+	var energy := _rtgi_energy_override
+	var floor_luma := float(metrics.get("cornell_box_floor_mean_luma", 0.0))
+	var occluded_luma := float(metrics.get("cornell_box_occluded_face_mean_luma", 0.0))
+	var reference_path := "%s/energy_reference_%s.json" % [_output_dir, mode_label]
+	if is_equal_approx(energy, 1.0):
+		_write_json(reference_path, {
+			"mode": mode_label,
+			"energy": energy,
+			"floor_mean_luma": floor_luma,
+			"occluded_face_mean_luma": occluded_luma,
+		})
+		print("ENERGY mode=%s reference recorded" % mode_label)
+		metrics["rtgi_energy_reference_recorded"] = true
+		return
+	var reference := _read_json_dictionary(reference_path)
+	if reference.is_empty() or not reference.has("occluded_face_mean_luma") or not reference.has("floor_mean_luma"):
+		push_error("rtgi_energy check: reference '%s' is missing or unreadable. Run the same scene into this output dir with --rtgi-energy=1.0 first." % reference_path)
+		print("ENERGY mode=%s energy=%.4f floor_ratio=nan occluded_ratio=nan expected=%.4f verdict=FAIL" % [mode_label, energy, energy])
+		metrics["rtgi_energy_verdict"] = "FAIL"
+		metrics["rtgi_energy_reference_missing"] = true
+		return
+	var floor_ratio := floor_luma / maxf(float(reference["floor_mean_luma"]), 1e-6)
+	var occluded_ratio := occluded_luma / maxf(float(reference["occluded_face_mean_luma"]), 1e-6)
+	var tolerance := 0.25 if mode_label == "hybrid" else 0.10
+	var rel_err := absf(occluded_ratio - energy) / maxf(energy, 1e-6)
+	var verdict := "PASS" if rel_err <= tolerance else "FAIL"
+	print("ENERGY mode=%s energy=%.4f floor_ratio=%.6f occluded_ratio=%.6f expected=%.4f verdict=%s" % [
+			mode_label, energy, floor_ratio, occluded_ratio, energy, verdict])
+	metrics["rtgi_energy_floor_ratio"] = floor_ratio
+	metrics["rtgi_energy_occluded_ratio"] = occluded_ratio
+	metrics["rtgi_energy_expected_ratio"] = energy
+	metrics["rtgi_energy_rel_err"] = rel_err
+	metrics["rtgi_energy_verdict"] = verdict
 
 
 # Reflection-quality measurement for the committed reflective_pool scene. The
@@ -3778,9 +3881,13 @@ func _luma(color: Color) -> float:
 
 
 func _load_expected_metrics() -> Dictionary:
-	if not FileAccess.file_exists(EXPECTED_METRICS_PATH):
+	return _read_json_dictionary(EXPECTED_METRICS_PATH)
+
+
+func _read_json_dictionary(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
 		return {}
-	var file := FileAccess.open(EXPECTED_METRICS_PATH, FileAccess.READ)
+	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		return {}
 	var parsed = JSON.parse_string(file.get_as_text())

@@ -70,6 +70,21 @@ Useful options:
   the cold start the recorded baselines use)
 - `--rtgi-denoiser=asvfg|reactive|none` (overrides the scene's RTGI denoiser; left untouched when absent)
 - `--rtgi-resolution-scale=0.25..1.0` (scales the RTGI trace inside the 3D render; left untouched when absent)
+- `--rtgi-energy=0.0..16.0` (overrides the environment's `rtgi_energy` indirect
+  multiplier; left untouched when absent. The metrics JSON records the request
+  as `override_rtgi_energy` and the read-back value as `applied_rtgi_energy`.
+  On the `cornell_box` scene this flag also arms the ENERGY scaling check, see
+  the scene list below)
+- `--rtgi-samples-per-pixel=1..16` (overrides the environment's
+  `rtgi_samples_per_pixel`; left untouched when absent. Every RTGI quality
+  preset pins samples-per-pixel to 1, so the harness switches the environment
+  to the Custom preset before applying the value. The metrics JSON records
+  `override_rtgi_samples_per_pixel` and the read-back
+  `applied_rtgi_samples_per_pixel`, which makes any preset pin visible. Each
+  config additionally prints an informational
+  `SPP scene=<scene> mode=<mode> spp_requested=<n> spp_effective=<n> sparkle_max=<f> sparkle_avg=<f>`
+  line built from the temporal-sparkle metrics, so an spp sweep shows at a
+  glance whether extra samples changed the per-frame noise)
 - `--rtgi-upscaler=none|taa|fsr2|xess` (configures the root viewport scaling; `none`/`taa` use bilinear, `taa` also enables built-in temporal AA; left untouched when absent)
 - `--rtgi-scale-3d=0.5..1.0` (the 3D render scale that the upscaler upscales from, separate from `--rtgi-resolution-scale`; left untouched when absent)
 
@@ -238,7 +253,23 @@ keeping real `.tscn` files avoids that.
   canonical interior blocks. The `WorldEnvironment` uses a linear tonemapper with
   ambient light off, so the red-onto-white and green-onto-white color bleed is
   the ground-truth RTGI signal. It measures the wall and floor chroma bleed
-  margins, floor luma, and ceiling firefly count.
+  margins, floor luma, and ceiling firefly count. It also samples the front
+  face of the short block as `cornell_box_occluded_face_mean_luma`: that face
+  is turned away from both ceiling lights, so it receives no direct light at
+  all and is the scene's indirect-only probe.
+
+  The `cornell_box` scene carries the ENERGY scaling check for `rtgi_energy`.
+  Like the fog-parity flow, it spans runs sharing one `--rtgi-output-dir`: a
+  run with `--rtgi-energy=1.0` records `energy_reference_<mode>.json` per mode,
+  and a later run with any other `--rtgi-energy` divides its floor and
+  occluded-face rect lumas by the recorded reference values and prints
+  `ENERGY mode=<mode> energy=<e> floor_ratio=<r1> occluded_ratio=<r2> expected=<e> verdict=<PASS|FAIL>`
+  per config. Since the occluded face is indirect-only, its luma must scale
+  linearly with `rtgi_energy`: PASS requires the occluded ratio within 10% of
+  the multiplier for `fpt` and within 25% for `hybrid` (the hybrid indirect
+  signal is probe-filtered, so it earns a wider corridor). A missing or
+  unreadable reference is a FAIL. ENERGY failures route into the process exit
+  code exactly like FOGPAR failures.
 - `specular_motion`: a large matte floor with four low-roughness metallic spheres
   that orbit the center while four colored `OmniLight3D` nodes orbit on opposing
   paths, sweeping specular highlights across the spheres every frame. This is the
