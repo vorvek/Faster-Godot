@@ -254,7 +254,6 @@ private:
 	float rtgi_ray_max_radiance = 48.0f;
 	bool rtgi_analytic_light_sampling_enabled = true;
 	bool rtgi_explicit_emissive_sampling_enabled = true;
-	float rtgi_wrc_strength = 1.0f;
 	RTGIDenoiser rtgi_denoiser = RTGI_DENOISER_ASVFG_EXPERIMENTAL;
 	bool rtgi_applying_quality_preset = false;
 	void _apply_rtgi_quality_preset(RTGIQualityPreset p_preset);
@@ -488,8 +487,6 @@ public:
 	bool is_rtgi_analytic_light_sampling_enabled() const;
 	void set_rtgi_explicit_emissive_sampling_enabled(bool p_enabled);
 	bool is_rtgi_explicit_emissive_sampling_enabled() const;
-	void set_rtgi_wrc_strength(float p_strength);
-	float get_rtgi_wrc_strength() const;
 	void set_rtgi_denoiser(RTGIDenoiser p_denoiser);
 	RTGIDenoiser get_rtgi_denoiser() const;
 	void set_rtgi_debug_mode(PathtracingDebugMode p_mode);

@@ -942,18 +942,6 @@ bool Environment::is_rtgi_explicit_emissive_sampling_enabled() const {
 	return rtgi_explicit_emissive_sampling_enabled;
 }
 
-void Environment::set_rtgi_wrc_strength(float p_strength) {
-	// Artistic multiplier applied to the World Radiance Cache irradiance. Orthogonal
-	// to the quality preset (it does not change the clipmap sizing), so unlike the
-	// STRC knobs it does NOT mark the preset Custom.
-	rtgi_wrc_strength = CLAMP(p_strength, 0.0f, 8.0f);
-	_update_pathtracing();
-}
-
-float Environment::get_rtgi_wrc_strength() const {
-	return rtgi_wrc_strength;
-}
-
 void Environment::set_rtgi_denoiser(RTGIDenoiser p_denoiser) {
 	pathtracing_denoiser = _pathtracing_denoiser_from_rtgi_denoiser(p_denoiser, rtgi_denoiser);
 	_mark_rtgi_quality_preset_custom();
@@ -994,7 +982,6 @@ void Environment::_update_pathtracing() {
 	params.ray_max_radiance = rtgi_ray_max_radiance;
 	params.analytic_light_sampling = rtgi_analytic_light_sampling_enabled;
 	params.explicit_emissive_sampling = rtgi_explicit_emissive_sampling_enabled;
-	params.wrc_strength = rtgi_wrc_strength;
 	RS::get_singleton()->environment_set_pathtracing_params(environment, params);
 }
 
@@ -1866,8 +1853,6 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_rtgi_analytic_light_sampling_enabled"), &Environment::is_rtgi_analytic_light_sampling_enabled);
 	ClassDB::bind_method(D_METHOD("set_rtgi_explicit_emissive_sampling_enabled", "enabled"), &Environment::set_rtgi_explicit_emissive_sampling_enabled);
 	ClassDB::bind_method(D_METHOD("is_rtgi_explicit_emissive_sampling_enabled"), &Environment::is_rtgi_explicit_emissive_sampling_enabled);
-	ClassDB::bind_method(D_METHOD("set_rtgi_wrc_strength", "strength"), &Environment::set_rtgi_wrc_strength);
-	ClassDB::bind_method(D_METHOD("get_rtgi_wrc_strength"), &Environment::get_rtgi_wrc_strength);
 	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser", "denoiser"), &Environment::set_rtgi_denoiser);
 	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser"), &Environment::get_rtgi_denoiser);
 	ClassDB::bind_method(D_METHOD("set_rtgi_debug_mode", "mode"), &Environment::set_rtgi_debug_mode);
@@ -1897,7 +1882,6 @@ void Environment::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_ray_max_radiance", PROPERTY_HINT_RANGE, "0,4096,0.1,or_greater"), "set_rtgi_ray_max_radiance", "get_rtgi_ray_max_radiance");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_analytic_light_sampling_enabled"), "set_rtgi_analytic_light_sampling_enabled", "is_rtgi_analytic_light_sampling_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "rtgi_explicit_emissive_sampling_enabled"), "set_rtgi_explicit_emissive_sampling_enabled", "is_rtgi_explicit_emissive_sampling_enabled");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rtgi_wrc_strength", PROPERTY_HINT_RANGE, "0,8,0.01"), "set_rtgi_wrc_strength", "get_rtgi_wrc_strength");
 	// Reactive (RR-style) denoiser (enum value 11) is intentionally not exposed here. It was explored
 	// as a poor-man's Ray Reconstruction (feed a GI-confidence reactive mask to FSR2/XeSS) but measured
 	// WORSE than ASVFG under disocclusion (the reactive channel makes the upscaler trust the noisy

@@ -889,10 +889,6 @@ struct PathtracingParams {
 	float ray_max_radiance = 48.0f;
 	bool analytic_light_sampling = true;
 	bool explicit_emissive_sampling = true;
-	// CPU-side artistic multiplier for the World Radiance Cache irradiance, applied
-	// in the WRC GI consumer. Read directly off the struct on the CPU; NOT packed
-	// into the shader float params.
-	float wrc_strength = 1.0f;
 	PathtracingBackend backend = PT_BACKEND_VULKAN_GENERIC;
 };
 

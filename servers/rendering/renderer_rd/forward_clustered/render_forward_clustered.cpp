@@ -4784,9 +4784,8 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 			// in _render_scene. The debug query only needs the ClipmapParams.
 			const RSE::PathtracingParams *dbg_pt = p_render_data->environment.is_valid() ? RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment) : nullptr;
 			RtgiWrc::ClipmapParams wrc_dbg_params = _resolve_wrc_params(dbg_pt ? dbg_pt->rtgi_quality_preset : 3u);
-			const float wrc_dbg_strength = dbg_pt ? dbg_pt->wrc_strength : 1.0f;
 			const Vector3 wrc_dbg_camera = p_render_data->scene_data->cam_transform.origin;
-			rtgi_wrc->render_gi_debug(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), p_render_data->scene_data->get_cam_projection().inverse(), p_render_data->scene_data->cam_transform, wrc_dbg_params, wrc_dbg_camera, wrc_dbg_strength, fb, rb->get_internal_size());
+			rtgi_wrc->render_gi_debug(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), p_render_data->scene_data->get_cam_projection().inverse(), p_render_data->scene_data->cam_transform, wrc_dbg_params, wrc_dbg_camera, 1.0f, fb, rb->get_internal_size());
 		}
 
 		// Screen Probe Gather (SPG) debug views (A2). RADIANCE blits the per-probe
@@ -4812,8 +4811,8 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 		// tonemap) for the A2-T6 furnace gate. Guard mirrors the WRC-GI block: the SPATIAL
 		// atlas (via get_radiance_filtered()) + normal-roughness (forced on for this debug
 		// mode at the depth-prepass-mode selection site; depth always exists post-opaque).
-		// No demod/remod, no composite into beauty -- that is A3. The SPG has no artistic
-		// strength field (unlike the WRC's wrc_strength), so pass the raw 1.0 the gate reads.
+		// No demod/remod, no composite into beauty -- that is A3. Like the WRC-GI view,
+		// the blit has no artistic strength scaling, so pass the raw 1.0 the gate reads.
 		if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_RTGI_SPG_GI && rtgi_spg != nullptr && rtgi_spg->get_radiance_filtered().is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
 			rtgi_spg->render_gi_debug(rb, rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), p_render_data->scene_data->get_cam_projection().inverse(), p_render_data->scene_data->cam_transform, rb->get_internal_size(), 1.0f, fb);
 		}
