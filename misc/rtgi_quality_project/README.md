@@ -14,11 +14,16 @@ screenshot:
 Run it with the locally built editor:
 
 ```powershell
-D:\dev\faster-godot-4.6.3\bin\faster-godot.windows.editor.dev.x86_64.faster_godot.mono.console.exe --path D:\dev\faster-godot-4.6.3\misc\rtgi_quality_project --scene res://scenes/rtgi_quality_main.tscn --rtgi-denoise-strength=1.0 --rtgi-capture-debug
+D:\dev\faster-godot-4.6.3\bin\faster-godot.windows.editor.dev.x86_64.faster_godot.mono.console.exe --path D:\dev\faster-godot-4.6.3\misc\rtgi_quality_project --scene res://scenes/rtgi_quality_main.tscn --rtgi-denoise-strength=1.0
 ```
 
 The harness writes captures and metrics to `user://rtgi_quality` by default.
-Use `--rtgi-output-dir=<path>` for an explicit output directory.
+Use `--rtgi-output-dir=<path>` for an explicit output directory. The runner
+disables vsync at startup and uses a convergence-aware settle instead of a
+fixed warmup: it renders at least 45 frames after the scene load (120 after an
+in-process mode switch), then stops as soon as the whole-frame mean luma
+stabilizes, capped at the `--rtgi-warmup-frames` value. Each metrics JSON
+records the frame count actually used as `settle_frames_used`.
 
 Useful options:
 
@@ -33,11 +38,15 @@ Useful options:
 - `--rtgi-ray-firefly-suppression=0.0..1.0`
 - `--rtgi-ray-max-radiance=0.0..4096.0`
 - `--rtgi-diffuse-cache-max-entries=4096..4194304`
-- `--rtgi-warmup-frames=120`
+- `--rtgi-warmup-frames=120` (upper bound; the settle stops early once the
+  image converges, and the value also acts as the floor when it is smaller)
 - `--rtgi-reference-spp=16`
 - `--rtgi-debug-view=beauty|final|noisy|diffuse_noisy|specular_noisy|diffuse_final|specular_final|specular_guide|normal_roughness|normal_deviation|viewz_hitdist|motion_vectors|variance|history_length|rejection|disabled`
 - `--rtgi-gate-profile=strict|smoke`
-- `--rtgi-capture-debug`
+- `--rtgi-capture-debug` (diagnostic-only: writes every debug-view PNG and runs
+  the per-view metric sweep, which re-renders and pixel-scans dozens of views
+  and adds several minutes per run; off by default, regression runs do not
+  need it and none of its outputs feed the gate thresholds)
 - `--rtgi-capture-comparison`
 - `--rtgi-cornell-compare`
 - `--rtgi-cornell-reference-image=<path>`
@@ -47,6 +56,14 @@ Useful options:
 - `--rtgi-camera-pan`
 - `--rtgi-write-reference`
 - `--rtgi-mode=hybrid|fpt|fpt-reference|reflections|off` (overrides the scene's authored RTGI mode; `fpt-reference` selects the deep-path FPT oracle for informational A/B runs; `off` disables RTGI for the run so per-scene comparisons can record a raster reference; left untouched when absent)
+- `--rtgi-modes=<comma list>` (multi-config run: one process and one scene load
+  measure every listed mode in sequence, e.g. `--rtgi-modes=off,fpt,hybrid`.
+  Each mode settles, then writes its own `_<mode>`-suffixed metrics JSON and
+  capture, and prints its FOGPAR/metric lines exactly like a single-mode run.
+  The process exits non-zero if any config failed. List `fpt` before `hybrid`:
+  full path tracing leans on the world radiance cache, so measuring it after
+  another RTGI mode has warmed that cache reads a different steady state than
+  the cold start the recorded baselines use)
 - `--rtgi-denoiser=asvfg|reactive|none` (overrides the scene's RTGI denoiser; left untouched when absent)
 - `--rtgi-resolution-scale=0.25..1.0` (scales the RTGI trace inside the 3D render; left untouched when absent)
 - `--rtgi-upscaler=none|taa|fsr2|xess` (configures the root viewport scaling; `none`/`taa` use bilinear, `taa` also enables built-in temporal AA; left untouched when absent)
@@ -231,9 +248,10 @@ keeping real `.tscn` files avoids that.
 - `fog_corridor`: a 40 m gray corridor with marker blocks every 4 m, one shadowed
   OmniLight at the fixed camera, an alpha-blend glass pane at 8 m, and depth-mode
   fog (begin 2 m, end 30 m). It checks that the ray-traced paths apply the same
-  fog the raster pipeline does. The comparison spans three runs sharing one
-  `--rtgi-output-dir`: run `--rtgi-mode=off` first to record the raster
-  reference, then `--rtgi-mode=hybrid` and `--rtgi-mode=fpt`. Each RTGI run
+  fog the raster pipeline does. The comparison spans three configs sharing one
+  `--rtgi-output-dir`, run either as one process
+  (`--rtgi-modes=off,fpt,hybrid`) or as three single-mode runs with
+  `--rtgi-mode=off` first to record the raster reference. Each RTGI config
   prints a `FOGPAR mode=<n> max_rel_err=<f> seam=<f> verdict=<PASS|FAIL>` line
   comparing per-depth floor luminance (and the opaque/alpha seam at the glass
   pane) against the reference; PASS requires `max_rel_err <= 0.10`.
@@ -250,23 +268,30 @@ editor binary:
 D:\dev\faster-godot-4.6.3\bin\faster-godot.windows.editor.dev.x86_64.faster_godot.mono.console.exe --headless --path D:\dev\faster-godot-4.6.3\misc\rtgi_quality_project --script res://tools/generate_test_scenes.gd
 ```
 
-Run each scene headlessly for measurement (drop `--headless` for actual RTGI
-metrics; the headless display has no RT-capable viewport texture):
+The canonical regression pattern runs the modes of one scene in a single
+process with `--rtgi-modes` (about 40 seconds per scene instead of several
+minutes per mode). The per-task tier is two processes:
 
 ```powershell
-D:\dev\faster-godot-4.6.3\bin\faster-godot.windows.editor.dev.x86_64.faster_godot.mono.console.exe --path D:\dev\faster-godot-4.6.3\misc\rtgi_quality_project --scene res://scenes/rtgi_quality_main.tscn --rtgi-scene=cornell_box
-D:\dev\faster-godot-4.6.3\bin\faster-godot.windows.editor.dev.x86_64.faster_godot.mono.console.exe --path D:\dev\faster-godot-4.6.3\misc\rtgi_quality_project --scene res://scenes/rtgi_quality_main.tscn --rtgi-scene=specular_motion
-D:\dev\faster-godot-4.6.3\bin\faster-godot.windows.editor.dev.x86_64.faster_godot.mono.console.exe --path D:\dev\faster-godot-4.6.3\misc\rtgi_quality_project --scene res://scenes/rtgi_quality_main.tscn --rtgi-scene=reflective_pool
+$run = "D:\dev\faster-godot-4.6.3\bin\faster-godot.windows.editor.dev.x86_64.faster_godot.mono.console.exe --path D:\dev\faster-godot-4.6.3\misc\rtgi_quality_project --scene res://scenes/rtgi_quality_main.tscn"
+Invoke-Expression "$run --rtgi-scene=fog_corridor --rtgi-modes=off,fpt,hybrid --rtgi-output-dir=<dir>\fog_corridor"
+Invoke-Expression "$run --rtgi-scene=cornell_box --rtgi-modes=fpt,hybrid --rtgi-output-dir=<dir>\cornell_box"
 ```
 
-The fog-parity scene needs its three runs in order, sharing one output dir:
+For the fog-parity scene the `off` config records the raster reference and the
+later configs compare against it in the same process. Keep `fpt` ahead of
+`hybrid` in the list (see `--rtgi-modes` above). The full sign-off matrix adds
+the two single-mode animated scenes:
 
 ```powershell
-$run = "D:\dev\faster-godot-4.6.3\bin\faster-godot.windows.editor.dev.x86_64.faster_godot.mono.console.exe --path D:\dev\faster-godot-4.6.3\misc\rtgi_quality_project --scene res://scenes/rtgi_quality_main.tscn --rtgi-scene=fog_corridor --rtgi-output-dir=<dir>"
-Invoke-Expression "$run --rtgi-mode=off"
-Invoke-Expression "$run --rtgi-mode=hybrid"
-Invoke-Expression "$run --rtgi-mode=fpt"
+Invoke-Expression "$run --rtgi-scene=specular_motion"
+Invoke-Expression "$run --rtgi-scene=reflective_pool"
 ```
+
+Drop `--headless` for actual RTGI metrics; the headless display has no
+RT-capable viewport texture. Single-mode runs still work unchanged, including
+the original three-run fog-parity flow sharing one output dir
+(`--rtgi-mode=off`, then `--rtgi-mode=hybrid`, then `--rtgi-mode=fpt`).
 
 The thresholds for these scenes in
 `expected/rtgi_quality_expected.json` are initial, intentionally lenient

@@ -7,6 +7,32 @@ const CORNELL_PUBLIC_DATA_URL := "https://www.graphics.cornell.edu/online/box/da
 const SPONZA_KHRONOS_SOURCE_URL := "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Sponza"
 const SPONZA_KHRONOS_CANONICAL_SUFFIX := "Models/Sponza/glTF/Sponza.gltf"
 
+# Convergence-aware settle windows (frames). The GI history rebuilds in <= 30
+# frames on steady scenes and the temporal resolve caps at 16 accumulated
+# samples, so a 45-frame floor after a scene load carries comfortable margin.
+# The caps bound scenes that never settle (built-in animated content keeps the
+# luma delta high): the load cap is the old fixed warmup count, so the worst
+# case costs what the harness always paid.
+const SETTLE_LOAD_FLOOR_FRAMES := 45
+# After an in-process mode switch, settle at least as long as the old fixed
+# 120-frame warmup the per-scene reference values were captured with. The FPT
+# temporal tail keeps refining past the point where whole-frame luma deltas
+# can detect it (fog max_rel_err 0.0596 at 60 frames vs 0.0495 at 120), so a
+# shorter floor reads measurably stale against the recorded baselines. With
+# vsync off the extra frames cost well under a second per mode.
+const SETTLE_MODE_SWITCH_FLOOR_FRAMES := 120
+const SETTLE_MODE_SWITCH_CAP_FRAMES := 240
+const SETTLE_CHECK_INTERVAL_FRAMES := 15
+# Relative whole-frame mean-luma delta per check interval under which the GI
+# is considered settled. Whole-frame luma cannot resolve the late FPT
+# accumulation tail (that is what the 120-frame mode-switch floor is for);
+# this check exists to extend the settle past the floor while a scene is
+# still visibly converging, so it is kept tight.
+const SETTLE_MEAN_LUMA_REL_DELTA := 0.001
+# Steady-state perf readings kept from the settle tail (the measured render
+# time has a few-frame latency, so only the last frames are representative).
+const PERF_TAIL_SAMPLES := 8
+
 var _denoise_strength := 1.0
 var _history_weight := 0.95
 var _firefly_suppression := 1.0
@@ -24,7 +50,11 @@ var _strc_enabled := true
 var _warmup_frames := 120
 var _output_dir := DEFAULT_OUTPUT_DIR
 var _debug_view := "beauty"
-var _capture_all_debug_views := true
+# Per-debug-view captures and metric sweeps are diagnostic-only and cost
+# minutes per run (each of the dozens of views re-renders the frame and scans
+# it pixel by pixel in script). Regression runs skip them; pass
+# --rtgi-capture-debug to opt in.
+var _capture_all_debug_views := false
 var _capture_comparison := false
 var _write_reference := false
 var _camera_pan := false
@@ -44,6 +74,18 @@ var _gate_profile := "strict"
 # Per-run override flags. Each stays empty (or NAN) when the matching CLI flag is
 # absent, which means "leave the scene-authored value untouched".
 var _rtgi_mode_override := ""
+# Multi-config run list from --rtgi-modes=<comma list>. When non-empty, one
+# process measures every listed mode in sequence over a single scene load.
+var _rtgi_modes: Array[String] = []
+# Scene-animation frame counter. It advances once per rendered frame across
+# settle, capture, and sparkle loops (and across configs in a multi-config
+# run) so the frame-counter-driven scene animations stay in lock-step.
+var _scene_frame := 0
+# Frames the most recent settle actually rendered; recorded in the metrics.
+var _settle_frames_used := 0
+# Set when a config hit a skip/fatal path that already queued a tree quit, so
+# the multi-config loop stops instead of measuring further configs.
+var _abort_run := false
 var _rtgi_denoiser_override := ""
 var _rtgi_resolution_scale_override := NAN
 var _upscaler_override := ""
@@ -62,6 +104,17 @@ var _normal_flip_cache := {}
 
 func _ready() -> void:
 	_parse_args()
+	if DisplayServer.get_name().to_lower() != "headless":
+		# Measurement runs must not be paced by the display: with vsync on, the
+		# settle loop and every capture frame serialize on vblank.
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	if not _rtgi_modes.is_empty():
+		# Multi-config run: the first config rides the regular single-mode
+		# override machinery; later configs are applied in-process after a
+		# mode-switch settle.
+		if not _rtgi_mode_override.is_empty():
+			push_warning("--rtgi-mode is ignored when --rtgi-modes is given.")
+		_rtgi_mode_override = _rtgi_modes[0]
 	if _scene_mode == "convergence" and _convergence_frames <= 0:
 		_convergence_frames = 48
 	if _fast_iteration:
@@ -95,24 +148,8 @@ func _ready() -> void:
 func _apply_environment_overrides() -> void:
 	if _environment == null:
 		return
-	match _rtgi_mode_override:
-		"hybrid":
-			_environment.rtgi_mode = Environment.RTGI_MODE_HYBRID
-		"fpt":
-			_environment.rtgi_mode = Environment.RTGI_MODE_FULL_PATH_TRACING
-		"fpt-reference":
-			# Deep-path A/B oracle: the full per-pixel camera-ray path tracer with
-			# the probe composite bypassed. Used for informational A/B comparisons
-			# against the fast FPT path (for example recording the fog-model
-			# divergence); the per-scene gates are calibrated for the fast path.
-			_environment.rtgi_mode = Environment.RTGI_MODE_FULL_PATH_TRACING_REFERENCE
-		"reflections":
-			_environment.rtgi_mode = Environment.RTGI_MODE_REFLECTIONS_RT_ONLY
-		"off":
-			# Raster reference run: keep the scene as authored but disable RTGI
-			# entirely, so per-scene comparisons (for example fog parity) can
-			# record what the raster pipeline alone produces.
-			_environment.rtgi_enabled = false
+	if not _rtgi_mode_override.is_empty():
+		_apply_rtgi_mode(_rtgi_mode_override)
 	match _rtgi_denoiser_override:
 		"asvfg":
 			_environment.rtgi_denoiser = Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL
@@ -122,6 +159,38 @@ func _apply_environment_overrides() -> void:
 			_environment.rtgi_denoiser = Environment.RTGI_DENOISER_NONE
 	if not is_nan(_rtgi_resolution_scale_override):
 		_environment.rtgi_resolution_scale = _rtgi_resolution_scale_override
+
+
+# Applies one RTGI mode config to the live environment. Non-off modes force
+# rtgi_enabled back on so an in-process multi-config sequence like
+# off,fpt,hybrid can re-enable RTGI after the raster reference config disabled
+# it (the committed scenes all author rtgi_enabled = true, so this is a no-op
+# for single-mode runs).
+func _apply_rtgi_mode(mode: String) -> void:
+	if _environment == null:
+		return
+	match mode:
+		"hybrid":
+			_environment.rtgi_enabled = true
+			_environment.rtgi_mode = Environment.RTGI_MODE_HYBRID
+		"fpt":
+			_environment.rtgi_enabled = true
+			_environment.rtgi_mode = Environment.RTGI_MODE_FULL_PATH_TRACING
+		"fpt-reference":
+			# Deep-path A/B oracle: the full per-pixel camera-ray path tracer with
+			# the probe composite bypassed. Used for informational A/B comparisons
+			# against the fast FPT path (for example recording the fog-model
+			# divergence); the per-scene gates are calibrated for the fast path.
+			_environment.rtgi_enabled = true
+			_environment.rtgi_mode = Environment.RTGI_MODE_FULL_PATH_TRACING_REFERENCE
+		"reflections":
+			_environment.rtgi_enabled = true
+			_environment.rtgi_mode = Environment.RTGI_MODE_REFLECTIONS_RT_ONLY
+		"off":
+			# Raster reference config: keep the scene as authored but disable RTGI
+			# entirely, so per-scene comparisons (for example fog parity) can
+			# record what the raster pipeline alone produces.
+			_environment.rtgi_enabled = false
 
 
 # Configures the root window viewport's 3D scaling pipeline from --rtgi-upscaler and
@@ -258,6 +327,13 @@ func _parse_args() -> void:
 				_rtgi_mode_override = mode
 			else:
 				push_warning("Unknown RTGI mode '%s'; leaving the scene-authored mode untouched." % mode)
+		elif arg.begins_with("--rtgi-modes="):
+			for mode_token in arg.trim_prefix("--rtgi-modes=").to_lower().split(",", false):
+				var token := mode_token.strip_edges()
+				if token in ["hybrid", "fpt", "fpt-reference", "reflections", "off"]:
+					_rtgi_modes.append(token)
+				else:
+					push_warning("Unknown RTGI mode '%s' in --rtgi-modes; skipping it." % token)
 		elif arg.begins_with("--rtgi-denoiser="):
 			var denoiser := arg.trim_prefix("--rtgi-denoiser=").to_lower()
 			if denoiser in ["asvfg", "reactive", "none"]:
@@ -937,24 +1013,111 @@ func _build_sponza_fallback_atrium() -> void:
 
 func _run_capture() -> void:
 	_apply_debug_view(_debug_view)
-	# Sample the measured GPU/CPU frame time over the tail of the warmup loop. The
-	# measurement carries a few-frame latency, so the last frames before capture are
-	# the steady-state (post-warmup) readings we want.
-	var perf_sample_start := maxi(_warmup_frames - 8, 0)
-	for frame in range(_warmup_frames):
-		if _camera_pan:
-			_animate_camera(frame)
-		_animate_specular_objects(frame)
-		await _wait_render_frame()
-		if frame >= perf_sample_start:
-			_sample_frame_perf()
+	# Convergence-aware settle replaces the old fixed warmup loop: render at
+	# least the floor, stop once the mean luma stabilizes, and never exceed the
+	# old fixed count (--rtgi-warmup-frames stays the cap, and acts as the floor
+	# when it is smaller, e.g. under --rtgi-fast).
+	_settle_frames_used = await _settle_until_converged(SETTLE_LOAD_FLOOR_FRAMES, _warmup_frames)
 
 	var output_dir_error := DirAccess.make_dir_recursive_absolute(_output_dir)
 	if output_dir_error != OK:
 		push_error("Could not create RTGI quality output directory: %s" % _output_dir)
 		get_tree().quit(2)
 		return
-	var base_name := "%s_rtgi_strength_%0.2f" % [_scene_mode, _denoise_strength]
+
+	if _rtgi_modes.is_empty():
+		var failures: Array[String] = await _capture_and_measure_config("")
+		if _abort_run:
+			return
+		print("RTGI quality output: %s" % ProjectSettings.globalize_path(_output_dir))
+		get_tree().quit(0 if failures.is_empty() else 1)
+		return
+
+	# Multi-config run: one process, one scene load; each listed mode settles,
+	# measures, and writes its own per-mode outputs. The exit code fails if ANY
+	# config failed.
+	var any_failed := false
+	for i in range(_rtgi_modes.size()):
+		var mode: String = _rtgi_modes[i]
+		if i > 0:
+			_apply_rtgi_mode(mode)
+			# Settle again with the mode-switch floor/cap before measuring.
+			_settle_frames_used = await _settle_until_converged(SETTLE_MODE_SWITCH_FLOOR_FRAMES, SETTLE_MODE_SWITCH_CAP_FRAMES)
+		var config_failures: Array[String] = await _capture_and_measure_config("_%s" % mode)
+		if _abort_run:
+			return
+		print("RTGI config %s: %s" % [mode, "PASS" if config_failures.is_empty() else "FAIL (%s)" % "; ".join(config_failures)])
+		if not config_failures.is_empty():
+			any_failed = true
+	print("RTGI quality output: %s" % ProjectSettings.globalize_path(_output_dir))
+	get_tree().quit(1 if any_failed else 0)
+
+
+# Renders at least floor_frames, then every SETTLE_CHECK_INTERVAL_FRAMES
+# compares the viewport mean luma against the previous check; once the
+# relative delta drops under SETTLE_MEAN_LUMA_REL_DELTA the GI is treated as
+# converged. cap_frames bounds scenes that never settle (built-in motion keeps
+# the delta high), so the worst case equals the old fixed warmup. Returns the
+# number of frames rendered.
+func _settle_until_converged(floor_frames: int, cap_frames: int) -> int:
+	var cap := maxi(cap_frames, 1)
+	var floor_count := clampi(floor_frames, 1, cap)
+	# Take the first luma reading one interval before the floor so the run can
+	# stop exactly at the floor when the scene is already steady.
+	var first_check := maxi(floor_count - SETTLE_CHECK_INTERVAL_FRAMES, 1)
+	_perf_gpu_samples.clear()
+	_perf_cpu_samples.clear()
+	var previous_luma := -1.0
+	var frames := 0
+	while frames < cap:
+		if _camera_pan:
+			_animate_camera(_scene_frame)
+		_animate_specular_objects(_scene_frame)
+		await _wait_render_frame()
+		_scene_frame += 1
+		frames += 1
+		_sample_frame_perf()
+		if frames >= first_check and (frames - first_check) % SETTLE_CHECK_INTERVAL_FRAMES == 0:
+			var luma := _viewport_mean_luma_fast()
+			if luma >= 0.0 and previous_luma >= 0.0 and frames >= floor_count \
+					and absf(luma - previous_luma) <= maxf(previous_luma, 1e-4) * SETTLE_MEAN_LUMA_REL_DELTA:
+				break
+			previous_luma = luma
+	# Keep only the steady-state tail of the perf samples; the measured render
+	# time has a few-frame latency, so the last readings are the ones we want.
+	while _perf_gpu_samples.size() > PERF_TAIL_SAMPLES:
+		_perf_gpu_samples.pop_front()
+	while _perf_cpu_samples.size() > PERF_TAIL_SAMPLES:
+		_perf_cpu_samples.pop_front()
+	return frames
+
+
+# Cheap whole-frame mean luma for the settle convergence check: one GPU
+# readback, a bilinear downsample to 64x36, then a ~2k-pixel average. Returns
+# -1.0 when no viewport image is available (headless), disabling the check.
+func _viewport_mean_luma_fast() -> float:
+	var viewport_texture := get_viewport().get_texture()
+	if viewport_texture == null:
+		return -1.0
+	var image := viewport_texture.get_image()
+	if image == null:
+		return -1.0
+	image.convert(Image.FORMAT_RGBA8)
+	image.resize(64, 36, Image.INTERPOLATE_BILINEAR)
+	var sum := 0.0
+	for y in range(image.get_height()):
+		for x in range(image.get_width()):
+			sum += _luma(image.get_pixel(x, y))
+	return sum / float(maxi(image.get_width() * image.get_height(), 1))
+
+
+# Captures and measures the current configuration: beauty PNG, metrics JSON,
+# scene-specific measurements, optional diagnostic sweeps. base_suffix keeps
+# multi-config outputs distinct per mode (empty for single-mode runs, so the
+# single-mode file names are unchanged). Returns the gate-failure list; on the
+# skip/fatal paths it quits the tree and sets _abort_run.
+func _capture_and_measure_config(base_suffix: String) -> Array[String]:
+	var base_name := "%s_rtgi_strength_%0.2f%s" % [_scene_mode, _denoise_strength, base_suffix]
 	if DisplayServer.get_name().to_lower() == "headless":
 		var skipped := {
 			"skipped": true,
@@ -962,8 +1125,9 @@ func _run_capture() -> void:
 		}
 		_write_json("%s/%s_metrics.json" % [_output_dir, base_name], skipped)
 		print("RTGI quality metrics skipped: %s" % JSON.stringify(skipped))
+		_abort_run = true
 		get_tree().quit(0)
-		return
+		return []
 	var viewport_texture := get_viewport().get_texture()
 	var final_image: Image = null
 	if viewport_texture != null:
@@ -975,16 +1139,18 @@ func _run_capture() -> void:
 		}
 		_write_json("%s/%s_metrics.json" % [_output_dir, base_name], skipped)
 		print("RTGI quality metrics skipped: %s" % JSON.stringify(skipped))
+		_abort_run = true
 		get_tree().quit(0)
-		return
+		return []
 	final_image.convert(Image.FORMAT_RGBA8)
 	var png_path := "%s/%s_%s.png" % [_output_dir, base_name, _debug_view]
 	var metrics_path := "%s/%s_metrics.json" % [_output_dir, base_name]
 	var png_error := final_image.save_png(png_path)
 	if png_error != OK:
 		push_error("Could not write RTGI quality PNG: %s" % png_path)
+		_abort_run = true
 		get_tree().quit(2)
-		return
+		return []
 
 	var metrics := _measure_image(final_image)
 	if _scene_mode == "cornell":
@@ -1014,6 +1180,7 @@ func _run_capture() -> void:
 	metrics["ray_firefly_suppression"] = _ray_firefly_suppression
 	metrics["ray_max_radiance"] = _ray_max_radiance
 	metrics["warmup_frames"] = _warmup_frames
+	metrics["settle_frames_used"] = _settle_frames_used
 	metrics["sparkle_frames"] = _sparkle_frames
 	metrics["convergence_frames"] = _convergence_frames
 	metrics["gate_profile"] = _gate_profile
@@ -1037,7 +1204,10 @@ func _run_capture() -> void:
 		metrics.merge(await _measure_temporal_sparkle(base_name), true)
 	if not _fast_iteration and _convergence_frames > 1 and DisplayServer.get_name().to_lower() != "headless":
 		metrics.merge(await _measure_convergence_curve(base_name), true)
-	if not _fast_iteration and DisplayServer.get_name().to_lower() != "headless":
+	# The per-view signal sweep re-renders and pixel-scans dozens of debug views
+	# (minutes of script time); it is diagnostic-only, none of its outputs feed
+	# the gate thresholds, so it rides the same opt-in as the debug captures.
+	if not _fast_iteration and _capture_all_debug_views and DisplayServer.get_name().to_lower() != "headless":
 		metrics.merge(await _measure_signal_debug_views(), true)
 		metrics["rtgi_instability_attribution"] = _source_attribution_summary(metrics)
 
@@ -1063,8 +1233,7 @@ func _run_capture() -> void:
 		await _capture_comparison_grid(base_name)
 
 	print("RTGI quality metrics: %s" % JSON.stringify(metrics))
-	print("RTGI quality output: %s" % ProjectSettings.globalize_path(_output_dir))
-	get_tree().quit(0 if failures.is_empty() else 1)
+	return failures
 
 
 func _animate_camera(frame: int) -> void:
@@ -2668,9 +2837,10 @@ func _measure_temporal_sparkle(base_name: String) -> Dictionary:
 	var motion_scene := _scene_mode == "specular_stability" or _is_packed_test_scene()
 	if motion_scene:
 		if _camera_pan:
-			_animate_camera(_warmup_frames)
-		_animate_specular_objects(_warmup_frames)
+			_animate_camera(_scene_frame)
+		_animate_specular_objects(_scene_frame)
 	await _wait_render_frame()
+	_scene_frame += 1
 	var previous := get_viewport().get_texture().get_image()
 	previous.convert(Image.FORMAT_RGBA8)
 	var first := previous.duplicate()
@@ -2680,11 +2850,11 @@ func _measure_temporal_sparkle(base_name: String) -> Dictionary:
 	var last := previous
 	for frame in range(1, _sparkle_frames):
 		if motion_scene:
-			var scene_frame := _warmup_frames + frame
 			if _camera_pan:
-				_animate_camera(scene_frame)
-			_animate_specular_objects(scene_frame)
+				_animate_camera(_scene_frame)
+			_animate_specular_objects(_scene_frame)
 		await _wait_render_frame()
+		_scene_frame += 1
 		var current := get_viewport().get_texture().get_image()
 		current.convert(Image.FORMAT_RGBA8)
 		var frame_sparkles := _count_temporal_sparkles(previous, current)
