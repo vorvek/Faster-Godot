@@ -16,12 +16,13 @@ this fork update.
   - Adds `DisplayServerWindows::process_raw_input()`.
   - Drains raw input with `GetRawInputBuffer()` once per frame instead of
     allocating and parsing each `WM_INPUT` message through `GetRawInputData()`.
-  - Loops the buffered read until the queue is empty. With a null buffer,
+  - Loops the buffered read over several passes. With a null buffer,
     `GetRawInputBuffer()` reports the byte size of the first pending message,
     not a message count, so a single read caps out at a buffer's worth of
-    events (about 48 at the sizing inherited from the upstream PR). Anything
-    left in the queue would then be eaten unread by the unthrottled message
-    pump that follows.
+    events (about 48 at the sizing inherited from the upstream PR). The pass
+    count is bounded rather than running until the queue reports empty,
+    because raw input arrives continuously at high polling rates and an
+    "until empty" loop can stay fed for as long as the mouse is moving.
   - Keeps the special Shift-key raw input handling.
   - Preserves captured mouse relative-motion parsing through raw mouse input.
   - Shares the per-event parsing between the buffered path and `WndProc`
@@ -39,17 +40,36 @@ this fork update.
   - Declares `process_raw_input()` and `_process_raw_input_event()`, and holds
     the reused raw input read buffer.
 
+## Message pump policy
+
+The pump throttles only what the mouse hardware can flood, and drains the rest
+every frame:
+
+- `WM_INPUT` is excluded from `PeekMessage()` entirely. Pulling raw input
+  through the pump one message at a time is the original collapse; the
+  buffered read consumes it in batch instead.
+- `WM_MOUSEMOVE` and `WM_NCMOUSEMOVE` are dispatched at most once per frame.
+  Windows synthesizes these on demand from the hardware input stream, so while
+  the mouse is moving the queue never reads empty and an unbounded pump spins
+  until the motion stops. Measured on an 8,000 Hz mouse over a 2D scene at
+  240 Hz V-Sync: the unbounded pump fell below 1 FPS (frames over 1,000 ms);
+  the throttled pump loses 1 to 2 FPS. No motion is lost, because these
+  messages carry the latest coalesced cursor position and the engine derives
+  relative motion from successive positions.
+- Keys, characters, mouse buttons, wheel, and everything else discrete drain
+  fully. Capping them is what split `WM_KEYDOWN`/`WM_CHAR` pairs across frames
+  in the upstream PR and made keys fire twice (Shift+F toggling freelook on
+  and off, for example).
+
 ## Differences from the upstream PR
 
-- The upstream PR caps the Windows message pump at a few events per frame and
-  filters `WM_INPUT` out of `PeekMessage()`. This fork drains the queue
-  normally. The buffered raw input read already removes the `WM_INPUT` flood,
-  and legacy `WM_MOUSEMOVE` is coalesced by the OS, so the cap buys nothing.
-  Worse, the cap is what split `WM_KEYDOWN`/`WM_CHAR` pairs across frames and
-  made keys fire twice (Shift+F toggling freelook on and off, for example).
-- The upstream PR reads the buffer once per frame. Under its `PeekMessage()`
-  filter the leftovers survive to the next frame as a growing backlog. Here
-  they would have been destroyed by the unfiltered pump, hence the drain loop.
+- The upstream PR caps all message pumping at one event per frame (plus one
+  keyboard or mouse button event through a second budget). This fork caps only
+  the synthesized mouse motion messages and drains discrete input fully, which
+  keeps key pairs intact.
+- The upstream PR reads the raw input buffer once per frame, which holds about
+  48 events. This fork loops the read over a bounded number of passes, so the
+  backlog at high polling rates stays within a frame.
 - Note for 32-bit builds: `GetRawInputBuffer()` has documented WOW64 alignment
   requirements that neither the PR nor this fork implements. This fork only
   ships x86_64 Windows binaries, so it does not hit them.
@@ -83,3 +103,12 @@ up or down at the start of a drag.
   is handled one event at a time through the `WndProc` fallback. That is the
   pre-PR per-event path, but it only ever sees a handful of stragglers per
   frame, so the original flood cannot come back through it.
+- In visible, hidden, and confined mouse modes, scripts receive at most one
+  mouse motion event per rendered frame even with input accumulation disabled.
+  The total delta is exact, but sub-frame cursor samples from the legacy path
+  are gone. Captured mode keeps every raw event, so accumulation still has its
+  full meaning there.
+- Captured mode does per-event work for every poll (an `InputEventMouseMotion`
+  plus a cursor recenter), so its cost grows linearly with the polling rate.
+  Bounded and spread evenly, but an 8,000 Hz mouse does about 16 times the
+  per-event work of a 500 Hz one in that mode.
