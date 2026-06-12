@@ -3980,11 +3980,18 @@ void DisplayServerWindows::process_raw_input() {
 
 	// Read repeatedly: a single read returns at most a buffer's worth of events,
 	// and any WM_INPUT message left behind waits a frame for the next read.
-	// Bound the passes instead of looping until the queue reports empty: raw
-	// input arrives continuously at high polling rates (every 125 us at
-	// 8,000 Hz), so "until empty" could keep this loop fed for as long as the
-	// mouse is moving. The bound is far above any real per-frame arrival count.
-	for (int pass = 0; pass < 16; pass++) {
+	// Drain until the queue reports empty. This must not be bounded by a small
+	// pass count: when a long frame (a scene load) overlaps mouse motion, the
+	// thread's message queue reaches its 10,000-message cap, after which Windows
+	// drops every new hardware message (clicks and keys included) until the
+	// backlog is consumed. A bounded drain at a low frame rate (an unfocused
+	// editor idles around 10 FPS) can then never catch up with a high-polling
+	// mouse, which presents as a permanently frozen, input-dead window. The
+	// first read after a stall has to be able to swallow the whole backlog in
+	// one frame. Unlike the per-message pump, "until empty" cannot spin here:
+	// one buffered read consumes tens of events in microseconds while new
+	// packets arrive 125 us apart at 8,000 Hz, so arrival never keeps pace.
+	while (true) {
 		UINT n_buffer = 0;
 		// With a null buffer, this reports the byte size of the first pending
 		// message (the minimum required buffer), not a message count.

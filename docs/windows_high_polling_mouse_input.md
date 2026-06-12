@@ -16,13 +16,19 @@ this fork update.
   - Adds `DisplayServerWindows::process_raw_input()`.
   - Drains raw input with `GetRawInputBuffer()` once per frame instead of
     allocating and parsing each `WM_INPUT` message through `GetRawInputData()`.
-  - Loops the buffered read over several passes. With a null buffer,
+  - Loops the buffered read until the queue reports empty. With a null buffer,
     `GetRawInputBuffer()` reports the byte size of the first pending message,
     not a message count, so a single read caps out at a buffer's worth of
-    events (about 48 at the sizing inherited from the upstream PR). The pass
-    count is bounded rather than running until the queue reports empty,
-    because raw input arrives continuously at high polling rates and an
-    "until empty" loop can stay fed for as long as the mouse is moving.
+    events (about 48 at the sizing inherited from the upstream PR). The drain
+    must not be bounded by a small pass count: when a long frame (a scene
+    load) overlaps mouse motion, the thread's message queue reaches the
+    10,000-message Windows cap, after which Windows drops every new hardware
+    message, clicks and keys included, until the backlog is consumed. A
+    bounded drain at a low frame rate (an unfocused editor idles near 10 FPS)
+    then never catches up with a high-polling mouse, and the window looks
+    permanently frozen and stops responding to input. Unlike the per-message pump,
+    "until empty" cannot spin here: one buffered read consumes tens of events
+    in microseconds while new packets arrive 125 us apart at 8,000 Hz.
   - Keeps the special Shift-key raw input handling.
   - Preserves captured mouse relative-motion parsing through raw mouse input.
   - Shares the per-event parsing between the buffered path and `WndProc`
@@ -68,8 +74,9 @@ every frame:
   the synthesized mouse motion messages and drains discrete input fully, which
   keeps key pairs intact.
 - The upstream PR reads the raw input buffer once per frame, which holds about
-  48 events. This fork loops the read over a bounded number of passes, so the
-  backlog at high polling rates stays within a frame.
+  48 events. This fork loops the read until the queue is empty, so any backlog
+  clears within a frame, including the full 10,000-message queue that builds
+  up when a long frame overlaps mouse motion.
 - Note for 32-bit builds: `GetRawInputBuffer()` has documented WOW64 alignment
   requirements that neither the PR nor this fork implements. This fork only
   ships x86_64 Windows binaries, so it does not hit them.
