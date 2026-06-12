@@ -2847,20 +2847,6 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "네트워크 파일시스템을 사용한 경량 배포"
 
-msgid ""
-"When this option is enabled, using one-click deploy for Android will only "
-"export an executable without the project data.\n"
-"The filesystem will be provided from the project by the editor over the "
-"network.\n"
-"On Android, deploying will use the USB cable for faster performance. This "
-"option speeds up testing for projects with large assets."
-msgstr ""
-"이 옵션이 활성화되면 Android용 원클릭 배포를 사용하면 프로젝트 데이터 없이 실"
-"행 파일만 내보냅니다.\n"
-"파일시스템은 네트워크를 통해 편집기에 의해 프로젝트에서 제공됩니다.\n"
-"Android에서 배포는 더 빠른 성능을 위해 USB 케이블을 사용합니다. 이 옵션은 애셋"
-"의 용량이 큰 프로젝트의 테스트 속도를 높입니다."
-
 msgid "Visible Collision Shapes"
 msgstr "보여줄 콜리전 모양"
 
@@ -4862,26 +4848,6 @@ msgstr "편집기 메시지"
 msgid "Toggle visibility of editor messages."
 msgstr "편집기 메시지의 표시 여부를 토글합니다."
 
-msgid ""
-"The Android build template is already installed in this project and it won't "
-"be overwritten.\n"
-"Remove the \"%s\" directory manually before attempting this operation again."
-msgstr ""
-"Android 빌드 템플릿이 이미 이 프로젝트에 설치되어 있으며 덮어쓰이지 않을 것입"
-"니다.\n"
-"이 작업을 다시 수행하기 전에 \"%s\" 디렉터리를 수동으로 제거하세요."
-
-msgid ""
-"This will set up your project for gradle Android builds by installing the "
-"source template to \"%s\".\n"
-"Note that in order to make gradle builds instead of using pre-built APKs, the "
-"\"Use Gradle Build\" option should be enabled in the Android export preset."
-msgstr ""
-"이 프로젝트가 소스 템플릿을 \"%s\"에 설치하여 Android에 Gradle 빌드용으로 설정"
-"됩니다.\n"
-"미리 빌드된 APK를 사용하는 대신 Gradle 빌드를 만들려면 Android 내보내기 프리셋"
-"에서 \"Gradle 빌드 사용\" 옵션이 활성화되어야 합니다."
-
 msgid "Unnamed Project"
 msgstr "이름 없는 프로젝트"
 
@@ -5451,21 +5417,6 @@ msgstr "다시 불러오기가 완료되었습니다."
 msgid "Save & Restart"
 msgstr "저장 및 다시 시작"
 
-msgid ""
-"Changing the renderer requires restarting the editor.\n"
-"\n"
-"Choosing Save & Restart will change the renderer to:\n"
-"- Desktop platforms: %s\n"
-"- Mobile platforms: %s\n"
-"- Web platform: %s"
-msgstr ""
-"렌더러를 변경하려면 편집기를 다시 시작해야 합니다.\n"
-"\n"
-"저장 및 다시 시작을 선택하면 다음으로 렌더러를 변경합니다:\n"
-"- 데스크톱 플랫폼: %s\n"
-"- 모바일 플랫폼: %s\n"
-"- 웹 플랫폼: %s"
-
 msgid "Forward+"
 msgstr "Forward+"
 
@@ -5492,9 +5443,6 @@ msgstr "버전 관리 설정..."
 
 msgid "Pack Project as ZIP..."
 msgstr "프로젝트를 ZIP으로 패킹..."
-
-msgid "Install Android Build Template..."
-msgstr "Android 빌드 템플릿 설치..."
 
 msgid "Open User Data Folder"
 msgstr "사용자 데이터 폴더 열기"
@@ -5709,20 +5657,6 @@ msgstr "이전 편집기 열기"
 msgid "Project"
 msgstr "프로젝트"
 
-msgid ""
-"Choose a renderer.\n"
-"\n"
-"Notes:\n"
-"- On mobile platforms, the Mobile renderer is used if Forward+ is selected "
-"here.\n"
-"- On the web platform, the Compatibility renderer is always used."
-msgstr ""
-"렌더러를 선택합니다.\n"
-"\n"
-"참고:\n"
-"- 모바일 플랫폼에서는 Forward+를 여기에 선택하면 모바일 렌더러가 사용됩니다.\n"
-"- 웹 플랫폼에서는 호환성 렌더러가 항상 사용됩니다."
-
 msgid "Renderer"
 msgstr "렌더러"
 
@@ -5741,17 +5675,11 @@ msgstr "업데이트 스피너 숨기기"
 msgid "Don't Save"
 msgstr "저장하지 않음"
 
-msgid "Android build template is missing, please install relevant templates."
-msgstr "Android 빌드 템플릿이 누락되어 있습니다. 관련 템플릿을 설치해주세요."
-
 msgid "Manage Templates"
 msgstr "템플릿 관리"
 
 msgid "Install from file"
 msgstr "파일에서 설치"
-
-msgid "Select Android sources file"
-msgstr "Android 소스 파일 선택"
 
 msgid "Import Templates From ZIP File"
 msgstr "ZIP 파일에서 템플릿 가져오기"
@@ -5961,9 +5889,6 @@ msgstr "최소한 하나의 디스크 공간 접근 이유를 선택해야 합�
 msgid "At least one system boot time access reason should be selected."
 msgstr "최소한 하나의 시스템 부팅 시간 접근 이유를 선택해야 합니다."
 
-msgid "\"Shader Baker\" doesn't work with the Compatibility renderer."
-msgstr "\"셰이더 베이커\"는 호환성 렌더러로 작동되지 않습니다."
-
 msgid ""
 "The editor is currently using a different renderer than what the target "
 "platform will use. \"Shader Baker\" won't be able to include core shaders. "
@@ -6092,9 +6017,6 @@ msgstr "문자 '%s'은(는) 식별자에 허용되지 않습니다."
 msgid "Running on %s"
 msgstr "%s에서 실행"
 
-msgid "Could not start ios-deploy executable."
-msgstr "ios-deploy 실행 파일을 시작할 수 없습니다."
-
 msgid "Installation/running failed, see editor log for details."
 msgstr "설치/실행에 실패했습니다. 자세한 사항은 편집기 로그를 참조하세요."
 
@@ -6103,9 +6025,6 @@ msgstr "설치에 실패했습니다. 자세한 사항은 편집기 로그를 �
 
 msgid "Running failed, see editor log for details."
 msgstr "실행에 실패했습니다. 자세한 사항은 편집기 로그를 참조하세요."
-
-msgid "\"Shader Baker\" is not supported when using the Compatibility renderer."
-msgstr "\"셰이더 베이커\"는 호환성 렌더러를 사용할 때는 지원되지 않습니다."
 
 msgid ""
 "The editor is currently using a different renderer than what the target "
@@ -6284,9 +6203,6 @@ msgstr "이중 정밀도 빌드에서 템플릿은 없음"
 
 msgid "Official export templates aren't available for double-precision builds."
 msgstr "공식 내보내기 템플릿은 이중 정밀도 빌드에서는 사용할 수 없습니다."
-
-msgid "Uncompressing Android Build Sources"
-msgstr "Android 빌드 소스 압축 푸는 중"
 
 msgid "Export Template Manager"
 msgstr "내보내기 템플릿 매니저"
@@ -8375,17 +8291,11 @@ msgstr "크고 복잡한 씬을 그려내기는 힘듭니다."
 msgid "Fast rendering of simple scenes."
 msgstr "단순한 씬을 빠르게 그려낼 수 있습니다."
 
-msgid "Supports desktop, mobile + web platforms."
-msgstr "데스크톱, 모바일, 웹 플랫폼을 지원합니다."
-
 msgid "Least advanced 3D graphics."
 msgstr "기본적인 3D 그래픽을 사용할 수 있습니다."
 
 msgid "Intended for low-end/older devices."
 msgstr "저성능이거나 오래된 기기에서 사용합니다."
-
-msgid "Uses OpenGL 3 backend (OpenGL 3.3/ES 3.0/WebGL2)."
-msgstr "OpenGL 3 백엔드 (OpenGL 3.3/ES 3.0/WebGL2)를 사용합니다."
 
 msgid "Fastest rendering of simple scenes."
 msgstr "단순한 씬을 가장 빠르게 그려낼 수 있습니다."
@@ -8460,15 +8370,6 @@ msgstr "렌더러:"
 
 msgid "More information"
 msgstr "자세한 정보"
-
-msgid ""
-"RenderingDevice-based methods not available on this GPU:\n"
-"%s\n"
-"Please use the Compatibility renderer."
-msgstr ""
-"RenderingDevice 기반 메서드가 이 GPU에서 사용 가능하지 않습니다:\n"
-"%s\n"
-"호환성 렌더러를 사용해주세요."
 
 msgid "The renderer can be changed later, but scenes may need to be adjusted."
 msgstr "렌더러는 나중에 바꿀 수 있지만, 씬을 조정해야 할 수도 있습니다."
@@ -9151,20 +9052,8 @@ msgstr "프로젝트 정지"
 msgid "Run Current Scene"
 msgstr "현재 씬 실행"
 
-msgid "Run Scene in Regular Mode"
-msgstr "일반 모드에서 씬 실행"
-
-msgid "Run Scene in XR Mode"
-msgstr "XR 모드에서 씬 실행"
-
 msgid "Run Specific Scene"
 msgstr "특정 씬 실행"
-
-msgid "Run in Regular Mode"
-msgstr "일반 모드에서 실행"
-
-msgid "Run in XR Mode"
-msgstr "XR 모드에서 실행"
 
 msgid "Enable Movie Maker Mode"
 msgstr "무비 메이커 모드 활성화"
@@ -15368,9 +15257,6 @@ msgstr "내비게이션 (3D)"
 msgid "XR"
 msgstr "XR"
 
-msgid "OpenXR"
-msgstr "OpenXR"
-
 msgid "Wayland"
 msgstr "Wayland"
 
@@ -15444,9 +15330,6 @@ msgstr "3D를 위한 내비게이션 서버 및 능력."
 msgid "XR (AR and VR)."
 msgstr "XR (AR 및 VR)."
 
-msgid "OpenXR standard implementation (requires XR to be enabled)."
-msgstr "OpenXR 표준 구현 (XR 활성화 필요)."
-
 msgid "Wayland display (Linux only)."
 msgstr "Wayland 디스플레이 (Linux 전용)."
 
@@ -15460,9 +15343,6 @@ msgstr ""
 
 msgid "Forward+ renderer for advanced 3D graphics."
 msgstr "고급 3D 그래픽을 위한 Forward+ 렌더러."
-
-msgid "Mobile renderer for less advanced 3D graphics."
-msgstr "덜 고급 3D 그래픽을 위한 모바일 렌더러."
 
 msgid "Vulkan backend of RenderingDevice."
 msgstr "RenderingDevice의 Vulkan 백엔드."
@@ -16486,16 +16366,6 @@ msgstr "머티리얼에서 매개변수 복사"
 
 msgid "Paste Parameters To Material"
 msgstr "머티리얼으로 매개변수 붙여넣기"
-
-msgid "Forward+/Mobile"
-msgstr "Forward+/모바일"
-
-msgid ""
-"Only supported in the Forward+ and Mobile rendering methods, not "
-"Compatibility."
-msgstr ""
-"Forward+ 및 모바일 렌더링 메서드에서만 지원되며, 호환성에서는 지원되지 않습니"
-"다."
 
 msgid "Create Shader Node"
 msgstr "셰이더 노드 만들기"
@@ -18827,17 +18697,8 @@ msgstr "%s 불러오는 중 오류: %s."
 msgid "Error saving file %s: %s"
 msgstr "파일 %s 저장 중 오류: %s"
 
-msgid "OpenXR Action map:"
-msgstr "OpenXR 액션 맵:"
-
 msgid "Remove interaction profile"
 msgstr "상호작용 프로필 제거"
-
-msgid "OpenXR Action Map"
-msgstr "OpenXR 액션 맵"
-
-msgid "Toggle OpenXR Action Map Dock"
-msgstr "OpenXR 액션 맵 독 토글"
 
 msgid "Add Action Set"
 msgstr "액션 세트 추가"
@@ -18850,12 +18711,6 @@ msgstr "프로필 추가"
 
 msgid "Add an interaction profile."
 msgstr "상호작용 프로필을 추가합니다."
-
-msgid "Save this OpenXR action map."
-msgstr "이 OpenXR 액션 맵을 저장합니다."
-
-msgid "Reset to default OpenXR action map."
-msgstr "디폴트 OpenXR 액션 맵으로 재설정합니다."
 
 msgid "Action Sets"
 msgstr "액션 세트"
@@ -18964,62 +18819,14 @@ msgid "Choose an XR runtime."
 msgstr "XR 런타임을 선택하세요."
 
 msgid ""
-"Cannot use the same SubViewport with multiple OpenXR composition layers. "
-"Clear it from its current layer first."
-msgstr ""
-"같은 SubViewport를 여러 OpenXR 컴포지션 레이어와 사용할 수 없습니다. 먼저 현"
-"재 레이어에서 이를 비우세요."
-
-msgid ""
-"Cannot set SubViewport on an OpenXR composition layer when using an Android "
-"surface."
-msgstr ""
-"Android 표면을 사용할 때 OpenXR 컴포지션 레이어에 SubViewport를 설정할 수 없습"
-"니다."
-
-msgid "OpenXR composition layers must have an XROrigin3D node as their parent."
-msgstr "OpenXR 컴포지션 레이어는 XROrigin3D 노드가 부모로 있어야 합니다."
-
-msgid ""
-"OpenXR composition layers must have orthonormalized transforms (ie. no scale "
-"or shearing)."
-msgstr ""
-"OpenXR 컴포지션 레이어는 직교 정규화된 변형(즉, 스케일이나 밀림이 없음)이 있어"
-"야 합니다."
-
-msgid ""
 "Hole punching won't work as expected unless the sort order is less than zero."
 msgstr "홀 펀칭은 정렬 순서가 0보다 작지 않으면 예상대로 작동하지 않습니다."
-
-msgid "OpenXR visibility mask must have an XRCamera3D node as their parent."
-msgstr "OpenXR 가시성 마스크는 XRCamera3D 노드가 부모로 있어야 합니다."
-
-msgid "Building Android Project (gradle)"
-msgstr "Android 프로젝트 빌드 중 (gradle)"
-
-msgid "> Connecting to Gradle Build Environment..."
-msgstr "> Gradle 빌드 환경에 연결 중..."
-
-msgid "Unable to connect to Gradle Build Environment service"
-msgstr "Gradle 빌드 환경 서비스에 연결할 수 없습니다"
-
-msgid "> Starting Gradle build..."
-msgstr "> Gradle 빌드 시작 중..."
-
-msgid "Failed to execute Gradle command"
-msgstr "Gradle 명령을 실행하는 데 실패했습니다"
-
-msgid "> Copying Gradle artifacts..."
-msgstr "> Gradle 아티팩트 복사 ..."
 
 msgid "Package name is missing."
 msgstr "패키지 이름이 누락되어 있습니다."
 
 msgid "Package segments must be of non-zero length."
 msgstr "패키지 세그먼트는 길이가 0이 아니어야 합니다."
-
-msgid "The character '%s' is not allowed in Android application package names."
-msgstr "문자 '%s'은(는) Android 애플리케이션 패키지 이름에 사용할 수 없습니다."
 
 msgid "A digit cannot be the first character in a package segment."
 msgstr "패키지 세그먼트에서 숫자는 첫 번째 문자로 쓸 수 없습니다."
@@ -19039,30 +18846,6 @@ msgstr "APK 확장에 잘못된 공개 키입니다."
 msgid "Invalid package name:"
 msgstr "잘못된 패키지 이름:"
 
-msgid "\"Use Gradle Build\" is required to enable \"Swipe to dismiss\"."
-msgstr "\"밀어서 해제\"를 활성화하려면 \"Gradle 빌드 사용\"이 필요합니다."
-
-msgid "\"Use Gradle Build\" must be enabled to use the plugins."
-msgstr "플러그인을 사용하려면 \"Gradle 빌드 사용\"이 활성화되어야 합니다."
-
-msgid "Support for \"Use Gradle Build\" on Android is currently experimental."
-msgstr "Android에서 \"Gradle 빌드 사용\"에 대한 지원은 현재 실험적입니다."
-
-msgid ""
-"\"Compress Native Libraries\" is only valid when \"Use Gradle Build\" is "
-"enabled."
-msgstr ""
-"\"네이티브 라이브러리 압축\"은 \"Gradle 빌드 사용\"이 활성화될 때에만 올바릅니"
-"다."
-
-msgid "\"Export AAB\" is only valid when \"Use Gradle Build\" is enabled."
-msgstr "\"AAB 내보내기\"는 \"Gradle 빌드 사용\"이 활성화될 때에만 올바릅니다."
-
-msgid "\"Min SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
-msgstr ""
-"\"최소 SDK\"는 \"Gradle 빌드 사용\"이 활성화될 때에만 오버라이드할 수 있습니"
-"다."
-
 msgid "\"Min SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
 "\"최소 SDK\"는 올바른 정수여야 하지만, 다음 값은 올바르지 않습니다(\"%s\")."
@@ -19074,39 +18857,12 @@ msgstr ""
 "\"최소 SDK\"는 Godot 라이브러리에 필요한 버전인 %d보다 낮을 수 없습니다."
 
 msgid ""
-"\"Target SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
-msgstr ""
-"\"대상 SDK\"는 \"Gradle 빌드 사용\"이 활성화될 때에만 오버라이드할 수 있습니"
-"다."
-
-msgid ""
 "\"Target SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
 "\"대상 SDK\"는 올바른 정수여야 하지만, 다음 값은 올바르지 않습니다(\"%s\")."
 
 msgid "\"Target SDK\" version must be greater or equal to \"Min SDK\" version."
 msgstr "\"대상 SDK\" 버전은 \"최소 SDK\" 버전보다 크거나 같아야 합니다."
-
-msgid "\"Use Gradle Build\" is required to add custom theme attributes."
-msgstr "커스텀 테마 특성을 추가하려면 \"Gradle 빌드 사용\"이 필요합니다."
-
-msgid "\"Use Gradle Build\" must be enabled to enable \"Show In Android Tv\"."
-msgstr ""
-"\"Android TV에 보이기\"를 활성화하려면 \"Gradle 빌드 사용\"이 활성화되어야 합"
-"니다."
-
-msgid "\"Use Gradle Build\" must be enabled to enable \"Show As Launcher App\"."
-msgstr ""
-"\"런처 앱으로 보이기\"를 활성화하려면 \"Gradle 빌드 사용\"이 활성화되어야 합니"
-"다."
-
-msgid "\"Use Gradle Build\" must be enabled to disable \"Show In App Library\"."
-msgstr ""
-"\"앱 라이브러리에서 보이기\"를 비활성화하려면 \"Gradle 빌드 사용\"이 활성화되"
-"어야 합니다."
-
-msgid "Mirror Android devices"
-msgstr "Android 기기 미러링"
 
 msgid ""
 "If enabled, \"scrcpy\" is used to start the project and automatically stream "
@@ -19130,47 +18886,11 @@ msgstr "기기에 설치할 수 없음: %s"
 msgid "Running on device..."
 msgstr "기기에서 실행 중..."
 
-msgid ""
-"Could not start scrcpy executable. Configure scrcpy path in the Editor "
-"Settings (Export > Android > scrcpy > Path)."
-msgstr ""
-"scrcpy 실행 파일을 시작할 수 없었습니다. 편집기 설정(내보내기 > Android > "
-"scrcpy > 경로)에서 scrcpy 경로를 구성하세요."
-
 msgid "Could not execute on device."
 msgstr "기기에서 실행할 수 없었습니다."
 
 msgid "Error: There was a problem validating the keystore username and password"
 msgstr "오류: 키스토어 사용자 이름과 비밀번호를 검증하는 중 문제가 발생했습니다"
-
-msgid ""
-"Unable to determine the C# project's TFM, it may be incompatible. The export "
-"template only supports '%s'. Make sure the project targets '%s' or consider "
-"using gradle builds instead."
-msgstr ""
-"C# 프로젝트의 TFM을 결정할 수 없으며, 호환되지 않을 수 있습니다. 내보내기 템플"
-"릿은 '%s'만 지원합니다. 프로젝트가 '%s'을(를) 대상으로 하는지 확인하거나 "
-"Gradle 빌드를 대신 사용하는 것을 고려하세요."
-
-msgid ""
-"C# project targets '%s' but the export template only supports '%s'. Consider "
-"using gradle builds instead."
-msgstr ""
-"C# 프로젝트는 '%s'을(를) 대상으로 하지만 내보내기 템플릿은 '%s'만 지원합니다. "
-"Gradle 빌드를 대신 사용하는 것을 고려하세요."
-
-msgid "Exporting to Android when using C#/.NET is experimental."
-msgstr "C#/.NET을 사용할 때 Android로 내보내기는 실험적입니다."
-
-msgid "Custom Android source template not found."
-msgstr "커스텀 Android 소스 템플릿을 찾을 수 없습니다."
-
-msgid ""
-"Android build template not installed in the project. Install it from the "
-"Project menu."
-msgstr ""
-"프로젝트에 Android 빌드 템플릿을 설치하지 않았습니다. 프로젝트 메뉴에서 설치하"
-"세요."
 
 msgid ""
 "Either Debug Keystore, Debug User AND Debug Password settings must be "
@@ -19207,29 +18927,11 @@ msgstr "Java SDK 경로에서 'java' 명령어를 찾을 수 없습니다."
 msgid "Please check the Java SDK directory specified in Editor Settings."
 msgstr "편집기 설정에서 지정된 Java SDK 디렉터리를 확인해 주세요."
 
-msgid "A valid Android SDK path is required in Editor Settings."
-msgstr "편집기 설정에서 올바른 Android SDK 경로가 필요합니다."
-
-msgid "Invalid Android SDK path in Editor Settings."
-msgstr "편집기 설정에서 잘못된 Android SDK 경로입니다."
-
 msgid "Missing 'platform-tools' directory!"
 msgstr "'platform-tools' 디렉터리가 누락되어 있습니다!"
 
-msgid "Unable to find Android SDK platform-tools' adb command."
-msgstr "Android SDK platform-tools의 adb 명령을 찾을 수 없습니다."
-
-msgid "Please check in the Android SDK directory specified in Editor Settings."
-msgstr "편집기 설정에서 지정된 Android SDK 디렉터리를 확인해 주세요."
-
 msgid "Missing 'build-tools' directory!"
 msgstr "'build-tools' 디렉터리가 누락되어 있습니다!"
-
-msgid "Unable to find Android SDK build-tools' apksigner command."
-msgstr "Android SDK build-tools의 apksigner 명령을 찾을 수 없습니다."
-
-msgid "\"Use Gradle Build\" is required for transparent background on Android"
-msgstr "Android에서 투명 배경에 대해 \"Gradle 빌드 사용\"이 필요합니다"
 
 msgid ""
 "\"Target SDK\" %d is higher than the default version %d. This may work, but "
@@ -19237,13 +18939,6 @@ msgid ""
 msgstr ""
 "\"대상 SDK\"(%d)는 디폴트 버전(%d)보다 높아야 합니다. 이것은 동작하지만, 테스"
 "트되지 않았고 불안정할 수 있습니다."
-
-msgid ""
-"The \"%s\" renderer is designed for Desktop devices, and is not suitable for "
-"Android devices."
-msgstr ""
-"\"%s\" 렌더러는 데스크톱 기기용으로 설계되었고, Android 기기에 적합하지 않습니"
-"다."
 
 msgid ""
 "The project name does not meet the requirement for the package name format "
@@ -19271,22 +18966,6 @@ msgstr "릴리즈 키스토어를 찾을 수 없어, 내보낼 수 없었습니�
 msgid "Unable to sign apk."
 msgstr "apk를 서명할 수 없습니다."
 
-msgid ""
-"All 'apksigner' tools located in Android SDK 'build-tools' directory failed "
-"to execute. Please check that you have the correct version installed for your "
-"target sdk version. The resulting APK is unsigned."
-msgstr ""
-"Android SDK 'build-tools' 디렉터리에 있는 모든 'apksigner' 툴을 실행하는데 실"
-"패했습니다. 대상 SDK 버전에 맞는 버전이 설치되어 있는지 확인해 주세요. 결과 "
-"APK는 서명되지 않습니다."
-
-msgid ""
-"'apksigner' could not be found. Please check that the command is available in "
-"the Android SDK build-tools directory. The resulting APK is unsigned."
-msgstr ""
-"'apksigner'를 찾을 수 없었습니다. 명령이 Android SDK build-tools 디렉터리에서 "
-"사용 가능한지 확인해 주세요. 결과 APK는 서명되지 않습니다."
-
 msgid "Could not start apksigner executable."
 msgstr "apksigner 실행 파일을 시작할 수 없습니다."
 
@@ -19312,28 +18991,8 @@ msgstr "APK의 'apksigner' 검증에 실패했습니다."
 msgid "Could not create temporary file!"
 msgstr "임시 파일을 만들 수 없었습니다!"
 
-msgid "Exporting for Android"
-msgstr "Android로 내보내기"
-
-msgid "Invalid filename! Android App Bundle requires the *.aab extension."
-msgstr ""
-"잘못된 파일 이름입니다! Android App Bundle에는 * .aab 확장자가 필요합니다."
-
-msgid "APK Expansion not compatible with Android App Bundle."
-msgstr "APK 확장은 Android App Bundle과 호환되지 않습니다."
-
-msgid "Invalid filename! Android APK requires the *.apk extension."
-msgstr "잘못된 파일 이름입니다! Android APK는 *.apk 확장자가 필요합니다."
-
 msgid "Unsupported export format!"
 msgstr "지원되지 않는 내보내기 형식입니다!"
-
-msgid ""
-"Trying to build from a gradle built template, but no version info for it "
-"exists. Please reinstall from the 'Project' menu."
-msgstr ""
-"Gradle 빌드 템플릿으로 빌드하려 했으나, 버전 정보가 없습니다. '프로젝트' 메뉴"
-"에서 다시 설치해주세요."
 
 msgid ""
 "Java SDK path must be configured in Editor Settings at 'export/android/"
@@ -19341,13 +19000,6 @@ msgid ""
 msgstr ""
 "Java SDK 경로는 편집기 설정에 'export/android/java_sdk_path'에서 구성되어야 합"
 "니다."
-
-msgid ""
-"Android SDK path must be configured in Editor Settings at 'export/android/"
-"android_sdk_path'."
-msgstr ""
-"Android SDK 경로는 편집기 설정에 'export/android/android_sdk_path'에서 구성되"
-"어야 합니다."
 
 msgid "Unable to overwrite res/*.xml files with project name."
 msgstr "res/*.xml 파일을 프로젝트 이름으로 덮어쓸 수 없습니다."
@@ -19358,14 +19010,8 @@ msgstr "스파스 pck 메타데이터를 생성할 수 없었습니다!"
 msgid "Could not write PCK directory!"
 msgstr "PCK 디렉터리를 쓸 수 없었습니다!"
 
-msgid "Could not export project files to gradle project."
-msgstr "프로젝트 파일을 gradle 프로젝트로 내보낼 수 없었습니다."
-
 msgid "Could not write expansion package file!"
 msgstr "확장 패키지 파일을 쓸 수 없었습니다!"
-
-msgid "Building of Android project failed, check output for the error:"
-msgstr "Android 프로젝트의 빌드에 실패했습니다, 출력된 오류를 확인하세요:"
 
 msgid "Moving output"
 msgstr "출력 이동 중"
@@ -19405,9 +19051,6 @@ msgstr "APK를 정렬 중..."
 
 msgid "Could not unzip temporary unaligned APK."
 msgstr "임시 정렬되지 않은 APK의 압축을 풀 수 없었습니다."
-
-msgid "Metal renderer require iOS 14+."
-msgstr "Metal 렌더러는 iOS 14 이상이 필요합니다."
 
 msgid "Export Icons"
 msgstr "아이콘 내보내기"
@@ -20035,15 +19678,6 @@ msgstr ""
 "CanvasItemMaterial을 사용해야 합니다."
 
 msgid ""
-"Particle trails are only available when using the Forward+ or Mobile renderer."
-msgstr ""
-"입자 트레일은 Forward+ 또는 모바일 렌더러를 사용할 때만 사용 가능합니다."
-
-msgid ""
-"Particle sub-emitters are not available when using the Compatibility renderer."
-msgstr "입자 서브이미터는 호환성 렌더러를 사용할 때는 지원되지 않습니다."
-
-msgid ""
 "A texture with the shape of the light must be supplied to the \"Texture\" "
 "property."
 msgstr "조명의 모양이 있는 텍스처는 반드시 \"Texture\" 속성에 지정해야 합니다."
@@ -20311,9 +19945,6 @@ msgstr ""
 "CPUParticles3D 애니메이션을 사용하려면 Billboard Mode가 \"Particle "
 "Billboard\"로 설정된 StandardMaterial3D가 필요합니다."
 
-msgid "Decals are only available when using the Forward+ or Mobile renderer."
-msgstr "데칼은 Forward+ 또는 모바일 렌더러를 사용할 때만 사용 가능합니다."
-
 msgid ""
 "The decal has no textures loaded into any of its texture properties, and will "
 "therefore not be visible."
@@ -20411,13 +20042,6 @@ msgstr "빛의 크기는 실제로 보이는 빛의 크기에 영향을 미치�
 
 msgid "Projector texture only works with shadows active."
 msgstr "프로젝터 텍스처는 그림자가 활성 중에만 작동합니다."
-
-msgid ""
-"Projector textures are not supported when using the Compatibility renderer "
-"yet. Support will be added in a future release."
-msgstr ""
-"프로젝터 텍스처는 호환성 렌더러를 사용할 때는 아직 지원되지 않습니다. 지원이 "
-"향후 릴리스에서 추가될 예정입니다."
 
 msgid "A SpotLight3D with an angle wider than 90 degrees cannot cast shadows."
 msgstr "SpotLight3D의 각도를 90도보다 넓게 잡으면 그림자를 투영할 수 없습니다."
@@ -20825,13 +20449,6 @@ msgstr "디스턴스 필드 생성 중"
 msgid "Finishing Plot"
 msgstr "구분 마치는 중"
 
-msgid ""
-"VoxelGI nodes are not supported when using the Compatibility renderer yet. "
-"Support will be added in a future release."
-msgstr ""
-"VoxelGI 노드는 호환성 렌더러를 사용할 때는 아직 지원되지 않습니다. 지원이 향"
-"후 릴리스에서 추가될 예정입니다."
-
 msgid "VoxelGI nodes are not supported when using the Dummy renderer."
 msgstr "VoxelGI 노드는 더미 렌더러를 사용할 때는 지원되지 않습니다."
 
@@ -21199,13 +20816,6 @@ msgstr "셰이더에 대한 소스가 올바르지 않습니다."
 
 msgid "Invalid operator for that type."
 msgstr "해당 유형에 대한 연산자가 올바르지 않습니다."
-
-msgid ""
-"`%s` precision mode is not available for `gl_compatibility` profile.\n"
-"Reverted to `None` precision."
-msgstr ""
-"`%s` 정밀도 모드는 `gl_compatibility` 프로필에서 사용할 수 없습니다.\n"
-"`None` 정밀도로 되돌렸습니다."
 
 msgid "'%s' type is incompatible with '%s' source."
 msgstr "'%s' 유형은 '%s' 소스와 호환되지 않습니다."

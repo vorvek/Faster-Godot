@@ -294,7 +294,6 @@
 			[b]Note:[/b] Although this is a global setting, finer control of individual branches of the [SceneTree] is possible using [member Node.physics_interpolation_mode].
 		</member>
 		<member name="quit_on_go_back" type="bool" setter="set_quit_on_go_back" getter="is_quit_on_go_back" default="true">
-			If [code]true[/code], the application quits automatically when navigating back (e.g. using the system "Back" button on Android).
 			To handle 'Go Back' button when this option is disabled, use [constant DisplayServer.WINDOW_EVENT_GO_BACK_REQUEST].
 		</member>
 		<member name="root" type="Window" setter="" getter="get_root">

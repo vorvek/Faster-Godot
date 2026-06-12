@@ -765,7 +765,7 @@ uint32_t RenderSceneBuffersRD::get_depth_usage_bits(bool p_resolve, bool p_msaa,
 		if (p_storage) {
 			usage_bits |= RD::TEXTURE_USAGE_STORAGE_BIT;
 		} else if (RenderingDevice::get_singleton()->has_feature(RD::SUPPORTS_FRAMEBUFFER_DEPTH_RESOLVE)) {
-			// We're able to resolve depth in (sub)passes and we make use of this in our mobile renderer.
+			// We're able to resolve depth in (sub)passes and use this in raster render paths.
 			usage_bits |= RD::TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT;
 		}
 	} else {
@@ -792,7 +792,7 @@ uint32_t RenderSceneBuffersRD::get_vrs_usage_bits() {
 }
 
 float RenderSceneBuffersRD::get_luminance_multiplier() const {
-	// On mobile renderer when not using HDR2D we need to scale HDR values by two
+	// In low precision raster paths without HDR2D we need to scale HDR values by two.
 	// to fit 0-2 range color values into a UNORM buffer.
 	return (force_hdr || can_be_storage) ? 1.0 : 2.0;
 }

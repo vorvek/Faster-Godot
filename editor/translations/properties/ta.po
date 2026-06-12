@@ -206,14 +206,8 @@ msgstr "உட்பொதிக்கப்பட்ட துணை சிந�
 msgid "Frame Pacing"
 msgstr "பிரேம் வேகக்கட்டுப்பாடு"
 
-msgid "Android"
-msgstr "ஆண்ட்ராய்டு"
-
 msgid "Enable Frame Pacing"
 msgstr "பிரேம் வேகத்தை இயக்கவும்"
-
-msgid "Swappy Mode"
-msgstr "ச்வாப்பி பயன்முறை"
 
 msgid "Physics"
 msgstr "இயற்பியல்"
@@ -2847,9 +2841,6 @@ msgstr "இயல்புநிலை அனிமேசன் படி"
 msgid "Default FPS Mode"
 msgstr "இயல்புநிலை FPS பயன்முறை"
 
-msgid "Default FPS Compatibility"
-msgstr "இயல்புநிலை FPS பொருந்தக்கூடிய தன்மை"
-
 msgid "Autorename Animation Tracks"
 msgstr "தன்னியக்க பெயர் அனிமேசன் தடங்கள்"
 
@@ -2909,9 +2900,6 @@ msgstr "செவ்வக தனிப்பயன் நிலை"
 
 msgid "Screen"
 msgstr "திரை"
-
-msgid "Android Window"
-msgstr "ஆண்ட்ராய்டு சாளரம்"
 
 msgid "Game Embed Mode"
 msgstr "விளையாட்டு உட்பொதித்தல் பயன்முறை"
@@ -3144,9 +3132,6 @@ msgstr "D3D12 க்கு குறைவானது"
 msgid "Fallback to OpenGL 3"
 msgstr "ஓபன்சிஎல் 3 க்கு குறைவானது"
 
-msgid "GL Compatibility"
-msgstr "GL பொருந்தக்கூடிய தன்மை"
-
 msgid "Nvidia Disable Threaded Optimization"
 msgstr "என்விடியா திரிக்கப்பட்ட தேர்வுமுறையை முடக்கு"
 
@@ -3215,9 +3200,6 @@ msgstr "இடைமுகம் சைகை அடக்கவும்"
 
 msgid "XR"
 msgstr "எக்ச்ஆர்"
-
-msgid "OpenXR"
-msgstr "Openxr"
 
 msgid "Default Action Map"
 msgstr "இயல்புநிலை செயல் வரைபடம்"
@@ -4497,12 +4479,6 @@ msgstr "அடுத்தது"
 msgid "Layer Viewport"
 msgstr "அடுக்கு வியாபோர்ட்"
 
-msgid "Use Android Surface"
-msgstr "ஆண்ட்ராய்டு மேற்பரப்பைப் பயன்படுத்தவும்"
-
-msgid "Android Surface Size"
-msgstr "ஆண்ட்ராய்டு மேற்பரப்பு அளவு"
-
 msgid "Sort Order"
 msgstr "வரிசைப்படுத்தும் முறை"
 
@@ -4620,9 +4596,6 @@ msgstr "Igd எங்கள் addr"
 msgid "IGD Status"
 msgstr "IGD நிலை"
 
-msgid "WebRTC"
-msgstr "Webrtc"
-
 msgid "Max Channel in Buffer (KB)"
 msgstr "பஃப்பரில் அதிகபட்ச சேனல் (கேபி)"
 
@@ -4686,9 +4659,6 @@ msgstr "ஏற்றுமதி செய்யப்பட்ட APK ஐ ந�
 msgid "Java SDK Path"
 msgstr "சாவா எச்.டி.கே பாதை"
 
-msgid "Android SDK Path"
-msgstr "ஆண்ட்ராய்டு SDK பாதை"
-
 msgid "Force System User"
 msgstr "படை கணினி பயனர்"
 
@@ -4718,18 +4688,6 @@ msgstr "தகவமைப்பு பின்னணி 432 ஃச் 432"
 
 msgid "Adaptive Monochrome 432 X 432"
 msgstr "தகவமைப்பு மோனோக்ரோம் 432 ஃச் 432"
-
-msgid "Gradle Build"
-msgstr "கிரேடில் உருவாக்க"
-
-msgid "Use Gradle Build"
-msgstr "கிரேடில் கட்டமைப்பைப் பயன்படுத்தவும்"
-
-msgid "Gradle Build Directory"
-msgstr "கிரேடில் உருவாக்க கோப்பகம்"
-
-msgid "Android Source Template"
-msgstr "ஆண்ட்ராய்டு மூல வார்ப்புரு"
 
 msgid "Compress Native Libraries"
 msgstr "சொந்த நூலகங்களை சுருக்கவும்"
@@ -4781,9 +4739,6 @@ msgstr "நிறுவல் நீக்கம் குறித்த தர
 
 msgid "Exclude From Recents"
 msgstr "முன்னேற்றங்களிலிருந்து விலக்கு"
-
-msgid "Show in Android TV"
-msgstr "ஆண்ட்ராய்டு டிவியில் காண்பி"
 
 msgid "Show in App Library"
 msgstr "பயன்பாட்டு நூலகத்தில் காண்பி"
@@ -4857,14 +4812,8 @@ msgstr "அனுமதிகள்"
 msgid "Custom Permissions"
 msgstr "தனிப்பயன் அனுமதிகள்"
 
-msgid "iOS Deploy"
-msgstr "ஐஇமு வரிசைப்படுத்துதல்"
-
 msgid "Targeted Device Family"
 msgstr "இலக்கு சாதன குடும்பம்"
-
-msgid "Min iOS Version"
-msgstr "மணித்துளி ஐஇமு பதிப்பு"
 
 msgid "Storyboard"
 msgstr "ச்டோரிபோர்டு"
@@ -4919,15 +4868,6 @@ msgstr "ஐபாட் 167 ஃச் 167"
 
 msgid "iPad 152 X 152"
 msgstr "ஐபாட் 152 ஃச் 152"
-
-msgid "iOS 128 X 128"
-msgstr "ஐஇமு 128 ஃச் 128"
-
-msgid "iOS 192 X 192"
-msgstr "ஐஇமு 192 ஃச் 192"
-
-msgid "iOS 136 X 136"
-msgstr "ஐஇமு 136 ஃச் 136"
 
 msgid "App Store 1024 X 1024"
 msgstr "ஆப் கடை 1024 ஃச் 1024"
@@ -5234,9 +5174,6 @@ msgstr "படவுரு 180 ஃச் 180"
 
 msgid "Icon 512 X 512"
 msgstr "படவுரு 512 ஃச் 512"
-
-msgid "Emscripten Pool Size"
-msgstr "Mescripten பூல் அளவு"
 
 msgid "Godot Pool Size"
 msgstr "கோடோட் பூல் அளவு"

@@ -44,9 +44,7 @@
 #include "scene/gui/panel_container.h"
 
 void QuickSettingsDialog::_fetch_setting_values() {
-#ifndef ANDROID_ENABLED
 	editor_languages.clear();
-#endif
 	editor_styles.clear();
 	editor_themes.clear();
 	editor_scales.clear();
@@ -60,9 +58,7 @@ void QuickSettingsDialog::_fetch_setting_values() {
 
 		for (const PropertyInfo &pi : editor_settings_properties) {
 			if (pi.name == "interface/editor/editor_language") {
-#ifndef ANDROID_ENABLED
 				editor_languages = pi.hint_string.split(";", false);
-#endif
 			} else if (pi.name == "interface/theme/style") {
 				editor_styles = pi.hint_string.split(",");
 			} else if (pi.name == "interface/theme/color_preset") {
@@ -81,7 +77,6 @@ void QuickSettingsDialog::_fetch_setting_values() {
 }
 
 void QuickSettingsDialog::_update_current_values() {
-#ifndef ANDROID_ENABLED
 	// Language options.
 	{
 		const String current_lang = EDITOR_GET("interface/editor/editor_language");
@@ -95,7 +90,6 @@ void QuickSettingsDialog::_update_current_values() {
 			}
 		}
 	}
-#endif
 	// Style options.
 	{
 		const String current_style = EDITOR_GET("interface/theme/style");
@@ -192,12 +186,10 @@ void QuickSettingsDialog::_add_setting_control(const String &p_text, Control *p_
 	container->add_child(p_control);
 }
 
-#ifndef ANDROID_ENABLED
 void QuickSettingsDialog::_language_selected(int p_id) {
 	const String selected_language = language_option_button->get_item_metadata(p_id);
 	_set_setting_value("interface/editor/editor_language", selected_language);
 }
-#endif
 
 void QuickSettingsDialog::_style_selected(int p_id) {
 	const String selected_style = style_option_button->get_item_text(p_id);
@@ -273,9 +265,7 @@ void QuickSettingsDialog::_request_restart() {
 }
 
 void QuickSettingsDialog::update_size_limits(const Size2 &p_max_popup_size) {
-#ifndef ANDROID_ENABLED
 	language_option_button->get_popup()->set_max_size(p_max_popup_size);
-#endif
 }
 
 void QuickSettingsDialog::_notification(int p_what) {
@@ -317,7 +307,6 @@ QuickSettingsDialog::QuickSettingsDialog() {
 		settings_list = memnew(VBoxContainer);
 		settings_list_panel->add_child(settings_list);
 
-#ifndef ANDROID_ENABLED
 		// Language options.
 		{
 			language_option_button = memnew(OptionButton);
@@ -334,7 +323,6 @@ QuickSettingsDialog::QuickSettingsDialog() {
 
 			_add_setting_control(TTRC("Language"), language_option_button);
 		}
-#endif
 		// Style options.
 		{
 			style_option_button = memnew(OptionButton);

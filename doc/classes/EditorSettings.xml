@@ -941,7 +941,6 @@
 		<member name="interface/editor/collapse_main_menu" type="bool" setter="" getter="">
 			If [code]true[/code], the main menu collapses into a [MenuButton].
 			[b]Note:[/b] This setting is only applicable on macOS when [member interface/editor/use_embedded_menu] is [code]true[/code].
-			[b]Note:[/b] Defaults to [code]true[/code] on the Android editor.
 		</member>
 		<member name="interface/editor/custom_display_scale" type="float" setter="" getter="">
 			The custom editor scale factor to use. This can be used for displays with very high DPI where a scale factor of 200% is not sufficient.
@@ -1083,7 +1082,7 @@
 		<member name="interface/editor/vsync_mode" type="int" setter="" getter="">
 			Sets the V-Sync mode for the editor. Does not affect the project when run from the editor (this is controlled by [member ProjectSettings.display/window/vsync/vsync_mode]).
 			Depending on the platform and used renderer, the engine will fall back to [b]Enabled[/b] if the desired mode is not supported.
-			[b]Note:[/b] V-Sync modes other than [b]Enabled[/b] are only supported in the Forward+ and Mobile rendering methods, not Compatibility.
+			[b]Note:[/b] V-Sync modes other than [b]Enabled[/b] are supported in the Forward+ rendering method.
 		</member>
 		<member name="interface/editors/derive_script_globals_by_name" type="bool" setter="" getter="">
 			If [code]true[/code], when extending a script, the global class name of the script is inserted in the script creation dialog, if it exists. If [code]false[/code], the script's file path is always inserted.
@@ -1243,7 +1242,6 @@
 		</member>
 		<member name="interface/theme/use_system_accent_color" type="bool" setter="" getter="">
 			If [code]true[/code], set accent color based on system settings.
-			[b]Note:[/b] This setting is only effective on Windows, MacOS, and Android.
 		</member>
 		<member name="interface/touchscreen/enable_long_press_as_right_click" type="bool" setter="" getter="">
 			If [code]true[/code], long press on touchscreen is treated as right click.
@@ -1263,7 +1261,7 @@
 		</member>
 		<member name="interface/touchscreen/touch_actions_panel" type="int" setter="" getter="">
 			A touch-friendly panel that provides easy access to common actions such as save, delete, undo, and redo without requiring a keyboard.
-			[b]Note:[/b] Only available in the Android and XR editor.
+			[b]Note:[/b] Only available in editor builds that provide a touch action panel.
 		</member>
 		<member name="network/connection/check_for_updates" type="int" setter="" getter="">
 			Specifies how the engine should check for updates.
@@ -1299,7 +1297,7 @@
 			[b]Note:[/b] Only supported when using Mbed TLS 3.0 or later (Linux distribution packages may be compiled against older system Mbed TLS packages), otherwise the maximum supported TLS version is always TLSv1.2.
 		</member>
 		<member name="project_manager/default_renderer" type="String" setter="" getter="">
-			The renderer type that will be checked off by default when creating a new project. Accepted strings are "forward_plus", "mobile" or "gl_compatibility".
+			The renderer type that will be checked off by default when creating a new project. Accepted string is "forward_plus".
 		</member>
 		<member name="project_manager/directory_naming_convention" type="int" setter="" getter="">
 			Directory naming convention for the project manager. Options are "No Convention" (project name is directory name), "kebab-case" (default), "snake_case", "camelCase", "PascalCase", or "Title Case".
@@ -1329,13 +1327,6 @@
 		</member>
 		<member name="run/platforms/linuxbsd/prefer_wayland" type="bool" setter="" getter="">
 			If [code]true[/code], on Linux/BSD, the editor will check for Wayland first instead of X11 (if available).
-		</member>
-		<member name="run/window_placement/android_window" type="int" setter="" getter="">
-			Specifies how the Play window is launched relative to the Android editor.
-			- [b]Auto (based on screen size)[/b] (default) will automatically choose how to launch the Play window based on the device and screen metrics. Defaults to [b]Same as Editor[/b] on phones and [b]Side-by-side with Editor[/b] on tablets.
-			- [b]Same as Editor[/b] will launch the Play window in the same window as the Editor.
-			- [b]Side-by-side with Editor[/b] will launch the Play window side-by-side with the Editor window.
-			[b]Note:[/b] Only available in the Android editor.
 		</member>
 		<member name="run/window_placement/game_embed_mode" type="int" setter="" getter="">
 			Overrides game embedding setting for all newly opened projects. If enabled, game embedding settings are not saved.

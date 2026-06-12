@@ -69,7 +69,7 @@ Resolve::~Resolve() {
 }
 
 void Resolve::resolve_gi(RID p_source_depth, RID p_source_normal_roughness, RID p_source_voxel_gi, RID p_dest_depth, RID p_dest_normal_roughness, RID p_dest_voxel_gi, Vector2i p_screen_size, int p_samples) {
-	ERR_FAIL_COND_MSG(prefer_raster_effects, "Can't use the compute shader resolve with the mobile renderer.");
+	ERR_FAIL_COND_MSG(prefer_raster_effects, "Can't use the compute shader resolve when raster effects are preferred.");
 
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
@@ -113,7 +113,7 @@ void Resolve::resolve_gi(RID p_source_depth, RID p_source_normal_roughness, RID 
 }
 
 void Resolve::resolve_depth(RID p_source_depth, RID p_dest_depth, Vector2i p_screen_size, int p_samples) {
-	ERR_FAIL_COND_MSG(prefer_raster_effects, "Can't use the compute shader resolve with the mobile renderer.");
+	ERR_FAIL_COND_MSG(prefer_raster_effects, "Can't use the compute shader resolve when raster effects are preferred.");
 
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);

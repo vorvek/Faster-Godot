@@ -304,9 +304,6 @@ void ProjectManager::_update_theme(bool p_skip_creation) {
 			asset_library->add_theme_style_override(SceneStringName(panel), memnew(StyleBoxEmpty));
 		}
 	}
-#ifdef ANDROID_ENABLED
-	DisplayServer::get_singleton()->window_set_color(theme->get_color("background", EditorStringName(Editor)));
-#endif
 }
 
 Button *ProjectManager::_add_main_view(MainViewTab p_id, const String &p_name, const Ref<Texture2D> &p_icon, Control *p_view_control) {
@@ -369,7 +366,6 @@ void ProjectManager::_select_main_view(int p_id) {
 	main_view_toggle_map[current_main_view]->set_pressed_no_signal(true);
 	main_view_map[current_main_view]->set_visible(true);
 
-#ifndef ANDROID_ENABLED
 	if (current_main_view == MAIN_VIEW_PROJECTS && search_box->is_inside_tree()) {
 		// Automatically grab focus when the user moves from the Templates tab
 		// back to the Projects tab.
@@ -379,7 +375,6 @@ void ProjectManager::_select_main_view(int p_id) {
 
 	// The Templates tab's search field is focused on display in the asset
 	// library editor plugin code.
-#endif
 }
 
 void ProjectManager::_show_about() {
@@ -1738,7 +1733,7 @@ ProjectManager::ProjectManager() {
 		asset_library_filler->set_name("AssetLibraryTab");
 		Button *asset_library_toggle = _add_main_view(MAIN_VIEW_ASSETLIB, TTRC("Asset Library"), Ref<Texture2D>(), asset_library_filler);
 		asset_library_toggle->set_disabled(true);
-		asset_library_toggle->set_tooltip_text(TTRC("Asset Library not available (due to using Web editor, or because SSL support disabled)."));
+		asset_library_toggle->set_tooltip_text(TTRC("Asset Library not available because SSL support is disabled."));
 	}
 
 	// Footer bar.

@@ -263,14 +263,8 @@ msgstr "サブウィンドウを埋め込む"
 msgid "Frame Pacing"
 msgstr "フレームペーシング"
 
-msgid "Android"
-msgstr "Android"
-
 msgid "Enable Frame Pacing"
 msgstr "フレームペーシングを有効にする"
-
-msgid "Swappy Mode"
-msgstr "スワッピーモード"
 
 msgid "Physics"
 msgstr "物理"
@@ -2835,9 +2829,6 @@ msgstr "D3D12へフォールバックする"
 msgid "Fallback to OpenGL 3"
 msgstr "OpenGL 3 へフォールバックする"
 
-msgid "GL Compatibility"
-msgstr "GL互換"
-
 msgid "Nvidia Disable Threaded Optimization"
 msgstr "NVIDIAのスレッド最適化の無効化"
 
@@ -2900,9 +2891,6 @@ msgstr "UIジェスチャーを抑制する"
 
 msgid "XR"
 msgstr "XR"
-
-msgid "OpenXR"
-msgstr "OpenXR"
 
 msgid "Default Action Map"
 msgstr "デフォルトのアクションマップ"
@@ -3432,9 +3420,6 @@ msgstr "名前"
 msgid "Strings"
 msgstr "文字列"
 
-msgid "WebRTC"
-msgstr "WebRTC"
-
 msgid "Write Mode"
 msgstr "書き込みモード"
 
@@ -3459,9 +3444,6 @@ msgstr "可視性の状態"
 msgid "Java SDK Path"
 msgstr "Java SDKパス"
 
-msgid "Android SDK Path"
-msgstr "Android SDKパス"
-
 msgid "Launcher Icons"
 msgstr "ランチャーアイコン"
 
@@ -3476,15 +3458,6 @@ msgstr "適応的背景 (432x432)"
 
 msgid "Adaptive Monochrome 432 X 432"
 msgstr "適応的モノクロ (432x432)"
-
-msgid "Gradle Build"
-msgstr "Gradleビルド"
-
-msgid "Use Gradle Build"
-msgstr "Gradleビルドを使用"
-
-msgid "Gradle Build Directory"
-msgstr "Gradleビルドディレクトリ"
 
 msgid "Export Format"
 msgstr "エクスポート形式"
@@ -3581,15 +3554,6 @@ msgstr "iPad 167 x 167"
 
 msgid "iPad 152 X 152"
 msgstr "iPad 152 x 152"
-
-msgid "iOS 128 X 128"
-msgstr "iOS 128 x 128"
-
-msgid "iOS 192 X 192"
-msgstr "iOS 192 x 192"
-
-msgid "iOS 136 X 136"
-msgstr "iOS 136 x 136"
 
 msgid "App Store 1024 X 1024"
 msgstr "App Store 1024 x 1024"

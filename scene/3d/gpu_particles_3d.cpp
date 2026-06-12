@@ -422,13 +422,13 @@ PackedStringArray GPUParticles3D::get_configuration_warnings() const {
 		if ((dp_count || skin.is_valid()) && (missing_trails || no_materials)) {
 			warnings.push_back(RTR("Trails enabled, but one or more mesh materials are either missing or not set for trails rendering."));
 		}
-		if (OS::get_singleton()->get_current_rendering_method() == "gl_compatibility" || OS::get_singleton()->get_current_rendering_method() == "dummy") {
-			warnings.push_back(RTR("Particle trails are only available when using the Forward+ or Mobile renderer."));
+		if (OS::get_singleton()->get_current_rendering_method() == "dummy") {
+			warnings.push_back(RTR("Particle trails are not available when using the Dummy renderer."));
 		}
 	}
 
-	if (sub_emitter != NodePath() && (OS::get_singleton()->get_current_rendering_method() == "gl_compatibility" || OS::get_singleton()->get_current_rendering_method() == "dummy")) {
-		warnings.push_back(RTR("Particle sub-emitters are only available when using the Forward+ or Mobile renderer."));
+	if (sub_emitter != NodePath() && OS::get_singleton()->get_current_rendering_method() == "dummy") {
+		warnings.push_back(RTR("Particle sub-emitters are not available when using the Dummy renderer."));
 	}
 
 	return warnings;

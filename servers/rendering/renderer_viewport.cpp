@@ -137,13 +137,12 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 			const float EPSILON = 0.0001;
 			float scaling_3d_scale = p_viewport->scaling_3d_scale;
 			RS::ViewportScaling3DMode scaling_3d_mode = p_viewport->scaling_3d_mode;
-			// XeSS and MetalFX upscalers were removed from this fork. Coerce any project,
-			// script, or saved setting that still requests them to FSR2 so old projects keep
-			// working instead of selecting an unavailable mode.
+			// Coerce legacy scaler slots to FSR2 so old projects keep working
+			// instead of selecting unavailable modes.
 			if (scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_XESS ||
-					scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL ||
-					scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL) {
-				WARN_PRINT_ONCE("XeSS and MetalFX 3D scaling are no longer supported; using FSR2 instead.");
+					int(scaling_3d_mode) == 3 ||
+					int(scaling_3d_mode) == 4) {
+				WARN_PRINT_ONCE("Unsupported legacy 3D scaling mode requested; using FSR2 instead.");
 				scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_FSR2;
 			}
 			RS::ViewportScaling3DType scaling_type = RS::scaling_3d_mode_type(scaling_3d_mode);
@@ -151,23 +150,10 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 
 			if ((!upscaler_available || (scaling_type == RS::VIEWPORT_SCALING_3D_TYPE_SPATIAL)) && scaling_3d_scale >= (1.0 - EPSILON) && scaling_3d_scale <= (1.0 + EPSILON)) {
 				// No 3D scaling for spatial modes? Ignore scaling mode, this just introduces overhead.
-				// - Mobile can't perform optimal path
-				// - FSR does an extra pass (or 2 extra passes if 2D-MSAA is enabled)
-				// Scaling = 1.0 on FSR2 and MetalFX temporal has benefits
+				// FSR does an extra pass (or 2 extra passes if 2D-MSAA is enabled).
+				// Scaling = 1.0 on FSR2 has benefits.
 				scaling_3d_scale = 1.0;
 				scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_OFF;
-			}
-
-			if (scaling_3d_mode != RS::VIEWPORT_SCALING_3D_MODE_OFF && scaling_3d_mode != RS::VIEWPORT_SCALING_3D_MODE_BILINEAR && OS::get_singleton()->get_current_rendering_method() == "gl_compatibility") {
-				scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_BILINEAR;
-				scaling_type = RS::scaling_3d_mode_type(scaling_3d_mode);
-				WARN_PRINT_ONCE("MetalFX and FSR upscaling are not supported in the Compatibility renderer. Falling back to bilinear scaling.");
-			}
-
-			if ((scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_FSR || scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_FSR2) && OS::get_singleton()->get_current_rendering_method() == "mobile") {
-				scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_BILINEAR;
-				scaling_type = RS::scaling_3d_mode_type(scaling_3d_mode);
-				WARN_PRINT_ONCE("MetalFX temporal and FSR upscaling are not supported in the Mobile renderer. Falling back to bilinear scaling.");
 			}
 
 			RS::ViewportMSAA msaa_3d = p_viewport->msaa_3d;
@@ -178,7 +164,7 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 			bool use_taa = p_viewport->use_taa;
 
 			if (scaling_3d_is_advanced_upscaler && (scaling_3d_scale >= (1.0 + EPSILON))) {
-				// FSR and MetalFX is not designed for downsampling.
+				// FSR is not designed for downsampling.
 				// Fall back to bilinear scaling.
 				WARN_PRINT_ONCE("FSR 3D resolution scaling is not designed for downsampling. Falling back to bilinear 3D resolution scaling.");
 				scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_BILINEAR;
@@ -247,7 +233,6 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 			float jitter_scale = 1.0f;
 			if (scaling_type == RS::VIEWPORT_SCALING_3D_TYPE_TEMPORAL) {
 				// Implementation has been copied from ffxFsr2GetJitterPhaseCount.
-				// Also used for MetalFX Temporal scaling.
 				jitter_phase_count = uint32_t(8.0f * std::pow(float(target_width) / render_width, 2.0f));
 			} else if (use_taa) {
 				jitter_phase_count = CLAMP((int)p_viewport->taa_jitter_phase_count, 2, 64);
@@ -324,11 +309,6 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 		String rt_id = "vp_begin_" + itos(p_viewport->self.get_id());
 		RSG::utilities->capture_timestamp(rt_id);
 		timestamp_vp_map[rt_id] = p_viewport->self;
-	}
-
-	if (OS::get_singleton()->get_current_rendering_method() == "gl_compatibility") {
-		// This is currently needed for GLES to keep the current window being rendered to up to date
-		DisplayServer::get_singleton()->gl_window_make_current(p_viewport->viewport_to_screen);
 	}
 
 	/* Camera should always be BEFORE any other 3D */
@@ -1097,6 +1077,10 @@ void RendererViewport::viewport_set_use_xr(RID p_viewport, bool p_use_xr) {
 void RendererViewport::viewport_set_scaling_3d_mode(RID p_viewport, RS::ViewportScaling3DMode p_mode) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
+	if (int(p_mode) == 3 || int(p_mode) == 4) {
+		WARN_PRINT_ONCE("Unsupported legacy 3D scaling mode requested; using FSR2 instead.");
+		p_mode = RS::VIEWPORT_SCALING_3D_MODE_FSR2;
+	}
 #ifdef DEBUG_ENABLED
 	const String rendering_method = OS::get_singleton()->get_current_rendering_method();
 	if (rendering_method != "forward_plus") {
@@ -1619,11 +1603,6 @@ bool RendererViewport::viewport_is_using_hdr_2d(RID p_viewport) const {
 void RendererViewport::viewport_set_screen_space_aa(RID p_viewport, RS::ViewportScreenSpaceAA p_mode) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
-#ifdef DEBUG_ENABLED
-	if (OS::get_singleton()->get_current_rendering_method() == "gl_compatibility" && p_mode != RS::VIEWPORT_SCREEN_SPACE_AA_DISABLED) {
-		WARN_PRINT_ONCE_ED("Screen-space AA is only available when using the Forward+ or Mobile renderer.");
-	}
-#endif
 
 	if (viewport->screen_space_aa == p_mode) {
 		return;

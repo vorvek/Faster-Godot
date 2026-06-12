@@ -1824,20 +1824,6 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "Malgranda disponigo kun reta dosiersistemo"
 
-msgid ""
-"When this option is enabled, using one-click deploy for Android will only "
-"export an executable without the project data.\n"
-"The filesystem will be provided from the project by the editor over the "
-"network.\n"
-"On Android, deploying will use the USB cable for faster performance. This "
-"option speeds up testing for projects with large assets."
-msgstr ""
-"Kiam ĉi tiun agordon ŝaltus, uzado de unu-alklaka disponigo por Android nur "
-"eksportos komandodosieron sen la datumoj de projekto.\n"
-"La dosiersistemo proviziĝos el la projekto per la redaktilo per la reto.\n"
-"Per Android, disponigado uzos la USB-kablon por pli rapida rendimento. Ĉi tiu "
-"opcio rapidigas testadon por projektoj kun grandaj havaĵoj."
-
 msgid "Visible Collision Shapes"
 msgstr "Videblaj koliziaj formoj"
 
@@ -3121,21 +3107,6 @@ msgstr "%d pliaj dosieroj"
 msgid "Save & Restart"
 msgstr "Konservi kaj relanĉi"
 
-msgid ""
-"Changing the renderer requires restarting the editor.\n"
-"\n"
-"Choosing Save & Restart will change the renderer to:\n"
-"- Desktop platforms: %s\n"
-"- Mobile platforms: %s\n"
-"- Web platform: %s"
-msgstr ""
-"Ŝanĝi la bildigilon postulus restartigi la redaktilon.\n"
-"\n"
-"Elekti «Konservi kaj relanĉi» ŝanĝos la bildigilon al:\n"
-"- Komputilaj platformoj: %s\n"
-"- Poŝtelefonaj platformoj: %s\n"
-"- Enreta platformo: %s"
-
 msgid "Forward+"
 msgstr "Forward+"
 
@@ -3159,9 +3130,6 @@ msgstr "Krei/anstataŭigi versitenajn metadatenojn..."
 
 msgid "Version Control Settings..."
 msgstr "Versitenaj agordoj..."
-
-msgid "Install Android Build Template..."
-msgstr "Instali Androidan muntadan ŝablonon..."
 
 msgid "Tools"
 msgstr "Iloj"
@@ -3419,9 +3387,6 @@ msgstr "Enportas:"
 
 msgid "Official export templates aren't available for development builds."
 msgstr "Oficaj eksportaj ŝablonoj estas ne haveblaj por programistaj muntoj."
-
-msgid "Uncompressing Android Build Sources"
-msgstr "Malkompaktigas kompilajn fontkodojn por Android"
 
 msgid "Export Template Manager"
 msgstr "Mastrumilo de eksportaj ŝablonoj"
@@ -3927,17 +3892,11 @@ msgstr "Malpli potenca por malsimplaj scenoj."
 msgid "Fast rendering of simple scenes."
 msgstr "Rapida bildigo de simplaj scenoj."
 
-msgid "Supports desktop, mobile + web platforms."
-msgstr "Ludoj por komputiloj, poŝtelefonoj kaj foliumiloj."
-
 msgid "Least advanced 3D graphics."
 msgstr "Baza 3D-a grafikaĵaro."
 
 msgid "Intended for low-end/older devices."
 msgstr "Celata al malaltnivelaj aŭ malnovaj aparatoj."
-
-msgid "Uses OpenGL 3 backend (OpenGL 3.3/ES 3.0/WebGL2)."
-msgstr "Uzo de la subtavolo OpenGL 3 (OpenGL 3.3/ES 3.0/WebGL2)."
 
 msgid "Fastest rendering of simple scenes."
 msgstr "Plej rapida bildigo de simplaj scenoj."

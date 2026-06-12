@@ -189,18 +189,11 @@
 #include "servers/physics_3d/physics_server_3d.h"
 #endif // PHYSICS_3D_DISABLED
 
-#ifdef ANDROID_ENABLED
-#include "editor/gui/touch_actions_panel.h"
-#endif // ANDROID_ENABLED
-
 #include <cstdlib>
 
 EditorNode *EditorNode::singleton = nullptr;
 
 static const String EDITOR_NODE_CONFIG_SECTION = "EditorNode";
-
-static const String REMOVE_ANDROID_BUILD_TEMPLATE_MESSAGE = TTRC("The Android build template is already installed in this project and it won't be overwritten.\nRemove the \"%s\" directory manually before attempting this operation again.");
-static const String INSTALL_ANDROID_BUILD_TEMPLATE_MESSAGE = TTRC("This will set up your project for gradle Android builds by installing the source template to \"%s\".\nNote that in order to make gradle builds instead of using pre-built APKs, the \"Use Gradle Build\" option should be enabled in the Android export preset.");
 
 constexpr int LARGE_RESOURCE_WARNING_SIZE_THRESHOLD = 512'000; // 500 KB
 
@@ -713,9 +706,6 @@ void EditorNode::_update_theme(bool p_skip_creation) {
 	editor_dock_manager->update_tab_styles();
 	editor_dock_manager->update_docks_menu();
 	editor_dock_manager->set_tab_icon_max_width(theme->get_constant(SNAME("class_icon_size"), EditorStringName(Editor)));
-#ifdef ANDROID_ENABLED
-	DisplayServer::get_singleton()->window_set_color(theme->get_color(SNAME("background"), EditorStringName(Editor)));
-#endif
 }
 
 Ref<Texture2D> EditorNode::get_editor_theme_native_menu_icon(const StringName &p_name, bool p_global_menu, bool p_dark_mode) const {
@@ -899,13 +889,6 @@ void EditorNode::_notification(int p_what) {
 			get_tree()->get_root()->set_snap_2d_transforms_to_pixel(false);
 			get_tree()->get_root()->set_snap_2d_vertices_to_pixel(false);
 			get_tree()->set_auto_accept_quit(false);
-#ifdef ANDROID_ENABLED
-			get_tree()->set_quit_on_go_back(false);
-			bool is_fullscreen = EDITOR_DEF("_is_editor_fullscreen", false);
-			if (is_fullscreen) {
-				DisplayServer::get_singleton()->window_set_mode(DisplayServer::WINDOW_MODE_FULLSCREEN);
-			}
-#endif
 			get_tree()->get_root()->connect("files_dropped", callable_mp(this, &EditorNode::_dropped_files));
 
 			command_palette->register_shortcuts_as_command();
@@ -1126,11 +1109,6 @@ void EditorNode::_notification(int p_what) {
 				EditorHelpHighlighter::get_singleton()->reset_cache();
 			}
 #endif
-#ifdef ANDROID_ENABLED
-			if (EditorSettings::get_singleton()->check_changed_settings_in_group("interface/touchscreen/touch_actions_panel")) {
-				_touch_actions_panel_mode_changed();
-			}
-#endif
 		} break;
 	}
 }
@@ -1336,9 +1314,6 @@ void EditorNode::_fs_changed() {
 				} else { // Normal project export.
 					String config_error;
 					bool missing_templates;
-					if (export_defer.android_build_template) {
-						export_template_manager->install_android_template(export_preset);
-					}
 					if (!platform->can_export(export_preset, config_error, missing_templates, export_defer.debug)) {
 						ERR_PRINT(vformat("Cannot export project with preset \"%s\" due to configuration errors:\n%s", preset_name, config_error));
 						err = missing_templates ? ERR_FILE_NOT_FOUND : ERR_UNCONFIGURED;
@@ -3267,28 +3242,6 @@ void EditorNode::_edit_current(bool p_skip_foreign, bool p_skip_inspector_update
 	InspectorDock::get_singleton()->update(current_obj);
 }
 
-void EditorNode::_android_build_source_selected(const String &p_file) {
-	export_template_manager->install_android_template_from_file(p_file, android_export_preset);
-}
-
-void EditorNode::_android_export_preset_selected(int p_index) {
-	if (p_index >= 0) {
-		android_export_preset = EditorExport::get_singleton()->get_export_preset(choose_android_export_profile->get_item_id(p_index));
-	} else {
-		android_export_preset.unref();
-	}
-	install_android_build_template_message->set_text(vformat(TTR(INSTALL_ANDROID_BUILD_TEMPLATE_MESSAGE), export_template_manager->get_android_build_directory(android_export_preset)));
-}
-
-void EditorNode::_android_install_build_template() {
-	gradle_build_manage_templates->hide();
-	file_android_build_source->popup_centered_ratio();
-}
-
-void EditorNode::_android_explore_build_templates() {
-	OS::get_singleton()->shell_show_in_file_manager(ProjectSettings::get_singleton()->globalize_path(export_template_manager->get_android_build_directory(android_export_preset).get_base_dir()), true);
-}
-
 static String _get_unsaved_scene_dialog_text(String p_scene_filename, uint64_t p_started_timestamp) {
 	String unsaved_message;
 
@@ -3584,50 +3537,6 @@ void EditorNode::_menu_option_confirm(int p_option, bool p_confirmed) {
 			ScriptEditor::get_singleton()->open_find_in_files_dialog("");
 		} break;
 
-		case PROJECT_INSTALL_ANDROID_SOURCE: {
-			if (p_confirmed) {
-				if (export_template_manager->is_android_template_installed(android_export_preset)) {
-					remove_android_build_template->set_text(vformat(TTR(REMOVE_ANDROID_BUILD_TEMPLATE_MESSAGE), export_template_manager->get_android_build_directory(android_export_preset)));
-					remove_android_build_template->popup_centered();
-				} else if (!export_template_manager->can_install_android_template(android_export_preset)) {
-					gradle_build_manage_templates->popup_centered();
-				} else {
-					export_template_manager->install_android_template(android_export_preset);
-				}
-			} else {
-				bool has_custom_gradle_build = false;
-				choose_android_export_profile->clear();
-				for (int i = 0; i < EditorExport::get_singleton()->get_export_preset_count(); i++) {
-					Ref<EditorExportPreset> export_preset = EditorExport::get_singleton()->get_export_preset(i);
-					if (export_preset->get_platform()->get_class_name() == "EditorExportPlatformAndroid" && (bool)export_preset->get("gradle_build/use_gradle_build")) {
-						choose_android_export_profile->add_item(export_preset->get_name(), i);
-						String gradle_build_directory = export_preset->get("gradle_build/gradle_build_directory");
-						String android_source_template = export_preset->get("gradle_build/android_source_template");
-						if (!android_source_template.is_empty() || (gradle_build_directory != "" && gradle_build_directory != "res://android")) {
-							has_custom_gradle_build = true;
-						}
-					}
-				}
-				_android_export_preset_selected(choose_android_export_profile->get_item_count() >= 1 ? 0 : -1);
-
-				if (choose_android_export_profile->get_item_count() > 1 && has_custom_gradle_build) {
-					// If there's multiple options and at least one of them uses a custom gradle build then prompt the user to choose.
-					choose_android_export_profile->show();
-					install_android_build_template->popup_centered();
-				} else {
-					choose_android_export_profile->hide();
-
-					if (export_template_manager->is_android_template_installed(android_export_preset)) {
-						remove_android_build_template->set_text(vformat(TTR(REMOVE_ANDROID_BUILD_TEMPLATE_MESSAGE), export_template_manager->get_android_build_directory(android_export_preset)));
-						remove_android_build_template->popup_centered();
-					} else if (export_template_manager->can_install_android_template(android_export_preset)) {
-						install_android_build_template->popup_centered();
-					} else {
-						gradle_build_manage_templates->popup_centered();
-					}
-				}
-			}
-		} break;
 		case PROJECT_OPEN_USER_DATA_FOLDER: {
 			// Ensure_user_data_dir() to prevent the edge case: "Open User Data Folder" won't work after the project was renamed in ProjectSettingsEditor unless the project is saved.
 			OS::get_singleton()->ensure_user_data_dir();
@@ -3760,9 +3669,7 @@ void EditorNode::_menu_option_confirm(int p_option, bool p_confirmed) {
 			export_template_manager->popup_manager();
 		} break;
 		case EDITOR_CONFIGURE_FBX_IMPORTER: {
-#if !defined(ANDROID_ENABLED) && !defined(WEB_ENABLED)
 			fbx_importer_manager->show_dialog();
-#endif
 		} break;
 		case EDITOR_MANAGE_FEATURE_PROFILES: {
 			feature_profile_manager->popup_centered_clamped(Size2(900, 800) * EDSCALE, 0.8);
@@ -3771,17 +3678,9 @@ void EditorNode::_menu_option_confirm(int p_option, bool p_confirmed) {
 			DisplayServer::WindowMode mode = DisplayServer::get_singleton()->window_get_mode();
 			if (mode == DisplayServer::WINDOW_MODE_FULLSCREEN || mode == DisplayServer::WINDOW_MODE_EXCLUSIVE_FULLSCREEN) {
 				DisplayServer::get_singleton()->window_set_mode(prev_mode);
-#ifdef ANDROID_ENABLED
-				EditorSettings::get_singleton()->set("_is_editor_fullscreen", false);
-				EditorSettings::get_singleton()->save();
-#endif
 			} else {
 				prev_mode = mode;
 				DisplayServer::get_singleton()->window_set_mode(DisplayServer::WINDOW_MODE_FULLSCREEN);
-#ifdef ANDROID_ENABLED
-				EditorSettings::get_singleton()->set("_is_editor_fullscreen", true);
-				EditorSettings::get_singleton()->save();
-#endif
 			}
 		} break;
 		case EDITOR_TAKE_SCREENSHOT: {
@@ -5953,25 +5852,9 @@ String EditorNode::_get_system_info() const {
 	// Prettify
 	if (rendering_method == "forward_plus") {
 		rendering_method = "Forward+";
-	} else if (rendering_method == "mobile") {
-		rendering_method = "Mobile";
-	} else if (rendering_method == "gl_compatibility") {
-		rendering_method = "Compatibility";
 	}
 	if (driver_name == "vulkan") {
 		driver_name = "Vulkan";
-	} else if (driver_name == "opengl3_angle") {
-		driver_name = "OpenGL ES 3/ANGLE";
-	} else if (driver_name == "opengl3_es") {
-		driver_name = "OpenGL ES 3";
-	} else if (driver_name == "opengl3") {
-		if (OS::get_singleton()->get_gles_over_gl()) {
-			driver_name = "OpenGL 3";
-		} else {
-			driver_name = "OpenGL ES 3";
-		}
-	} else if (driver_name == "metal") {
-		driver_name = "Metal";
 	}
 
 	// Join info.
@@ -6111,12 +5994,11 @@ void EditorNode::_begin_first_scan() {
 	requested_first_scan = true;
 }
 
-Error EditorNode::export_preset(const String &p_preset, const String &p_path, bool p_debug, bool p_pack_only, bool p_android_build_template, bool p_patch, const Vector<String> &p_patches) {
+Error EditorNode::export_preset(const String &p_preset, const String &p_path, bool p_debug, bool p_pack_only, bool p_patch, const Vector<String> &p_patches) {
 	export_defer.preset = p_preset;
 	export_defer.path = p_path;
 	export_defer.debug = p_debug;
 	export_defer.pack_only = p_pack_only;
-	export_defer.android_build_template = p_android_build_template;
 	export_defer.patch = p_patch;
 	export_defer.patches = p_patches;
 	cmdline_mode = true;
@@ -7672,12 +7554,10 @@ void EditorNode::_renderer_selected(int p_index) {
 		video_restart_dialog->disconnect(SceneStringName(confirmed), callable_mp(this, &EditorNode::_set_renderer_name_save_and_restart));
 	}
 
-	const String mobile_rendering_method = rendering_method == "forward_plus" ? "mobile" : rendering_method;
-	const String web_rendering_method = "gl_compatibility";
 	video_restart_dialog->connect(SceneStringName(confirmed), callable_mp(this, &EditorNode::_set_renderer_name_save_and_restart).bind(rendering_method));
 	video_restart_dialog->set_text(
-			vformat(TTR("Changing the renderer requires restarting the editor.\n\nChoosing Save & Restart will change the renderer to:\n- Desktop platforms: %s\n- Mobile platforms: %s\n- Web platform: %s"),
-					_to_rendering_method_display_name(rendering_method), _to_rendering_method_display_name(mobile_rendering_method), _to_rendering_method_display_name(web_rendering_method)));
+			vformat(TTR("Changing the renderer requires restarting the editor.\n\nChoosing Save & Restart will change the renderer to: %s"),
+					_to_rendering_method_display_name(rendering_method)));
 	video_restart_dialog->popup_centered();
 
 	_update_renderer_color();
@@ -7687,27 +7567,11 @@ String EditorNode::_to_rendering_method_display_name(const String &p_rendering_m
 	if (p_rendering_method == "forward_plus") {
 		return TTR("Forward+");
 	}
-	if (p_rendering_method == "mobile") {
-		return TTR("Mobile");
-	}
-	if (p_rendering_method == "gl_compatibility") {
-		return TTR("Compatibility");
-	}
 	return p_rendering_method;
 }
 
 void EditorNode::_set_renderer_name_save_and_restart(const String &p_rendering_method) {
 	ProjectSettings::get_singleton()->set("rendering/renderer/rendering_method", p_rendering_method);
-
-	if (p_rendering_method == "mobile" || p_rendering_method == "gl_compatibility") {
-		// Also change the mobile override if changing to a compatible renderer.
-		// This prevents visual discrepancies between desktop and mobile platforms.
-		ProjectSettings::get_singleton()->set("rendering/renderer/rendering_method.mobile", p_rendering_method);
-	} else if (p_rendering_method == "forward_plus") {
-		// Use the equivalent mobile renderer. This prevents the renderer from staying
-		// on its old choice if moving from `gl_compatibility` to `forward_plus`.
-		ProjectSettings::get_singleton()->set("rendering/renderer/rendering_method.mobile", "mobile");
-	}
 
 	ProjectSettings::get_singleton()->save();
 
@@ -7956,10 +7820,7 @@ void EditorNode::_build_project_menu() {
 	project_menu->add_separator();
 	project_menu->add_shortcut(ED_GET_SHORTCUT("editor/export"), PROJECT_EXPORT);
 	project_menu->add_item(TTRC("Pack Project as ZIP..."), PROJECT_PACK_AS_ZIP);
-	project_menu->add_item(TTRC("Install Android Build Template..."), PROJECT_INSTALL_ANDROID_SOURCE);
-#ifndef ANDROID_ENABLED
 	project_menu->add_item(TTRC("Open User Data Folder"), PROJECT_OPEN_USER_DATA_FOLDER);
-#endif
 	project_menu->add_separator();
 
 	if (!tool_menu) {
@@ -8008,7 +7869,6 @@ void EditorNode::_build_settings_menu() {
 	settings_menu->add_shortcut(ED_GET_SHORTCUT("editor/fullscreen_mode"), EDITOR_TOGGLE_FULLSCREEN);
 	settings_menu->add_separator();
 
-#ifndef ANDROID_ENABLED
 	if (EditorPaths::get_singleton()->get_data_dir() == EditorPaths::get_singleton()->get_config_dir()) {
 		// Configuration and data folders are located in the same place.
 		settings_menu->add_item(TTRC("Open Editor Data/Settings Folder"), EDITOR_OPEN_DATA_FOLDER);
@@ -8018,13 +7878,10 @@ void EditorNode::_build_settings_menu() {
 		settings_menu->add_item(TTRC("Open Editor Settings Folder"), EDITOR_OPEN_CONFIG_FOLDER);
 	}
 	settings_menu->add_separator();
-#endif
 
 	settings_menu->add_item(TTRC("Manage Editor Features..."), EDITOR_MANAGE_FEATURE_PROFILES);
 	settings_menu->add_item(TTRC("Manage Export Templates..."), EDITOR_MANAGE_EXPORT_TEMPLATES);
-#if !defined(ANDROID_ENABLED) && !defined(WEB_ENABLED)
 	settings_menu->add_item(TTRC("Configure FBX Importer..."), EDITOR_CONFIGURE_FBX_IMPORTER);
-#endif
 }
 
 void EditorNode::_build_help_menu() {
@@ -8132,13 +7989,6 @@ void EditorNode::_update_main_menu_type() {
 			}
 		}
 
-#ifdef ANDROID_ENABLED
-		// Align main menu icon visually with TouchActionsPanel buttons.
-		menu_btn_spacer = memnew(Control);
-		menu_btn_spacer->set_custom_minimum_size(Vector2(8, 0) * EDSCALE);
-		title_bar->add_child(menu_btn_spacer);
-		title_bar->move_child(menu_btn_spacer, left_menu_spacer ? left_menu_spacer->get_index() + 1 : 0);
-#endif
 		title_bar->add_child(main_menu_button);
 		if (menu_btn_spacer == nullptr) {
 			title_bar->move_child(main_menu_button, left_menu_spacer ? left_menu_spacer->get_index() + 1 : 0);
@@ -8173,34 +8023,6 @@ void EditorNode::_update_main_menu_type() {
 void EditorNode::_bottom_panel_resized() {
 	bottom_panel->set_bottom_panel_offset(center_split->get_split_offset());
 }
-
-#ifdef ANDROID_ENABLED
-void EditorNode::_touch_actions_panel_mode_changed() {
-	int panel_mode = EDITOR_GET("interface/touchscreen/touch_actions_panel");
-	switch (panel_mode) {
-		case 1:
-			if (touch_actions_panel != nullptr) {
-				touch_actions_panel->queue_free();
-			}
-			touch_actions_panel = memnew(TouchActionsPanel);
-			main_hbox->call_deferred("add_child", touch_actions_panel);
-			break;
-		case 2:
-			if (touch_actions_panel != nullptr) {
-				touch_actions_panel->queue_free();
-			}
-			touch_actions_panel = memnew(TouchActionsPanel);
-			call_deferred("add_child", touch_actions_panel);
-			break;
-		case 0:
-			if (touch_actions_panel != nullptr) {
-				touch_actions_panel->queue_free();
-				touch_actions_panel = nullptr;
-			}
-			break;
-	}
-}
-#endif
 
 #ifdef MACOS_ENABLED
 extern "C" GameViewPluginBase *get_game_view_plugin();
@@ -8550,28 +8372,10 @@ EditorNode::EditorNode() {
 
 	main_vbox = memnew(VBoxContainer);
 
-#ifdef ANDROID_ENABLED
-	base_vbox = memnew(VBoxContainer);
-	base_vbox->set_anchors_and_offsets_preset(Control::PRESET_FULL_RECT, Control::PRESET_MODE_MINSIZE, theme->get_constant(SNAME("window_border_margin"), EditorStringName(Editor)));
-
-	title_bar = memnew(EditorTitleBar);
-	base_vbox->add_child(title_bar);
-
-	main_hbox = memnew(HBoxContainer);
-	main_hbox->add_child(main_vbox);
-	main_vbox->set_h_size_flags(Control::SIZE_EXPAND_FILL);
-	main_hbox->set_v_size_flags(Control::SIZE_EXPAND_FILL);
-	base_vbox->add_child(main_hbox);
-
-	_touch_actions_panel_mode_changed();
-
-	gui_base->add_child(base_vbox);
-#else
 	gui_base->add_child(main_vbox);
 
 	title_bar = memnew(EditorTitleBar);
 	main_vbox->add_child(title_bar);
-#endif
 
 	main_hsplit = memnew(DockSplitContainer);
 	main_hsplit->set_name("DockHSplitMain");
@@ -8746,10 +8550,8 @@ EditorNode::EditorNode() {
 	gui_base->add_child(about);
 	feature_profile_manager->connect("current_feature_profile_changed", callable_mp(this, &EditorNode::_feature_profile_changed));
 
-#if !defined(ANDROID_ENABLED) && !defined(WEB_ENABLED)
 	fbx_importer_manager = memnew(FBXImporterManager);
 	gui_base->add_child(fbx_importer_manager);
-#endif
 
 	warning = memnew(AcceptDialog);
 	warning->set_unparent_when_invisible(true);
@@ -8933,7 +8735,7 @@ EditorNode::EditorNode() {
 	renderer->set_focus_mode(Control::FOCUS_ACCESSIBILITY);
 	renderer->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
 	renderer->set_tooltip_auto_translate_mode(AUTO_TRANSLATE_MODE_ALWAYS);
-	renderer->set_tooltip_text(TTRC("Choose a renderer.\n\nNotes:\n- On mobile platforms, the Mobile renderer is used if Forward+ is selected here.\n- On the web platform, the Compatibility renderer is always used."));
+	renderer->set_tooltip_text(TTRC("Choose a renderer."));
 	renderer->set_accessibility_name(TTRC("Renderer"));
 
 	right_menu_hb->add_child(renderer);
@@ -9086,46 +8888,6 @@ EditorNode::EditorNode() {
 	save_confirmation->connect("canceled", callable_mp(this, &EditorNode::_cancel_close_scene_tab));
 	save_confirmation->connect("about_to_popup", callable_mp(this, &EditorNode::_prepare_save_confirmation_popup));
 
-	gradle_build_manage_templates = memnew(ConfirmationDialog);
-	gradle_build_manage_templates->set_text(TTR("Android build template is missing, please install relevant templates."));
-	gradle_build_manage_templates->set_ok_button_text(TTR("Manage Templates"));
-	gradle_build_manage_templates->add_button(TTR("Install from file"))->connect(SceneStringName(pressed), callable_mp(this, &EditorNode::_android_install_build_template));
-	gradle_build_manage_templates->connect(SceneStringName(confirmed), callable_mp(this, &EditorNode::_menu_option).bind(EDITOR_MANAGE_EXPORT_TEMPLATES));
-	gui_base->add_child(gradle_build_manage_templates);
-
-	file_android_build_source = memnew(EditorFileDialog);
-	file_android_build_source->set_title(TTR("Select Android sources file"));
-	file_android_build_source->set_access(EditorFileDialog::ACCESS_FILESYSTEM);
-	file_android_build_source->set_file_mode(EditorFileDialog::FILE_MODE_OPEN_FILE);
-	file_android_build_source->add_filter("*.zip");
-	file_android_build_source->connect("file_selected", callable_mp(this, &EditorNode::_android_build_source_selected));
-	gui_base->add_child(file_android_build_source);
-
-	{
-		VBoxContainer *vbox = memnew(VBoxContainer);
-		install_android_build_template_message = memnew(Label);
-		install_android_build_template_message->set_focus_mode(Control::FOCUS_ACCESSIBILITY);
-		install_android_build_template_message->set_autowrap_mode(TextServer::AUTOWRAP_WORD_SMART);
-		install_android_build_template_message->set_custom_minimum_size(Size2(300 * EDSCALE, 1));
-		vbox->add_child(install_android_build_template_message);
-
-		choose_android_export_profile = memnew(OptionButton);
-		choose_android_export_profile->connect(SceneStringName(item_selected), callable_mp(this, &EditorNode::_android_export_preset_selected));
-		vbox->add_child(choose_android_export_profile);
-
-		install_android_build_template = memnew(ConfirmationDialog);
-		install_android_build_template->set_ok_button_text(TTR("Install"));
-		install_android_build_template->connect(SceneStringName(confirmed), callable_mp(this, &EditorNode::_menu_confirm_current));
-		install_android_build_template->add_child(vbox);
-		install_android_build_template->set_min_size(Vector2(500.0 * EDSCALE, 0));
-		gui_base->add_child(install_android_build_template);
-	}
-
-	remove_android_build_template = memnew(ConfirmationDialog);
-	remove_android_build_template->set_ok_button_text(TTR("Show in File Manager"));
-	remove_android_build_template->connect(SceneStringName(confirmed), callable_mp(this, &EditorNode::_android_explore_build_templates));
-	gui_base->add_child(remove_android_build_template);
-
 	file_templates = memnew(EditorFileDialog);
 	file_templates->set_title(TTR("Import Templates From ZIP File"));
 
@@ -9217,7 +8979,7 @@ EditorNode::EditorNode() {
 	if (AssetLibraryEditorPlugin::is_available()) {
 		add_editor_plugin(memnew(AssetLibraryEditorPlugin));
 	} else {
-		print_verbose("Asset Library not available (due to using Web editor, or SSL support disabled).");
+		print_verbose("Asset Library not available because SSL support is disabled.");
 	}
 
 	// More visually meaningful to have this later.

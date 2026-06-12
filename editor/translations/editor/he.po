@@ -2454,9 +2454,6 @@ msgstr "פתיחה מהאחרונים"
 msgid "Version Control"
 msgstr "בקרת גירסאות"
 
-msgid "Install Android Build Template..."
-msgstr "התקנת תבנית בנייה לאנדרואיד..."
-
 msgid "Tools"
 msgstr "כלים"
 
@@ -2579,9 +2576,6 @@ msgstr "הסתרת מחוון העדכון"
 
 msgid "Don't Save"
 msgstr "לא לשמור"
-
-msgid "Android build template is missing, please install relevant templates."
-msgstr "חסרה תבנית בנייה לאנדרואיד, נא להתקין תבניות רלוונטיות."
 
 msgid "Manage Templates"
 msgstr "ניהול תבניות"
@@ -4260,19 +4254,11 @@ msgstr "יש להגדיר או ליצור משאב NavigationMesh כדי שצו�
 msgid "Pose"
 msgstr "פוזה"
 
-msgid "Building Android Project (gradle)"
-msgstr "בניית מיזם אנדרואיד (gradle)"
-
 msgid "Invalid public key for APK expansion."
 msgstr "מפתח ציבורי לא חוקי להרחבת APK."
 
 msgid "Invalid package name:"
 msgstr "שם חבילה לא חוקי:"
-
-msgid ""
-"Android build template not installed in the project. Install it from the "
-"Project menu."
-msgstr "תבנית בנייה לאנדרואיד לא מותקנת בפרוייקט. ההתקנה היא מתפריט המיזם."
 
 msgid "Debug keystore not configured in the Editor Settings nor in the preset."
 msgstr "מפתח לניפוי שגיאות לא נקבע בהגדרות העורך ולא בהגדרות הייצוא."

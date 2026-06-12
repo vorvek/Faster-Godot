@@ -126,7 +126,6 @@ if env["use_sowrap"]:
         [
             File("dynwrappers/wayland-cursor-so_wrap.c"),
             File("dynwrappers/wayland-client-core-so_wrap.c"),
-            File("dynwrappers/wayland-egl-core-so_wrap.c"),
         ]
     )
 
@@ -136,10 +135,5 @@ if env["use_sowrap"]:
 
 if env["vulkan"]:
     source_files.append(File("rendering_context_driver_vulkan_wayland.cpp"))
-
-if env["opengl3"]:
-    source_files.append(File("detect_prime_egl.cpp"))
-    source_files.append(File("egl_manager_wayland.cpp"))
-    source_files.append(File("egl_manager_wayland_gles.cpp"))
 
 Return("source_files")

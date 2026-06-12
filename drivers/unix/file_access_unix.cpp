@@ -38,7 +38,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#if !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__NetBSD__) && !defined(WEB_ENABLED)
+#if !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__NetBSD__)
 #include <sys/xattr.h>
 #endif
 #include <unistd.h>
@@ -377,15 +377,6 @@ uint64_t FileAccessUnix::_get_modified_time(const String &p_file) {
 		if ((st.st_mode & S_IFMT) == S_IFLNK || (st.st_mode & S_IFMT) == S_IFREG || (st.st_mode & S_IFDIR) == S_IFDIR) {
 			modified_time = st.st_mtime;
 		}
-#ifdef ANDROID_ENABLED
-		// Workaround for GH-101007
-		//FIXME: After saving, all timestamps (st_mtime, st_ctime, st_atime) are set to the same value.
-		// After exporting or after some time, only 'modified_time' resets to a past timestamp.
-		uint64_t created_time = st.st_ctime;
-		if (modified_time < created_time) {
-			modified_time = created_time;
-		}
-#endif
 		return modified_time;
 	} else {
 		return 0;
@@ -514,7 +505,7 @@ PackedByteArray FileAccessUnix::_get_extended_attribute(const String &p_file, co
 
 	String file = fix_path(p_file);
 	PackedByteArray data;
-#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(WEB_ENABLED)
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
 	// Not supported.
 #elif defined(__APPLE__)
 	CharString attr_name = p_attribute_name.utf8();
@@ -544,7 +535,7 @@ Error FileAccessUnix::_set_extended_attribute(const String &p_file, const String
 	ERR_FAIL_COND_V(p_attribute_name.is_empty(), FAILED);
 
 	String file = fix_path(p_file);
-#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(WEB_ENABLED)
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
 	// Not supported.
 #elif defined(__APPLE__)
 	int err = setxattr(file.utf8().get_data(), p_attribute_name.utf8().get_data(), (const void *)p_data.ptr(), p_data.size(), 0, 0);
@@ -564,7 +555,7 @@ Error FileAccessUnix::_remove_extended_attribute(const String &p_file, const Str
 	ERR_FAIL_COND_V(p_attribute_name.is_empty(), FAILED);
 
 	String file = fix_path(p_file);
-#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(WEB_ENABLED)
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
 	// Not supported.
 #elif defined(__APPLE__)
 	int err = removexattr(file.utf8().get_data(), p_attribute_name.utf8().get_data(), 0);
@@ -583,7 +574,7 @@ Error FileAccessUnix::_remove_extended_attribute(const String &p_file, const Str
 PackedStringArray FileAccessUnix::_get_extended_attributes_list(const String &p_file) {
 	PackedStringArray ret;
 	String file = fix_path(p_file);
-#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(WEB_ENABLED)
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
 	// Not supported.
 #elif defined(__APPLE__)
 	size_t size = listxattr(file.utf8().get_data(), nullptr, 0, 0);

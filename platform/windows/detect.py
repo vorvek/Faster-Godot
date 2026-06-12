@@ -216,7 +216,6 @@ def get_opts():
         BoolVariable("debug_crt", "Compile with MSVC's debug CRT (/MDd)", False),
         BoolVariable("incremental_link", "Use MSVC incremental linking. May increase or decrease build times.", False),
         BoolVariable("silence_msvc", "Silence MSVC's cl/link stdout bloat, redirecting any errors to stderr.", True),
-        ("angle_libs", "Path to the ANGLE static libraries", ""),
     ]
 
 
@@ -445,19 +444,6 @@ def configure_msvc(env: "SConsEnvironment"):
 
     if env["sdl"]:
         env.Append(CPPDEFINES=["SDL_ENABLED"])
-
-    if env["opengl3"]:
-        env.AppendUnique(CPPDEFINES=["GLES3_ENABLED"])
-        if env["angle_libs"] != "":
-            env.AppendUnique(CPPDEFINES=["EGL_STATIC"])
-            env.Append(LIBPATH=[env["angle_libs"]])
-            LIBS += [
-                "libANGLE.windows." + env["arch"] + prebuilt_lib_extra_suffix,
-                "libEGL.windows." + env["arch"] + prebuilt_lib_extra_suffix,
-                "libGLES.windows." + env["arch"] + prebuilt_lib_extra_suffix,
-            ]
-            LIBS += ["dxgi", "d3d9", "d3d11"]
-        env.Prepend(CPPPATH=["#thirdparty/angle/include"])
 
     if env["target"] in ["editor", "template_debug"]:
         LIBS += ["psapi", "dbghelp"]
@@ -828,21 +814,6 @@ def configure_mingw(env: "SConsEnvironment"):
 
     if env["sdl"]:
         env.Append(CPPDEFINES=["SDL_ENABLED"])
-
-    if env["opengl3"]:
-        env.Append(CPPDEFINES=["GLES3_ENABLED"])
-        if env["angle_libs"] != "":
-            env.AppendUnique(CPPDEFINES=["EGL_STATIC"])
-            env.Append(LIBPATH=[env["angle_libs"]])
-            env.Append(
-                LIBS=[
-                    "EGL.windows." + env["arch"],
-                    "GLES.windows." + env["arch"],
-                    "ANGLE.windows." + env["arch"],
-                ]
-            )
-            env.Append(LIBS=["dxgi", "d3d9", "d3d11"])
-        env.Prepend(CPPPATH=["#thirdparty/angle/include"])
 
     env.Append(CPPDEFINES=["MINGW_ENABLED", ("MINGW_HAS_SECURE_API", 1)])
 

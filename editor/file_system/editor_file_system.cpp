@@ -1079,24 +1079,6 @@ void EditorFileSystem::scan() {
 	// to be loaded to continue the scan and reimportations.
 	if (first_scan) {
 		_first_scan_filesystem();
-#ifdef ANDROID_ENABLED
-		// Create a .nomedia file to hide assets from media apps on Android.
-		// Android 11 has some issues with nomedia files, so it's disabled there. See GH-106479 and GH-105399 for details.
-		// NOTE: Nomedia file is also handled in project manager. See project_dialog.cpp ->  ProjectDialog::ok_pressed().
-		String sdk_version = OS::get_singleton()->get_version().get_slicec('.', 0);
-		if (sdk_version != "30") {
-			const String nomedia_file_path = ProjectSettings::get_singleton()->get_resource_path().path_join(".nomedia");
-			if (!FileAccess::exists(nomedia_file_path)) {
-				Ref<FileAccess> f = FileAccess::open(nomedia_file_path, FileAccess::WRITE);
-				if (f.is_null()) {
-					// .nomedia isn't so critical.
-					ERR_PRINT("Couldn't create .nomedia in project path.");
-				} else {
-					f->close();
-				}
-			}
-		}
-#endif
 	}
 
 	_update_extensions();
@@ -3294,12 +3276,7 @@ void EditorFileSystem::reimport_files(const Vector<String> &p_files) {
 	// Emit the resource_reimporting signal for the single file before the actual importation.
 	emit_signal(SNAME("resources_reimporting"), reloads);
 
-#ifdef WEB_ENABLED
-	// On web, busy-wait loops on the main thread block the JavaScript event loop,
-	// causing the browser tab to appear frozen. Disable threaded imports entirely.
-	// See GH-112072 for details.
-	bool use_multiple_threads = false;
-#elif defined(THREADS_ENABLED)
+#if defined(THREADS_ENABLED)
 	bool use_multiple_threads = GLOBAL_GET("editor/import/use_multiple_threads");
 #else
 	bool use_multiple_threads = false;
@@ -3764,9 +3741,7 @@ void EditorFileSystem::remove_import_format_support_query(Ref<EditorFileSystemIm
 }
 
 EditorFileSystem::EditorFileSystem() {
-#if defined(THREADS_ENABLED) && !defined(WEB_ENABLED)
-	// On web, threaded scanning blocks the browser's event loop, causing freezes.
-	// See GH-112072 for details.
+#if defined(THREADS_ENABLED)
 	use_threads = true;
 #endif
 

@@ -3256,11 +3256,11 @@ void Node3DEditorViewport::_notification(int p_what) {
 					case SupportedRenderingMethods::ALL:
 						break;
 					case SupportedRenderingMethods::FORWARD_PLUS_MOBILE:
-						disabled = OS::get_singleton()->get_current_rendering_method() == "gl_compatibility";
-						disabled_tooltip = TTR("This debug draw mode is only supported when using the Forward+ or Mobile renderer.");
+						disabled = false;
+						disabled_tooltip = TTR("This debug draw mode is only supported when using the Forward+ renderer.");
 						break;
 					case SupportedRenderingMethods::FORWARD_PLUS:
-						disabled = OS::get_singleton()->get_current_rendering_method() == "gl_compatibility" || OS::get_singleton()->get_current_rendering_method() == "mobile";
+						disabled = false;
 						disabled_tooltip = TTR("This debug draw mode is only supported when using the Forward+ renderer.");
 						break;
 				}
@@ -9526,7 +9526,7 @@ void Node3DEditor::_load_default_preview_settings() {
 	environ_sky_color->set_pick_color(Color(0.385, 0.454, 0.55));
 	environ_ground_color->set_pick_color(Color(0.2, 0.169, 0.133));
 	environ_energy->set_value_no_signal(1.0);
-	if (OS::get_singleton()->get_current_rendering_method() != "gl_compatibility" && OS::get_singleton()->get_current_rendering_method() != "dummy") {
+	if (OS::get_singleton()->get_current_rendering_method() != "dummy") {
 		environ_glow_button->set_pressed_no_signal(true);
 	}
 	environ_tonemap_button->set_pressed_no_signal(true);

@@ -300,8 +300,7 @@ void main() {
 
 #endif // DISABLE_FOG
 
-	// For mobile renderer we're multiplying by 0.5 as we're using a UNORM buffer.
-	// For both mobile and clustered, we also bake in the exposure value for the environment and camera.
+	// For UNORM buffers, multiply by 0.5. Also bake in the exposure value for the environment and camera.
 	frag_color.rgb = frag_color.rgb * params.luminance_multiplier;
 
 	// Blending is disabled for Sky, so alpha doesn't blend.

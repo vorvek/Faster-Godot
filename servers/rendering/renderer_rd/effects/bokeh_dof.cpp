@@ -89,7 +89,7 @@ BokehDOF::~BokehDOF() {
 }
 
 void BokehDOF::bokeh_dof_compute(const BokehBuffers &p_buffers, RID p_camera_attributes, float p_cam_znear, float p_cam_zfar, bool p_cam_orthogonal) {
-	ERR_FAIL_COND_MSG(prefer_raster_effects, "Can't use compute version of bokeh depth of field with the mobile renderer.");
+	ERR_FAIL_COND_MSG(prefer_raster_effects, "Can't use compute version of bokeh depth of field when raster effects are preferred.");
 
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);

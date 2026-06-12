@@ -247,14 +247,8 @@ msgstr "Inbeddade underfönster"
 msgid "Frame Pacing"
 msgstr "Bildrutetakt"
 
-msgid "Android"
-msgstr "Android"
-
 msgid "Enable Frame Pacing"
 msgstr "Aktivera bildrutetakt"
-
-msgid "Swappy Mode"
-msgstr "Swappy‑läge"
 
 msgid "Physics"
 msgstr "Fysik"
@@ -3005,9 +2999,6 @@ msgstr "Standardanimationssteg"
 msgid "Default FPS Mode"
 msgstr "Standard‑FPS‑läge"
 
-msgid "Default FPS Compatibility"
-msgstr "Standard‑FPS‑kompatibilitet"
-
 msgid "Autorename Animation Tracks"
 msgstr "Byt namn på animationsspår automatiskt"
 
@@ -3070,9 +3061,6 @@ msgstr "Anpassad Rect-position"
 
 msgid "Screen"
 msgstr "Skärm"
-
-msgid "Android Window"
-msgstr "Android-fönster"
 
 msgid "Game Embed Mode"
 msgstr "Inbäddat spelläge"
@@ -3305,9 +3293,6 @@ msgstr "Falla tillbaka på D3D12"
 msgid "Fallback to OpenGL 3"
 msgstr "Falla tillbaka på OpenGL 3"
 
-msgid "GL Compatibility"
-msgstr "GL‑kompatibilitet"
-
 msgid "Nvidia Disable Threaded Optimization"
 msgstr "Inaktivera Nvidia trådad optimering"
 
@@ -3376,9 +3361,6 @@ msgstr "Undertryck UI‑gest"
 
 msgid "XR"
 msgstr "XR"
-
-msgid "OpenXR"
-msgstr "OpenXR"
 
 msgid "Target API Version"
 msgstr "Målversion för API"
@@ -4730,14 +4712,8 @@ msgstr "Nästa"
 msgid "Layer Viewport"
 msgstr "Lager‑vyport"
 
-msgid "Use Android Surface"
-msgstr "Använd Android‑yta"
-
 msgid "Protected Content"
 msgstr "Skyddat innehåll"
-
-msgid "Android Surface Size"
-msgstr "Android‑ytans storlek"
 
 msgid "Sort Order"
 msgstr "Sorteringsordning"
@@ -4856,9 +4832,6 @@ msgstr "IGD vår adress"
 msgid "IGD Status"
 msgstr "IGD‑status"
 
-msgid "WebRTC"
-msgstr "WebRTC"
-
 msgid "Max Channel in Buffer (KB)"
 msgstr "Max kanal i buffert (KB)"
 
@@ -4922,9 +4895,6 @@ msgstr "Installera exporterad APK"
 msgid "Java SDK Path"
 msgstr "Sökväg till Java SDK"
 
-msgid "Android SDK Path"
-msgstr "Sökväg till Android SDK"
-
 msgid "scrcpy"
 msgstr "scrcpy"
 
@@ -4969,18 +4939,6 @@ msgstr "Adaptiv bakgrund 432 X 432"
 
 msgid "Adaptive Monochrome 432 X 432"
 msgstr "Adaptiv monokrom 432 X 432"
-
-msgid "Gradle Build"
-msgstr "Gradle‑bygge"
-
-msgid "Use Gradle Build"
-msgstr "Använd Gradle‑bygge"
-
-msgid "Gradle Build Directory"
-msgstr "Gradle‑byggkatalog"
-
-msgid "Android Source Template"
-msgstr "Android‑källmall"
 
 msgid "Compress Native Libraries"
 msgstr "Komprimera inbyggda bibliotek"
@@ -5032,9 +4990,6 @@ msgstr "Behåll data vid avinstallation"
 
 msgid "Exclude From Recents"
 msgstr "Uteslut från senaste"
-
-msgid "Show in Android TV"
-msgstr "Visa i Android TV"
 
 msgid "Show in App Library"
 msgstr "Visa i appbiblioteket"
@@ -5108,14 +5063,8 @@ msgstr "Rättigheter"
 msgid "Custom Permissions"
 msgstr "Anpassade rättigheter"
 
-msgid "iOS Deploy"
-msgstr "iOS‑distribution"
-
 msgid "Targeted Device Family"
 msgstr "Målenhetstyp"
-
-msgid "Min iOS Version"
-msgstr "Minimal iOS‑version"
 
 msgid "Storyboard"
 msgstr "Storyboard"
@@ -5170,15 +5119,6 @@ msgstr "iPad 167 X 167"
 
 msgid "iPad 152 X 152"
 msgstr "iPad 152 X 152"
-
-msgid "iOS 128 X 128"
-msgstr "iOS 128 X 128"
-
-msgid "iOS 192 X 192"
-msgstr "iOS 192 X 192"
-
-msgid "iOS 136 X 136"
-msgstr "iOS 136 X 136"
 
 msgid "App Store 1024 X 1024"
 msgstr "App Store 1024 X 1024"
@@ -5491,9 +5431,6 @@ msgstr "Ikon 180 X 180"
 
 msgid "Icon 512 X 512"
 msgstr "Ikon 512 X 512"
-
-msgid "Emscripten Pool Size"
-msgstr "Emscripten‑poolstorlek"
 
 msgid "Godot Pool Size"
 msgstr "Godot‑poolstorlek"

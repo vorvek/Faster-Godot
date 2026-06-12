@@ -27,26 +27,12 @@ namespace Godot.NativeInterop
                 {
                     return _internalHandle;
                 }
-                else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-                {
-                    return MacOS.dlopen(IntPtr.Zero, MacOS.RTLD_LAZY);
-                }
             }
 
             return IntPtr.Zero;
         }
 
         // ReSharper disable InconsistentNaming
-        private static class MacOS
-        {
-            private const string SystemLibrary = "/usr/lib/libSystem.dylib";
-
-            public const int RTLD_LAZY = 1;
-
-            [DllImport(SystemLibrary)]
-            public static extern IntPtr dlopen(IntPtr path, int mode);
-        }
-
         private static class Win32
         {
             private const string SystemLibrary = "Kernel32.dll";

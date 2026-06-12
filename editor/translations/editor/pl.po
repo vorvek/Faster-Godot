@@ -2879,20 +2879,6 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "Małe wdrożenie z sieciowym systemem plików"
 
-msgid ""
-"When this option is enabled, using one-click deploy for Android will only "
-"export an executable without the project data.\n"
-"The filesystem will be provided from the project by the editor over the "
-"network.\n"
-"On Android, deploying will use the USB cable for faster performance. This "
-"option speeds up testing for projects with large assets."
-msgstr ""
-"Gdy ta opcja jest zaznaczona, szybkie wdrożenie na Androida eksportuje tylko "
-"plik wykonywalny bez danych projektu.\n"
-"System plików będzie udostępniony z projektu przez edytor poprzez sieć.\n"
-"Na Androidzie, wdrożenie użyje kabla USB dla szybszej wydajności. Opcja ta "
-"znacznie przyspiesza testowanie dużych gier."
-
 msgid "Visible Collision Shapes"
 msgstr "Widoczne kształty kolizji"
 
@@ -4925,27 +4911,6 @@ msgstr "Wiadomości edytora"
 msgid "Toggle visibility of editor messages."
 msgstr "Przełącz widoczność wiadomości edytora."
 
-msgid ""
-"The Android build template is already installed in this project and it won't "
-"be overwritten.\n"
-"Remove the \"%s\" directory manually before attempting this operation again."
-msgstr ""
-"Szablon budowania Androida jest już zainstalowany w tym projekcie i nie "
-"zostanie nadpisany.\n"
-"Usuń ręcznie folder \"%s\" przed ponowną próbą wykonania tej operacji."
-
-msgid ""
-"This will set up your project for gradle Android builds by installing the "
-"source template to \"%s\".\n"
-"Note that in order to make gradle builds instead of using pre-built APKs, the "
-"\"Use Gradle Build\" option should be enabled in the Android export preset."
-msgstr ""
-"To przygotuje twój projekt do kompilacji Androida z Gradle poprzez "
-"zainstalowanie szablonu źródła w \"%s\".\n"
-"Pamiętaj, że aby zrobić kompilację Gradle zamiast użycia przygotowanego APK, "
-"opcja \"Użyj kompilacji Gradle\" musi być włączona w profilu eksportu "
-"Androida."
-
 msgid "Unnamed Project"
 msgstr "Projekt bez nazwy"
 
@@ -5523,21 +5488,6 @@ msgstr "Przeładowywanie zakończone."
 msgid "Save & Restart"
 msgstr "Zapisz i zrestartuj"
 
-msgid ""
-"Changing the renderer requires restarting the editor.\n"
-"\n"
-"Choosing Save & Restart will change the renderer to:\n"
-"- Desktop platforms: %s\n"
-"- Mobile platforms: %s\n"
-"- Web platform: %s"
-msgstr ""
-"Zmiana metody renderowania wymaga restartu edytora.\n"
-"\n"
-"Wybranie Zapisz i zrestartuj zmieni metodę renderowania na:\n"
-"- Platformy desktopowe: %s\n"
-"- Platformy mobilne: %s\n"
-"- Platforma sieciowa: %s"
-
 msgid "Forward+"
 msgstr "Forward+"
 
@@ -5564,9 +5514,6 @@ msgstr "Ustawienia kontroli wersji..."
 
 msgid "Pack Project as ZIP..."
 msgstr "Spakuj projekt jako ZIP..."
-
-msgid "Install Android Build Template..."
-msgstr "Zainstaluj szablon eksportu dla Androida..."
 
 msgid "Open User Data Folder"
 msgstr "Otwórz folder danych użytkownika"
@@ -5782,22 +5729,6 @@ msgstr "Otwórz poprzedni edytor"
 msgid "Project"
 msgstr "Projekt"
 
-msgid ""
-"Choose a renderer.\n"
-"\n"
-"Notes:\n"
-"- On mobile platforms, the Mobile renderer is used if Forward+ is selected "
-"here.\n"
-"- On the web platform, the Compatibility renderer is always used."
-msgstr ""
-"Wybierz metodę renderowania.\n"
-"\n"
-"Uwagi:\n"
-"- Na platformach mobilnych, metoda renderowania Mobilny jest używana jeśli "
-"wybrano tu Forward+.\n"
-"- Na platformie sieciowej, zawsze używana jest metoda renderowania "
-"Kompatybilny."
-
 msgid "Renderer"
 msgstr "Metoda renderowania"
 
@@ -5816,17 +5747,11 @@ msgstr "Ukryj wiatraczek aktualizacji"
 msgid "Don't Save"
 msgstr "Nie zapisuj"
 
-msgid "Android build template is missing, please install relevant templates."
-msgstr "Brakuje szablonu budowania Androida, zainstaluj odpowiednie szablony."
-
 msgid "Manage Templates"
 msgstr "Zarządzaj szablonami"
 
 msgid "Install from file"
 msgstr "Zainstaluj z pliku"
-
-msgid "Select Android sources file"
-msgstr "Wybierz plik źródeł Androida"
 
 msgid "Import Templates From ZIP File"
 msgstr "Zaimportuj Szablony z pliku ZIP"
@@ -6042,9 +5967,6 @@ msgstr ""
 "Powinien być wybrany przynajmniej jeden powód dostępu w czasie uruchamiania "
 "systemu."
 
-msgid "\"Shader Baker\" doesn't work with the Compatibility renderer."
-msgstr "\"Wypalacz shaderów\" nie działa z rendererem Kompatybilnym."
-
 msgid ""
 "The editor is currently using a different renderer than what the target "
 "platform will use. \"Shader Baker\" won't be able to include core shaders. "
@@ -6180,9 +6102,6 @@ msgstr "Znak \"%s\" nie jest dozwolony w identyfikatorze."
 msgid "Running on %s"
 msgstr "Uruchamiam na %s"
 
-msgid "Could not start ios-deploy executable."
-msgstr "Nie udało się uruchomić pliku wykonywalnego ios-deploy."
-
 msgid "Installation/running failed, see editor log for details."
 msgstr ""
 "Instalacja/uruchomienie nie powiodło się, zobacz dziennik (log) edytora po "
@@ -6197,11 +6116,6 @@ msgid "Running failed, see editor log for details."
 msgstr ""
 "Uruchamianie nie powiodło się, zobacz dziennik (log) edytora po więcej "
 "szczegółów."
-
-msgid "\"Shader Baker\" is not supported when using the Compatibility renderer."
-msgstr ""
-"\"Wypalacz shaderów\" nie jest wspierany, gdy użyty jest renderer "
-"Kompatybilny."
 
 msgid ""
 "The editor is currently using a different renderer than what the target "
@@ -6383,9 +6297,6 @@ msgid "Official export templates aren't available for double-precision builds."
 msgstr ""
 "Oficjalne szablony eksportowe nie są dostępne dla kompilacji z podwójną "
 "precyzją."
-
-msgid "Uncompressing Android Build Sources"
-msgstr "Dekompresja źródeł budowania Androida"
 
 msgid "Export Template Manager"
 msgstr "Menedżer szablonów eksportu"
@@ -8516,17 +8427,11 @@ msgstr "Mniejsze możliwości skalowania złożonych scen."
 msgid "Fast rendering of simple scenes."
 msgstr "Szybkie renderowanie prostych scen."
 
-msgid "Supports desktop, mobile + web platforms."
-msgstr "Wspiera platformy desktopowe, mobilne i webowe."
-
 msgid "Least advanced 3D graphics."
 msgstr "Najmniej zaawansowana grafika 3D."
 
 msgid "Intended for low-end/older devices."
 msgstr "Przeznaczone dla słabszych/starszych urządzeń."
-
-msgid "Uses OpenGL 3 backend (OpenGL 3.3/ES 3.0/WebGL2)."
-msgstr "Używa backendu OpenGL 3 (OpenGL 3.3/ES 3.0/WebGL2)."
 
 msgid "Fastest rendering of simple scenes."
 msgstr "Najszybsze renderowanie prostych scen."
@@ -8601,15 +8506,6 @@ msgstr "Silnik rendereujący:"
 
 msgid "More information"
 msgstr "Więcej informacji"
-
-msgid ""
-"RenderingDevice-based methods not available on this GPU:\n"
-"%s\n"
-"Please use the Compatibility renderer."
-msgstr ""
-"Metody bazowane na RenderingDevice nie są dostępne na tym GPU.\n"
-"%s\n"
-"Proszę użyć renderera Kompatybilnego."
 
 msgid "The renderer can be changed later, but scenes may need to be adjusted."
 msgstr ""
@@ -9309,20 +9205,8 @@ msgstr "Zatrzymaj uruchomiony projekt"
 msgid "Run Current Scene"
 msgstr "Uruchom obecną scenę"
 
-msgid "Run Scene in Regular Mode"
-msgstr "Uruchom scenę w trybie zwykłym"
-
-msgid "Run Scene in XR Mode"
-msgstr "Uruchom scenę w trybie XR"
-
 msgid "Run Specific Scene"
 msgstr "Uruchom konkretną scenę"
-
-msgid "Run in Regular Mode"
-msgstr "Uruchom w trybie zwykłym"
-
-msgid "Run in XR Mode"
-msgstr "Uruchom w trybie XR"
 
 msgid "Enable Movie Maker Mode"
 msgstr "Włącz tryb Twórcy Filmów"
@@ -15633,9 +15517,6 @@ msgstr "Nawigacja (3D)"
 msgid "XR"
 msgstr "XR"
 
-msgid "OpenXR"
-msgstr "OpenXR"
-
 msgid "Wayland"
 msgstr "Wayland"
 
@@ -15708,9 +15589,6 @@ msgstr "Możliwości serwera nawigacji dla 3D."
 msgid "XR (AR and VR)."
 msgstr "XR (AR i VR)."
 
-msgid "OpenXR standard implementation (requires XR to be enabled)."
-msgstr "Standardowa implementacja OpenXR (wymaga włączonego XR)."
-
 msgid "Wayland display (Linux only)."
 msgstr "Wyświetlanie Wayland (tylko Linux)."
 
@@ -15725,9 +15603,6 @@ msgstr ""
 
 msgid "Forward+ renderer for advanced 3D graphics."
 msgstr "Renderer Forward+ dla zaawansowanej grafiki 3D."
-
-msgid "Mobile renderer for less advanced 3D graphics."
-msgstr "Renderer mobilny dla mniej zaawansowanej grafiki 3D."
 
 msgid "Vulkan backend of RenderingDevice."
 msgstr "Zaplecze renderowania RenderingDevice Vulkan."
@@ -16757,16 +16632,6 @@ msgstr "Kopiuj parametry z materiału"
 
 msgid "Paste Parameters To Material"
 msgstr "Wklej parametry do materiału"
-
-msgid "Forward+/Mobile"
-msgstr "Forward+/Mobilny"
-
-msgid ""
-"Only supported in the Forward+ and Mobile rendering methods, not "
-"Compatibility."
-msgstr ""
-"Tylko wspierane w metodach renderowania Forward+ i Mobilny, nie w "
-"Kompatybilnym."
 
 msgid "Create Shader Node"
 msgstr "Utwórz węzeł shadera"
@@ -19190,17 +19055,8 @@ msgstr "Błąd ładowania %s: %s."
 msgid "Error saving file %s: %s"
 msgstr "Błąd podczas zapisywania pliku %s: %s"
 
-msgid "OpenXR Action map:"
-msgstr "Mapa akcji OpenXR:"
-
 msgid "Remove interaction profile"
 msgstr "Usuń profil interakcji"
-
-msgid "OpenXR Action Map"
-msgstr "Mapa akcji OpenXR"
-
-msgid "Toggle OpenXR Action Map Dock"
-msgstr "Przełącz dok Mapy akcji OpenXR"
 
 msgid "Add Action Set"
 msgstr "Dodaj zestaw akcji"
@@ -19213,12 +19069,6 @@ msgstr "Dodaj profil"
 
 msgid "Add an interaction profile."
 msgstr "Dodaj profil interakcji."
-
-msgid "Save this OpenXR action map."
-msgstr "Zapisz tę mapę akcji OpenXR."
-
-msgid "Reset to default OpenXR action map."
-msgstr "Przywróć domyślną mapę akcji OpenXR."
 
 msgid "Action Sets"
 msgstr "Zestawy akcji"
@@ -19328,64 +19178,16 @@ msgid "Choose an XR runtime."
 msgstr "Wybierz środowisko uruchomieniowe XR."
 
 msgid ""
-"Cannot use the same SubViewport with multiple OpenXR composition layers. "
-"Clear it from its current layer first."
-msgstr ""
-"Nie można użyć tego samego SubViewport z wieloma warstwami kompozycji OpenXR. "
-"Wyczyść go najpierw z bieżącej warstwy."
-
-msgid ""
-"Cannot set SubViewport on an OpenXR composition layer when using an Android "
-"surface."
-msgstr ""
-"Nie można ustawić węzła SubViewport na warstwie kompozycji OpenXR, kiedy "
-"używana jest powierzchnia Androida."
-
-msgid "OpenXR composition layers must have an XROrigin3D node as their parent."
-msgstr "Warstwy kompozycji OpenXR muszą mieć węzeł XROrigin3D jako nadrzędny."
-
-msgid ""
-"OpenXR composition layers must have orthonormalized transforms (ie. no scale "
-"or shearing)."
-msgstr ""
-"Warstwy kompozycji OpeXR muszą mieć ortonormalizowane transformacje (np. bez "
-"skalowania lub ścinania)."
-
-msgid ""
 "Hole punching won't work as expected unless the sort order is less than zero."
 msgstr ""
 "Dziurkowanie nie zadziała zgodnie z oczekiwaniami kiedy kolejność sortowania "
 "nie jest mniejsza niż zero."
-
-msgid "OpenXR visibility mask must have an XRCamera3D node as their parent."
-msgstr "Maska widoczności OpenXR musi mieć węzeł XRCamera3D jako nadrzędny."
-
-msgid "Building Android Project (gradle)"
-msgstr "Budowanie projektu Androida (gradle)"
-
-msgid "> Connecting to Gradle Build Environment..."
-msgstr "> Łączenie ze środowiskiem kompilacji Gradle..."
-
-msgid "Unable to connect to Gradle Build Environment service"
-msgstr "Nie udało się połączyć z usługą Gradle Build Environment"
-
-msgid "> Starting Gradle build..."
-msgstr "> Rozpoczynanie kompilacji Gradle..."
-
-msgid "Failed to execute Gradle command"
-msgstr "Nie udało się wykonać komendy Gradle"
-
-msgid "> Copying Gradle artifacts..."
-msgstr "> Kopiowanie artefaktów Gradle..."
 
 msgid "Package name is missing."
 msgstr "Brakuje nazwy pakietu."
 
 msgid "Package segments must be of non-zero length."
 msgstr "Segmenty pakietu muszą być niezerowej długości."
-
-msgid "The character '%s' is not allowed in Android application package names."
-msgstr "Znak \"%s\" jest niedozwolony w nazwie pakietu aplikacji Androida."
 
 msgid "A digit cannot be the first character in a package segment."
 msgstr "Cyfra nie może być pierwszym znakiem w segmencie pakietu."
@@ -19405,36 +19207,6 @@ msgstr "Niepoprawny klucz publiczny dla ekspansji APK."
 msgid "Invalid package name:"
 msgstr "Niepoprawna nazwa paczki:"
 
-msgid "\"Use Gradle Build\" is required to enable \"Swipe to dismiss\"."
-msgstr ""
-"\"Użyj kompilacji Gradle\" jest wymagane, aby włączyć \"Przesuń, aby "
-"odrzucić\"."
-
-msgid "\"Use Gradle Build\" must be enabled to use the plugins."
-msgstr "Aby korzystać z wtyczek, należy włączyć opcję „Użyj kompilacji Gradle”."
-
-msgid "Support for \"Use Gradle Build\" on Android is currently experimental."
-msgstr ""
-"Wsparcie dla \"Użyj kompilacje Gradle\" na Androidzie jest aktualne "
-"eksperymentalne."
-
-msgid ""
-"\"Compress Native Libraries\" is only valid when \"Use Gradle Build\" is "
-"enabled."
-msgstr ""
-"„Kompresuj biblioteki natywne” jest prawidłowe tylko wtedy, gdy włączona jest "
-"opcja „Użyj kompilacji Gradle”."
-
-msgid "\"Export AAB\" is only valid when \"Use Gradle Build\" is enabled."
-msgstr ""
-"„Eksportuj AAB” działa tylko wtedy, gdy włączona jest opcja „Użyj kompilacji "
-"Gradle”."
-
-msgid "\"Min SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
-msgstr ""
-"\"Min SDK\" można nadpisać tylko wtedy, gdy włączona jest opcja „Użyj "
-"kompilacji Gradle”."
-
 msgid "\"Min SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
 "Wartość „Min SDK” powinna być liczbą całkowitą, ale otrzymano wartość \"%s\", "
@@ -19448,12 +19220,6 @@ msgstr ""
 "bibliotekę Godota."
 
 msgid ""
-"\"Target SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
-msgstr ""
-"\"Target SDK\" można nadpisać tylko wtedy, gdy włączona jest opcja „Użyj "
-"kompilacji Gradle”."
-
-msgid ""
 "\"Target SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
 "Wartość „Target SDK” powinna być liczbą całkowitą, ale otrzymano wartość "
@@ -19461,28 +19227,6 @@ msgstr ""
 
 msgid "\"Target SDK\" version must be greater or equal to \"Min SDK\" version."
 msgstr "Wersja \"Target SDK\" musi być większa lub równa wersji \"Min SDK\"."
-
-msgid "\"Use Gradle Build\" is required to add custom theme attributes."
-msgstr ""
-"\"Użyj kompilacji Gradle\" jest wymagane, aby dodać niestandardowe atrybuty "
-"motywu."
-
-msgid "\"Use Gradle Build\" must be enabled to enable \"Show In Android Tv\"."
-msgstr ""
-"\"Użyj kompilacji Gradle\" jest wymagane, aby włączyć \"Pokaż w Android TV\"."
-
-msgid "\"Use Gradle Build\" must be enabled to enable \"Show As Launcher App\"."
-msgstr ""
-"\"Użyj kompilacji Gradle\" jest wymagane, aby włączyć \"Pokaż jako aplikację "
-"uruchamiającą\"."
-
-msgid "\"Use Gradle Build\" must be enabled to disable \"Show In App Library\"."
-msgstr ""
-"\"Użyj kompilacji Gradle\" jest wymagane, aby wyłączyć \"Pokaż w bibliotece "
-"aplikacji\"."
-
-msgid "Mirror Android devices"
-msgstr "Klonuj ekran urządzeń z Androidem"
 
 msgid ""
 "If enabled, \"scrcpy\" is used to start the project and automatically stream "
@@ -19506,48 +19250,12 @@ msgstr "Nie udało się zainstalować na urządzeniu: %s"
 msgid "Running on device..."
 msgstr "Uruchamiam na urządzeniu..."
 
-msgid ""
-"Could not start scrcpy executable. Configure scrcpy path in the Editor "
-"Settings (Export > Android > scrcpy > Path)."
-msgstr ""
-"Nie udało się uruchomić scrcpy. Skonfiguruj ścieżkę scrcpy w Ustawieniach "
-"Edytora (Eksport > Android > scrcpy > Ścieżka)."
-
 msgid "Could not execute on device."
 msgstr "Nie udało się uruchomić na urządzeniu."
 
 msgid "Error: There was a problem validating the keystore username and password"
 msgstr ""
 "Błąd: Wystąpił problem podczas sprawdzania nazwy użytkownika i hasła keystore"
-
-msgid ""
-"Unable to determine the C# project's TFM, it may be incompatible. The export "
-"template only supports '%s'. Make sure the project targets '%s' or consider "
-"using gradle builds instead."
-msgstr ""
-"Nie udało się określić TFM projektu C#, może być niekompatybilny. Szablon "
-"eksportu wspiera tylko \"%s\". Upewnij się, że projekt docelowa wersja "
-"projektu to \"%s\" lub zamiast tego użyj kompilacji gradle."
-
-msgid ""
-"C# project targets '%s' but the export template only supports '%s'. Consider "
-"using gradle builds instead."
-msgstr ""
-"Wersja docelowa projektu C# to \"%s\", ale szablon eksportu wspiera jedynie "
-"\"%s\". Zamiast tego rozważ użycie kompilacji gradle."
-
-msgid "Exporting to Android when using C#/.NET is experimental."
-msgstr "Eksportowanie na Androida z użyciem C#/.NET jest eksperymentalne."
-
-msgid "Custom Android source template not found."
-msgstr "Nie znaleziono własnego szablonu źródłowego Androida."
-
-msgid ""
-"Android build template not installed in the project. Install it from the "
-"Project menu."
-msgstr ""
-"Szablon budowania Androida nie jest zainstalowany dla projektu. Zainstaluj go "
-"z menu Projekt."
 
 msgid ""
 "Either Debug Keystore, Debug User AND Debug Password settings must be "
@@ -19586,31 +19294,11 @@ msgstr "Nie udało się odnaleźć komendy \"java\" używając ścieżki SDK Jav
 msgid "Please check the Java SDK directory specified in Editor Settings."
 msgstr "Sprawdź folder Java SDK podany w Ustawieniach Edytora."
 
-msgid "A valid Android SDK path is required in Editor Settings."
-msgstr "Wymagana jest poprawna ścieżka SDK Androida w Ustawieniach Edytora."
-
-msgid "Invalid Android SDK path in Editor Settings."
-msgstr "Niepoprawna ścieżka do SDK Androida w Ustawieniach Edytora."
-
 msgid "Missing 'platform-tools' directory!"
 msgstr "Folder \"platform-tools\" nie istnieje!"
 
-msgid "Unable to find Android SDK platform-tools' adb command."
-msgstr ""
-"Nie udało się znaleźć komendy adb z narzędzi platformowych SDK Androida."
-
-msgid "Please check in the Android SDK directory specified in Editor Settings."
-msgstr "Sprawdź w folderze SDK Androida podanych w Ustawieniach Edytora."
-
 msgid "Missing 'build-tools' directory!"
 msgstr "Brakuje folderu \"build-tools\"!"
-
-msgid "Unable to find Android SDK build-tools' apksigner command."
-msgstr "Nie udało się znaleźć komendy apksigner z narzędzi SDK Androida."
-
-msgid "\"Use Gradle Build\" is required for transparent background on Android"
-msgstr ""
-"\"Użyj kompilacji Gradle\" jest wymagane dla przezroczystego tła na Androidzie"
 
 msgid ""
 "\"Target SDK\" %d is higher than the default version %d. This may work, but "
@@ -19618,13 +19306,6 @@ msgid ""
 msgstr ""
 "Wartość \"Target SDK\" %d jest wyższa niż domyślna wersja %d. To może "
 "działać, ale nie zostało przetestowane i może być niestabilne."
-
-msgid ""
-"The \"%s\" renderer is designed for Desktop devices, and is not suitable for "
-"Android devices."
-msgstr ""
-"Renderer \"%s\" jest przeznaczony dla desktopów i nie jest odpowiedni dla "
-"urządzeń z systemem Android."
 
 msgid ""
 "The project name does not meet the requirement for the package name format "
@@ -19652,23 +19333,6 @@ msgstr "Nie udało się znaleźć wydaniowego keystore, nie można eksportować.
 msgid "Unable to sign apk."
 msgstr "Nie udało się podpisać APK."
 
-msgid ""
-"All 'apksigner' tools located in Android SDK 'build-tools' directory failed "
-"to execute. Please check that you have the correct version installed for your "
-"target sdk version. The resulting APK is unsigned."
-msgstr ""
-"Żadne z narzędzi \"apksigner\" znajdujących się w katalogu \"build-tools\" "
-"SDK Androida nie zostało uruchomione. Sprawdź, czy masz zainstalowaną "
-"prawidłową wersję dla docelowej wersji zestawu SDK. Wynikowy APK jest "
-"niepodpisany."
-
-msgid ""
-"'apksigner' could not be found. Please check that the command is available in "
-"the Android SDK build-tools directory. The resulting APK is unsigned."
-msgstr ""
-"\"apksigner\" nie został znaleziony. Sprawdź, czy komenda jest dostępna w "
-"folderze narzędzi SDK Androida. Wynikowy APK jest niepodpisany."
-
 msgid "Could not start apksigner executable."
 msgstr "Nie można było uruchomić podprocesu apksigner."
 
@@ -19694,28 +19358,8 @@ msgstr "Weryfikacja \"apksigner\" dla APK nieudana."
 msgid "Could not create temporary file!"
 msgstr "Nie udało się utworzyć pliku tymczasowego!"
 
-msgid "Exporting for Android"
-msgstr "Eksportowanie na Androida"
-
-msgid "Invalid filename! Android App Bundle requires the *.aab extension."
-msgstr ""
-"Nieprawidłowa nazwa pliku! Android App Bundle wymaga rozszerzenia *.aab."
-
-msgid "APK Expansion not compatible with Android App Bundle."
-msgstr "APK Expansion nie jest kompatybilne z Android App Bundle."
-
-msgid "Invalid filename! Android APK requires the *.apk extension."
-msgstr "Nieprawidłowa nazwa pliku! APK Androida wymaga rozszerzenia *.apk."
-
 msgid "Unsupported export format!"
 msgstr "Nieobsługiwany format eksportu!"
-
-msgid ""
-"Trying to build from a gradle built template, but no version info for it "
-"exists. Please reinstall from the 'Project' menu."
-msgstr ""
-"Próbuję zbudować z szablonu zbudowanego w gradle , ale nie ma informacji o "
-"wersji. Zainstaluj ponownie z menu \"Projekt\"."
 
 msgid ""
 "Java SDK path must be configured in Editor Settings at 'export/android/"
@@ -19723,13 +19367,6 @@ msgid ""
 msgstr ""
 "Ścieżka Java SDK musi być skonfigurowana w Ustawieniach Edytora w \"export/"
 "android/java_sdk_path\"."
-
-msgid ""
-"Android SDK path must be configured in Editor Settings at 'export/android/"
-"android_sdk_path'."
-msgstr ""
-"Ścieżka Android SDK musi być skonfigurowana w Ustawieniach Edytora w \"export/"
-"android/android_sdk_path\"."
 
 msgid "Unable to overwrite res/*.xml files with project name."
 msgstr "Nie można zastąpić plików res/*.xml nazwą projektu."
@@ -19740,14 +19377,8 @@ msgstr "Nie udało się wygenerować rzadkich metadanych pck!"
 msgid "Could not write PCK directory!"
 msgstr "Nie udało się zapisać katalogu PCK!"
 
-msgid "Could not export project files to gradle project."
-msgstr "Nie udało się eksportować plików projektu do projektu gradle."
-
 msgid "Could not write expansion package file!"
 msgstr "Nie udało się zapisać pliku pakietu rozszerzenia!"
-
-msgid "Building of Android project failed, check output for the error:"
-msgstr "Budowanie projektu Androida nie powiodło się, sprawdź błędy w konsoli:"
 
 msgid "Moving output"
 msgstr "Przesuwam wyjście"
@@ -19787,9 +19418,6 @@ msgstr "Uzgadnianie APK..."
 
 msgid "Could not unzip temporary unaligned APK."
 msgstr "Nie udało się rozpakować tymczasowego niewyrównanego APK."
-
-msgid "Metal renderer require iOS 14+."
-msgstr "Renderer Metal wymaga iOS 14+."
 
 msgid "Export Icons"
 msgstr "Eksportuj ikony"
@@ -20435,18 +20063,6 @@ msgstr ""
 "Animation\"."
 
 msgid ""
-"Particle trails are only available when using the Forward+ or Mobile renderer."
-msgstr ""
-"Wstęgi cząsteczek są dostępne tylko w przypadku korzystania z renderera "
-"Forward+ lub Mobilny."
-
-msgid ""
-"Particle sub-emitters are not available when using the Compatibility renderer."
-msgstr ""
-"Podemitery cząstek nie są dostępne w przypadku korzystania z renderera "
-"Kompatybilnego."
-
-msgid ""
 "A texture with the shape of the light must be supplied to the \"Texture\" "
 "property."
 msgstr ""
@@ -20735,10 +20351,6 @@ msgstr ""
 "Animacja CPUParticles3D wymaga użycia StandardMaterial3D, którego tryb "
 "Billboard jest ustawiony na \"Particle Billboard\"."
 
-msgid "Decals are only available when using the Forward+ or Mobile renderer."
-msgstr ""
-"Naklejki są dostępne tylko, gdy używany jest renderer Forward+ lub Mobilny."
-
 msgid ""
 "The decal has no textures loaded into any of its texture properties, and will "
 "therefore not be visible."
@@ -20842,13 +20454,6 @@ msgstr "Skala światła nie wpływa na jego wizualny rozmiar."
 
 msgid "Projector texture only works with shadows active."
 msgstr "Tekstura projektora działa tylko z aktywnymi cieniami."
-
-msgid ""
-"Projector textures are not supported when using the Compatibility renderer "
-"yet. Support will be added in a future release."
-msgstr ""
-"Tekstury projektora nie są jeszcze obsługiwane podczas korzystania z "
-"renderera Kompatybilnego. Wsparcie zostanie dodane w przyszłym wydaniu."
 
 msgid "A SpotLight3D with an angle wider than 90 degrees cannot cast shadows."
 msgstr "SpotLight3D o kącie szerszym niż 90 stopni nie może rzucać cieni."
@@ -21267,13 +20872,6 @@ msgstr "Generowanie pola odległości"
 msgid "Finishing Plot"
 msgstr "Kończenie kreślenia"
 
-msgid ""
-"VoxelGI nodes are not supported when using the Compatibility renderer yet. "
-"Support will be added in a future release."
-msgstr ""
-"Węzły VoxelGI nie są jeszcze obsługiwane podczas używania renderera "
-"Kompatybilnego. Wsparcie zostanie dodane w przyszłym wydaniu."
-
 msgid "VoxelGI nodes are not supported when using the Dummy renderer."
 msgstr "Węzły VoxelGI nie są obsługiwane podczas używania atrapy renderera."
 
@@ -21654,13 +21252,6 @@ msgstr "Niewłaściwe źródło dla shadera."
 
 msgid "Invalid operator for that type."
 msgstr "Nieprawidłowy operator dla tego typu."
-
-msgid ""
-"`%s` precision mode is not available for `gl_compatibility` profile.\n"
-"Reverted to `None` precision."
-msgstr ""
-"Tryb precyzji `%s` nie jest dostępny dla profilu `gl_compatibility`.\n"
-"Przywrócono precyzję `None`."
 
 msgid "'%s' type is incompatible with '%s' source."
 msgstr "Typ \"%s\" jest niekompatybilny ze źródłem \"%s\"."

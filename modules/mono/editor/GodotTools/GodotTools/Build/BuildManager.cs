@@ -333,45 +333,6 @@ namespace GodotTools.Build
         ) => PublishProjectBlocking(CreatePublishBuildInfo(configuration,
             platform, runtimeIdentifier, publishOutputDir, includeDebugSymbols));
 
-        public static bool GenerateXCFrameworkBlocking(
-            List<string> outputPaths,
-            string xcFrameworkPath)
-        {
-            using var pr = new EditorProgress("generate_xcframework", "Generating XCFramework...", 1);
-
-            pr.Step("Running xcodebuild -create-xcframework", 0);
-
-            if (!GenerateXCFramework(outputPaths, xcFrameworkPath))
-            {
-                ShowBuildErrorDialog("Failed to generate XCFramework");
-                return false;
-            }
-
-            return true;
-        }
-
-        private static bool GenerateXCFramework(List<string> outputPaths, string xcFrameworkPath)
-        {
-            // Required in order to update the build tasks list.
-            Internal.GodotMainIteration();
-
-            try
-            {
-                int exitCode = BuildSystem.GenerateXCFramework(outputPaths, xcFrameworkPath, StdOutputReceived, StdErrorReceived);
-
-                if (exitCode != 0)
-                    PrintVerbose(
-                        $"xcodebuild create-xcframework exited with code: {exitCode}.");
-
-                return exitCode == 0;
-            }
-            catch (Exception e)
-            {
-                Console.Error.WriteLine(e);
-                return false;
-            }
-        }
-
         public static bool EditorBuildCallback()
         {
             if (!File.Exists(GodotSharpDirs.ProjectCsProjPath))

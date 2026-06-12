@@ -693,49 +693,21 @@ void Input::joy_connection_changed(int p_idx, bool p_connected, const String &p_
 
 Vector3 Input::get_gravity() const {
 	_THREAD_SAFE_METHOD_
-
-#if defined(DEBUG_ENABLED) && defined(ANDROID_ENABLED)
-	if (!gravity_enabled) {
-		WARN_PRINT_ONCE("`input_devices/sensors/enable_gravity` is not enabled in project settings.");
-	}
-#endif
-
 	return gravity;
 }
 
 Vector3 Input::get_accelerometer() const {
 	_THREAD_SAFE_METHOD_
-
-#if defined(DEBUG_ENABLED) && defined(ANDROID_ENABLED)
-	if (!accelerometer_enabled) {
-		WARN_PRINT_ONCE("`input_devices/sensors/enable_accelerometer` is not enabled in project settings.");
-	}
-#endif
-
 	return accelerometer;
 }
 
 Vector3 Input::get_magnetometer() const {
 	_THREAD_SAFE_METHOD_
-
-#if defined(DEBUG_ENABLED) && defined(ANDROID_ENABLED)
-	if (!magnetometer_enabled) {
-		WARN_PRINT_ONCE("`input_devices/sensors/enable_magnetometer` is not enabled in project settings.");
-	}
-#endif
-
 	return magnetometer;
 }
 
 Vector3 Input::get_gyroscope() const {
 	_THREAD_SAFE_METHOD_
-
-#if defined(DEBUG_ENABLED) && defined(ANDROID_ENABLED)
-	if (!gyroscope_enabled) {
-		WARN_PRINT_ONCE("`input_devices/sensors/enable_gyroscope` is not enabled in project settings.");
-	}
-#endif
-
 	return gyroscope;
 }
 
@@ -1416,12 +1388,10 @@ void Input::joy_axis(int p_device, JoyAxis p_axis, float p_value) {
 	if (map.type == TYPE_AXIS) {
 		JoyAxis axis = JoyAxis(map.index);
 		float value = map.value;
-#ifndef ANDROID_ENABLED // Android trigger values are already between 0.0f and 1.0f.
 		if (range == FULL_AXIS && (axis == JoyAxis::TRIGGER_LEFT || axis == JoyAxis::TRIGGER_RIGHT)) {
 			// Convert to a value between 0.0f and 1.0f.
 			value = 0.5f + value / 2.0f;
 		}
-#endif
 		_axis_event(p_device, axis, value);
 		return;
 	}
@@ -1867,7 +1837,6 @@ void Input::remove_joy_mapping(const String &p_guid) {
 		for (int i = 0; i < removed_idx.size(); i++) {
 			if (removed_idx[i] == joy.mapping) {
 				// Set to fallback_mapping, if defined, else unmap the joypad.
-				// Currently, the fallback_mapping is only set internally, and only for Android.
 				_set_joypad_mapping(joy, fallback_mapping);
 				break;
 			}

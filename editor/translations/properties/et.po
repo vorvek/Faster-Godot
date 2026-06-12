@@ -164,9 +164,6 @@ msgstr "Alamaknad"
 msgid "Embed Subwindows"
 msgstr "Manusta Alamaknad"
 
-msgid "Android"
-msgstr "Android"
-
 msgid "Physics"
 msgstr "Füüsika"
 
@@ -1892,9 +1889,6 @@ msgstr "Peida Olekuriba"
 msgid "XR"
 msgstr "Laiendatud reaalsus"
 
-msgid "OpenXR"
-msgstr "OpenXR"
-
 msgid "View Configuration"
 msgstr "Vaate Konfiguratsioon"
 
@@ -2353,9 +2347,6 @@ msgstr "IGD Teenuse Tüüp"
 
 msgid "IGD Status"
 msgstr "IGD Olek"
-
-msgid "WebRTC"
-msgstr "WebRTC"
 
 msgid "Max Channel in Buffer (KB)"
 msgstr "Max Kanal Puhvris (KB)"

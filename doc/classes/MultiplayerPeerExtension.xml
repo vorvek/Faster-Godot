@@ -4,7 +4,7 @@
 		Class that can be inherited to implement custom multiplayer API networking layers via GDExtension.
 	</brief_description>
 	<description>
-		This class is designed to be inherited from a GDExtension plugin to implement custom networking layers for the multiplayer API (such as WebRTC). All the methods below [b]must[/b] be implemented to have a working custom multiplayer implementation. See also [MultiplayerAPI].
+		This class is designed to be inherited from a GDExtension plugin to implement custom networking layers for the multiplayer API. All the methods below [b]must[/b] be implemented to have a working custom multiplayer implementation. See also [MultiplayerAPI].
 	</description>
 	<tutorials>
 	</tutorials>

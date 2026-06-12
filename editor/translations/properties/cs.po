@@ -257,14 +257,8 @@ msgstr "Vnořená podokna"
 msgid "Frame Pacing"
 msgstr "Rychlost snímkování"
 
-msgid "Android"
-msgstr "Android"
-
 msgid "Enable Frame Pacing"
 msgstr "Povolit rychlost snímkování"
-
-msgid "Swappy Mode"
-msgstr "Swappy režim"
 
 msgid "Physics"
 msgstr "Fyzika"
@@ -2898,9 +2892,6 @@ msgstr "Záložní D3D12"
 msgid "Fallback to OpenGL 3"
 msgstr "Záložní OpenGL 3"
 
-msgid "GL Compatibility"
-msgstr "GL Compatibility"
-
 msgid "Nvidia Disable Threaded Optimization"
 msgstr "Nvidia zakázat optimalizaci vláken"
 
@@ -2966,9 +2957,6 @@ msgstr "Potlačit UI gesta"
 
 msgid "XR"
 msgstr "XR"
-
-msgid "OpenXR"
-msgstr "OpenXR"
 
 msgid "Default Action Map"
 msgstr "Výchozí mapa akcí"
@@ -4077,12 +4065,6 @@ msgstr "Další"
 msgid "Layer Viewport"
 msgstr "Průzor vrstev"
 
-msgid "Use Android Surface"
-msgstr "Použít Android Surface"
-
-msgid "Android Surface Size"
-msgstr "Velikost Android Surface"
-
 msgid "Sort Order"
 msgstr "Řazení podle"
 
@@ -4167,9 +4149,6 @@ msgstr "Naše adresa IGD"
 msgid "IGD Status"
 msgstr "Stav IGD"
 
-msgid "WebRTC"
-msgstr "WebRTC"
-
 msgid "Max Channel in Buffer (KB)"
 msgstr "Maximální kanál ve vyrovnávací paměti (KB)"
 
@@ -4242,18 +4221,6 @@ msgstr "Adaptivní pozadí 432 x 432"
 msgid "Adaptive Monochrome 432 X 432"
 msgstr "Adaptivní monochromatické 432 x 432"
 
-msgid "Gradle Build"
-msgstr "Gradle sestavení"
-
-msgid "Use Gradle Build"
-msgstr "Použít Gradle sestavení"
-
-msgid "Gradle Build Directory"
-msgstr "Adresář Gradle sestavení"
-
-msgid "Android Source Template"
-msgstr "Zdrojová Android šablona"
-
 msgid "Export Format"
 msgstr "Formát exportu"
 
@@ -4298,9 +4265,6 @@ msgstr "Zachování dat při odinstalaci"
 
 msgid "Exclude From Recents"
 msgstr "Vyřadit z nedávných"
-
-msgid "Show in Android TV"
-msgstr "Zobrazit v Android TV"
 
 msgid "Show in App Library"
 msgstr "Zobrazit v knihovně aplikací"
@@ -4374,9 +4338,6 @@ msgstr "Vlastní oprávnění"
 msgid "Targeted Device Family"
 msgstr "Cílená rodina zařízení"
 
-msgid "Min iOS Version"
-msgstr "Minimální verze iOS"
-
 msgid "Storyboard"
 msgstr "Storyboard"
 
@@ -4430,15 +4391,6 @@ msgstr "iPad 167 x 167"
 
 msgid "iPad 152 X 152"
 msgstr "iPad 152 x 152"
-
-msgid "iOS 128 X 128"
-msgstr "iOS 128 x 128"
-
-msgid "iOS 192 X 192"
-msgstr "iOS 192 x 192"
-
-msgid "iOS 136 X 136"
-msgstr "iOS 136 x 136"
 
 msgid "App Store 1024 X 1024"
 msgstr "App Store 1024 x 1024"

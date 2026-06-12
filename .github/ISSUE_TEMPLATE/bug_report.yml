@@ -33,7 +33,7 @@ body:
       description: |
         - Specify the OS version, and when relevant hardware information.
         - For issues that are likely OS-specific and/or graphics-related, please specify the CPU model and architecture.
-        - For graphics-related issues, specify the GPU model, driver version, and the rendering backend (GLES2, GLES3, Vulkan).
+        - For graphics-related issues, specify the GPU model, driver version, and the Vulkan rendering backend.
         - **Bug reports not including the required information may be closed at the maintainers' discretion.** If in doubt, always include all the requested information; it's better to include too much information than not enough information.
         - **Starting from Godot 4.1, you can copy this information to your clipboard by using *Help > Copy System Info* at the top of the editor window.**
       placeholder: Windows 10 - Godot v4.0.3.stable - Vulkan (Forward+) - dedicated NVIDIA GeForce GTX 970 (nvidia, 510.85.02) - Intel Core i7-10700KF CPU @ 3.80GHz (16 Threads)

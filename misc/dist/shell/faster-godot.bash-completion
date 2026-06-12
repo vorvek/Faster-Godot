@@ -60,7 +60,6 @@ _complete_faster_godot_options() {
 --resolution
 --position
 --single-window
---xr-mode
 --debug
 --breakpoints
 --profiling
@@ -121,15 +120,11 @@ _complete_faster_godot_bash() {
   elif [[ $prev == "--rendering-method" ]]; then
     local IFS=$' \n\t'
     # shellcheck disable=SC2207
-    COMPREPLY=($(compgen -W "forward_plus mobile gl_compatibility" -- "$cur"))
+    COMPREPLY=($(compgen -W "forward_plus" -- "$cur"))
   elif [[ $prev == "--rendering-driver" ]]; then
     local IFS=$' \n\t'
     # shellcheck disable=SC2207
-    COMPREPLY=($(compgen -W "vulkan opengl3 dummy" -- "$cur"))
-	elif [[ $prev == "--xr-mode" ]]; then
-    local IFS=$' \n\t'
-    # shellcheck disable=SC2207
-    COMPREPLY=($(compgen -W "default off on" -- "$cur"))
+    COMPREPLY=($(compgen -W "vulkan dummy" -- "$cur"))
   elif [[ $prev == "--path" || $prev == "--doctool" ]]; then
     local IFS=$'\n\t'
     # shellcheck disable=SC2207

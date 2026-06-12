@@ -709,12 +709,10 @@ void EditorAssetLibrary::_notification(int p_what) {
 
 		case NOTIFICATION_VISIBILITY_CHANGED: {
 			if (is_visible()) {
-#ifndef ANDROID_ENABLED
 				// Focus the search box automatically when switching to the Templates tab (in the Project Manager)
 				// or switching to the AssetLib tab (in the editor).
 				// The Project Manager's project filter box is automatically focused in the project manager code.
 				filter->grab_focus();
-#endif
 
 				if (initial_loading) {
 					_repository_changed(0); // Update when shown for the first time.
@@ -1829,13 +1827,7 @@ EditorAssetLibrary::EditorAssetLibrary(bool p_templates_only) {
 ///////
 
 bool AssetLibraryEditorPlugin::is_available() {
-#ifdef WEB_ENABLED
-	// Asset Library can't work on Web editor for now as most assets are sourced
-	// directly from GitHub which does not set CORS.
-	return false;
-#else
 	return StreamPeerTLS::is_available() && !Engine::get_singleton()->is_recovery_mode_hint();
-#endif
 }
 
 void AssetLibraryEditorPlugin::make_visible(bool p_visible) {

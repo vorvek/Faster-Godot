@@ -637,8 +637,8 @@ PackedStringArray OmniLight3D::get_configuration_warnings() const {
 		warnings.push_back(RTR("Projector texture only works with shadows active."));
 	}
 
-	if (get_projector().is_valid() && (OS::get_singleton()->get_current_rendering_method() == "gl_compatibility" || OS::get_singleton()->get_current_rendering_method() == "dummy")) {
-		warnings.push_back(RTR("Projector textures are not supported when using the Compatibility renderer yet. Support will be added in a future release."));
+	if (get_projector().is_valid() && OS::get_singleton()->get_current_rendering_method() == "dummy") {
+		warnings.push_back(RTR("Projector textures are not supported when using the Dummy renderer."));
 	}
 
 	return warnings;
@@ -673,8 +673,8 @@ PackedStringArray SpotLight3D::get_configuration_warnings() const {
 		warnings.push_back(RTR("Projector texture only works with shadows active."));
 	}
 
-	if (get_projector().is_valid() && (OS::get_singleton()->get_current_rendering_method() == "gl_compatibility" || OS::get_singleton()->get_current_rendering_method() == "dummy")) {
-		warnings.push_back(RTR("Projector textures are not supported when using the Compatibility renderer yet. Support will be added in a future release."));
+	if (get_projector().is_valid() && OS::get_singleton()->get_current_rendering_method() == "dummy") {
+		warnings.push_back(RTR("Projector textures are not supported when using the Dummy renderer."));
 	}
 
 	return warnings;
@@ -773,14 +773,6 @@ PackedStringArray AreaLight3D::get_configuration_warnings() const {
 	if (get_projector().is_valid()) {
 		warnings.push_back(RTR("Projector texture is not supported for area lights. Use the area_texture field instead."));
 	}
-	if (get_area_texture().is_valid() && OS::get_singleton()->get_current_rendering_method() == "gl_compatibility") {
-		warnings.push_back(RTR("Rendering textured area lights is not implemented in the Compatibility rendering mode."));
-	}
-
-	if (has_shadow() && OS::get_singleton()->get_current_rendering_method() == "gl_compatibility") {
-		warnings.push_back(RTR("Rendering area light shadows does not work in the Compatibility rendering mode."));
-	}
-
 	return warnings;
 }
 

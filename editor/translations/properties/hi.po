@@ -232,14 +232,8 @@ msgstr "छोटी विंडो जोड़ो"
 msgid "Frame Pacing"
 msgstr "फ्रेम समन्वय"
 
-msgid "Android"
-msgstr "एंड्रॉयड"
-
 msgid "Enable Frame Pacing"
 msgstr "फ्रेम पेइसिंग सक्षम करें"
-
-msgid "Swappy Mode"
-msgstr "स्वैपी मोड"
 
 msgid "Physics"
 msgstr "फिजिक्स"
@@ -3434,9 +3428,6 @@ msgstr "आईजीडी सेवा प्रकार"
 msgid "IGD Status"
 msgstr "IGD स्थिति"
 
-msgid "WebRTC"
-msgstr "वेबRTC"
-
 msgid "Max Channel in Buffer (KB)"
 msgstr "बफर में अधिकतम चैनल (KB)"
 
@@ -3491,12 +3482,6 @@ msgstr "अनुकूली अग्रभूमि 432 x 432"
 msgid "Adaptive Background 432 X 432"
 msgstr "अनुकूली पृष्ठभूमि 432 X 432"
 
-msgid "Use Gradle Build"
-msgstr "ग्रैडल बिल्ड का उपयोग करें"
-
-msgid "Android Source Template"
-msgstr "एंड्रॉइड स्रोत टेम्पलेट"
-
 msgid "Compress Native Libraries"
 msgstr "मूल लाइब्रेरी को संपीड़ित करें"
 
@@ -3511,9 +3496,6 @@ msgstr "ऐप श्रेणी"
 
 msgid "Retain Data on Uninstall"
 msgstr "अनइंस्टॉल करने पर डेटा बनाए रखें"
-
-msgid "Show in Android TV"
-msgstr "एंड्रॉइड टीवी में दिखाएं"
 
 msgid "Show as Launcher App"
 msgstr "लॉन्चर ऐप के रूप में दिखाएं"
@@ -3539,9 +3521,6 @@ msgstr "अनुमति दें"
 msgid "APK Expansion"
 msgstr "APK विस्तार"
 
-msgid "iOS Deploy"
-msgstr "IOS परिनियोजन"
-
 msgid "Targeted Device Family"
 msgstr "निर्दिष्ट उपकरण श्रेणी"
 
@@ -3565,15 +3544,6 @@ msgstr "iPad 167 X 167"
 
 msgid "iPad 152 X 152"
 msgstr "iPad 152 X 152"
-
-msgid "iOS 128 X 128"
-msgstr "iOS 128 X 128"
-
-msgid "iOS 192 X 192"
-msgstr "iOS 192 X 192"
-
-msgid "iOS 136 X 136"
-msgstr "iOS 136 X 136"
 
 msgid "App Store 1024 X 1024"
 msgstr "ऐप स्टोर 1024 X 1024"
@@ -3712,9 +3682,6 @@ msgstr "दृश्यचिन्ह 180 X 180"
 
 msgid "Icon 512 X 512"
 msgstr "दृश्यचिन्ह 512 X 512"
-
-msgid "Emscripten Pool Size"
-msgstr "Emscripten पूल आकार"
 
 msgid "osslsigncode"
 msgstr "osslsigncode"

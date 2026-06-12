@@ -28,8 +28,6 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef WEB_ENABLED
-
 #include "http_client_tcp.h"
 
 #include "core/io/stream_peer_tls.h"
@@ -793,5 +791,3 @@ HTTPClientTCP::HTTPClientTCP() {
 }
 
 HTTPClient *(*HTTPClient::_create)(bool p_notify_postinitialize) = HTTPClientTCP::_create_func;
-
-#endif // WEB_ENABLED

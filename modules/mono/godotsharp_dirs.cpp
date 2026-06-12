@@ -73,17 +73,6 @@ String _get_mono_user_dir() {
 			settings_path = exe_dir.path_join("editor_data");
 		}
 
-		// On macOS, look outside .app bundle, since .app bundle is read-only.
-		// Note: This will not work if Gatekeeper path randomization is active.
-		if (OS::get_singleton()->has_feature("macos") && exe_dir.ends_with("MacOS") && exe_dir.path_join("..").simplify_path().ends_with("Contents")) {
-			exe_dir = exe_dir.path_join("../../..").simplify_path();
-			d = DirAccess::create_for_path(exe_dir);
-			if (d->file_exists("._sc_") || d->file_exists("_sc_")) {
-				// contain yourself
-				settings_path = exe_dir.path_join("editor_data");
-			}
-		}
-
 		return settings_path.path_join("mono");
 	}
 #else
@@ -95,14 +84,10 @@ String _get_mono_user_dir() {
 // This should be the equivalent of GodotTools.Utils.OS.PlatformNameMap.
 static const char *platform_name_map[][2] = {
 	{ "Windows", "windows" },
-	{ "macOS", "macos" },
 	{ "Linux", "linuxbsd" },
 	{ "FreeBSD", "linuxbsd" },
 	{ "NetBSD", "linuxbsd" },
 	{ "BSD", "linuxbsd" },
-	{ "Android", "android" },
-	{ "iOS", "ios" },
-	{ "Web", "web" },
 	{ nullptr, nullptr }
 };
 
@@ -141,11 +126,7 @@ private:
 		// TODO use paths from csproj
 		res_temp_assemblies_dir = res_data_dir.path_join("temp").path_join("bin").path_join(_get_expected_build_config());
 
-#ifdef WEB_ENABLED
-		mono_user_dir = "user://";
-#else
 		mono_user_dir = _get_mono_user_dir();
-#endif
 
 		String exe_dir = OS::get_singleton()->get_executable_path().get_base_dir();
 		String res_dir = OS::get_singleton()->get_bundle_resource_dir();
@@ -169,10 +150,6 @@ private:
 		String arch = Engine::get_singleton()->get_architecture_name();
 		String appname_safe = Path::get_csharp_project_name();
 		String packed_path = "res://.godot/mono/publish/" + arch;
-#ifdef ANDROID_ENABLED
-		api_assemblies_dir = packed_path;
-		print_verbose(".NET: Android platform detected. Setting api_assemblies_dir directly to pck path: " + api_assemblies_dir);
-#else
 		if (DirAccess::exists(packed_path)) {
 			// The dotnet publish data is packed in the pck/zip.
 			String data_dir_root = OS::get_singleton()->get_cache_path().path_join("data_" + appname_safe + "_" + platform + "_" + arch);
@@ -218,7 +195,6 @@ private:
 #endif
 			api_assemblies_dir = data_dir_root;
 		}
-#endif // ANDROID_ENABLED
 #endif
 	}
 

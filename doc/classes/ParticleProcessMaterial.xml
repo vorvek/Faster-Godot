@@ -371,7 +371,6 @@
 		</member>
 		<member name="turbulence_enabled" type="bool" setter="set_turbulence_enabled" getter="get_turbulence_enabled" default="false">
 			If [code]true[/code], enables turbulence for the particle system. Turbulence can be used to vary particle movement according to its position (based on a 3D noise pattern). In 3D, [GPUParticlesAttractorVectorField3D] with [NoiseTexture3D] can be used as an alternative to turbulence that works in world space and with multiple particle systems reacting in the same way.
-			[b]Note:[/b] Enabling turbulence has a high performance cost on the GPU. Only enable turbulence on a few particle systems at once at most, and consider disabling it when targeting mobile/web platforms.
 		</member>
 		<member name="turbulence_influence_max" type="float" setter="set_param_max" getter="get_param_max" default="0.1">
 			Maximum turbulence influence on each particle.

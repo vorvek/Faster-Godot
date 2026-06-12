@@ -894,17 +894,15 @@ LightmapGI::BakeError LightmapGI::_save_and_reimport_atlas_textures(const Ref<Li
 }
 
 void LightmapGI::_build_area_light_texture_atlas(const Vector<LightmapGI::LightsFound> &lights_found, HashMap<Ref<Texture2D>, AreaLightAtlasTexture> &r_textures, Size2i &r_atlas_size, int &r_mipmaps) const {
-	if (RenderingServer::get_singleton()->get_current_rendering_method() != "gl_compatibility") { // area light textures unsupported in compat
-		r_mipmaps = 8;
-		r_atlas_size = Size2i(pow(2, r_mipmaps), pow(2, r_mipmaps));
+	r_mipmaps = 8;
+	r_atlas_size = Size2i(pow(2, r_mipmaps), pow(2, r_mipmaps));
 
-		for (int i = 0; i < lights_found.size(); i++) {
-			Light3D *light = lights_found[i].light;
-			if (Object::cast_to<AreaLight3D>(light)) {
-				AreaLight3D *l = Object::cast_to<AreaLight3D>(light);
-				if (l->get_area_texture().is_valid() && !r_textures.has(l->get_area_texture())) {
-					r_textures[l->get_area_texture()] = AreaLightAtlasTexture();
-				}
+	for (int i = 0; i < lights_found.size(); i++) {
+		Light3D *light = lights_found[i].light;
+		if (Object::cast_to<AreaLight3D>(light)) {
+			AreaLight3D *l = Object::cast_to<AreaLight3D>(light);
+			if (l->get_area_texture().is_valid() && !r_textures.has(l->get_area_texture())) {
+				r_textures[l->get_area_texture()] = AreaLightAtlasTexture();
 			}
 		}
 	}
@@ -1996,8 +1994,6 @@ PackedStringArray LightmapGI::get_configuration_warnings() const {
 		warnings.push_back(RTR("The lightmap has no baked shadowmask textures. Please rebake with the Shadowmask Mode set to anything other than None."));
 	}
 
-#elif defined(ANDROID_ENABLED) || defined(APPLE_EMBEDDED_ENABLED)
-	warnings.push_back(vformat(RTR("Lightmaps cannot be baked on %s. Rendering existing baked lightmaps will still work."), OS::get_singleton()->get_name()));
 #else
 	warnings.push_back(RTR("Lightmaps cannot be baked, as the `lightmapper_rd` module was disabled at compile-time. Rendering existing baked lightmaps will still work."));
 #endif

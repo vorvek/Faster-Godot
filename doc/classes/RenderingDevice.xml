@@ -7,8 +7,8 @@
 		[RenderingDevice] is an abstraction for working with modern low-level graphics APIs such as Vulkan. Compared to [RenderingServer] (which works with Godot's own rendering subsystems), [RenderingDevice] is much lower-level and allows working more directly with the underlying graphics APIs. [RenderingDevice] is used in Godot to provide support for several modern low-level graphics APIs while reducing the amount of code duplication required. [RenderingDevice] can also be used in your own projects to perform things that are not exposed by [RenderingServer] or high-level nodes, such as using compute shaders.
 		On startup, Godot creates a global [RenderingDevice] which can be retrieved using [method RenderingServer.get_rendering_device]. This global [RenderingDevice] performs drawing to the screen.
 		[b]Local RenderingDevices:[/b] Using [method RenderingServer.create_local_rendering_device], you can create "secondary" rendering devices to perform drawing and GPU compute operations on separate threads.
-		[b]Note:[/b] [RenderingDevice] assumes intermediate knowledge of modern graphics APIs such as Vulkan, Metal or WebGPU. These graphics APIs are lower-level than OpenGL or Direct3D 11, requiring you to perform what was previously done by the graphics driver itself. If you have difficulty understanding the concepts used in this class, follow the [url=https://vulkan-tutorial.com/]Vulkan Tutorial[/url] or [url=https://vkguide.dev/]Vulkan Guide[/url]. It's recommended to have existing modern OpenGL or Direct3D 11 knowledge before attempting to learn a low-level graphics API.
-		[b]Note:[/b] [RenderingDevice] is not available when running in headless mode or when using the Compatibility rendering method.
+		[b]Note:[/b] [RenderingDevice] assumes intermediate knowledge of modern graphics APIs such as Vulkan. These graphics APIs are lower-level than OpenGL or Direct3D 11, requiring you to perform what was previously done by the graphics driver itself. If you have difficulty understanding the concepts used in this class, follow the [url=https://vulkan-tutorial.com/]Vulkan Tutorial[/url] or [url=https://vkguide.dev/]Vulkan Guide[/url]. It's recommended to have existing modern OpenGL or Direct3D 11 knowledge before attempting to learn a low-level graphics API.
+		[b]Note:[/b] [RenderingDevice] is not available when running in headless mode.
 	</description>
 	<tutorials>
 		<link title="Using compute shaders">$DOCS_URL/tutorials/shaders/compute_shaders.html</link>
@@ -1162,7 +1162,6 @@
 			Rendering device type does not match any of the other enum values or is unknown.
 		</constant>
 		<constant name="DEVICE_TYPE_INTEGRATED_GPU" value="1" enum="DeviceType">
-			Rendering device is an integrated GPU, which is typically [i](but not always)[/i] slower than dedicated GPUs ([constant DEVICE_TYPE_DISCRETE_GPU]). On Android and iOS, the rendering device type is always considered to be [constant DEVICE_TYPE_INTEGRATED_GPU].
 		</constant>
 		<constant name="DEVICE_TYPE_DISCRETE_GPU" value="2" enum="DeviceType">
 			Rendering device is a dedicated GPU, which is typically [i](but not always)[/i] faster than integrated GPUs ([constant DEVICE_TYPE_INTEGRATED_GPU]).
@@ -1179,7 +1178,6 @@
 		<constant name="DRIVER_RESOURCE_LOGICAL_DEVICE" value="0" enum="DriverResource">
 			Specific device object based on a physical device ([code]rid[/code] parameter is ignored).
 			- Vulkan: Vulkan device driver resource ([code]VkDevice[/code]).
-			- Metal: Metal device driver resource ([code]MTLDevice[/code]).
 		</constant>
 		<constant name="DRIVER_RESOURCE_PHYSICAL_DEVICE" value="1" enum="DriverResource">
 			Physical device the specific logical device is based on ([code]rid[/code] parameter is ignored).
@@ -1192,7 +1190,6 @@
 		<constant name="DRIVER_RESOURCE_COMMAND_QUEUE" value="3" enum="DriverResource">
 			The main graphics-compute command queue ([code]rid[/code] parameter is ignored).
 			- Vulkan: [code]VkQueue[/code].
-			- Metal: [code]MTLCommandQueue[/code].
 		</constant>
 		<constant name="DRIVER_RESOURCE_QUEUE_FAMILY" value="4" enum="DriverResource">
 			The specific family the main queue belongs to ([code]rid[/code] parameter is ignored).
@@ -1221,11 +1218,9 @@
 		</constant>
 		<constant name="DRIVER_RESOURCE_COMPUTE_PIPELINE" value="11" enum="DriverResource">
 			- Vulkan: [code]VkPipeline[/code].
-			- Metal: [code]MTLComputePipelineState[/code].
 		</constant>
 		<constant name="DRIVER_RESOURCE_RENDER_PIPELINE" value="12" enum="DriverResource">
 			- Vulkan: [code]VkPipeline[/code].
-			- Metal: [code]MTLRenderPipelineState[/code].
 		</constant>
 		<constant name="DRIVER_RESOURCE_TEXTURE_DEVICE_MEMORY" value="13" enum="DriverResource">
 			- Vulkan: [code]VkDeviceMemory[/code] for the texture allocation.
@@ -2571,12 +2566,6 @@
 		<constant name="PIPELINE_SPECIALIZATION_CONSTANT_TYPE_FLOAT" value="2" enum="PipelineSpecializationConstantType">
 			Floating-point specialization constant.
 		</constant>
-		<constant name="SUPPORTS_METALFX_SPATIAL" value="3" enum="Features">
-			Support for MetalFX spatial upscaling.
-		</constant>
-		<constant name="SUPPORTS_METALFX_TEMPORAL" value="4" enum="Features">
-			Support for MetalFX temporal upscaling.
-		</constant>
 		<constant name="SUPPORTS_BUFFER_DEVICE_ADDRESS" value="6" enum="Features">
 			Features support for buffer device address extension.
 		</constant>
@@ -2693,14 +2682,6 @@
 		</constant>
 		<constant name="LIMIT_MAX_VIEWPORT_DIMENSIONS_Y" value="36" enum="Limit">
 			Maximum viewport height (in pixels).
-		</constant>
-		<constant name="LIMIT_METALFX_TEMPORAL_SCALER_MIN_SCALE" value="46" enum="Limit">
-			Returns the smallest value for [member ProjectSettings.rendering/scaling_3d/scale] when using the MetalFX temporal upscaler.
-			[b]Note:[/b] The returned value is multiplied by a factor of [code]1000000[/code] to preserve 6 digits of precision. It must be divided by [code]1000000.0[/code] to convert the value to a floating point number.
-		</constant>
-		<constant name="LIMIT_METALFX_TEMPORAL_SCALER_MAX_SCALE" value="47" enum="Limit">
-			Returns the largest value for [member ProjectSettings.rendering/scaling_3d/scale] when using the MetalFX temporal upscaler.
-			[b]Note:[/b] The returned value is multiplied by a factor of [code]1000000[/code] to preserve 6 digits of precision. It must be divided by [code]1000000.0[/code] to convert the value to a floating point number.
 		</constant>
 		<constant name="MEMORY_TEXTURES" value="0" enum="MemoryType">
 			Memory taken by textures.

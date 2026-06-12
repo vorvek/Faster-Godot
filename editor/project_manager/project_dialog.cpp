@@ -495,27 +495,12 @@ void ProjectDialog::_renderer_selected() {
 
 	if (renderer_type == "forward_plus") {
 		renderer_info->set_text(
-				String::utf8("•  ") + TTR("Supports desktop platforms only.") +
+				String::utf8("•  ") + TTR("Supports Windows and Linux.") +
 				String::utf8("\n•  ") + TTR("Advanced 3D graphics available.") +
 				String::utf8("\n•  ") + TTR("Can scale to large complex scenes.") +
 				String::utf8("\n•  ") + TTR("Uses RenderingDevice backend.") +
 				String::utf8("\n•  ") + TTR("Slower rendering of simple scenes."));
 		rd_error = !rendering_device_supported;
-	} else if (renderer_type == "mobile") {
-		renderer_info->set_text(
-				String::utf8("•  ") + TTR("Supports desktop + mobile platforms.") +
-				String::utf8("\n•  ") + TTR("Less advanced 3D graphics.") +
-				String::utf8("\n•  ") + TTR("Less scalable for complex scenes.") +
-				String::utf8("\n•  ") + TTR("Uses RenderingDevice backend.") +
-				String::utf8("\n•  ") + TTR("Fast rendering of simple scenes."));
-		rd_error = !rendering_device_supported;
-	} else if (renderer_type == "gl_compatibility") {
-		renderer_info->set_text(
-				String::utf8("•  ") + TTR("Supports desktop, mobile + web platforms.") +
-				String::utf8("\n•  ") + TTR("Least advanced 3D graphics.") +
-				String::utf8("\n•  ") + TTR("Intended for low-end/older devices.") +
-				String::utf8("\n•  ") + TTR("Uses OpenGL 3 backend (OpenGL 3.3/ES 3.0/WebGL2).") +
-				String::utf8("\n•  ") + TTR("Fastest rendering of simple scenes."));
 	} else {
 		WARN_PRINT("Unknown renderer type. Please report this as a bug on GitHub.");
 	}
@@ -566,9 +551,6 @@ void ProjectDialog::ok_pressed() {
 		PackedStringArray project_features = ProjectSettings::get_required_features();
 		ProjectSettings::CustomMap initial_settings;
 
-		// Be sure to change this code if/when renderers are changed.
-		// Default values are "forward_plus" for the main setting, "mobile" for the mobile override,
-		// and "gl_compatibility" for the web override.
 		String renderer_type = renderer_button_group->get_pressed_button()->get_meta(SNAME("rendering_method"));
 		initial_settings["rendering/renderer/rendering_method"] = renderer_type;
 
@@ -577,12 +559,6 @@ void ProjectDialog::ok_pressed() {
 
 		if (renderer_type == "forward_plus") {
 			project_features.push_back("Forward Plus");
-		} else if (renderer_type == "mobile") {
-			project_features.push_back("Mobile");
-		} else if (renderer_type == "gl_compatibility") {
-			project_features.push_back("GL Compatibility");
-			// Also change the default renderer for the mobile override.
-			initial_settings["rendering/renderer/rendering_method.mobile"] = "gl_compatibility";
 		} else {
 			WARN_PRINT("Unknown renderer type. Please report this as a bug on GitHub.");
 		}
@@ -789,22 +765,6 @@ void ProjectDialog::ok_pressed() {
 
 	hide();
 	if (mode == MODE_NEW || mode == MODE_IMPORT || mode == MODE_INSTALL) {
-#ifdef ANDROID_ENABLED
-		// Create a .nomedia file to hide assets from media apps on Android.
-		// Android 11 has some issues with nomedia files, so it's disabled there. See GH-106479, GH-105399 for details.
-		// NOTE: Nomedia file is also handled during the first filesystem scan. See editor_file_system.cpp -> EditorFileSystem::scan().
-		String sdk_version = OS::get_singleton()->get_version().get_slicec('.', 0);
-		if (sdk_version != "30") {
-			const String nomedia_file_path = path.path_join(".nomedia");
-			Ref<FileAccess> f2 = FileAccess::open(nomedia_file_path, FileAccess::WRITE);
-			if (f2.is_null()) {
-				// .nomedia isn't so critical.
-				ERR_PRINT("Couldn't create .nomedia in project path.");
-			} else {
-				f2->close();
-			}
-		}
-#endif
 		emit_signal(SNAME("project_created"), path, edit_check_box->is_pressed());
 	} else if (mode == MODE_DUPLICATE) {
 		emit_signal(SNAME("project_duplicated"), original_project_path, path, edit_check_box->is_visible() && edit_check_box->is_pressed());
@@ -923,7 +883,7 @@ void ProjectDialog::show_dialog(bool p_reset_name, bool p_is_confirmed) {
 					List<BaseButton *> buttons;
 					renderer_button_group->get_buttons(&buttons);
 					for (BaseButton *button : buttons) {
-						if (button->get_meta(SNAME("rendering_method")) == "gl_compatibility") {
+						if (button->get_meta(SNAME("rendering_method")) == "forward_plus") {
 							button->set_pressed(true);
 							break;
 						}
@@ -1116,6 +1076,9 @@ ProjectDialog::ProjectDialog() {
 	String default_renderer_type = "forward_plus";
 	if (EditorSettings::get_singleton()->has_setting("project_manager/default_renderer")) {
 		default_renderer_type = EditorSettings::get_singleton()->get_setting("project_manager/default_renderer");
+		if (default_renderer_type != "forward_plus") {
+			default_renderer_type = "forward_plus";
+		}
 	}
 
 	Button *rs_button = memnew(CheckBox);
@@ -1131,39 +1094,11 @@ ProjectDialog::ProjectDialog() {
 	if (default_renderer_type == "forward_plus") {
 		rs_button->set_pressed(true);
 	}
-	rs_button = memnew(CheckBox);
-	rs_button->set_button_group(renderer_button_group);
-	rs_button->set_text(TTRC("Mobile"));
-	rs_button->set_accessibility_name(TTRC("Renderer:"));
-#ifndef RD_ENABLED
-	rs_button->set_disabled(true);
-#endif
-	rs_button->set_meta(SNAME("rendering_method"), "mobile");
-	rs_button->connect(SceneStringName(pressed), callable_mp(this, &ProjectDialog::_renderer_selected));
-	rvb->add_child(rs_button);
-	if (default_renderer_type == "mobile") {
-		rs_button->set_pressed(true);
-	}
-	rs_button = memnew(CheckBox);
-	rs_button->set_button_group(renderer_button_group);
-	rs_button->set_text(TTRC("Compatibility"));
-	rs_button->set_accessibility_name(TTRC("Renderer:"));
-#if !defined(GLES3_ENABLED)
-	rs_button->set_disabled(true);
-#endif
-	rs_button->set_meta(SNAME("rendering_method"), "gl_compatibility");
-	rs_button->connect(SceneStringName(pressed), callable_mp(this, &ProjectDialog::_renderer_selected));
-	rvb->add_child(rs_button);
 	LinkButton *ri_link = memnew(LinkButton);
 	ri_link->set_text(TTRC("More information"));
 	ri_link->set_uri(GODOT_VERSION_DOCS_URL "/tutorials/rendering/renderers.html");
 	ri_link->set_h_size_flags(Control::SIZE_SHRINK_CENTER);
 	rvb->add_child(ri_link);
-#if defined(GLES3_ENABLED)
-	if (default_renderer_type == "gl_compatibility") {
-		rs_button->set_pressed(true);
-	}
-#endif
 	rshc->add_child(memnew(VSeparator));
 
 	// Right hand side, used for text explaining each choice.
@@ -1178,7 +1113,7 @@ ProjectDialog::ProjectDialog() {
 
 	rd_not_supported = memnew(Label);
 	rd_not_supported->set_focus_mode(Control::FOCUS_ACCESSIBILITY);
-	rd_not_supported->set_text(vformat(TTR("RenderingDevice-based methods not available on this GPU:\n%s\nPlease use the Compatibility renderer."), RenderingServer::get_singleton()->get_video_adapter_name()));
+	rd_not_supported->set_text(vformat(TTR("Forward+ is not available on this GPU:\n%s"), RenderingServer::get_singleton()->get_video_adapter_name()));
 	rd_not_supported->set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER);
 	rd_not_supported->set_custom_minimum_size(Size2(200, 0) * EDSCALE);
 	rd_not_supported->set_autowrap_mode(TextServer::AUTOWRAP_WORD_SMART);

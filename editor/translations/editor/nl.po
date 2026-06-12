@@ -2744,21 +2744,6 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "Kleine uitrol met netwerkbestandssysteem"
 
-msgid ""
-"When this option is enabled, using one-click deploy for Android will only "
-"export an executable without the project data.\n"
-"The filesystem will be provided from the project by the editor over the "
-"network.\n"
-"On Android, deploying will use the USB cable for faster performance. This "
-"option speeds up testing for projects with large assets."
-msgstr ""
-"Wanneer deze optie is ingeschakeld, zal op Android een uitvoerbaar bestand "
-"zonder de project data geëxporteerd worden.\n"
-"Het bestandssysteem wordt beschikbaar gesteld aan het project door de editor "
-"over het netwerk.\n"
-"Op Android zal de USB verbinding gebruikt worden voor hogere prestaties. Deze "
-"optie versnelt het testen van spellen met veel data."
-
 msgid "Visible Collision Shapes"
 msgstr "Botsingsvormen tonen"
 
@@ -4629,9 +4614,6 @@ msgstr "Metadata voor versiebeheer maken/overschrijven..."
 msgid "Version Control Settings..."
 msgstr "Versiebeheer­instellingen…"
 
-msgid "Install Android Build Template..."
-msgstr "Android-bouw­sjabloon installeren…"
-
 msgid "Open User Data Folder"
 msgstr "Gebruikers­gegevens­map openen"
 
@@ -4809,11 +4791,6 @@ msgstr "Update-lader verbergen"
 
 msgid "Don't Save"
 msgstr "Niet Opslaan"
-
-msgid "Android build template is missing, please install relevant templates."
-msgstr ""
-"Android build-sjabloon ontbreekt, gelieve de relevante sjablonen te "
-"installeren."
 
 msgid "Manage Templates"
 msgstr "Sjablonen beheren"
@@ -5017,9 +4994,6 @@ msgstr ""
 
 msgid "Official export templates aren't available for development builds."
 msgstr "Officiële export sjablonen zijn niet beschikbaar voor ontwikkel builds."
-
-msgid "Uncompressing Android Build Sources"
-msgstr "Android build-sjablonen aan het uitpakken"
 
 msgid "Export Template Manager"
 msgstr "Export Sjabloon Manager"
@@ -8688,9 +8662,6 @@ msgstr "Navigatie (3D)"
 msgid "XR"
 msgstr "XR"
 
-msgid "OpenXR"
-msgstr "OpenXR"
-
 msgid "Wayland"
 msgstr "Wayland"
 
@@ -8761,9 +8732,6 @@ msgstr "Navigatieserver en -mogelijkheden voor 3D."
 msgid "XR (AR and VR)."
 msgstr "XR (AR en VR)."
 
-msgid "OpenXR standard implementation (requires XR to be enabled)."
-msgstr "OpenXR standaardimplementatie (vereist dat XR ingeschakeld is)."
-
 msgid "Wayland display (Linux only)."
 msgstr "Wayland-weergave (alleen op Linux)."
 
@@ -8778,9 +8746,6 @@ msgstr ""
 
 msgid "Forward+ renderer for advanced 3D graphics."
 msgstr "Forward+-renderer voor geavanceerd 3D-beeld."
-
-msgid "Mobile renderer for less advanced 3D graphics."
-msgstr "Mobiele renderer voor minder geavanceerd 3D-beeld."
 
 msgid "Vulkan backend of RenderingDevice."
 msgstr "Vulkan-backend voor RenderingDevice."
@@ -10173,9 +10138,6 @@ msgstr "Haptisch"
 msgid "Unknown"
 msgstr "Onbekend"
 
-msgid "Building Android Project (gradle)"
-msgstr "Bouwen van Android Project (gradle)"
-
 msgid "Invalid public key for APK expansion."
 msgstr "Ongeldige publieke sleutel voor APK -uitbreiding."
 
@@ -10198,13 +10160,6 @@ msgid "Could not execute on device."
 msgstr "Kon niet uitgevoerd worden op toestel."
 
 msgid ""
-"Android build template not installed in the project. Install it from the "
-"Project menu."
-msgstr ""
-"Geen Android bouwsjabloon geïnstalleerd in dit project. Vanuit het "
-"projectmenu kan het geïnstalleerd worden."
-
-msgid ""
 "Either Debug Keystore, Debug User AND Debug Password settings must be "
 "configured OR none of them."
 msgstr ""
@@ -10217,47 +10172,11 @@ msgstr "Debug Keystore is niet ingesteld of aanwezig in de editor-instellingen."
 msgid "Release keystore incorrectly configured in the export preset."
 msgstr "Release-Keystore is verkeerd ingesteld in de exportinstelingen."
 
-msgid "A valid Java SDK path is required in Editor Settings."
-msgstr ""
-"Een geldig Android SDK-pad moet in de editor-instellingen ingesteld zijn."
-
-msgid "Invalid Java SDK path in Editor Settings."
-msgstr "Ongeldig Android SDK-pad in editor-instellingen."
-
-msgid "Please check the Java SDK directory specified in Editor Settings."
-msgstr "Controleer de opgegeven Android SDK map in de editor-instellingen."
-
-msgid "A valid Android SDK path is required in Editor Settings."
-msgstr ""
-"Een geldig Android SDK-pad moet in de editor-instellingen ingesteld zijn."
-
-msgid "Invalid Android SDK path in Editor Settings."
-msgstr "Ongeldig Android SDK-pad in editor-instellingen."
-
 msgid "Missing 'platform-tools' directory!"
 msgstr "'platform-tools' map ontbreekt!"
 
-msgid "Unable to find Android SDK platform-tools' adb command."
-msgstr "Kon Android SDK platform-tools adb commando niet vinden."
-
-msgid "Please check in the Android SDK directory specified in Editor Settings."
-msgstr "Controleer de opgegeven Android SDK map in de editor-instellingen."
-
 msgid "Missing 'build-tools' directory!"
 msgstr "'build tools' map ontbreekt!"
-
-msgid "Unable to find Android SDK build-tools' apksigner command."
-msgstr "Kon Android sdk build-tools apksigner commando niet vinden."
-
-msgid "Invalid filename! Android App Bundle requires the *.aab extension."
-msgstr ""
-"Bestandsnaam niet toegestaan! Android App Bundle vereist een *.aab extensie."
-
-msgid "APK Expansion not compatible with Android App Bundle."
-msgstr "APK Expansion werkt niet samen met Android App Bundle."
-
-msgid "Invalid filename! Android APK requires the *.apk extension."
-msgstr "Bestandsnaam niet toegestaan! Android APK vereist een *.apk extensie."
 
 msgid "Moving output"
 msgstr "Output verplaatsen"
