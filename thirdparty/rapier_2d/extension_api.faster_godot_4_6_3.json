@@ -229021,14 +229021,6 @@
 					"is_bitfield": false,
 					"values": [
 						{
-							"name": "SUPPORTS_METALFX_SPATIAL",
-							"value": 3
-						},
-						{
-							"name": "SUPPORTS_METALFX_TEMPORAL",
-							"value": 4
-						},
-						{
 							"name": "SUPPORTS_BUFFER_DEVICE_ADDRESS",
 							"value": 6
 						},
@@ -229201,14 +229193,6 @@
 						{
 							"name": "LIMIT_MAX_VIEWPORT_DIMENSIONS_Y",
 							"value": 36
-						},
-						{
-							"name": "LIMIT_METALFX_TEMPORAL_SCALER_MIN_SCALE",
-							"value": 46
-						},
-						{
-							"name": "LIMIT_METALFX_TEMPORAL_SCALER_MAX_SCALE",
-							"value": 47
 						}
 					]
 				},
@@ -233607,14 +233591,6 @@
 						{
 							"name": "VIEWPORT_SCALING_3D_MODE_FSR2",
 							"value": 2
-						},
-						{
-							"name": "VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL",
-							"value": 3
-						},
-						{
-							"name": "VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL",
-							"value": 4
 						},
 						{
 							"name": "VIEWPORT_SCALING_3D_MODE_NEAREST",
@@ -315788,14 +315764,6 @@
 						{
 							"name": "SCALING_3D_MODE_FSR2",
 							"value": 2
-						},
-						{
-							"name": "SCALING_3D_MODE_METALFX_SPATIAL",
-							"value": 3
-						},
-						{
-							"name": "SCALING_3D_MODE_METALFX_TEMPORAL",
-							"value": 4
 						},
 						{
 							"name": "SCALING_3D_MODE_NEAREST",

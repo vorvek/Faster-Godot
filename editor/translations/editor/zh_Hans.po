@@ -2854,19 +2854,6 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "使用网络文件系统进行小型部署"
 
-msgid ""
-"When this option is enabled, using one-click deploy for Android will only "
-"export an executable without the project data.\n"
-"The filesystem will be provided from the project by the editor over the "
-"network.\n"
-"On Android, deploying will use the USB cable for faster performance. This "
-"option speeds up testing for projects with large assets."
-msgstr ""
-"启用该选项时，一键部署到 Android 时所导出的可执行文件将不包含项目数据。\n"
-"文件系统将由编辑器基于项目通过网络提供。\n"
-"在 Android 平台，部署将通过 USB 线缆进行以提高性能。如果项目中包含较大的资产，"
-"该选项可提高测试速度。"
-
 msgid "Visible Collision Shapes"
 msgstr "显示碰撞区域"
 
@@ -4820,24 +4807,6 @@ msgstr "编辑器消息"
 msgid "Toggle visibility of editor messages."
 msgstr "切换编辑器消息的可见性。"
 
-msgid ""
-"The Android build template is already installed in this project and it won't "
-"be overwritten.\n"
-"Remove the \"%s\" directory manually before attempting this operation again."
-msgstr ""
-"该项目已安装 Android 构建模板，不会进行覆盖。\n"
-"前先请手动移除“%s”目录然后再尝试本操作。"
-
-msgid ""
-"This will set up your project for gradle Android builds by installing the "
-"source template to \"%s\".\n"
-"Note that in order to make gradle builds instead of using pre-built APKs, the "
-"\"Use Gradle Build\" option should be enabled in the Android export preset."
-msgstr ""
-"本操作会为你的项目建立基于 Gradle 的 Android 构建，在“%s”安装源码模板。\n"
-"请注意，要使用 Gradle 构建代替使用预制 APK，应在 Android 导出预设中启用“使用 "
-"Gradle 构建”选项。"
-
 msgid "Unnamed Project"
 msgstr "未命名项目"
 
@@ -5361,21 +5330,6 @@ msgstr "重新加载完成。"
 msgid "Save & Restart"
 msgstr "保存并重启"
 
-msgid ""
-"Changing the renderer requires restarting the editor.\n"
-"\n"
-"Choosing Save & Restart will change the renderer to:\n"
-"- Desktop platforms: %s\n"
-"- Mobile platforms: %s\n"
-"- Web platform: %s"
-msgstr ""
-"更改渲染器需要重新启动编辑器。\n"
-"\n"
-"选择保存并重启将更改渲染器为：\n"
-"- 桌面平台：%s\n"
-"- 移动平台：%s\n"
-"- Web平台：%s"
-
 msgid "Forward+"
 msgstr "Forward+"
 
@@ -5402,9 +5356,6 @@ msgstr "版本控制设置..."
 
 msgid "Pack Project as ZIP..."
 msgstr "项目打包为 ZIP..."
-
-msgid "Install Android Build Template..."
-msgstr "安装 Android 构建模板..."
 
 msgid "Open User Data Folder"
 msgstr "打开 “用户数据” 文件夹"
@@ -5619,20 +5570,6 @@ msgstr "打开上一个编辑器"
 msgid "Project"
 msgstr "项目"
 
-msgid ""
-"Choose a renderer.\n"
-"\n"
-"Notes:\n"
-"- On mobile platforms, the Mobile renderer is used if Forward+ is selected "
-"here.\n"
-"- On the web platform, the Compatibility renderer is always used."
-msgstr ""
-"选择一个渲染器。\n"
-"\n"
-"注意：\n"
-"- 在移动平台上，如果此处选择 Forward+，则使用移动渲染器。\n"
-"- 在网络平台上，始终使用兼容性渲染器。"
-
 msgid "Renderer"
 msgstr "渲染器"
 
@@ -5651,17 +5588,11 @@ msgstr "隐藏更新旋转图"
 msgid "Don't Save"
 msgstr "不保存"
 
-msgid "Android build template is missing, please install relevant templates."
-msgstr "缺失 Android 构建模板，请安装相应的模板。"
-
 msgid "Manage Templates"
 msgstr "管理模板"
 
 msgid "Install from file"
 msgstr "从文件安装"
-
-msgid "Select Android sources file"
-msgstr "选择 Android 源文件"
 
 msgid "Import Templates From ZIP File"
 msgstr "从 ZIP 文件中导入模板"
@@ -5868,9 +5799,6 @@ msgstr "应当至少选择一个硬盘空间访问理由。"
 msgid "At least one system boot time access reason should be selected."
 msgstr "应当至少选择一个系统启动时间访问理由。"
 
-msgid "\"Shader Baker\" doesn't work with the Compatibility renderer."
-msgstr "兼容渲染器无法使用“着色器烘焙器”。"
-
 msgid ""
 "The editor is currently using a different renderer than what the target "
 "platform will use. \"Shader Baker\" won't be able to include core shaders. "
@@ -5985,9 +5913,6 @@ msgstr "标识符中不允许“%s”字符。"
 msgid "Running on %s"
 msgstr "正在 %s 上运行"
 
-msgid "Could not start ios-deploy executable."
-msgstr "无法启动 ios-deploy 可执行文件。"
-
 msgid "Installation/running failed, see editor log for details."
 msgstr "安装/运行失败，详见编辑器日志。"
 
@@ -5996,9 +5921,6 @@ msgstr "安装失败，详见编辑器日志。"
 
 msgid "Running failed, see editor log for details."
 msgstr "运行失败，详见编辑器日志。"
-
-msgid "\"Shader Baker\" is not supported when using the Compatibility renderer."
-msgstr "“着色器烘焙器”在使用兼容渲染器时不可用。"
 
 msgid ""
 "The editor is currently using a different renderer than what the target "
@@ -6171,9 +6093,6 @@ msgstr "没有双精度构建模板"
 
 msgid "Official export templates aren't available for double-precision builds."
 msgstr "双精度构建下官方导出模板不可用。"
-
-msgid "Uncompressing Android Build Sources"
-msgstr "解压 Android Build 资源"
 
 msgid "Export Template Manager"
 msgstr "导出模板管理器"
@@ -8207,17 +8126,11 @@ msgstr "对复杂场景的可扩展性较差。"
 msgid "Fast rendering of simple scenes."
 msgstr "简单场景的渲染速度较快。"
 
-msgid "Supports desktop, mobile + web platforms."
-msgstr "支持桌面、移动 + 网络平台。"
-
 msgid "Least advanced 3D graphics."
 msgstr "最不先进的 3D 图形。"
 
 msgid "Intended for low-end/older devices."
 msgstr "针对低端/较老的设备。"
-
-msgid "Uses OpenGL 3 backend (OpenGL 3.3/ES 3.0/WebGL2)."
-msgstr "使用 OpenGL 3 后端（OpenGL 3.3/ES 3.0/WebGL2）。"
 
 msgid "Fastest rendering of simple scenes."
 msgstr "简单场景的渲染速度最快。"
@@ -8290,15 +8203,6 @@ msgstr "渲染器："
 
 msgid "More information"
 msgstr "更多信息"
-
-msgid ""
-"RenderingDevice-based methods not available on this GPU:\n"
-"%s\n"
-"Please use the Compatibility renderer."
-msgstr ""
-"基于 RenderingDevice 的方法在该 GPU 上不可用：\n"
-"%s\n"
-"请使用兼容渲染器。"
 
 msgid "The renderer can be changed later, but scenes may need to be adjusted."
 msgstr "渲染器可以稍后更改，但可能需要调整场景。"
@@ -8949,20 +8853,8 @@ msgstr "停止运行中的项目"
 msgid "Run Current Scene"
 msgstr "运行当前场景"
 
-msgid "Run Scene in Regular Mode"
-msgstr "在常规模式下运行场景"
-
-msgid "Run Scene in XR Mode"
-msgstr "在 XR 模式下运行场景"
-
 msgid "Run Specific Scene"
 msgstr "运行特定场景"
-
-msgid "Run in Regular Mode"
-msgstr "在常规模式下运行"
-
-msgid "Run in XR Mode"
-msgstr "在 XR 模式下运行"
 
 msgid "Enable Movie Maker Mode"
 msgstr "启用 Movie Maker 模式"
@@ -15042,9 +14934,6 @@ msgstr "导航（3D）"
 msgid "XR"
 msgstr "XR"
 
-msgid "OpenXR"
-msgstr "OpenXR"
-
 msgid "Wayland"
 msgstr "Wayland"
 
@@ -15117,9 +15006,6 @@ msgstr "3D 导航服务器及能力。"
 msgid "XR (AR and VR)."
 msgstr "XR（AR 和 VR）。"
 
-msgid "OpenXR standard implementation (requires XR to be enabled)."
-msgstr "OpenXR 标准实现（需要启用 XR）。"
-
 msgid "Wayland display (Linux only)."
 msgstr "Wayland 显示（仅 Linux）。"
 
@@ -15132,9 +15018,6 @@ msgstr "基于 RenderingDevice 的渲染（禁用则需要 OpenGL 后端）。"
 
 msgid "Forward+ renderer for advanced 3D graphics."
 msgstr "Forward+ 渲染器，用于高级 3D 图形。"
-
-msgid "Mobile renderer for less advanced 3D graphics."
-msgstr "移动渲染器，用于次高级 3D 图形。"
 
 msgid "Vulkan backend of RenderingDevice."
 msgstr "RenderingDevice 的 Vulkan 后端。"
@@ -16145,14 +16028,6 @@ msgstr "复制材质的参数"
 
 msgid "Paste Parameters To Material"
 msgstr "粘贴材质的参数"
-
-msgid "Forward+/Mobile"
-msgstr "Forward+/Mobile"
-
-msgid ""
-"Only supported in the Forward+ and Mobile rendering methods, not "
-"Compatibility."
-msgstr "仅被 Forward+ 和 Mobile 渲染方法支持，而非 Compatibility。"
 
 msgid "Create Shader Node"
 msgstr "创建着色器节点"
@@ -18430,17 +18305,8 @@ msgstr "加载 %s 时出错：%s。"
 msgid "Error saving file %s: %s"
 msgstr "保存文件 %s 时出错：%s"
 
-msgid "OpenXR Action map:"
-msgstr "OpenXR 动作映射："
-
 msgid "Remove interaction profile"
 msgstr "移除交互配置"
-
-msgid "OpenXR Action Map"
-msgstr "OpenXR 动作映射"
-
-msgid "Toggle OpenXR Action Map Dock"
-msgstr "开关 OpenXR 动作映射面板"
 
 msgid "Add Action Set"
 msgstr "添加动作集"
@@ -18453,12 +18319,6 @@ msgstr "添加配置"
 
 msgid "Add an interaction profile."
 msgstr "添加一个交互配置。"
-
-msgid "Save this OpenXR action map."
-msgstr "保存这个 OpenXR 动作映射。"
-
-msgid "Reset to default OpenXR action map."
-msgstr "重置为默认的 OpenXR 动作映射。"
 
 msgid "Action Sets"
 msgstr "动作集"
@@ -18564,57 +18424,14 @@ msgid "Choose an XR runtime."
 msgstr "请选择 XR 运行时。"
 
 msgid ""
-"Cannot use the same SubViewport with multiple OpenXR composition layers. "
-"Clear it from its current layer first."
-msgstr ""
-"无法为多个 OpenXR 合成层使用同一个 SubViewport。请先在当前层中将其清除。"
-
-msgid ""
-"Cannot set SubViewport on an OpenXR composition layer when using an Android "
-"surface."
-msgstr "使用 Android 表面时无法为 OpenXR 合成层设置 SubViewport。"
-
-msgid "OpenXR composition layers must have an XROrigin3D node as their parent."
-msgstr "OpenXR 合成层的父节点必须为 XROrigin3D。"
-
-msgid ""
-"OpenXR composition layers must have orthonormalized transforms (ie. no scale "
-"or shearing)."
-msgstr "OpenXR 合成层的变换必须正交归一（即无缩放和倾斜）。"
-
-msgid ""
 "Hole punching won't work as expected unless the sort order is less than zero."
 msgstr "排序小于零时打洞功能才能够正常工作。"
-
-msgid "OpenXR visibility mask must have an XRCamera3D node as their parent."
-msgstr "OpenXR 可见遮罩的父节点必须为 XRCamera3D。"
-
-msgid "Building Android Project (gradle)"
-msgstr "构建 Android 项目 (Gradle)"
-
-msgid "> Connecting to Gradle Build Environment..."
-msgstr "> 正在连接到 Gradle 构建环境……"
-
-msgid "Unable to connect to Gradle Build Environment service"
-msgstr "无法连接到 Gradle 构建环境服务"
-
-msgid "> Starting Gradle build..."
-msgstr "> 开始 Gradle 构建……"
-
-msgid "Failed to execute Gradle command"
-msgstr "执行 Gradle 命令失败"
-
-msgid "> Copying Gradle artifacts..."
-msgstr "> 正在复制 Gradle artifacts……"
 
 msgid "Package name is missing."
 msgstr "缺失包名。"
 
 msgid "Package segments must be of non-zero length."
 msgstr "包名中每段的长度均不能为零。"
-
-msgid "The character '%s' is not allowed in Android application package names."
-msgstr "Android 应用包名中不允许“%s”字符。"
 
 msgid "A digit cannot be the first character in a package segment."
 msgstr "包名中每段的第一个字符均不能是数字。"
@@ -18634,26 +18451,6 @@ msgstr "APK 扩展的公钥无效。"
 msgid "Invalid package name:"
 msgstr "无效的包名称："
 
-msgid "\"Use Gradle Build\" is required to enable \"Swipe to dismiss\"."
-msgstr "必须启用“使用 Gradle 构建”才能启用“Swipe to dismiss”。"
-
-msgid "\"Use Gradle Build\" must be enabled to use the plugins."
-msgstr "必须启用“使用 Gradle 构建”才能使用插件。"
-
-msgid "Support for \"Use Gradle Build\" on Android is currently experimental."
-msgstr "Android上的“使用Gradle构建”功能目前处于实验阶段。"
-
-msgid ""
-"\"Compress Native Libraries\" is only valid when \"Use Gradle Build\" is "
-"enabled."
-msgstr "“压缩原生库”只有在启用“使用 Gradle 构建”时才有效。"
-
-msgid "\"Export AAB\" is only valid when \"Use Gradle Build\" is enabled."
-msgstr "“导出 AAB”只有在启用“使用 Gradle 构建”时才有效。"
-
-msgid "\"Min SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
-msgstr "“最小 SDK”只有在启用“使用 Gradle 构建”时才能覆盖。"
-
 msgid "\"Min SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr "“最小 SDK”应当为有效的整数，但获得了无效的“%s”。"
 
@@ -18663,30 +18460,11 @@ msgid ""
 msgstr "“最小 SDK”不能低于 %d，这是 Godot 库所需要的版本。"
 
 msgid ""
-"\"Target SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
-msgstr "“目标 SDK”只有在启用“使用 Gradle 构建”时才能覆盖。"
-
-msgid ""
 "\"Target SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr "“目标 SDK”应当为有效的整数，但获得了无效的“%s”。"
 
 msgid "\"Target SDK\" version must be greater or equal to \"Min SDK\" version."
 msgstr "“目标 SDK”版本必须大于等于“最小 SDK”版本。"
-
-msgid "\"Use Gradle Build\" is required to add custom theme attributes."
-msgstr "必须启用“使用 Gradle 构建”才能添加自定义主题属性。"
-
-msgid "\"Use Gradle Build\" must be enabled to enable \"Show In Android Tv\"."
-msgstr "必须启用“使用 Gradle 构建”才能启用“Show In Android Tv”。"
-
-msgid "\"Use Gradle Build\" must be enabled to enable \"Show As Launcher App\"."
-msgstr "必须启用“使用 Gradle 构建”才能启用“Show As Launcher App”。"
-
-msgid "\"Use Gradle Build\" must be enabled to disable \"Show In App Library\"."
-msgstr "必须启用“使用 Gradle 构建”才能禁用“Show In App Library”。"
-
-msgid "Mirror Android devices"
-msgstr "镜像安卓设备"
 
 msgid ""
 "If enabled, \"scrcpy\" is used to start the project and automatically stream "
@@ -18709,42 +18487,11 @@ msgstr "无法安装到设备：%s"
 msgid "Running on device..."
 msgstr "正在设备上运行……"
 
-msgid ""
-"Could not start scrcpy executable. Configure scrcpy path in the Editor "
-"Settings (Export > Android > scrcpy > Path)."
-msgstr ""
-"无法启动scrcpy可执行文件。请在编辑器设置中配置scrcpy路径（Export > Android > "
-"scrcpy > Path）。"
-
 msgid "Could not execute on device."
 msgstr "无法在设备上运行。"
 
 msgid "Error: There was a problem validating the keystore username and password"
 msgstr "错误：校验密钥库用户名密码时出现问题"
-
-msgid ""
-"Unable to determine the C# project's TFM, it may be incompatible. The export "
-"template only supports '%s'. Make sure the project targets '%s' or consider "
-"using gradle builds instead."
-msgstr ""
-"无法确定 C# 项目的 TFM，可能不兼容。导出模板仅支持“%s”。请确保项目以“%s”为目"
-"标，或考虑改用 Gradle 构建。"
-
-msgid ""
-"C# project targets '%s' but the export template only supports '%s'. Consider "
-"using gradle builds instead."
-msgstr "C# 项目以“%s”为目标，但是导出模板仅支持“%s”。请考虑改用 Gradle 构建。"
-
-msgid "Exporting to Android when using C#/.NET is experimental."
-msgstr "使用 C#/.NET 时导出到 Android 是实验性的。"
-
-msgid "Custom Android source template not found."
-msgstr "找不到自定义 Android 源码模板。"
-
-msgid ""
-"Android build template not installed in the project. Install it from the "
-"Project menu."
-msgstr "未在项目中安装 Android 构建模板。从项目菜单安装它。"
 
 msgid ""
 "Either Debug Keystore, Debug User AND Debug Password settings must be "
@@ -18777,29 +18524,11 @@ msgstr "无法使用 Java SDK 路径找到“java”命令。"
 msgid "Please check the Java SDK directory specified in Editor Settings."
 msgstr "请检查编辑器设置中指定的 Java SDK 目录。"
 
-msgid "A valid Android SDK path is required in Editor Settings."
-msgstr "编辑器设置中需要有效的 Android SDK 路径。"
-
-msgid "Invalid Android SDK path in Editor Settings."
-msgstr "编辑器设置中的 Android SDK 路径无效。"
-
 msgid "Missing 'platform-tools' directory!"
 msgstr "缺失“platform-tools”目录！"
 
-msgid "Unable to find Android SDK platform-tools' adb command."
-msgstr "找不到 Android SDK 平台工具的 adb 命令。"
-
-msgid "Please check in the Android SDK directory specified in Editor Settings."
-msgstr "请检查编辑器设置中指定的 Android SDK 目录。"
-
 msgid "Missing 'build-tools' directory!"
 msgstr "缺失“build-tools”目录！"
-
-msgid "Unable to find Android SDK build-tools' apksigner command."
-msgstr "找不到 Android SDK 生成工具的 apksigner 命令。"
-
-msgid "\"Use Gradle Build\" is required for transparent background on Android"
-msgstr "必须启用“使用 Gradle 构建”才能启用 Android 的透明背景"
 
 msgid ""
 "\"Target SDK\" %d is higher than the default version %d. This may work, but "
@@ -18807,11 +18536,6 @@ msgid ""
 msgstr ""
 "“目标 SDK”%d 比默认版本 %d 要高。这样做也许可行，但并没有经过测试，可能不稳"
 "定。"
-
-msgid ""
-"The \"%s\" renderer is designed for Desktop devices, and is not suitable for "
-"Android devices."
-msgstr "“%s”渲染器专为桌面设备设计，不适用于 Android 设备。"
 
 msgid ""
 "The project name does not meet the requirement for the package name format "
@@ -18838,21 +18562,6 @@ msgstr "找不到发布密钥库，无法导出。"
 msgid "Unable to sign apk."
 msgstr "无法为 APK 签名。"
 
-msgid ""
-"All 'apksigner' tools located in Android SDK 'build-tools' directory failed "
-"to execute. Please check that you have the correct version installed for your "
-"target sdk version. The resulting APK is unsigned."
-msgstr ""
-"位于 Android SDK“build-tools”目录下的所有“apksigner”工具都未能成功执行。请检查"
-"你是否为目标 SDK 版本安装了正确的版本。生成的 APK 未签名。"
-
-msgid ""
-"'apksigner' could not be found. Please check that the command is available in "
-"the Android SDK build-tools directory. The resulting APK is unsigned."
-msgstr ""
-"无法找到“apksigner”。请检查 Android SDK 的 build-tools 目录中是否有此命令。生"
-"成的 APK 未签名。"
-
 msgid "Could not start apksigner executable."
 msgstr "无法启动 apksigner 可执行文件。"
 
@@ -18878,39 +18587,14 @@ msgstr "“apksigner”APK 校验失败。"
 msgid "Could not create temporary file!"
 msgstr "无法创建临时文件！"
 
-msgid "Exporting for Android"
-msgstr "正在为 Android 导出"
-
-msgid "Invalid filename! Android App Bundle requires the *.aab extension."
-msgstr "无效文件名！Android App Bundle 必须有 *.aab 扩展。"
-
-msgid "APK Expansion not compatible with Android App Bundle."
-msgstr "APK Expansion 与 Android App Bundle 不兼容。"
-
-msgid "Invalid filename! Android APK requires the *.apk extension."
-msgstr "无效文件名！Android APK 必须有 *.apk 扩展。"
-
 msgid "Unsupported export format!"
 msgstr "不支持的导出格式！"
-
-msgid ""
-"Trying to build from a gradle built template, but no version info for it "
-"exists. Please reinstall from the 'Project' menu."
-msgstr ""
-"尝试从自定义构建模板构建，但是它所使用的版本信息不存在。请从“项目”菜单中重新安"
-"装。"
 
 msgid ""
 "Java SDK path must be configured in Editor Settings at 'export/android/"
 "java_sdk_path'."
 msgstr ""
 "必须在“编辑器设置”的“export/android/java_sdk_path”中配置 Java SDK 路径。"
-
-msgid ""
-"Android SDK path must be configured in Editor Settings at 'export/android/"
-"android_sdk_path'."
-msgstr ""
-"必须在“编辑器设置”的“export/android/android_sdk_path”中配置 Android SDK 路径。"
 
 msgid "Unable to overwrite res/*.xml files with project name."
 msgstr "无法使用项目名称覆盖 res/*.xml 文件。"
@@ -18921,14 +18605,8 @@ msgstr "无法生成稀疏 PCK 元数据！"
 msgid "Could not write PCK directory!"
 msgstr "无法写入 PCK 目录！"
 
-msgid "Could not export project files to gradle project."
-msgstr "无法将项目文件导出至 gradle 项目。"
-
 msgid "Could not write expansion package file!"
 msgstr "无法写入扩展包文件！"
-
-msgid "Building of Android project failed, check output for the error:"
-msgstr "Android 项目构建失败，请检查输出中显示的错误："
 
 msgid "Moving output"
 msgstr "移动输出"
@@ -18967,9 +18645,6 @@ msgstr "正在对齐 APK……"
 
 msgid "Could not unzip temporary unaligned APK."
 msgstr "无法解压未对齐的临时 APK。"
-
-msgid "Metal renderer require iOS 14+."
-msgstr "金属材质渲染器需要iOS 14+。"
 
 msgid "Export Icons"
 msgstr "导出图标"
@@ -19556,14 +19231,6 @@ msgstr ""
 "Particles2D 动画需要使用启用了 “Particles Animation” 的 CanvasItemMaterial。"
 
 msgid ""
-"Particle trails are only available when using the Forward+ or Mobile renderer."
-msgstr "粒子尾迹仅在使用 Forward+ 或 Mobile 渲染器时可用。"
-
-msgid ""
-"Particle sub-emitters are not available when using the Compatibility renderer."
-msgstr "粒子的子发射器在使用 Compatibility 渲染器时不可用。"
-
-msgid ""
 "A texture with the shape of the light must be supplied to the \"Texture\" "
 "property."
 msgstr "必须将具有灯光形状的纹理提供给 “Texture”（纹理）属性。"
@@ -19808,9 +19475,6 @@ msgstr ""
 "CPUParticles3D 动画需要使用 StandardMaterial3D，其 Billboard Mode 应被设置"
 "为“Particle Billboard”。"
 
-msgid "Decals are only available when using the Forward+ or Mobile renderer."
-msgstr "贴花仅在使用 Forward+ 或 Mobile 渲染器时可用。"
-
 msgid ""
 "The decal has no textures loaded into any of its texture properties, and will "
 "therefore not be visible."
@@ -19893,11 +19557,6 @@ msgstr "灯光的缩放不会影响灯光的视觉尺寸。"
 
 msgid "Projector texture only works with shadows active."
 msgstr "投影纹理仅在阴影激活时能够正常工作。"
-
-msgid ""
-"Projector textures are not supported when using the Compatibility renderer "
-"yet. Support will be added in a future release."
-msgstr "使用 Compatibility 渲染器时尚不支持投影器纹理。将在后续版本中加入。"
 
 msgid "A SpotLight3D with an angle wider than 90 degrees cannot cast shadows."
 msgstr "角度大于 90 度的 SpotLight3D 无法投射阴影。"
@@ -20263,11 +19922,6 @@ msgstr "正在生成距离场"
 msgid "Finishing Plot"
 msgstr "正在完成绘制"
 
-msgid ""
-"VoxelGI nodes are not supported when using the Compatibility renderer yet. "
-"Support will be added in a future release."
-msgstr "使用 Compatibility 渲染器时暂不支持 VoxelGI 节点。将在后续版本中加入。"
-
 msgid "VoxelGI nodes are not supported when using the Dummy renderer."
 msgstr "使用虚设渲染器时不支持 VoxelGI 节点。"
 
@@ -20594,13 +20248,6 @@ msgstr "着色器的源资源无效。"
 
 msgid "Invalid operator for that type."
 msgstr "运算符对该类型无效。"
-
-msgid ""
-"`%s` precision mode is not available for `gl_compatibility` profile.\n"
-"Reverted to `None` precision."
-msgstr ""
-"`%s` 精度模式在 `gl_compatibility` 配置下不可用。\n"
-"已恢复为 `None` 精度。"
 
 msgid "'%s' type is incompatible with '%s' source."
 msgstr "“%s”类型与“%s”源不兼容。"

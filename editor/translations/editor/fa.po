@@ -2721,20 +2721,6 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "پیاده‌سازی کوچک با سامانهٔ پروندهٔ شبکه"
 
-msgid ""
-"When this option is enabled, using one-click deploy for Android will only "
-"export an executable without the project data.\n"
-"The filesystem will be provided from the project by the editor over the "
-"network.\n"
-"On Android, deploying will use the USB cable for faster performance. This "
-"option speeds up testing for projects with large assets."
-msgstr ""
-"هنگامی که این گزینه به‌کارافتاده باشد، به‌کارگیری پیاده‌سازی با یک‌کلیک برای "
-"اندروید تنها اجراپذیری را بدون داده‌های پروژه برون‌برد خواهد کرد.\n"
-"سامانهٔ پرونده توسط ویراستار از پروژه بر روی شبکه فراهم می‌شود.\n"
-"در اندروید، پیاده‌سازی از کابل USB برای عملکرد سریع‌تر استفاده خواهد کرد. این "
-"گزینه زمان آزمایش برای پروژه‌هایی با دارایی‌های بزرگ را تندتر می‌کند."
-
 msgid "Visible Collision Shapes"
 msgstr "پدیداری شکل برخوردگاه‌ها"
 
@@ -4695,26 +4681,6 @@ msgstr "پیام‌های ویراستار"
 msgid "Toggle visibility of editor messages."
 msgstr "روشن/خاموش کردن پدیداری پیام‌های ویراستار."
 
-msgid ""
-"The Android build template is already installed in this project and it won't "
-"be overwritten.\n"
-"Remove the \"%s\" directory manually before attempting this operation again."
-msgstr ""
-"قالب ساخت اندروید از قبل در این پروژه نصب شده است و بازنویسی نخواهد شد.\n"
-"پوشه «%s» را به‌صورت دستی حذف کنید و سپس دوباره این عملیات را انجام دهید."
-
-msgid ""
-"This will set up your project for gradle Android builds by installing the "
-"source template to \"%s\".\n"
-"Note that in order to make gradle builds instead of using pre-built APKs, the "
-"\"Use Gradle Build\" option should be enabled in the Android export preset."
-msgstr ""
-"این عملیات، پروژه شما را برای ساخت‌های اندروید با گریدل آماده می‌کند و قالب "
-"منبع را در «%s» نصب خواهد کرد.\n"
-"توجه داشته باشید که برای ساخت با گریدل به‌جای استفاده از ای‌پی‌کی‌های از پیش "
-"ساخته‌شده، گزینه «استفاده از ساخت گریدل» باید در پیش‌تنظیم برون‌برد اندروید فعال "
-"شود."
-
 msgid "Unnamed Project"
 msgstr "پروژه بی‌نام"
 
@@ -5274,9 +5240,6 @@ msgstr "تنظیمات کنترل نسخه..."
 msgid "Pack Project as ZIP..."
 msgstr "بسته‌بندی پروژه به‌عنوان زیپ..."
 
-msgid "Install Android Build Template..."
-msgstr "نصب قالب ساخت اندروید..."
-
 msgid "Open User Data Folder"
 msgstr "گشودن پوشهٔ داده‌های کاربر"
 
@@ -5496,17 +5459,11 @@ msgstr "پنهان کردن چرخنده به‌روزرسانی"
 msgid "Don't Save"
 msgstr "ذخیره نکن"
 
-msgid "Android build template is missing, please install relevant templates."
-msgstr "قالب ساخت اندروید وجود ندارد، لطفاً قالب‌های مربوطه را نصب کنید."
-
 msgid "Manage Templates"
 msgstr "مدیریت قالب‌ها"
 
 msgid "Install from file"
 msgstr "نصب از پرونده"
-
-msgid "Select Android sources file"
-msgstr "گزینش پروندهٔ منبع‌های اندروید"
 
 msgid "Import Templates From ZIP File"
 msgstr "درون‌برد قالب‌ها از یک پروندهٔ زیپ"
@@ -5717,9 +5674,6 @@ msgstr "باید حداقل یک دلیل دسترسی به فضای دیسک ا
 msgid "At least one system boot time access reason should be selected."
 msgstr "باید حداقل یک دلیل دسترسی به زمان راه‌اندازی سامانه انتخاب شود."
 
-msgid "\"Shader Baker\" doesn't work with the Compatibility renderer."
-msgstr "«Shader Baker» با رندرکننده‌ی Compatibility کار نمی‌کند."
-
 msgid ""
 "The editor is currently using a different renderer than what the target "
 "platform will use. \"Shader Baker\" won't be able to include core shaders. "
@@ -5847,9 +5801,6 @@ msgstr "نویسهٔ «%s» درون شناسه مجاز نیست."
 msgid "Running on %s"
 msgstr "در حال اجرا روی %s"
 
-msgid "Could not start ios-deploy executable."
-msgstr "نتوانست فایل اجرایی ios-deploy را شروع کند."
-
 msgid "Installation/running failed, see editor log for details."
 msgstr "نصب/اجرا شکست خورد، برای جزئیات به لاگ ویراستار مراجعه کنید."
 
@@ -5858,9 +5809,6 @@ msgstr "نصب شکست خورد، برای جزئیات به لاگ ویراس�
 
 msgid "Running failed, see editor log for details."
 msgstr "اجرار شکست خورد، برای جزئیات به لاگ ویراستار مراجعه کنید."
-
-msgid "\"Shader Baker\" is not supported when using the Compatibility renderer."
-msgstr "هنگام استفاده از رندرکننده سازگاری، «Shader Baker» پشتیبانی نمی‌شود."
 
 msgid ""
 "The editor is currently using a different renderer than what the target "
@@ -6042,9 +5990,6 @@ msgstr "هیچ قالبی برای ساخت‌های با دقت مضاعف نی
 
 msgid "Official export templates aren't available for double-precision builds."
 msgstr "قالب‌های برون‌برد رسمی برای ساخت‌های با دقت مضاعف دردسترس نیستند."
-
-msgid "Uncompressing Android Build Sources"
-msgstr "استخراج منابع ساخت اندروید"
 
 msgid "Export Template Manager"
 msgstr "برون‌برد مدیر قالب"
@@ -8030,17 +7975,11 @@ msgstr "توانایی کمتری برای رسیدن به اندازهٔ صحن
 msgid "Fast rendering of simple scenes."
 msgstr "نماپردازش تند صحنه‌های ساده."
 
-msgid "Supports desktop, mobile + web platforms."
-msgstr "از سکوهای رایانه، وب و گوشی پشتیبانی می‌کند."
-
 msgid "Least advanced 3D graphics."
 msgstr "کمترین پیشرفتگی گرافیک سه‌بعدی."
 
 msgid "Intended for low-end/older devices."
 msgstr "در نظر گرفته شده برای دستگاه‌های رده‌پایین یا کهنه‌تر."
-
-msgid "Uses OpenGL 3 backend (OpenGL 3.3/ES 3.0/WebGL2)."
-msgstr "بَک‌اِند OpenGL ۳ را بکار می‌گیرد (OpenGL ۳.۳ یا ES ۳.۰ یا WebGL۲)."
 
 msgid "Fastest rendering of simple scenes."
 msgstr "تندترین نماپردازش برای صحنه‌های ساده."
@@ -8110,15 +8049,6 @@ msgstr "مسیر نصب پروژه:"
 
 msgid "Renderer:"
 msgstr "نماپرداز:"
-
-msgid ""
-"RenderingDevice-based methods not available on this GPU:\n"
-"%s\n"
-"Please use the Compatibility renderer."
-msgstr ""
-"روش‌های پایه بر RenderingDevice برای این کارت گرافیک دردسترس نیستند:\n"
-"%s\n"
-"خواهشمندیم نماپرداز سازگاری را به کار ببرید."
 
 msgid "The renderer can be changed later, but scenes may need to be adjusted."
 msgstr ""
@@ -8764,20 +8694,8 @@ msgstr "ایستاندن پروژهٔ در حال اجرا"
 msgid "Run Current Scene"
 msgstr "اجرای صحنهٔ کنونی"
 
-msgid "Run Scene in Regular Mode"
-msgstr "اجرای صحنه در حالت عادی"
-
-msgid "Run Scene in XR Mode"
-msgstr "اجرای صحنه در حالت ایکس.آر"
-
 msgid "Run Specific Scene"
 msgstr "اجرای صحنه‌ای ویژه"
-
-msgid "Run in Regular Mode"
-msgstr "اجرا در حالت عادی"
-
-msgid "Run in XR Mode"
-msgstr "اجرا در حالت ایکس.آر"
 
 msgid "Enable Movie Maker Mode"
 msgstr "به‌کاراندازی حالت فیلم‌ساز"
@@ -14017,9 +13935,6 @@ msgstr "ناوبری (سه‌بعدی)"
 msgid "XR"
 msgstr "اکس‌آر"
 
-msgid "OpenXR"
-msgstr "اوپن‌ایکس‌آر"
-
 msgid "Wayland"
 msgstr "ویلند"
 
@@ -14092,9 +14007,6 @@ msgstr "کارساز ناوبری و توانایی‌ها برای سه‌بع�
 msgid "XR (AR and VR)."
 msgstr "اکس‌آر (ای‌آر و وی‌آر)."
 
-msgid "OpenXR standard implementation (requires XR to be enabled)."
-msgstr "پیاده‌سازی استاندارد اوپن‌ایکس‌آر (به به‌کارافتادگی ایکس.آر نیاز دارد)."
-
 msgid "Wayland display (Linux only)."
 msgstr "نمایشگر وِی‌لند (تنها برای لینوکس)."
 
@@ -14109,9 +14021,6 @@ msgstr ""
 
 msgid "Forward+ renderer for advanced 3D graphics."
 msgstr "نماپردازندهٔ فوروارد+ برای گرافیک سه‌بعدی پیشرفته."
-
-msgid "Mobile renderer for less advanced 3D graphics."
-msgstr "نماپردازندهٔ جنبا برای گرافیک سه‌بعدی با پیشرفتگی کمتر."
 
 msgid "Vulkan backend of RenderingDevice."
 msgstr "بَک‌اِند وولکانِ RenderingDevice."
@@ -16214,12 +16123,6 @@ msgstr "افزودن نمایه"
 msgid "Add an interaction profile."
 msgstr "افزودن نمایه تعاملی."
 
-msgid "Save this OpenXR action map."
-msgstr "ذخیره این نقشه کنش اوپن‌اکس‌آر."
-
-msgid "Reset to default OpenXR action map."
-msgstr "بازنشانی نقشه عملکرد اوپن‌اکس‌آر به حالت پیش‌فرض."
-
 msgid "Add action"
 msgstr "افزودن کنش"
 
@@ -16284,9 +16187,6 @@ msgid ""
 msgstr ""
 "سوراخ‌سازی طبق انتظار عمل نخواهد کرد مگر اینکه ترتیب مرتب‌سازی کمتر از صفر باشد."
 
-msgid "Building Android Project (gradle)"
-msgstr "در حال ساخت پروژه اندروید (گریدل)"
-
 msgid "Package name is missing."
 msgstr "نام بسته وجود ندارد."
 
@@ -16308,30 +16208,6 @@ msgstr "کلید عمومی نامعتبر برای گسترش APK."
 msgid "Invalid package name:"
 msgstr "نام پکیج نامعتبر:"
 
-msgid "\"Use Gradle Build\" is required to enable \"Swipe to dismiss\"."
-msgstr "گزینه «استفاده از ساخت گریدل» برای فعال‌کردن «کشیدن برای بستن» لازم است."
-
-msgid "\"Use Gradle Build\" must be enabled to use the plugins."
-msgstr ""
-"گزینه «استفاده از ساخت گریدل» باید فعال باشد تا بتوان از پلاگین‌ها استفاده کرد."
-
-msgid ""
-"\"Compress Native Libraries\" is only valid when \"Use Gradle Build\" is "
-"enabled."
-msgstr ""
-"گزینه «فشرده‌سازی کتابخانه‌های بومی» تنها زمانی معتبر است که «استفاده از ساخت "
-"گریدل» فعال باشد."
-
-msgid "\"Export AAB\" is only valid when \"Use Gradle Build\" is enabled."
-msgstr ""
-"گزینه «برون‌برد ای‌ای‌بی» تنها زمانی معتبر است که «استفاده از ساخت گریدل» فعال "
-"باشد."
-
-msgid "\"Min SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
-msgstr ""
-"گزینه «حداقل اس‌دی‌کی» تنها زمانی قابل بازنویسی است که «استفاده از ساخت گریدل» "
-"فعال باشد."
-
 msgid "\"Min SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
 "گزینه «حداقل اس‌دی‌کی» باید یک عدد صحیح معتبر باشد، اما مقدار «%s» نامعتبر است."
@@ -16344,35 +16220,12 @@ msgstr ""
 "نیاز دارد."
 
 msgid ""
-"\"Target SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
-msgstr ""
-"گزینه «هدف اس‌دی‌کی» تنها زمانی قابل بازنویسی است که «استفاده از ساخت گریدل» "
-"فعال باشد."
-
-msgid ""
 "\"Target SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
 "گزینه «هدف اس‌دی‌کی» باید یک عدد صحیح معتبر باشد، اما مقدار «%s» نامعتبر است."
 
 msgid "\"Target SDK\" version must be greater or equal to \"Min SDK\" version."
 msgstr "نسخه «هدف اس‌دی‌کی» باید برابر یا بزرگ‌تر از نسخه «حداقل اس‌دی‌کی» باشد."
-
-msgid "\"Use Gradle Build\" is required to add custom theme attributes."
-msgstr "گزینه «استفاده از ساخت گریدل» برای افزودن ویژگی‌های سفارشی تم لازم است."
-
-msgid "\"Use Gradle Build\" must be enabled to enable \"Show In Android Tv\"."
-msgstr ""
-"برای فعال‌سازی «نمایش در اندروید تی‌وی»، باید «استفاده از ساخت گریدل» فعال باشد."
-
-msgid "\"Use Gradle Build\" must be enabled to enable \"Show As Launcher App\"."
-msgstr ""
-"برای فعال کردن «نمایش به عنوان برنامه لانچر» باید «استفاده از بیلد گریدل» "
-"فعال باشد."
-
-msgid "\"Use Gradle Build\" must be enabled to disable \"Show In App Library\"."
-msgstr ""
-"برای غیرفعال کردن «نمایش در کتابخانه برنامه» باید «استفاده از بیلد گریدل» "
-"فعال باشد."
 
 msgid "Exporting APK..."
 msgstr "در حال برون‌برد APK..."
@@ -16391,30 +16244,6 @@ msgstr "در حال اجرا روی دستگاه..."
 
 msgid "Error: There was a problem validating the keystore username and password"
 msgstr "خطا: مشکلی در تأیید نام کاربری و گذرواژه کی‌استور رخ داد"
-
-msgid ""
-"Unable to determine the C# project's TFM, it may be incompatible. The export "
-"template only supports '%s'. Make sure the project targets '%s' or consider "
-"using gradle builds instead."
-msgstr ""
-"امکان تعیین تی‌اف‌ام پروژه سی‌شارپ وجود ندارد، ممکن است ناسازگار باشد. قالب "
-"برون‌برد تنها از «%s» پشتیبانی می‌کند. اطمینان حاصل کنید که پروژه هدف «%s» را "
-"دنبال می‌کند یا به استفاده از ساخت‌های گریدل فکر کنید."
-
-msgid ""
-"C# project targets '%s' but the export template only supports '%s'. Consider "
-"using gradle builds instead."
-msgstr ""
-"پروژهٔ سی.شارپ «%s» را هدف می‌گیرد ولی قالب برون‌برد تنها از «%s» پشتیبانی "
-"می‌کند. به‌جای آن به‌کارگیری ساخت‌های گِرِیدِل را در نظر بگیرید."
-
-msgid "Exporting to Android when using C#/.NET is experimental."
-msgstr "برون‌برد به اندروید هنگام استفاده از سی‌شارپ/دات‌نت آزمایشی است."
-
-msgid ""
-"Android build template not installed in the project. Install it from the "
-"Project menu."
-msgstr "قالب ساخت اندروید در پروژه نصب نشده است. آن را از منوی پروژه نصب کنید."
 
 msgid ""
 "Either Debug Keystore, Debug User AND Debug Password settings must be "
@@ -16452,38 +16281,12 @@ msgstr "امکان یافتن فرمان «java» با استفاده از مس�
 msgid "Please check the Java SDK directory specified in Editor Settings."
 msgstr "لطفاً پوشه اس‌دی‌کی جاوا مشخص‌شده در تنظیمات ویراستار را بررسی کنید."
 
-msgid "A valid Android SDK path is required in Editor Settings."
-msgstr "مسیر معتبر برای اس‌دی‌کی اندروید در تنظیمات ویراستار الزامی است."
-
-msgid "Invalid Android SDK path in Editor Settings."
-msgstr "مسیر نامعتبر برای اس‌دی‌کی اندروید در تنظیمات ویراستار."
-
-msgid "Unable to find Android SDK platform-tools' adb command."
-msgstr "امکان یافتن فرمان «adb» در platform-tools اس‌دی‌کی اندروید وجود ندارد."
-
-msgid "Please check in the Android SDK directory specified in Editor Settings."
-msgstr "لطفاً در شاخه Android SDK مشخص‌شده در تنظیمات ویراستار بررسی کنید."
-
-msgid "Unable to find Android SDK build-tools' apksigner command."
-msgstr ""
-"امکان یافتن فرمان apksigner مربوط به build-tools در Android SDK وجود ندارد."
-
-msgid "\"Use Gradle Build\" is required for transparent background on Android"
-msgstr "«استفاده از ساخت گریدل» برای پس‌زمینه شفاف در اندروید لازم است"
-
 msgid ""
 "\"Target SDK\" %d is higher than the default version %d. This may work, but "
 "wasn't tested and may be unstable."
 msgstr ""
 "«Target SDK» ‏%d از نسخه پیش‌فرض ‏%d بالاتر است. این ممکن است کار کند، اما "
 "آزمایش نشده و ممکن است ناپایدار باشد."
-
-msgid ""
-"The \"%s\" renderer is designed for Desktop devices, and is not suitable for "
-"Android devices."
-msgstr ""
-"نماپرداز «%s» برای دستگاه‌های رایانه‌ای طراحی شده است و مناسب دستگاه‌های "
-"اندرویدی نیست."
 
 msgid ""
 "The project name does not meet the requirement for the package name format "
@@ -16495,15 +16298,6 @@ msgstr ""
 
 msgid "Signing debug APK..."
 msgstr "امضای ای‌پی‌کی اشکال‌زدایی..."
-
-msgid ""
-"All 'apksigner' tools located in Android SDK 'build-tools' directory failed "
-"to execute. Please check that you have the correct version installed for your "
-"target sdk version. The resulting APK is unsigned."
-msgstr ""
-"تمامی ابزارهای «apksigner» موجود در دایرکتوری «build-tools» در اس‌دی‌کی اندروید "
-"قادر به اجرا نبودند. لطفاً بررسی کنید که نسخه صحیح برای نسخه هدف اس‌دی‌کی خود "
-"نصب شده باشد. ای‌پی‌کی خروجی بدون امضا است."
 
 msgid "Could not start apksigner executable."
 msgstr "امکان راه‌اندازی فایل اجرایی «apksigner» وجود ندارد."
@@ -16527,36 +16321,14 @@ msgstr "ناتوان در تأیید ای‌پی‌کی امضا شده."
 msgid "'apksigner' verification of APK failed."
 msgstr "تأیید «apksigner» برای ای‌پی‌کی شکست خورد."
 
-msgid "Exporting for Android"
-msgstr "در حال برون‌برد برای اندروید"
-
-msgid "Invalid filename! Android App Bundle requires the *.aab extension."
-msgstr "نام پرونده نامعتبر است! بسته برنامه اندروید نیاز به پسوند «*.aab» دارد."
-
-msgid "APK Expansion not compatible with Android App Bundle."
-msgstr "گسترش ای‌پی‌کی با بسته برنامه اندروید سازگار نیست."
-
-msgid "Invalid filename! Android APK requires the *.apk extension."
-msgstr "نام پرونده نامعتبر است! ای‌پی‌کی اندروید نیاز به پسوند *.apk دارد."
-
 msgid "Unsupported export format!"
 msgstr "چارچوب پشتیبانی نشدهٔ برون‌برد!"
-
-msgid ""
-"Trying to build from a gradle built template, but no version info for it "
-"exists. Please reinstall from the 'Project' menu."
-msgstr ""
-"در حال تلاش برای بیلد از قالبی ساخته‌شده با گریدل هستید، اما هیچ اطلاعات "
-"نسخه‌ای برای آن موجود نیست. لطفاً دوباره از منوی «پروژه» نصب کنید."
 
 msgid "Unable to overwrite res/*.xml files with project name."
 msgstr "امکان بازنویسی پرونده‌های res/*.xml با نام پروژه وجود ندارد."
 
 msgid "Could not write expansion package file!"
 msgstr "امکان نوشتن پرونده بسته گسترش وجود ندارد!"
-
-msgid "Building of Android project failed, check output for the error:"
-msgstr "ناکامی در ساخت پروژهٔ اندروید، برای خطا برونداد را بررسی کنید:"
 
 msgid "Moving output"
 msgstr "در حال جابجایی خروجی"
@@ -16596,9 +16368,6 @@ msgstr "در حال تراز کردن APK..."
 
 msgid "Could not unzip temporary unaligned APK."
 msgstr "امکان استخراج APK موقت غیرتراز شده وجود ندارد."
-
-msgid "Metal renderer require iOS 14+."
-msgstr "رندرگر متال به آی‌او‌اس ۱۴ یا بالاتر نیاز دارد."
 
 msgid "Export Icons"
 msgstr "آیکون‌های خروجی"
@@ -17071,10 +16840,6 @@ msgstr ""
 "«پویانمایی ذرات» فعال شده است."
 
 msgid ""
-"Particle sub-emitters are not available when using the Compatibility renderer."
-msgstr "زیرگسیلنده‌های ذره‌ای هنگام استفاده از پردازشگر سازگار در دسترس نیستند."
-
-msgid ""
 "A texture with the shape of the light must be supplied to the \"Texture\" "
 "property."
 msgstr "یک بافت با شکل نور باید برای دارایی \"بافت\" فراهم شده باشد."
@@ -17373,13 +17138,6 @@ msgstr "مقیاس یک نور بر اندازه بصری نور تأثیر نم
 
 msgid "Projector texture only works with shadows active."
 msgstr "بافت پروجکتور تنها زمانی کار می‌کند که سایه‌ها فعال باشند."
-
-msgid ""
-"Projector textures are not supported when using the Compatibility renderer "
-"yet. Support will be added in a future release."
-msgstr ""
-"‬بافت‌های پروژه‌تور هنوز در هنگام استفاده از رندرگر سازگاری پشتیبانی نمی‌شوند. "
-"پشتیبانی از آن در نسخه‌های آینده اضافه خواهد شد."
 
 msgid "A SpotLight3D with an angle wider than 90 degrees cannot cast shadows."
 msgstr "یک SpotLight3D با زاویه‌ای بزرگتر از ۹۰ درجه نمی‌تواند سایه بیندازد."
@@ -17726,13 +17484,6 @@ msgid "Finishing Plot"
 msgstr "پایان ترسیم"
 
 msgid ""
-"VoxelGI nodes are not supported when using the Compatibility renderer yet. "
-"Support will be added in a future release."
-msgstr ""
-"‫گره‌های VoxelGI هنگام استفاده از رندر سازگاری پشتیبانی نمی‌شوند. پشتیبانی از آن "
-"در نسخه‌های آینده اضافه خواهد شد."
-
-msgid ""
 "Only one WorldEnvironment is allowed per scene (or set of instantiated "
 "scenes)."
 msgstr ""
@@ -18027,13 +17778,6 @@ msgstr "منبع نامعتبر برای پیش نمایش."
 
 msgid "Invalid source for shader."
 msgstr "منبع نامعتبر برای شیدر."
-
-msgid ""
-"`%s` precision mode is not available for `gl_compatibility` profile.\n"
-"Reverted to `None` precision."
-msgstr ""
-"حالت دقت `%s` برای نمایه `gl_compatibility` در دسترس نیست.\n"
-"به دقت `None` بازگشت داده شد."
 
 msgid "'%s' type is incompatible with '%s' source."
 msgstr "نوع '%s' با منبع '%s' ناسازگار است."

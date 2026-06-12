@@ -149,9 +149,7 @@ void ExportTemplateManager::_update_template_status() {
 		TreeItem *ti = installed_table->create_item(installed_root);
 		ti->set_text(0, version_string);
 
-#ifndef ANDROID_ENABLED
 		ti->add_button(0, get_editor_theme_icon(SNAME("Folder")), OPEN_TEMPLATE_FOLDER, false, TTR("Open the folder containing these templates."));
-#endif
 		ti->add_button(0, get_editor_theme_icon(SNAME("Remove")), UNINSTALL_TEMPLATE, false, TTR("Uninstall these templates."));
 	}
 }
@@ -775,154 +773,6 @@ void ExportTemplateManager::_hide_dialog() {
 	hide();
 }
 
-String ExportTemplateManager::get_android_build_directory(const Ref<EditorExportPreset> &p_preset) {
-	if (p_preset.is_valid()) {
-		String gradle_build_dir = p_preset->get("gradle_build/gradle_build_directory");
-		if (!gradle_build_dir.is_empty()) {
-			return gradle_build_dir.path_join("build");
-		}
-	}
-	return "res://android/build";
-}
-
-String ExportTemplateManager::get_android_source_zip(const Ref<EditorExportPreset> &p_preset) {
-	if (p_preset.is_valid()) {
-		String android_source_zip = p_preset->get("gradle_build/android_source_template");
-		if (!android_source_zip.is_empty()) {
-			return android_source_zip;
-		}
-	}
-
-	const String templates_dir = EditorPaths::get_singleton()->get_export_templates_dir().path_join(GODOT_VERSION_FULL_CONFIG);
-	return templates_dir.path_join("android_source.zip");
-}
-
-String ExportTemplateManager::get_android_template_identifier(const Ref<EditorExportPreset> &p_preset) {
-	// The template identifier is the Godot version for the default template, and the full path plus md5 hash for custom templates.
-	if (p_preset.is_valid()) {
-		String android_source_zip = p_preset->get("gradle_build/android_source_template");
-		if (!android_source_zip.is_empty()) {
-			return android_source_zip + String(" [") + FileAccess::get_md5(android_source_zip) + String("]");
-		}
-	}
-	return GODOT_VERSION_FULL_CONFIG;
-}
-
-bool ExportTemplateManager::is_android_template_installed(const Ref<EditorExportPreset> &p_preset) {
-	return DirAccess::exists(get_android_build_directory(p_preset));
-}
-
-bool ExportTemplateManager::can_install_android_template(const Ref<EditorExportPreset> &p_preset) {
-	return FileAccess::exists(get_android_source_zip(p_preset));
-}
-
-Error ExportTemplateManager::install_android_template(const Ref<EditorExportPreset> &p_preset) {
-	const String source_zip = get_android_source_zip(p_preset);
-	ERR_FAIL_COND_V(!FileAccess::exists(source_zip), ERR_CANT_OPEN);
-	return install_android_template_from_file(source_zip, p_preset);
-}
-
-Error ExportTemplateManager::install_android_template_from_file(const String &p_file, const Ref<EditorExportPreset> &p_preset) {
-	// To support custom Android builds, we install the Java source code and buildsystem
-	// from android_source.zip to the project's res://android folder.
-
-	Ref<DirAccess> da = DirAccess::create(DirAccess::ACCESS_RESOURCES);
-	ERR_FAIL_COND_V(da.is_null(), ERR_CANT_CREATE);
-
-	String build_dir = get_android_build_directory(p_preset);
-	String parent_dir = build_dir.get_base_dir();
-
-	// Make parent of the build dir (if it does not exist).
-	da->make_dir_recursive(parent_dir);
-	{
-		// Add identifier, to ensure building won't work if the current template doesn't match.
-		Ref<FileAccess> f = FileAccess::open(parent_dir.path_join(".build_version"), FileAccess::WRITE);
-		ERR_FAIL_COND_V(f.is_null(), ERR_CANT_CREATE);
-		f->store_line(get_android_template_identifier(p_preset));
-	}
-
-	// Create the android build directory.
-	Error err = da->make_dir_recursive(build_dir);
-	ERR_FAIL_COND_V(err != OK, err);
-	{
-		// Add an empty .gdignore file to avoid scan.
-		Ref<FileAccess> f = FileAccess::open(build_dir.path_join(".gdignore"), FileAccess::WRITE);
-		ERR_FAIL_COND_V(f.is_null(), ERR_CANT_CREATE);
-		f->store_line("");
-	}
-
-	// Uncompress source template.
-
-	Ref<FileAccess> io_fa;
-	zlib_filefunc_def io = zipio_create_io(&io_fa);
-
-	unzFile pkg = unzOpen2(p_file.utf8().get_data(), &io);
-	ERR_FAIL_NULL_V_MSG(pkg, ERR_CANT_OPEN, "Android sources not in ZIP format.");
-
-	int ret = unzGoToFirstFile(pkg);
-	int total_files = 0;
-	// Count files to unzip.
-	while (ret == UNZ_OK) {
-		total_files++;
-		ret = unzGoToNextFile(pkg);
-	}
-	ret = unzGoToFirstFile(pkg);
-
-	ProgressDialog::get_singleton()->add_task("uncompress_src", TTR("Uncompressing Android Build Sources"), total_files);
-
-	HashSet<String> dirs_tested;
-	int idx = 0;
-	while (ret == UNZ_OK) {
-		// Get file path.
-		unz_file_info info;
-		char fpath[16384];
-		ret = unzGetCurrentFileInfo(pkg, &info, fpath, 16384, nullptr, 0, nullptr, 0);
-		if (ret != UNZ_OK) {
-			break;
-		}
-
-		String path = String::utf8(fpath);
-		String base_dir = path.get_base_dir();
-
-		if (!path.ends_with("/")) {
-			Vector<uint8_t> uncomp_data;
-			uncomp_data.resize(info.uncompressed_size);
-
-			// Read.
-			unzOpenCurrentFile(pkg);
-			unzReadCurrentFile(pkg, uncomp_data.ptrw(), uncomp_data.size());
-			unzCloseCurrentFile(pkg);
-
-			if (!dirs_tested.has(base_dir)) {
-				da->make_dir_recursive(build_dir.path_join(base_dir));
-				dirs_tested.insert(base_dir);
-			}
-
-			String to_write = build_dir.path_join(path);
-			Ref<FileAccess> f = FileAccess::open(to_write, FileAccess::WRITE);
-			if (f.is_valid()) {
-				f->store_buffer(uncomp_data.ptr(), uncomp_data.size());
-				f.unref(); // close file.
-#ifndef WINDOWS_ENABLED
-				FileAccess::set_unix_permissions(to_write, (info.external_fa >> 16) & 0x01FF);
-#endif
-			} else {
-				ERR_PRINT("Can't uncompress file: " + to_write);
-			}
-		}
-
-		ProgressDialog::get_singleton()->task_step("uncompress_src", path, idx);
-
-		idx++;
-		ret = unzGoToNextFile(pkg);
-	}
-
-	ProgressDialog::get_singleton()->end_task("uncompress_src");
-	unzClose(pkg);
-	EditorFileSystem::get_singleton()->scan_changes();
-	return OK;
-}
-
 void ExportTemplateManager::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_THEME_CHANGED: {
@@ -1024,13 +874,11 @@ ExportTemplateManager::ExportTemplateManager() {
 	current_installed_path->set_accessibility_name(TTRC("Installed Path"));
 	current_installed_hb->add_child(current_installed_path);
 
-#ifndef ANDROID_ENABLED
 	Button *current_open_button = memnew(Button);
 	current_open_button->set_text(TTR("Open Folder"));
 	current_open_button->set_tooltip_text(TTR("Open the folder containing installed templates for the current version."));
 	current_installed_hb->add_child(current_open_button);
 	current_open_button->connect(SceneStringName(pressed), callable_mp(this, &ExportTemplateManager::_open_template_folder).bind(GODOT_VERSION_FULL_CONFIG));
-#endif
 
 	current_uninstall_button = memnew(Button);
 	current_uninstall_button->set_text(TTR("Uninstall"));

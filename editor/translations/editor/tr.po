@@ -2848,21 +2848,6 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "Ağ Dosya Sistemi ile Küçük Dağıtım"
 
-msgid ""
-"When this option is enabled, using one-click deploy for Android will only "
-"export an executable without the project data.\n"
-"The filesystem will be provided from the project by the editor over the "
-"network.\n"
-"On Android, deploying will use the USB cable for faster performance. This "
-"option speeds up testing for projects with large assets."
-msgstr ""
-"Bu seçenek etkinleştirildiğinde, Android için tek-tıklama dağıtımı "
-"kullanılmak, proje verileri olmadan sadece çalıştırılabilir bir dosyayı dışa "
-"aktarır.\n"
-"Dosya sistemi, düzenleyici tarafından ağ üzerinden sağlanacaktır.\n"
-"Android'de, dağıtım, daha hızlı performans için USB kablosunu kullanacaktır. "
-"Bu seçenek, büyük varlıklara sahip projeler için hızlandırma sağlar."
-
 msgid "Visible Collision Shapes"
 msgstr "Görünür Çarpışma Şekilleri"
 
@@ -4845,27 +4830,6 @@ msgstr "Düzenleyici İletileri"
 msgid "Toggle visibility of editor messages."
 msgstr "Düzenleyicinin mesajlarının görünürlüğünü değiştir."
 
-msgid ""
-"The Android build template is already installed in this project and it won't "
-"be overwritten.\n"
-"Remove the \"%s\" directory manually before attempting this operation again."
-msgstr ""
-"Android derleme şablonu bu projede zaten kurulmuş ve bunun üzerine "
-"yazılmayacak.\n"
-"Bu işlemi tekrar denemeden önce \"%s\" dizinini kendiniz elden kaldırın."
-
-msgid ""
-"This will set up your project for gradle Android builds by installing the "
-"source template to \"%s\".\n"
-"Note that in order to make gradle builds instead of using pre-built APKs, the "
-"\"Use Gradle Build\" option should be enabled in the Android export preset."
-msgstr ""
-"Bu, kaynak şablonunu \"%s\" yoluna kurarak projenizi gradle Android "
-"derlemeleri için ayarlayacaktır.\n"
-"Ön-derlenmiş APK'ları kullanmak yerine gradle derlemeleri yapmak için, "
-"Android dışa aktarma hazır ayarında \"Gradle Derlemesini Kullan\" seçeneğinin "
-"etkinleştirilmesi gerektiğini unutmayın."
-
 msgid "Unnamed Project"
 msgstr "İsimsiz Proje"
 
@@ -5433,9 +5397,6 @@ msgstr "Sürüm Denetim Ayarları..."
 msgid "Pack Project as ZIP..."
 msgstr "Projeyi ZIP Olarak Paketle..."
 
-msgid "Install Android Build Template..."
-msgstr "Android Yapı Şablonunu Kur..."
-
 msgid "Open User Data Folder"
 msgstr "Kullanıcı Veri Klasörünü Aç"
 
@@ -5655,17 +5616,11 @@ msgstr "Güncelleme Fırıldağını Gizle"
 msgid "Don't Save"
 msgstr "Kaydetme"
 
-msgid "Android build template is missing, please install relevant templates."
-msgstr "Android yapı şablonu eksik, lütfen ilgili şablonları kur."
-
 msgid "Manage Templates"
 msgstr "Şablonlarını Yönet"
 
 msgid "Install from file"
 msgstr "Dosyadan kurulum yap"
-
-msgid "Select Android sources file"
-msgstr "Bir Android kaynak dosyası seçin"
 
 msgid "Import Templates From ZIP File"
 msgstr "Şablonları ZIP Dosyasından İçeri Aktar"
@@ -5879,9 +5834,6 @@ msgstr "En az bir disk alanı erişimi nedeni seçilmelidir."
 msgid "At least one system boot time access reason should be selected."
 msgstr "En az bir sistem önyükleme zamanı erişimi nedeni seçilmelidir."
 
-msgid "\"Shader Baker\" doesn't work with the Compatibility renderer."
-msgstr "“Gölgelendirici Fırınlayıcı”, Uyumluluk işleyicisi ile çalışmaz."
-
 msgid ""
 "The editor is currently using a different renderer than what the target "
 "platform will use. \"Shader Baker\" won't be able to include core shaders. "
@@ -6016,9 +5968,6 @@ msgstr "Tanımlayıcıda '%s' karakterine izin verilmez."
 msgid "Running on %s"
 msgstr "%s üzerinde çalışıyor"
 
-msgid "Could not start ios-deploy executable."
-msgstr "ios-deploy çalıştırılabilir dosyası başlatılamadı."
-
 msgid "Installation/running failed, see editor log for details."
 msgstr ""
 "Kurulum/çalıştırma başarısız oldu, ayrıntılar için düzenleyici günlüğüne "
@@ -6029,10 +5978,6 @@ msgstr "Kurulum başarısız oldu, ayrıntılar için düzenleyici günlüğüne
 
 msgid "Running failed, see editor log for details."
 msgstr "Çalıştırma başarısız oldu, ayrıntılar için düzenleyici günlüğüne bakın."
-
-msgid "\"Shader Baker\" is not supported when using the Compatibility renderer."
-msgstr ""
-"“Gölgelendirici Fırınlayıcı”, Uyumluluk işleyicisi kullanılırken desteklenmez."
 
 msgid ""
 "The editor is currently using a different renderer than what the target "
@@ -6221,9 +6166,6 @@ msgid "Official export templates aren't available for double-precision builds."
 msgstr ""
 "Çift-hassasiyetli derlemeler için, resmi dışa aktarma şablonları mevcut "
 "değildir."
-
-msgid "Uncompressing Android Build Sources"
-msgstr "Android Derleme Kaynakları Çıkartılıyor"
 
 msgid "Export Template Manager"
 msgstr "Dışa Aktarım Şablonu Yöneticisi"
@@ -8214,17 +8156,11 @@ msgstr "Karmaşık sahneler için daha az ölçeklenebilirlik."
 msgid "Fast rendering of simple scenes."
 msgstr "Basit sahneler için hızlı işleme."
 
-msgid "Supports desktop, mobile + web platforms."
-msgstr "Masaüstü, mobil + web platformlarını destekler."
-
 msgid "Least advanced 3D graphics."
 msgstr "En az gelişmiş 3B grafikler."
 
 msgid "Intended for low-end/older devices."
 msgstr "Düşük seviyeli / eski cihazlar için kullanımı amaçlanmıştır."
-
-msgid "Uses OpenGL 3 backend (OpenGL 3.3/ES 3.0/WebGL2)."
-msgstr "OpenGL 3 arkauç'unu kullanır (OpenGL 3.3/ES 3.0/WebGL2)."
 
 msgid "Fastest rendering of simple scenes."
 msgstr "Basit sahneler için en hızlı işleme."
@@ -8295,15 +8231,6 @@ msgstr "Proje Yükleme Yolu:"
 
 msgid "Renderer:"
 msgstr "İşleyici:"
-
-msgid ""
-"RenderingDevice-based methods not available on this GPU:\n"
-"%s\n"
-"Please use the Compatibility renderer."
-msgstr ""
-"RenderingDevice-temelli yöntemler bu GPU'da kullanılamıyor:\n"
-"%s\n"
-"Lütfen Uyumluluk işleyicisini kullanın."
 
 msgid "The renderer can be changed later, but scenes may need to be adjusted."
 msgstr ""
@@ -8957,20 +8884,8 @@ msgstr "Oynatılan Projeyi Durdur"
 msgid "Run Current Scene"
 msgstr "Geçerli Sahneyi Oynat"
 
-msgid "Run Scene in Regular Mode"
-msgstr "Sahneyi Düzenli Kipte Çalıştır"
-
-msgid "Run Scene in XR Mode"
-msgstr "Sahneyi XR Kipinde Çalıştır"
-
 msgid "Run Specific Scene"
 msgstr "Belirli Bir Sahneyi Oynat"
-
-msgid "Run in Regular Mode"
-msgstr "Düzenli Kipte Çalıştır"
-
-msgid "Run in XR Mode"
-msgstr "XR Kipinde Çalıştır"
 
 msgid "Enable Movie Maker Mode"
 msgstr "Film Yapıcı Modunu Etkinleştir"
@@ -14818,9 +14733,6 @@ msgstr "Gezinti (3B)"
 msgid "XR"
 msgstr "Genişletilmiş Gerçeklik (XR)"
 
-msgid "OpenXR"
-msgstr "OpenXR"
-
 msgid "Wayland"
 msgstr "Wayland"
 
@@ -14894,9 +14806,6 @@ msgstr "Gezinti Sunucusu ve 3B için yetenekler."
 msgid "XR (AR and VR)."
 msgstr "XR (AR ve VR, Genişletilmiş Gerçeklik)."
 
-msgid "OpenXR standard implementation (requires XR to be enabled)."
-msgstr "OpenXR standart uyarlaması (XR'ın etkinleştirilmesi gerekir)."
-
 msgid "Wayland display (Linux only)."
 msgstr "Wayland görüntü protokolü (sadece Linux)."
 
@@ -14911,9 +14820,6 @@ msgstr ""
 
 msgid "Forward+ renderer for advanced 3D graphics."
 msgstr "Gelişmiş 3B grafikler için İleri+ işleyici."
-
-msgid "Mobile renderer for less advanced 3D graphics."
-msgstr "Daha az gelişmiş 3B grafikler için Mobil işleyici."
 
 msgid "Vulkan backend of RenderingDevice."
 msgstr "RenderingDevice için Vulkan desteği."
@@ -17944,14 +17850,8 @@ msgstr "%s yüklenirken hata: %s."
 msgid "Error saving file %s: %s"
 msgstr "%s dosyası kaydedilirken hata: %s"
 
-msgid "OpenXR Action map:"
-msgstr "OpenXR Eylem haritası:"
-
 msgid "Remove interaction profile"
 msgstr "Etkileşim profilini kaldır"
-
-msgid "OpenXR Action Map"
-msgstr "OpenXR Eylem Haritası"
 
 msgid "Add Action Set"
 msgstr "Eylem Kümesi Ekle"
@@ -17964,12 +17864,6 @@ msgstr "Profil ekle"
 
 msgid "Add an interaction profile."
 msgstr "Bir etkileşim profili ekle."
-
-msgid "Save this OpenXR action map."
-msgstr "Bu OpenXR eylem haritasını kaydet."
-
-msgid "Reset to default OpenXR action map."
-msgstr "Varsayılan OpenXR eylem haritasına sıfırla."
 
 msgid "Action Sets"
 msgstr "Eylem Kümeleri"
@@ -18078,53 +17972,16 @@ msgid "Choose an XR runtime."
 msgstr "Bir XR çalışma zamanı seçin."
 
 msgid ""
-"Cannot use the same SubViewport with multiple OpenXR composition layers. "
-"Clear it from its current layer first."
-msgstr ""
-"Aynı SubViewport birden fazla OpenXR birleştirme katmanıyla kullanılamaz. "
-"Bunu önce bulunduğu katmandan temizleyin."
-
-msgid ""
-"Cannot set SubViewport on an OpenXR composition layer when using an Android "
-"surface."
-msgstr ""
-"Bir Android Surface kullanılırken OpenXR birleştirme katmanında SubViewport "
-"(alt çerçeve) ayarlanamıyor."
-
-msgid "OpenXR composition layers must have an XROrigin3D node as their parent."
-msgstr ""
-"OpenXR birleştirme katmanları, üst öge olarak bir XROrigin3D düğümüne sahip "
-"olmalıdır."
-
-msgid ""
-"OpenXR composition layers must have orthonormalized transforms (ie. no scale "
-"or shearing)."
-msgstr ""
-"OpenXR birleştirme katmanları orto-normalleştirilmiş dönüşümlere sahip "
-"olmalıdır (yani ölçek veya kayma olmamalıdır)."
-
-msgid ""
 "Hole punching won't work as expected unless the sort order is less than zero."
 msgstr ""
 "Sıralama düzeni sıfırdan küçük olmadığı sürece, delgeç işlemi beklendiği gibi "
 "çalışmayacaktır."
-
-msgid "OpenXR visibility mask must have an XRCamera3D node as their parent."
-msgstr ""
-"OpenXR görünürlük maskesi, üst-öge olarak bir XRCamera3D düğümüne sahip "
-"olmalıdır."
-
-msgid "Building Android Project (gradle)"
-msgstr "Android Projesi Oluşturuluyor (gradle)"
 
 msgid "Package name is missing."
 msgstr "Paket ismi eksik."
 
 msgid "Package segments must be of non-zero length."
 msgstr "Paket parçaları, sıfır olmayan uzunlukta olmalıdır."
-
-msgid "The character '%s' is not allowed in Android application package names."
-msgstr "Android uygulama paketi isimlerinde '%s' karakterine izin verilmez."
 
 msgid "A digit cannot be the first character in a package segment."
 msgstr "Bir rakam, bir paket parçasındaki ilk karakter olamaz."
@@ -18144,26 +18001,6 @@ msgstr "APK genişletmesi için geçersiz ortak anahtar."
 msgid "Invalid package name:"
 msgstr "Geçersiz paket ismi:"
 
-msgid "\"Use Gradle Build\" is required to enable \"Swipe to dismiss\"."
-msgstr ""
-"\"Kapatmak için kaydır\" seçeneğini etkinleştirmek için \"Gradle Derlemesini "
-"Kullan\" seçeneği gereklidir."
-
-msgid "\"Use Gradle Build\" must be enabled to use the plugins."
-msgstr ""
-"Eklentileri kullanabilmek için \"Graadle Derlemesi Kullan\" seçeneği aktif "
-"olmalıdır."
-
-msgid "\"Export AAB\" is only valid when \"Use Gradle Build\" is enabled."
-msgstr ""
-"\"AAB Dışa Aktar\" yalnızca \"Gradle Derlemesi Kullan\" etkinleştirildiğinde "
-"geçerlidir."
-
-msgid "\"Min SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
-msgstr ""
-"\"En Küçük SDK\" yalnızca \"Gradle Derlemesi Kullan\" etkinleştirildiğinde "
-"geçersiz kılınabilir."
-
 msgid "\"Min SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
 "\"En Küçük SDK\" geçerli bir tamsayı olmalıdır, ancak geçersiz olan \"%s\" "
@@ -18177,12 +18014,6 @@ msgstr ""
 "değerinden daha düşük olamaz."
 
 msgid ""
-"\"Target SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
-msgstr ""
-"\"Hedef SDK\" yalnızca \"Gradle Derlemesini Kullan\" etkinleştirildiğinde "
-"geçersiz kılınabilir."
-
-msgid ""
 "\"Target SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
 "\"Hedef SDK\" geçerli bir tamsayı olmalıdır, ancak geçersiz olan \"%s\" "
@@ -18192,25 +18023,6 @@ msgid "\"Target SDK\" version must be greater or equal to \"Min SDK\" version."
 msgstr ""
 "\"Hedef SDK\" sürümü, \"En Küçük SDK\" sürümünden büyük veya ona eşit "
 "olmalıdır."
-
-msgid "\"Use Gradle Build\" is required to add custom theme attributes."
-msgstr ""
-"Özel tema özellikleri eklemek için \"Gradle Derlemesini Kullan\" gereklidir."
-
-msgid "\"Use Gradle Build\" must be enabled to enable \"Show In Android Tv\"."
-msgstr ""
-"\"Android Tv'de Göster\" 'i etkinleştirmek için \"Gradle Derlemesini Kullan\" "
-"etkinleştirilmelidir."
-
-msgid "\"Use Gradle Build\" must be enabled to enable \"Show As Launcher App\"."
-msgstr ""
-"\"Başlatıcı Uygulaması Olarak Göster\" 'i etkinleştirmek için \"Gradle "
-"Derlemesini Kullan\" etkinleştirilmelidir."
-
-msgid "\"Use Gradle Build\" must be enabled to disable \"Show In App Library\"."
-msgstr ""
-"\"Uygulama Kitaplığında Göster\" seçeneğini devre dışı bırakmak için \"Gradle "
-"Derlemesini Kullan\" seçeneği etkinleştirilmelidir."
 
 msgid "Exporting APK..."
 msgstr "APK dışa aktarılıyor..."
@@ -18233,33 +18045,6 @@ msgstr "Cihazda yürütülemedi."
 msgid "Error: There was a problem validating the keystore username and password"
 msgstr ""
 "Hata: Anahtar deposu kullanıcı adı ve parolasını doğrularken bir sorun oluştu"
-
-msgid ""
-"Unable to determine the C# project's TFM, it may be incompatible. The export "
-"template only supports '%s'. Make sure the project targets '%s' or consider "
-"using gradle builds instead."
-msgstr ""
-"C# projesinin TFM'si belirlenemiyor, uyumsuz olabilir. Dışa aktarma şablonu "
-"yalnızca '%s' 'yi destekler. Projenin '%s' 'yi hedeflediğinden emin olun veya "
-"bunun yerine gradle derlemelerini kullanmayı düşünün."
-
-msgid ""
-"C# project targets '%s' but the export template only supports '%s'. Consider "
-"using gradle builds instead."
-msgstr ""
-"C# projesi '%s' 'yi hedefliyor ancak dışa aktarma şablonu yalnızca '%s' 'yi "
-"destekliyor. Bunun yerine gradle derlemelerini kullanmayı düşünün."
-
-msgid "Exporting to Android when using C#/.NET is experimental."
-msgstr "C#/.NET kullanırken Android'e dışa aktarma henüz deneyseldir."
-
-msgid "Custom Android source template not found."
-msgstr "Özel Android kaynak şablonu bulunamadı."
-
-msgid ""
-"Android build template not installed in the project. Install it from the "
-"Project menu."
-msgstr "Android derleme şablonu projede yüklü değil. Proje menüsünden yükleyin."
 
 msgid ""
 "Either Debug Keystore, Debug User AND Debug Password settings must be "
@@ -18300,28 +18085,11 @@ msgid "Please check the Java SDK directory specified in Editor Settings."
 msgstr ""
 "Lütfen Düzenleyici Ayarları'nda belirtilen Java SDK dizinini kontrol edin."
 
-msgid "A valid Android SDK path is required in Editor Settings."
-msgstr "Düzenleyici Ayarlarında geçerli bir Android SDK yolu gerekli."
-
-msgid "Invalid Android SDK path in Editor Settings."
-msgstr "Düzenleyici Ayarları'nda geçersiz Android SDK yolu."
-
 msgid "Missing 'platform-tools' directory!"
 msgstr "'platform-tools' klasörü eksik!"
 
-msgid "Unable to find Android SDK platform-tools' adb command."
-msgstr "Android SDK platform-tools'un adb komutu bulunamıyor."
-
-msgid "Please check in the Android SDK directory specified in Editor Settings."
-msgstr ""
-"Lütfen Düzenleyici Ayarlarında belirlenmiş Android SDK klasörünü kontrol "
-"ediniz."
-
 msgid "Missing 'build-tools' directory!"
 msgstr "'build-tools' klasörü eksik!"
-
-msgid "Unable to find Android SDK build-tools' apksigner command."
-msgstr "Android SDK build-tools'un apksigner komutu bulunamıyor."
 
 msgid ""
 "\"Target SDK\" %d is higher than the default version %d. This may work, but "
@@ -18329,13 +18097,6 @@ msgid ""
 msgstr ""
 "\"Hedef SDK\" %d, varsayılan sürüm %d 'den daha yüksek . Bu işe yarayabilir, "
 "ancak test edilmemiştir ve kararsız olabilir."
-
-msgid ""
-"The \"%s\" renderer is designed for Desktop devices, and is not suitable for "
-"Android devices."
-msgstr ""
-"\"%s\" işleyicisi Masaüstü cihazlar için tasarlanmıştır, ve Android cihazlar "
-"için uygun değildir."
 
 msgid ""
 "The project name does not meet the requirement for the package name format "
@@ -18363,22 +18124,6 @@ msgstr "Sürüm anahtar deposu bulunamadı, dışa aktarılamıyor."
 msgid "Unable to sign apk."
 msgstr "Apk imzalanamıyor."
 
-msgid ""
-"All 'apksigner' tools located in Android SDK 'build-tools' directory failed "
-"to execute. Please check that you have the correct version installed for your "
-"target sdk version. The resulting APK is unsigned."
-msgstr ""
-"Android SDK 'build-tools' klasöründe bulunan tüm 'apksigner' araçlarının "
-"çalıştırılması başarısız oldu. Lütfen hedef sdk sürümünüz için doğru sürümün "
-"yüklü olup olmadığını kontrol edin. Ortaya çıkan APK imzasızdır."
-
-msgid ""
-"'apksigner' could not be found. Please check that the command is available in "
-"the Android SDK build-tools directory. The resulting APK is unsigned."
-msgstr ""
-"'apksigner' bulunamadı. Lütfen komutun Android SDK build-tools dizininde "
-"mevcut olup olmadığını kontrol edin. Ortaya çıkan APK imzasızdır."
-
 msgid "Could not start apksigner executable."
 msgstr "apksigner uygulaması başlatılamadı."
 
@@ -18401,29 +18146,8 @@ msgstr "İmzalı apk doğrulanamıyor."
 msgid "'apksigner' verification of APK failed."
 msgstr "APK'nın 'apksigner' doğrulaması başarısız oldu."
 
-msgid "Exporting for Android"
-msgstr "Android için dışa aktarılıyor"
-
-msgid "Invalid filename! Android App Bundle requires the *.aab extension."
-msgstr ""
-"Geçersiz dosya adı! Android Uygulama Paketi *.aab uzantısı gerektirir. "
-"(Android App Bundle baş harfleri)."
-
-msgid "APK Expansion not compatible with Android App Bundle."
-msgstr "APK Genişletme, Android Uygulama Paketi ile uyumlu değildir."
-
-msgid "Invalid filename! Android APK requires the *.apk extension."
-msgstr "Geçersiz dosya adı! Android APK, * .apk uzantısını gerektirir."
-
 msgid "Unsupported export format!"
 msgstr "Desteklenmeyen dışa aktarım biçimi!"
-
-msgid ""
-"Trying to build from a gradle built template, but no version info for it "
-"exists. Please reinstall from the 'Project' menu."
-msgstr ""
-"gradle ile derlenmiş bir şablondan derleme yapılmaya çalışılıyor, ancak bunun "
-"için bir sürüm belirtilmemiş. Lütfen 'Proje' menüsünden yeniden yükleyin."
 
 msgid ""
 "Java SDK path must be configured in Editor Settings at 'export/android/"
@@ -18432,26 +18156,11 @@ msgstr ""
 "Java SDK yolu Düzenleyici Ayarları'nda bulunan 'export/android/java_sdk_path' "
 "ile yapılandırılmalıdır."
 
-msgid ""
-"Android SDK path must be configured in Editor Settings at 'export/android/"
-"android_sdk_path'."
-msgstr ""
-"Android SDK yolu Düzenleyici Ayarları'nda 'export/android/android_sdk_path' "
-"ile yapılandırılmalıdır."
-
 msgid "Unable to overwrite res/*.xml files with project name."
 msgstr "Proje ismiyle res/*.xml dosyalarının üstüne yazılamıyor."
 
-msgid "Could not export project files to gradle project."
-msgstr "Proje dosyaları gradle projesine aktarılamadı."
-
 msgid "Could not write expansion package file!"
 msgstr "Genişletme paketi dosyası yazılamadı!"
-
-msgid "Building of Android project failed, check output for the error:"
-msgstr ""
-"Android projesinin oluşturulması başarısız oldu, hata için çıktıları kontrol "
-"edin:"
 
 msgid "Moving output"
 msgstr "Çıktı taşınıyor"
@@ -18491,9 +18200,6 @@ msgstr "APK hizalanıyor ..."
 
 msgid "Could not unzip temporary unaligned APK."
 msgstr "Geçici olarak hizalanmamış APK'nın sıkıştırması açılamadı."
-
-msgid "Metal renderer require iOS 14+."
-msgstr "Metal işleyici iOS 14+ gerektirir."
 
 msgid "Export Icons"
 msgstr "Simgeleri Dışa Aktar"
@@ -19096,11 +18802,6 @@ msgstr ""
 "davranış yok."
 
 msgid ""
-"Particle sub-emitters are not available when using the Compatibility renderer."
-msgstr ""
-"Uyumluluk işleyicisi kullanılırken parçacık alt yayıcıları kullanılamaz."
-
-msgid ""
 "A texture with the shape of the light must be supplied to the \"Texture\" "
 "property."
 msgstr "\"Doku\" özelliğine, ışık şeklinde bir doku verilmelidir."
@@ -19384,13 +19085,6 @@ msgstr "Bir ışığın ölçeği, ışığın görsel boyutunu etkilemez."
 
 msgid "Projector texture only works with shadows active."
 msgstr "Yansıtma dokuları sadece gölgeler etkin ise işe yarar."
-
-msgid ""
-"Projector textures are not supported when using the Compatibility renderer "
-"yet. Support will be added in a future release."
-msgstr ""
-"Uyumluluk işleyici kullanılırken, yansıtma dokuları henüz desteklenmiyor. "
-"Destek gelecekteki bir sürümde eklenecektir."
 
 msgid "Finding meshes, lights and probes"
 msgstr "Örgüler, ışıklar, ve sondalar bulunuyor"
@@ -19786,13 +19480,6 @@ msgstr "Uzaklık Alanı Oluşturuluyor"
 msgid "Finishing Plot"
 msgstr "Çizdirme Bitiriliyor"
 
-msgid ""
-"VoxelGI nodes are not supported when using the Compatibility renderer yet. "
-"Support will be added in a future release."
-msgstr ""
-"Uyumluluk işleyicisi kullanılırken, VoxelGI düğümleri henüz desteklenmiyor. "
-"Destek gelecekteki bir sürümde eklenecektir."
-
 msgid "VoxelGI nodes are not supported when using the Dummy renderer."
 msgstr "Kukla işleyici kullanılırken, VoxelGI düğümleri henüz desteklenmiyor."
 
@@ -20151,14 +19838,6 @@ msgstr "Gölgelendirici için geçersiz kaynak."
 
 msgid "Invalid operator for that type."
 msgstr "Bu tip için geçersiz işleç."
-
-msgid ""
-"`%s` precision mode is not available for `gl_compatibility` profile.\n"
-"Reverted to `None` precision."
-msgstr ""
-"`%s` hassasiyet kipi `gl_compatibility`(gl uyumluluğu) profili için "
-"kullanılamıyor.\n"
-"`Hiçbiri` hassasiyetine geri döndürüldü."
 
 msgid "'%s' type is incompatible with '%s' source."
 msgstr "'%s' tipi, '%s' kaynağı ile uyumsuz."

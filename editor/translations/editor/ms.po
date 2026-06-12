@@ -1666,21 +1666,6 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "Penggunaan Kecil dengan Sistem Fail Rangkaian"
 
-msgid ""
-"When this option is enabled, using one-click deploy for Android will only "
-"export an executable without the project data.\n"
-"The filesystem will be provided from the project by the editor over the "
-"network.\n"
-"On Android, deploying will use the USB cable for faster performance. This "
-"option speeds up testing for projects with large assets."
-msgstr ""
-"Apabila pilihan ini diaktifkan, menggunakan deploy satu klik untuk Android "
-"hanya akan mengeksport executable tanpa data projek.\n"
-"Sistem fail akan disediakan dari projek oleh editor melalui rangkaian.\n"
-"Pada Android, proses deploy akan menggunakan kabel USB untuk prestasi yang "
-"lebih pantas. Pilihan ini mempercepatkan pengujian untuk projek-projek dengan "
-"aset besar."
-
 msgid "Visible Collision Shapes"
 msgstr "Bentuk Perlanggaran Yang Boleh Dilihat"
 
@@ -2410,9 +2395,6 @@ msgstr "Buka Terkini"
 msgid "Version Control"
 msgstr "Kawalan Versi"
 
-msgid "Install Android Build Template..."
-msgstr "Pasang Templat Binaan Android..."
-
 msgid "Open User Data Folder"
 msgstr "Buka Folder Data Pengguna"
 
@@ -2560,9 +2542,6 @@ msgstr "Sembunyikan Spinner Kemas Kini"
 msgid "Don't Save"
 msgstr "Jangan Simpan"
 
-msgid "Android build template is missing, please install relevant templates."
-msgstr "Templat binaan Android hilang, sila pasang templat yang berkaitan."
-
 msgid "Manage Templates"
 msgstr "Urus Templat-templat"
 
@@ -2703,9 +2682,6 @@ msgstr "Templat eksport tiada. Muat turun atau pasang dari fail."
 
 msgid "Official export templates aren't available for development builds."
 msgstr "Templat eksport rasmi tidak tersedia untuk binaan pembangunan."
-
-msgid "Uncompressing Android Build Sources"
-msgstr "Nyahmemampatkan Sumber Binaan Android"
 
 msgid "Export Template Manager"
 msgstr "Pengurus Templat Eksport"

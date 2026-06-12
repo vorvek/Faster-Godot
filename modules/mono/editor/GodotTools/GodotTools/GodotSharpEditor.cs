@@ -283,7 +283,7 @@ namespace GodotTools
 
                     break;
                 }
-                case ExternalEditorId.VisualStudioForMac:
+                case ExternalEditorId.ReservedLegacyEditor:
                     goto case ExternalEditorId.MonoDevelop;
                 case ExternalEditorId.Rider:
                 case ExternalEditorId.Fleet:
@@ -317,53 +317,6 @@ namespace GodotTools
 
                     var args = new List<string>();
 
-                    bool macOSAppBundleInstalled = false;
-
-                    if (OS.IsMacOS)
-                    {
-                        // The package path is '/Applications/Visual Studio Code.app'
-                        const string vscodeBundleId = "com.microsoft.VSCode";
-
-                        macOSAppBundleInstalled = Internal.IsMacOSAppBundleInstalled(vscodeBundleId);
-
-                        if (macOSAppBundleInstalled)
-                        {
-                            args.Add("-b");
-                            args.Add(vscodeBundleId);
-
-                            // The reusing of existing windows made by the 'open' command might not choose a window that is
-                            // editing our folder. It's better to ask for a new window and let VSCode do the window management.
-                            args.Add("-n");
-
-                            // The open process must wait until the application finishes (which is instant in VSCode's case)
-                            args.Add("--wait-apps");
-
-                            args.Add("--args");
-                        }
-
-                        // Try VSCodium as a fallback if Visual Studio Code can't be found.
-                        if (!macOSAppBundleInstalled)
-                        {
-                            const string VscodiumBundleId = "com.vscodium.codium";
-                            macOSAppBundleInstalled = Internal.IsMacOSAppBundleInstalled(VscodiumBundleId);
-
-                            if (macOSAppBundleInstalled)
-                            {
-                                args.Add("-b");
-                                args.Add(VscodiumBundleId);
-
-                                // The reusing of existing windows made by the 'open' command might not choose a window that is
-                                // editing our folder. It's better to ask for a new window and let VSCode do the window management.
-                                args.Add("-n");
-
-                                // The open process must wait until the application finishes (which is instant in VSCode's case)
-                                args.Add("--wait-apps");
-
-                                args.Add("--args");
-                            }
-                        }
-                    }
-
                     args.Add(Path.GetDirectoryName(GodotSharpDirs.ProjectSlnPath)!);
 
                     string scriptPath = ProjectSettings.GlobalizePath(script.ResourcePath);
@@ -380,26 +333,13 @@ namespace GodotTools
 
                     string command;
 
-                    if (OS.IsMacOS)
+                    if (string.IsNullOrEmpty(_vsCodePath))
                     {
-                        if (!macOSAppBundleInstalled && string.IsNullOrEmpty(_vsCodePath))
-                        {
-                            GD.PushError("Cannot find code editor: Visual Studio Code or VSCodium");
-                            return Error.FileNotFound;
-                        }
-
-                        command = macOSAppBundleInstalled ? "/usr/bin/open" : _vsCodePath;
+                        GD.PushError("Cannot find code editor: Visual Studio Code or VSCodium");
+                        return Error.FileNotFound;
                     }
-                    else
-                    {
-                        if (string.IsNullOrEmpty(_vsCodePath))
-                        {
-                            GD.PushError("Cannot find code editor: Visual Studio Code or VSCodium");
-                            return Error.FileNotFound;
-                        }
 
-                        command = _vsCodePath;
-                    }
+                    command = _vsCodePath;
 
                     try
                     {
@@ -553,22 +493,13 @@ namespace GodotTools
             EditorDef(Settings.VerbosityLevel, Variant.From(VerbosityLevelId.Normal));
             EditorDef(Settings.NoConsoleLogging, false);
             EditorDef(Settings.CreateBinaryLog, false);
-            EditorDef(Settings.ProblemsLayout, Variant.From(BuildProblemsView.ProblemsLayout.Tree));
+                        EditorDef(Settings.ProblemsLayout, Variant.From(BuildProblemsView.ProblemsLayout.Tree));
 
             string settingsHintStr = "Disabled";
 
             if (OS.IsWindows)
             {
                 settingsHintStr += $",Visual Studio:{(int)ExternalEditorId.VisualStudio}" +
-                                   $",MonoDevelop:{(int)ExternalEditorId.MonoDevelop}" +
-                                   $",Visual Studio Code and VSCodium:{(int)ExternalEditorId.VsCode}" +
-                                   $",JetBrains Rider:{(int)ExternalEditorId.Rider}" +
-                                   $",JetBrains Fleet:{(int)ExternalEditorId.Fleet}" +
-                                   $",Custom:{(int)ExternalEditorId.CustomEditor}";
-            }
-            else if (OS.IsMacOS)
-            {
-                settingsHintStr += $",Visual Studio:{(int)ExternalEditorId.VisualStudioForMac}" +
                                    $",MonoDevelop:{(int)ExternalEditorId.MonoDevelop}" +
                                    $",Visual Studio Code and VSCodium:{(int)ExternalEditorId.VsCode}" +
                                    $",JetBrains Rider:{(int)ExternalEditorId.Rider}" +
@@ -691,9 +622,8 @@ namespace GodotTools
                 if (IsInstanceValid(_exportPluginWeak))
                 {
                     // We need to dispose our export plugin before the editor destroys EditorSettings.
-                    // Otherwise, if the GC disposes it at a later time, EditorExportPlatformAndroid
-                    // will be freed after EditorSettings already was, and its device polling thread
-                    // will try to access the EditorSettings singleton, resulting in null dereferencing.
+                    // Otherwise, if the GC disposes it at a later time, export platform teardown
+                    // can outlive the EditorSettings singleton.
                     (_exportPluginWeak.GetRef().AsGodotObject() as ExportPlugin)?.Dispose();
 
                     _exportPluginWeak.Dispose();

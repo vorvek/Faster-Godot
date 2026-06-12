@@ -33,7 +33,6 @@
 #include "../csharp_script.h"
 #include "../godotsharp_dirs.h"
 #include "../interop_types.h"
-#include "../utils/macos_utils.h"
 #include "../utils/path_utils.h"
 #include "code_completion.h"
 
@@ -43,7 +42,6 @@
 #include "editor/debugger/editor_debugger_node.h"
 #include "editor/editor_main_screen.h"
 #include "editor/editor_node.h"
-#include "editor/export/lipo.h"
 #include "editor/file_system/editor_paths.h"
 #include "editor/run/editor_run_bar.h"
 #include "editor/script/script_editor_plugin.h"
@@ -99,23 +97,6 @@ bool godot_icall_EditorProgress_Step(const godot_string *p_task, const godot_str
 void godot_icall_Internal_FullExportTemplatesDir(godot_string *r_dest) {
 	String full_templates_dir = EditorPaths::get_singleton()->get_export_templates_dir().path_join(GODOT_VERSION_FULL_CONFIG);
 	memnew_placement(r_dest, String(full_templates_dir));
-}
-
-bool godot_icall_Internal_IsMacOSAppBundleInstalled(const godot_string *p_bundle_id) {
-#ifdef MACOS_ENABLED
-	String bundle_id = *reinterpret_cast<const String *>(p_bundle_id);
-	return (bool)macos_is_app_bundle_installed(bundle_id);
-#else
-	(void)p_bundle_id; // UNUSED
-	return (bool)false;
-#endif
-}
-
-bool godot_icall_Internal_LipOCreateFile(const godot_string *p_output_path, const godot_packed_array *p_files) {
-	String output_path = *reinterpret_cast<const String *>(p_output_path);
-	PackedStringArray files = *reinterpret_cast<const PackedStringArray *>(p_files);
-	LipO lip;
-	return lip.create_file(output_path, files);
 }
 
 bool godot_icall_Internal_GodotIs32Bits() {
@@ -258,8 +239,6 @@ static const void *unmanaged_callbacks[]{
 	(void *)godot_icall_EditorProgress_Dispose,
 	(void *)godot_icall_EditorProgress_Step,
 	(void *)godot_icall_Internal_FullExportTemplatesDir,
-	(void *)godot_icall_Internal_IsMacOSAppBundleInstalled,
-	(void *)godot_icall_Internal_LipOCreateFile,
 	(void *)godot_icall_Internal_GodotIs32Bits,
 	(void *)godot_icall_Internal_GodotIsRealTDouble,
 	(void *)godot_icall_Internal_GodotMainIteration,

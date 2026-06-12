@@ -541,13 +541,7 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
 	EDITOR_SETTING_BASIC(Variant::INT, PROPERTY_HINT_ENUM, "interface/editor/vsync_mode", 1, "Disabled,Enabled,Adaptive,Mailbox")
 	EDITOR_SETTING(Variant::BOOL, PROPERTY_HINT_NONE, "interface/editor/update_continuously", false, "")
 
-	bool is_android_editor = false;
-#ifdef ANDROID_ENABLED
-	if (!OS::get_singleton()->has_feature("xr_editor")) {
-		is_android_editor = true;
-	}
-#endif
-	EDITOR_SETTING(Variant::BOOL, PROPERTY_HINT_NONE, "interface/editor/collapse_main_menu", is_android_editor, "")
+	EDITOR_SETTING(Variant::BOOL, PROPERTY_HINT_NONE, "interface/editor/collapse_main_menu", false, "")
 
 	_initial_set("interface/editors/show_scene_tree_root_selection", true);
 	_initial_set("interface/editors/derive_script_globals_by_name", true);
@@ -617,10 +611,6 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
 	set_restart_if_changed("interface/touchscreen/enable_pan_and_scale_gestures", true);
 	EDITOR_SETTING(Variant::FLOAT, PROPERTY_HINT_RANGE, "interface/touchscreen/scale_gizmo_handles", has_touchscreen_ui ? 2 : 1, "1,5,1")
 	set_restart_if_changed("interface/touchscreen/scale_gizmo_handles", true);
-
-	// Only available in the Android/XR editor.
-	String touch_actions_panel_hints = "Disabled:0,Embedded Panel:1,Floating Panel:2";
-	EDITOR_SETTING_BASIC(Variant::INT, PROPERTY_HINT_ENUM, "interface/touchscreen/touch_actions_panel", 1, touch_actions_panel_hints)
 
 	// Scene tabs
 	EDITOR_SETTING(Variant::INT, PROPERTY_HINT_ENUM, "interface/scene_tabs/display_close_button", 1, "Never,If Tab Active,Always"); // TabBar::CloseButtonDisplayPolicy
@@ -1041,7 +1031,6 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
 	/* Run */
 
 	// Window placement
-#ifndef ANDROID_ENABLED
 	EDITOR_SETTING_BASIC(Variant::INT, PROPERTY_HINT_ENUM, "run/window_placement/rect", 1, "Top Left,Centered,Custom Position,Force Maximized,Force Fullscreen")
 	// Keep the enum values in sync with the `DisplayServer::SCREEN_` enum.
 	String screen_hints = "Same as Editor:-5,Previous Screen:-4,Next Screen:-3,Primary Screen:-2"; // Note: Main Window Screen:-1 is not used for the main window.
@@ -1050,19 +1039,8 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
 	}
 	_initial_set("run/window_placement/rect_custom_position", Vector2());
 	EDITOR_SETTING_BASIC(Variant::INT, PROPERTY_HINT_ENUM, "run/window_placement/screen", -5, screen_hints)
-#endif
-	// Should match the ANDROID_WINDOW_* constants in 'platform/android/java/editor/src/main/java/org/godotengine/editor/BaseGodotEditor.kt'.
-	String android_window_hints = "Auto (based on screen size):0,Same as Editor:1,Side-by-side with Editor:2";
-	EDITOR_SETTING_BASIC(Variant::INT, PROPERTY_HINT_ENUM, "run/window_placement/android_window", 0, android_window_hints)
 
 	String game_embed_mode_hints = "Disabled:-1,Use Per-Project Configuration:0,Embed Game:1,Make Game Workspace Floating:2";
-#ifdef ANDROID_ENABLED
-	if (OS::get_singleton()->has_feature("xr_editor")) {
-		game_embed_mode_hints = "Disabled:-1";
-	} else {
-		game_embed_mode_hints = "Disabled:-1,Auto (based on screen size):0,Enabled:1";
-	}
-#endif
 	int default_game_embed_mode = OS::get_singleton()->has_feature("xr_editor") ? -1 : 0;
 	EDITOR_SETTING_BASIC(Variant::INT, PROPERTY_HINT_ENUM, "run/window_placement/game_embed_mode", default_game_embed_mode, game_embed_mode_hints);
 
@@ -1126,16 +1104,8 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
 	EDITOR_SETTING(Variant::INT, PROPERTY_HINT_ENUM, "project_manager/sorting_order", 0, "Last Edited,Name,Path")
 	EDITOR_SETTING_BASIC(Variant::INT, PROPERTY_HINT_ENUM, "project_manager/directory_naming_convention", 1, "No Convention,kebab-case,snake_case,camelCase,PascalCase,Title Case")
 
-#if defined(WEB_ENABLED)
-	// Web platform only supports `gl_compatibility`.
-	const String default_renderer = "gl_compatibility";
-#elif defined(ANDROID_ENABLED)
-	// Use more suitable rendering method by default.
-	const String default_renderer = "mobile";
-#else
 	const String default_renderer = "forward_plus";
-#endif
-	EDITOR_SETTING_BASIC(Variant::STRING, PROPERTY_HINT_ENUM, "project_manager/default_renderer", default_renderer, "forward_plus,mobile,gl_compatibility")
+	EDITOR_SETTING_BASIC(Variant::STRING, PROPERTY_HINT_ENUM, "project_manager/default_renderer", default_renderer, "forward_plus")
 
 #undef EDITOR_SETTING
 #undef EDITOR_SETTING_BASIC
@@ -1869,7 +1839,7 @@ float EditorSettings::get_auto_display_scale() {
 	}
 #endif
 
-#if defined(MACOS_ENABLED) || defined(ANDROID_ENABLED)
+#if defined(MACOS_ENABLED)
 	return DisplayServer::get_singleton()->screen_get_max_scale();
 #else
 	const int screen = DisplayServer::get_singleton()->window_get_current_screen();
@@ -1899,7 +1869,7 @@ float EditorSettings::get_auto_display_scale() {
 	return 1.0;
 #endif // defined(WINDOWS_ENABLED)
 
-#endif // defined(MACOS_ENABLED) || defined(ANDROID_ENABLED)
+#endif // defined(MACOS_ENABLED)
 }
 
 String EditorSettings::get_language() const {
@@ -2068,9 +2038,7 @@ void ED_SHORTCUT_OVERRIDE_ARRAY(const String &p_path, const String &p_feature, c
 
 	// Only add the override if the OS supports the provided feature.
 	if (!OS::get_singleton()->has_feature(p_feature)) {
-		if (!(p_feature == "macos" && (OS::get_singleton()->has_feature("web_macos") || OS::get_singleton()->has_feature("web_ios")))) {
-			return;
-		}
+		return;
 	}
 
 	Array events;

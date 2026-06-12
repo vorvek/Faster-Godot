@@ -1473,16 +1473,11 @@ GameView::GameView(Ref<GameViewDebugger> p_debugger, EmbeddedProcessBase *p_embe
 
 void GameViewPluginBase::selected_notify() {
 	if (_is_window_wrapper_enabled()) {
-#ifdef ANDROID_ENABLED
-		notify_main_screen_changed(get_plugin_name());
-#else
 		window_wrapper->grab_window_focus();
-#endif // ANDROID_ENABLED
 		_focus_another_editor();
 	}
 }
 
-#ifndef ANDROID_ENABLED
 void GameViewPluginBase::make_visible(bool p_visible) {
 	if (p_visible) {
 		window_wrapper->show();
@@ -1516,14 +1511,10 @@ void GameViewPluginBase::setup(Ref<GameViewDebugger> p_debugger, EmbeddedProcess
 	window_wrapper->connect("window_visibility_changed", callable_mp(this, &GameViewPlugin::_focus_another_editor).unbind(1));
 }
 
-#endif // ANDROID_ENABLED
-
 void GameViewPluginBase::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_TRANSLATION_CHANGED: {
-#ifndef ANDROID_ENABLED
 			window_wrapper->set_window_title(vformat(TTR("%s - Faster-Godot"), TTR("Game Workspace")));
-#endif
 		} break;
 		case NOTIFICATION_ENTER_TREE: {
 			add_debugger_plugin(debugger);
@@ -1553,25 +1544,16 @@ void GameViewPluginBase::_focus_another_editor() {
 }
 
 bool GameViewPluginBase::_is_window_wrapper_enabled() const {
-#ifdef ANDROID_ENABLED
-	return true;
-#else
 	return window_wrapper->get_window_enabled();
-#endif // ANDROID_ENABLED
 }
 
 GameViewPluginBase::GameViewPluginBase() {
-#ifdef ANDROID_ENABLED
-	debugger.instantiate();
-#endif
 }
 
 GameViewPlugin::GameViewPlugin() :
 		GameViewPluginBase() {
-#ifndef ANDROID_ENABLED
 	Ref<GameViewDebugger> game_view_debugger;
 	game_view_debugger.instantiate();
 	EmbeddedProcess *embedded_process = memnew(EmbeddedProcess);
 	setup(game_view_debugger, embedded_process);
-#endif
 }

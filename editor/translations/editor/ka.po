@@ -4641,9 +4641,6 @@ msgstr "3D ძრავა"
 msgid "XR"
 msgstr "XR"
 
-msgid "OpenXR"
-msgstr "OpenXR"
-
 msgid "Forward+ Renderer"
 msgstr "რენდერერი Forward+"
 
@@ -5364,12 +5361,6 @@ msgstr "%s-ის ჩატვირთვის შეცდომა: %s."
 
 msgid "Error saving file %s: %s"
 msgstr "ფაილის (%s) შენახვის შეცდომა: %s"
-
-msgid "OpenXR Action map:"
-msgstr "OpenXR ქმედების რუკა:"
-
-msgid "OpenXR Action Map"
-msgstr "OpenXR ქმედების რუკა"
 
 msgid "Add an action set."
 msgstr "ქმედებების ნაკრების დამატება."

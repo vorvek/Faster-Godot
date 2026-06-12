@@ -1983,21 +1983,6 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "Kis Telepítés Hálózati Fájlrendszerrel"
 
-msgid ""
-"When this option is enabled, using one-click deploy for Android will only "
-"export an executable without the project data.\n"
-"The filesystem will be provided from the project by the editor over the "
-"network.\n"
-"On Android, deploying will use the USB cable for faster performance. This "
-"option speeds up testing for projects with large assets."
-msgstr ""
-"Ha ez az opció engedélyezve van, akkor az exportálás vagy a telepítés egy "
-"minimális méretű futtatható programot hoz létre.\n"
-"A fájlrendszert magát a projektből a szerkesztő szolgáltatja majd a hálózaton "
-"keresztül.\n"
-"Androidon a telepítés gyorsabb teljesítmény érdekében kihasználja az USB "
-"kábelt. Ez a lehetőség felgyorsítja a nagy lábnyomú játékok tesztelését."
-
 msgid "Visible Collision Shapes"
 msgstr "Látható Ütközési Alakzatok"
 
@@ -3289,27 +3274,6 @@ msgstr "Kereső/Szűrő Fókuszálása"
 msgid "Warnings"
 msgstr "Figyelmeztetések"
 
-msgid ""
-"The Android build template is already installed in this project and it won't "
-"be overwritten.\n"
-"Remove the \"%s\" directory manually before attempting this operation again."
-msgstr ""
-"Az Android építősablon már telepítve van ebben a projektben és nem íródik "
-"felül.\n"
-"Törölje manuálisan a \"%s\" mappát a művelet újrapróbálása előtt."
-
-msgid ""
-"This will set up your project for gradle Android builds by installing the "
-"source template to \"%s\".\n"
-"Note that in order to make gradle builds instead of using pre-built APKs, the "
-"\"Use Gradle Build\" option should be enabled in the Android export preset."
-msgstr ""
-"Előkészíti a projektet Androidra a gradle segítségével és a forrás sablonokat "
-"a \"%s\" helyre telepíti.\n"
-"Ahhoz, hogy az előre elkészített APK helyett gradle segítségével készüljön a "
-"projekt, a \"Gradle Használata\" opció engedélyezése szükséges az Android "
-"export beállításokban."
-
 msgid "Unnamed Project"
 msgstr "Névtelen projekt"
 
@@ -3661,21 +3625,6 @@ msgstr "Jelenetek felkészítése újratöltéshez"
 msgid "Save & Restart"
 msgstr "Mentés és Újraindítás"
 
-msgid ""
-"Changing the renderer requires restarting the editor.\n"
-"\n"
-"Choosing Save & Restart will change the renderer to:\n"
-"- Desktop platforms: %s\n"
-"- Mobile platforms: %s\n"
-"- Web platform: %s"
-msgstr ""
-"A rendermotor változtatása a szerkesztő újraindítását igényli.\n"
-"\n"
-"A Mentés és Újratöltés megváltoztatja a rendermotort:\n"
-"- Asztali platformokon: %s\n"
-"- Hordozható platformokon: %s\n"
-"- Web platformokon: %s"
-
 msgid "Forward+"
 msgstr "Forward+"
 
@@ -3693,9 +3642,6 @@ msgstr "Verziókezelés"
 
 msgid "Pack Project as ZIP..."
 msgstr "Projekt Tömörítése ZIP-ként..."
-
-msgid "Install Android Build Template..."
-msgstr "Android Építősablon Telepítése..."
 
 msgid "Tools"
 msgstr "Eszközök"
@@ -3826,21 +3772,6 @@ msgstr "Előző Szerkesztő Megnyitása"
 msgid "Project"
 msgstr "Projekt"
 
-msgid ""
-"Choose a renderer.\n"
-"\n"
-"Notes:\n"
-"- On mobile platforms, the Mobile renderer is used if Forward+ is selected "
-"here.\n"
-"- On the web platform, the Compatibility renderer is always used."
-msgstr ""
-"Válasszon rendermotor.\n"
-"\n"
-"Megjegyzések:\n"
-"- Hordozható platformokon a Forward+ kiválasztás esetén Mobile lesz "
-"használatban.\n"
-"- Web platformon mindig a Compatibility motor működik."
-
 msgid "Update Continuously"
 msgstr "Folyamatos frissítés"
 
@@ -3849,9 +3780,6 @@ msgstr "Frissítési forgó elrejtése"
 
 msgid "Don't Save"
 msgstr "Nincs Mentés"
-
-msgid "Android build template is missing, please install relevant templates."
-msgstr "Hiányzó Android építősablon, kérem telepítse az ide tartozó sablonokat."
 
 msgid "Manage Templates"
 msgstr "Sablonok kezelése"
@@ -3976,9 +3904,6 @@ msgid "At least one system boot time access reason should be selected."
 msgstr ""
 "Legalább egy rendszerindítási idő hozzáférési ok kiválasztása szükséges."
 
-msgid "\"Shader Baker\" doesn't work with the Compatibility renderer."
-msgstr "A \"Shader Baker\" nem működik a Compatibility rendermotorral."
-
 msgid ""
 "The editor is currently using a different renderer than what the target "
 "platform will use. \"Shader Baker\" won't be able to include core shaders. "
@@ -4089,10 +4014,6 @@ msgstr "Telepítés sikertelen, részletek a szerkesztő naplójában."
 msgid "Running failed, see editor log for details."
 msgstr "Futtatás sikertelen, részletek a szerkesztő naplójában."
 
-msgid "\"Shader Baker\" is not supported when using the Compatibility renderer."
-msgstr ""
-"\"Shader Baker\" nem támogatott a Compatibility rendermotor használatakor."
-
 msgid ""
 "The editor is currently using a different renderer than what the target "
 "platform will use. \"Shader Baker\" won't be able to include core shaders. "
@@ -4180,9 +4101,6 @@ msgstr "Hivatalos export sablonok nem elérhetőek fejlesztői változatokhoz."
 msgid "Official export templates aren't available for double-precision builds."
 msgstr ""
 "Hivatalos export sablonok nem elérhetőek dupla pontosságú változatokhoz."
-
-msgid "Uncompressing Android Build Sources"
-msgstr "Android Építőforrások Kicsomagolása"
 
 msgid "Export Template Manager"
 msgstr "Export Sablon Kezelő"
@@ -5593,17 +5511,11 @@ msgstr "Kevésbé használható komplex jelenetekhez."
 msgid "Fast rendering of simple scenes."
 msgstr "Egyszerű jelenetek gyors renderelése."
 
-msgid "Supports desktop, mobile + web platforms."
-msgstr "Asztali, hordozható + web platformokat támogat."
-
 msgid "Least advanced 3D graphics."
 msgstr "Legkevésbé fejlett 3D grafika."
 
 msgid "Intended for low-end/older devices."
 msgstr "Belépőszintű/régi eszközökhöz szánt."
-
-msgid "Uses OpenGL 3 backend (OpenGL 3.3/ES 3.0/WebGL2)."
-msgstr "OpenGL 3 háttérprogramot használ (OpenGL 3.3/ES 3.0/WebGL2)."
 
 msgid "Fastest rendering of simple scenes."
 msgstr "Egyszerű jelenetek leggyorsabb renderelése."
@@ -5660,15 +5572,6 @@ msgstr "Projekt Telepítés Útvonal:"
 
 msgid "Renderer:"
 msgstr "Rendermotor:"
-
-msgid ""
-"RenderingDevice-based methods not available on this GPU:\n"
-"%s\n"
-"Please use the Compatibility renderer."
-msgstr ""
-"A RenderingDevice alapú metódusok nem elérhetőek ezen a GPU-n:\n"
-"%s\n"
-"Kérjük használja a Compatibility rendermotort."
 
 msgid "The renderer can be changed later, but scenes may need to be adjusted."
 msgstr ""
@@ -6151,17 +6054,8 @@ msgstr "Kikapcsolja a visszaállítási módot és újratölti a projektet."
 msgid "Recovery Mode is enabled. Click for more details."
 msgstr "Visszaállítási Mód engedélyezve. Kattintson a részletekért."
 
-msgid "Run Scene in Regular Mode"
-msgstr "Jelenet Futtatása Szokásos Módon"
-
-msgid "Run Scene in XR Mode"
-msgstr "Jelenet Futtatása XR Módban"
-
 msgid "Run Specific Scene"
 msgstr "Adott Jelenet Futtatása"
-
-msgid "Run in XR Mode"
-msgstr "Futtatás XR Módban"
 
 msgid "Enable Movie Maker Mode"
 msgstr "Filmkészítő Mód Bekapcsolása"
@@ -10276,9 +10170,6 @@ msgstr "Navigációs Szerver és 3D képességek."
 msgid "XR (AR and VR)."
 msgstr "XR (AR és VR)."
 
-msgid "OpenXR standard implementation (requires XR to be enabled)."
-msgstr "OpenXR általános implementáció (XR bekapcsolását igényli)."
-
 msgid "Wayland display (Linux only)."
 msgstr "Wayland megjelenítés (csak Linux)."
 
@@ -10293,9 +10184,6 @@ msgstr ""
 
 msgid "Forward+ renderer for advanced 3D graphics."
 msgstr "Forward+ rendermotor fejlett 3D grafikához."
-
-msgid "Mobile renderer for less advanced 3D graphics."
-msgstr "Mobile rendermotor kevésbé fejlett 3D grafikához."
 
 msgid "Vulkan backend of RenderingDevice."
 msgstr "A RenderingDevice Vulkan háttérprogramja."
@@ -10879,13 +10767,6 @@ msgstr "Node hozzáadása"
 
 msgid "Copy Parameters From Material"
 msgstr "Paraméterek Másolása Anyagból"
-
-msgid ""
-"Only supported in the Forward+ and Mobile rendering methods, not "
-"Compatibility."
-msgstr ""
-"Csak a Forward+ és Mobile renderelő módszerekkel támogatott, Compatibility-"
-"vel nem."
 
 msgid "Create Shader Node"
 msgstr "Shader Node Létrehozása"
@@ -12540,12 +12421,6 @@ msgstr "Művelet Lokalizált Neve"
 msgid "Add interaction profile"
 msgstr "Interakciós profil hozzáadása"
 
-msgid "Save this OpenXR action map."
-msgstr "OpenXR művelettérkép mentése."
-
-msgid "Reset to default OpenXR action map."
-msgstr "Visszaállítás az alapértelmezett OpenXR művelettérképre."
-
 msgid "Rename Action Sets Localized name"
 msgstr "Műveletcsoportok Lokalizált Nevének Átnevezése"
 
@@ -12598,54 +12473,16 @@ msgid "All interaction profiles have been added to the action map."
 msgstr "Minden interakciós profil hozzáadva a művelettérképhez."
 
 msgid ""
-"Cannot use the same SubViewport with multiple OpenXR composition layers. "
-"Clear it from its current layer first."
-msgstr ""
-"Ugyanazon SubViewport nem használható egyszerre több OpenXR kompozíció "
-"rétegen. Először törölje a jelenlegi rétegről."
-
-msgid ""
-"Cannot set SubViewport on an OpenXR composition layer when using an Android "
-"surface."
-msgstr ""
-"Android felület esetén SubViewport nem állítható be OpenXR kompozíció rétegre."
-
-msgid "OpenXR composition layers must have an XROrigin3D node as their parent."
-msgstr ""
-"Az OpenXR kompozíció rétegek XROrigin3D szülő node-dal kell rendelkezzenek."
-
-msgid ""
-"OpenXR composition layers must have orthonormalized transforms (ie. no scale "
-"or shearing)."
-msgstr ""
-"Az OpenXR kompozíció rétegeknek ortonormált transzformációval kell "
-"rendelkezniük (vagyis nem méretezhető (scale) vagy vágható (shear))."
-
-msgid ""
 "Hole punching won't work as expected unless the sort order is less than zero."
 msgstr ""
 "A lyukasztás csak akkor fog megfelelően működni, ha a rendezési sorrend "
 "nullánál kisebb."
-
-msgid "OpenXR visibility mask must have an XRCamera3D node as their parent."
-msgstr ""
-"Az OpenXR láthatósági maszknak XRCamera3D szülő node-dal kell rendelkeznie."
-
-msgid "Building Android Project (gradle)"
-msgstr "Android Projekt Építése (gradle)"
-
-msgid "Unable to connect to Gradle Build Environment service"
-msgstr "Sikertelen kapcsolódás a Gradle Építési Környezet szolgáltatáshoz"
 
 msgid "Package name is missing."
 msgstr "Hiányzó csomagnév."
 
 msgid "Package segments must be of non-zero length."
 msgstr "A csomagszegmensek hossza nullától eltérő kell legyen."
-
-msgid "The character '%s' is not allowed in Android application package names."
-msgstr ""
-"A \"%s\" karakter nem engedélyezett az Android alkalmazások csomagnevében."
 
 msgid "A digit cannot be the first character in a package segment."
 msgstr "A csomagszegmensek első karaktere nem lehet szám."
@@ -12665,28 +12502,6 @@ msgstr "Érvénytelen nyilvános kulcs az APK bővítéshez."
 msgid "Invalid package name:"
 msgstr "Érvénytelen csomagnév:"
 
-msgid "\"Use Gradle Build\" is required to enable \"Swipe to dismiss\"."
-msgstr ""
-"Az \"Elvetés elhúzással\" engedélyezéséhez \"Gradle Használata\" szükséges."
-
-msgid "\"Use Gradle Build\" must be enabled to use the plugins."
-msgstr "A bővítmények használatához \"Gradle Használata\" szükséges."
-
-msgid "Support for \"Use Gradle Build\" on Android is currently experimental."
-msgstr "A \"Gradle Használata\" Androidon jelenleg kísérleti jellegű."
-
-msgid ""
-"\"Compress Native Libraries\" is only valid when \"Use Gradle Build\" is "
-"enabled."
-msgstr ""
-"A \"Natív Könyvtárak Tömörítése\" csak \"Gradle Használata\" mellett érvényes."
-
-msgid "\"Export AAB\" is only valid when \"Use Gradle Build\" is enabled."
-msgstr "Az \"Export AAB\" csak \"Gradle Használata\" mellett érvényes."
-
-msgid "\"Min SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
-msgstr "\"Gradle Használata\" esetén a \"Min SDK\" felülírható."
-
 msgid "\"Min SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
 "A \"Min SDK\" egész szám kell legyen, de \"%s\" szerepel benne, ami "
@@ -12699,10 +12514,6 @@ msgstr ""
 "\"Min SDK\" nem lehet kisebb, mint a Godot könyvtár által igényelt verzió: %d."
 
 msgid ""
-"\"Target SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
-msgstr "A \"Cél SDK\" felülírható \"Gradle Használata\" mellett."
-
-msgid ""
 "\"Target SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
 "A \"Cél SDK\" egész szám kell legyen, de \"%s\" szerepel benne, ami "
@@ -12712,25 +12523,6 @@ msgid "\"Target SDK\" version must be greater or equal to \"Min SDK\" version."
 msgstr ""
 "A \"Cél\" SDK verzió nagyobb vagy egyenlő kell legyen a \"Min SDK\" verzióval."
 
-msgid "\"Use Gradle Build\" is required to add custom theme attributes."
-msgstr "Egyedi téma attribútumok hozzáadásához \"Gradle Használata\" szükséges."
-
-msgid "\"Use Gradle Build\" must be enabled to enable \"Show In Android Tv\"."
-msgstr ""
-"\"Mutatás Android TV-n\" engedélyezéséhez \"Gradle Használata\" szükséges."
-
-msgid "\"Use Gradle Build\" must be enabled to enable \"Show As Launcher App\"."
-msgstr ""
-"A \"Megjelenítés Indító Alkalmazásként\" engedélyezéséhez \"Gradle "
-"Használata\" szükséges."
-
-msgid "\"Use Gradle Build\" must be enabled to disable \"Show In App Library\"."
-msgstr ""
-"A \"Mutatás App Könyvtárban\" kikapcsolásához \"Gradle Használata\" szükséges."
-
-msgid "Mirror Android devices"
-msgstr "Android eszközök tükrözése"
-
 msgid ""
 "If enabled, \"scrcpy\" is used to start the project and automatically stream "
 "device display (or virtual display) content."
@@ -12739,43 +12531,10 @@ msgstr ""
 "automatikusan átjátssza az eszköz képernyőjének (vagy virtuális "
 "képernyőjének) tartalmát."
 
-msgid ""
-"Could not start scrcpy executable. Configure scrcpy path in the Editor "
-"Settings (Export > Android > scrcpy > Path)."
-msgstr ""
-"A scrcpy nem indítható el. Állítsa be a scrcpy útvonalat a Szerkesztő "
-"Beállításokban (Export > Android > scrcpy > Útvonal)."
-
 msgid "Error: There was a problem validating the keystore username and password"
 msgstr ""
 "Hiba: A kulcstár felhasználónevének és jelszavának érvényesítése problémába "
 "ütközött"
-
-msgid ""
-"Unable to determine the C# project's TFM, it may be incompatible. The export "
-"template only supports '%s'. Make sure the project targets '%s' or consider "
-"using gradle builds instead."
-msgstr ""
-"A C# projekt cél keretrendszere nem meghatározható, lehet, hogy nem "
-"kompatibilis. Az export sablon csak \"%s\"-t támogat. Ellenőrizze, hogy a "
-"projekt a(z) \"%s\"-t célozza vagy használjon gradle építést."
-
-msgid ""
-"C# project targets '%s' but the export template only supports '%s'. Consider "
-"using gradle builds instead."
-msgstr ""
-"A C# projekt célja \"%s\", de az export sablon csak \"%s\"-t támogat. "
-"Használjon helyette gradle építést."
-
-msgid "Exporting to Android when using C#/.NET is experimental."
-msgstr "C#/.NET exportálása Androidra csak kísérleti jellegű."
-
-msgid ""
-"Android build template not installed in the project. Install it from the "
-"Project menu."
-msgstr ""
-"Az Android építési sablon nincs a projektben telepítve. Telepítse a Projekt "
-"menüből."
 
 msgid ""
 "Either Debug Keystore, Debug User AND Debug Password settings must be "
@@ -12813,29 +12572,11 @@ msgstr "A \"java\" parancs nem található a Java SDK útvonalán."
 msgid "Please check the Java SDK directory specified in Editor Settings."
 msgstr "Ellenőrizze a Szerkesztő Beállításokban megadott Java SDK mappát."
 
-msgid "A valid Android SDK path is required in Editor Settings."
-msgstr "Érvényes Android SDK útvonal szükséges a Szerkesztő Beállításokban."
-
-msgid "Invalid Android SDK path in Editor Settings."
-msgstr "Érvénytelen Android SDK útvonal a Szerkesztő Beállításokban."
-
 msgid "Missing 'platform-tools' directory!"
 msgstr "Hiányzó \"platform-tools\" mappa!"
 
-msgid "Unable to find Android SDK platform-tools' adb command."
-msgstr "Nem található az Android SDK platformeszköz adb parancsa."
-
-msgid "Please check in the Android SDK directory specified in Editor Settings."
-msgstr "Ellenőrizze a Szerkesztő Beállításokban megadott Android SDK mappát."
-
 msgid "Missing 'build-tools' directory!"
 msgstr "Hiányzó \"build-tools\" mappa!"
-
-msgid "Unable to find Android SDK build-tools' apksigner command."
-msgstr "Nem található az Android SDK építési eszközök apksigner parancsa."
-
-msgid "\"Use Gradle Build\" is required for transparent background on Android"
-msgstr "Android kötelező a \"Gradle Használata\" az átlátszó hátterekhez"
 
 msgid ""
 "\"Target SDK\" %d is higher than the default version %d. This may work, but "
@@ -12843,13 +12584,6 @@ msgid ""
 msgstr ""
 "A \"Cél SDK\" %d újabb, mint az alapértelmezett %d verzió. Működhet, de nincs "
 "tesztelve és instabil lehet."
-
-msgid ""
-"The \"%s\" renderer is designed for Desktop devices, and is not suitable for "
-"Android devices."
-msgstr ""
-"A(z) \"%s\" rendermotor Asztali eszközökre van tervezve és nem alkalmas "
-"Android eszközökre."
 
 msgid ""
 "The project name does not meet the requirement for the package name format "
@@ -12862,22 +12596,6 @@ msgstr ""
 msgid "AAB signing is not supported"
 msgstr "AAB aláírás nem támogatott"
 
-msgid ""
-"All 'apksigner' tools located in Android SDK 'build-tools' directory failed "
-"to execute. Please check that you have the correct version installed for your "
-"target sdk version. The resulting APK is unsigned."
-msgstr ""
-"Az Android SDK \"build-tools\" mappájában lévő összes \"apksigner\" eszköz "
-"hibába ütközött. Ellenőrizze, hogy az sdk verzióhoz megfelelő verzió van "
-"telepítve. A létrejött APK nincs aláírva."
-
-msgid ""
-"'apksigner' could not be found. Please check that the command is available in "
-"the Android SDK build-tools directory. The resulting APK is unsigned."
-msgstr ""
-"\"apksigner\" nem található. Ellenőrizze, hogy a parancs elérhető az Android "
-"SDK build-tools mappájában. A létrejött APK nincs aláírva."
-
 msgid "'apksigner' returned with error #%d"
 msgstr "Az \"apksigner\" #%d hibakóddal tért vissza"
 
@@ -12887,25 +12605,8 @@ msgstr "Az aláírt apk nem ellenőrizhető."
 msgid "'apksigner' verification of APK failed."
 msgstr "APK ellenőrzése sikertelen \"apksigner\"-rel."
 
-msgid "Invalid filename! Android App Bundle requires the *.aab extension."
-msgstr ""
-"Érvénytelen fájlnév! Az Android App Bundle az *.aab kiterjesztést igényli."
-
-msgid "APK Expansion not compatible with Android App Bundle."
-msgstr "Az APK Bővítés nem kompatibilis az Android App Bundle-lel."
-
-msgid "Invalid filename! Android APK requires the *.apk extension."
-msgstr "Érvénytelen fájlnév! Az Android APK az *.apk kiterjesztést igényli."
-
 msgid "Unsupported export format!"
 msgstr "Nem támogatott export formátum!"
-
-msgid ""
-"Trying to build from a gradle built template, but no version info for it "
-"exists. Please reinstall from the 'Project' menu."
-msgstr ""
-"Építés gradle által készített sablonból, de nincs hozzátartozó "
-"verzióinformáció. Telepítse újra a \"Projekt\" menüből."
 
 msgid ""
 "Java SDK path must be configured in Editor Settings at 'export/android/"
@@ -12913,13 +12614,6 @@ msgid ""
 msgstr ""
 "A Java SDK útvonal beállítása szükséges a Szerkesztő Bállításokban: \"export/"
 "android/java_sdk_path\"."
-
-msgid ""
-"Android SDK path must be configured in Editor Settings at 'export/android/"
-"android_sdk_path'."
-msgstr ""
-"Az Android SDK útvonal beállítása szükséges a Szerkesztő Bállításokban: "
-"\"export/android/android_sdk_path\"."
 
 msgid "Unable to overwrite res/*.xml files with project name."
 msgstr "A projekt nevével nem írhatóak res/*.xml fájlok."
@@ -12929,9 +12623,6 @@ msgstr "Nem sikerült a ritka pck fájl metaadatainak írása!"
 
 msgid "Could not write expansion package file!"
 msgstr "A bővítőcsomag fájl nem írható!"
-
-msgid "Building of Android project failed, check output for the error:"
-msgstr "Az Android projekt építése sikertelen, ellenőrizze a kimeneti hibákat:"
 
 msgid "Moving output"
 msgstr "Kimenet áthelyezése"
@@ -12950,9 +12641,6 @@ msgstr "APK rendezése..."
 
 msgid "Could not unzip temporary unaligned APK."
 msgstr "Az ideiglenes rendezetlen APK kicsomagolása sikertelen."
-
-msgid "Metal renderer require iOS 14+."
-msgstr "iOS 14+ szükséges a Metal rendermotorhoz."
 
 msgid ""
 "Mismatching custom export template executable architecture: found \"%s\", "
@@ -13289,14 +12977,6 @@ msgid "PWA"
 msgstr "PWA"
 
 msgid ""
-"Exporting to Web is currently not supported in Godot 4 when using C#/.NET. "
-"Use Godot 3 to target Web with C#/Mono instead."
-msgstr ""
-"Exportálás Web platformra jelenleg nem támogatott a Godot 4-ben C#/.NET "
-"használata mellett. Használja a Godot 3-mat a Web platformhoz C#/Mono "
-"segítségével."
-
-msgid ""
 "If this project does not use C#, use a non-C# editor build to export the "
 "project."
 msgstr ""
@@ -13399,17 +13079,6 @@ msgid ""
 msgstr ""
 "A Particles2D animációhoz CanvasItemMaterial használata szükséges "
 "engedélyezett \"Részecske Animáció\" opcióval."
-
-msgid ""
-"Particle trails are only available when using the Forward+ or Mobile renderer."
-msgstr ""
-"A részecske nyomvonalak csak Forward+ vagy Mobile rendermotorok esetén "
-"elérhetőek."
-
-msgid ""
-"Particle sub-emitters are not available when using the Compatibility renderer."
-msgstr ""
-"A részecske al-kibocsátás nem elérhető Compatibility rendermotor esetén."
 
 msgid ""
 "A texture with the shape of the light must be supplied to the \"Texture\" "
@@ -13691,9 +13360,6 @@ msgstr ""
 "A CPUParticles3D animáció olyan StandardMaterial3D használatát igényli, amely "
 "Billboard módja \"Részecske Billboard\"-ra van állítva."
 
-msgid "Decals are only available when using the Forward+ or Mobile renderer."
-msgstr "A Decal-ok csak Forward+ vagy Mobile rendermotor esetén elérhetőek."
-
 msgid ""
 "The decal has no textures loaded into any of its texture properties, and will "
 "therefore not be visible."
@@ -13795,13 +13461,6 @@ msgstr "A fényforrás méretezése (scale) nincs hatással a fény látható m�
 
 msgid "Projector texture only works with shadows active."
 msgstr "A projekciós textúra csak bekapcsolt árnyékokkal működik."
-
-msgid ""
-"Projector textures are not supported when using the Compatibility renderer "
-"yet. Support will be added in a future release."
-msgstr ""
-"A projekciós textúrák Compatibility rendermotor esetén még nem támogatottak. "
-"Későbbi kiadások fogják majd támogatni."
 
 msgid "A SpotLight3D with an angle wider than 90 degrees cannot cast shadows."
 msgstr "90 foknál szélesebb szögű SpotLight3D nem hozhat létre árnyékokat."

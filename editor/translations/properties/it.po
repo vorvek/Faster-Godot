@@ -307,14 +307,8 @@ msgstr "Incorpora sottofinestre"
 msgid "Frame Pacing"
 msgstr "Andamento dei frame"
 
-msgid "Android"
-msgstr "Android"
-
 msgid "Enable Frame Pacing"
 msgstr "Abilita andamento dei frame"
-
-msgid "Swappy Mode"
-msgstr "Modalità di Swappy"
 
 msgid "Physics"
 msgstr "Fisica"
@@ -2970,9 +2964,6 @@ msgstr "Passo di animazione predefinito"
 msgid "Default FPS Mode"
 msgstr "Modalità di FPS predefinita"
 
-msgid "Default FPS Compatibility"
-msgstr "Compatibilità di FPS predefinita"
-
 msgid "Autorename Animation Tracks"
 msgstr "Auto-rinomina tracce di animazione"
 
@@ -3032,9 +3023,6 @@ msgstr "Posizione personalizzata del rettangolo"
 
 msgid "Screen"
 msgstr "Schermo"
-
-msgid "Android Window"
-msgstr "Finestra di Android"
 
 msgid "Game Embed Mode"
 msgstr "Modalità di gioco incorporato"
@@ -3267,9 +3255,6 @@ msgstr "Usa D3D12 come riserva"
 msgid "Fallback to OpenGL 3"
 msgstr "Usa OpenGL 3 come riserva"
 
-msgid "GL Compatibility"
-msgstr "Compatibilità GL"
-
 msgid "Nvidia Disable Threaded Optimization"
 msgstr "Disattiva ottimizzazioni di thread Nvidia"
 
@@ -3338,9 +3323,6 @@ msgstr "Sopprimi i gesti dell'interfaccia utente"
 
 msgid "XR"
 msgstr "XR"
-
-msgid "OpenXR"
-msgstr "OpenXR"
 
 msgid "Default Action Map"
 msgstr "Mappa di azioni predefinita"
@@ -4620,12 +4602,6 @@ msgstr "Successivo"
 msgid "Layer Viewport"
 msgstr "Viewport del livello"
 
-msgid "Use Android Surface"
-msgstr "Usa superficie Android"
-
-msgid "Android Surface Size"
-msgstr "Dimensioni superficie Android"
-
 msgid "Sort Order"
 msgstr "Tipo di ordinamento"
 
@@ -4743,9 +4719,6 @@ msgstr "Indirizzo locale IGD"
 msgid "IGD Status"
 msgstr "Stato IGD"
 
-msgid "WebRTC"
-msgstr "WebRTC"
-
 msgid "Max Channel in Buffer (KB)"
 msgstr "Canali massimi in buffer (KB)"
 
@@ -4809,9 +4782,6 @@ msgstr "Installa APK esportato"
 msgid "Java SDK Path"
 msgstr "Percorso all'SDK di Java"
 
-msgid "Android SDK Path"
-msgstr "Percorso all'SDK di Android"
-
 msgid "Force System User"
 msgstr "Forza l'utente del sistema"
 
@@ -4841,18 +4811,6 @@ msgstr "Sfondo adattivo (432×432)"
 
 msgid "Adaptive Monochrome 432 X 432"
 msgstr "Adattivo monocromatico (432×432)"
-
-msgid "Gradle Build"
-msgstr "Build Gradle"
-
-msgid "Use Gradle Build"
-msgstr "Utilizza build Gradle"
-
-msgid "Gradle Build Directory"
-msgstr "Cartella di build Gradle"
-
-msgid "Android Source Template"
-msgstr "Modello sorgente per Android"
 
 msgid "Compress Native Libraries"
 msgstr "Comprimi librerie native"
@@ -4904,9 +4862,6 @@ msgstr "Conserva dati dopo la disinstallazione"
 
 msgid "Exclude From Recents"
 msgstr "Escludi dai recenti"
-
-msgid "Show in Android TV"
-msgstr "Mostra su Android TV"
 
 msgid "Show in App Library"
 msgstr "Mostra nella libreria delle applicazioni"
@@ -4980,14 +4935,8 @@ msgstr "Permessi"
 msgid "Custom Permissions"
 msgstr "Permessi personalizzati"
 
-msgid "iOS Deploy"
-msgstr "Distribuzione su iOS"
-
 msgid "Targeted Device Family"
 msgstr "Famiglia di dispositivi selezionata"
-
-msgid "Min iOS Version"
-msgstr "Versione minima di iOS"
 
 msgid "Storyboard"
 msgstr "Storyboard"
@@ -5042,15 +4991,6 @@ msgstr "iPad (167×167)"
 
 msgid "iPad 152 X 152"
 msgstr "iPad (152×152)"
-
-msgid "iOS 128 X 128"
-msgstr "iOS (128×128)"
-
-msgid "iOS 192 X 192"
-msgstr "iOS (192×192)"
-
-msgid "iOS 136 X 136"
-msgstr "iOS (136×136)"
 
 msgid "App Store 1024 X 1024"
 msgstr "App Store (1024 x 1024)"
@@ -5357,9 +5297,6 @@ msgstr "Icona 180 x 180"
 
 msgid "Icon 512 X 512"
 msgstr "Icona 512 x 512"
-
-msgid "Emscripten Pool Size"
-msgstr "Dimensione di pool di Emscripten"
 
 msgid "Godot Pool Size"
 msgstr "Dimensione di pool di Godot"

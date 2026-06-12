@@ -45,14 +45,9 @@ SConscript("winmidi/SCsub")
 # Graphics drivers
 if env["vulkan"]:
     SConscript("vulkan/SCsub")
-if env["opengl3"]:
-    SConscript("gl_context/SCsub")
-    SConscript("gles3/SCsub")
-    SConscript("egl/SCsub")
 
 # Input drivers
 if env["sdl"] and env["platform"] in ["linuxbsd", "macos", "windows"]:
-    # TODO: Evaluate support for Android, iOS, and Web.
     SConscript("sdl/SCsub")
 
 # Core dependencies

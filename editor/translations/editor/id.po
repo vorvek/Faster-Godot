@@ -2480,20 +2480,6 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "Deploy Kecil dengan Jaringan Berkas"
 
-msgid ""
-"When this option is enabled, using one-click deploy for Android will only "
-"export an executable without the project data.\n"
-"The filesystem will be provided from the project by the editor over the "
-"network.\n"
-"On Android, deploying will use the USB cable for faster performance. This "
-"option speeds up testing for projects with large assets."
-msgstr ""
-"Ketika opsi ini aktif, menggunakan 'one-click deploy' hanya akan mengekspor "
-"executable tanpa data proyek.\n"
-"Berkas sistem akan tersedia dari proyek oleh editor melalui jaringan.\n"
-"Pada Android, deploy akan menggunakan kabel USB untuk performa yang lebih "
-"cepat. Opsi ini mempercepat pengujian dengan jejak kaki yang besar."
-
 msgid "Visible Collision Shapes"
 msgstr "Collision Shapes Terlihat"
 
@@ -4193,9 +4179,6 @@ msgstr "Pengaturan Kontrol Versi..."
 msgid "Pack Project as ZIP..."
 msgstr "Bungkus proyek sebagai ZIP..."
 
-msgid "Install Android Build Template..."
-msgstr "Pasang Templat Build Android..."
-
 msgid "Open User Data Folder"
 msgstr "Buka Folder Data Pengguna"
 
@@ -4379,17 +4362,11 @@ msgstr "Sembunyikan Spinner Pembaruan"
 msgid "Don't Save"
 msgstr "Jangan Simpan"
 
-msgid "Android build template is missing, please install relevant templates."
-msgstr "Templat build Android tidak ada, harap pasang templat yang relevan."
-
 msgid "Manage Templates"
 msgstr "Kelola Templat"
 
 msgid "Install from file"
 msgstr "Install dari file"
-
-msgid "Select Android sources file"
-msgstr "Pilih file sumber Android"
 
 msgid "Import Templates From ZIP File"
 msgstr "Impor Templat dari Berkas ZIP"
@@ -4623,9 +4600,6 @@ msgstr "Template ekspor tidak ada. Download atau instal dari file."
 
 msgid "Official export templates aren't available for development builds."
 msgstr "Templat ekspor resmi tidak tersedia untuk build pengembangan."
-
-msgid "Uncompressing Android Build Sources"
-msgstr "Mengekstrak Kode Sumber Build Android"
 
 msgid "Export Template Manager"
 msgstr "Manajer Templat Ekspor"
@@ -11094,9 +11068,6 @@ msgstr ""
 msgid "Pose"
 msgstr "Pose"
 
-msgid "Building Android Project (gradle)"
-msgstr "Membangun Proyek Android (gradle)"
-
 msgid "Invalid public key for APK expansion."
 msgstr "Kunci Publik untuk ekspansi APK tidak valid."
 
@@ -11121,13 +11092,6 @@ msgstr "Berjalan pada perangkat..."
 msgid "Could not execute on device."
 msgstr "Tidak dapat dijalankan di perangkat."
 
-msgid ""
-"Android build template not installed in the project. Install it from the "
-"Project menu."
-msgstr ""
-"Templat build Android belum terpasang dalam proyek. Pasanglah dari menu "
-"Proyek."
-
 msgid "Debug keystore not configured in the Editor Settings nor in the preset."
 msgstr ""
 "Berkas debug keystore belum dikonfigurasi dalam Pengaturan Editor maupun di "
@@ -11136,27 +11100,11 @@ msgstr ""
 msgid "Release keystore incorrectly configured in the export preset."
 msgstr "Berkas keystore rilis belum dikonfigurasi di prasetel ekspor."
 
-msgid "A valid Android SDK path is required in Editor Settings."
-msgstr "Lokasi Android SDK yang valid dibutuhkan di Pengaturan Editor."
-
-msgid "Invalid Android SDK path in Editor Settings."
-msgstr "Lokasi Android SDK tidak valid di Pengaturan Editor."
-
 msgid "Missing 'platform-tools' directory!"
 msgstr "Direktori 'platform-tools' tidak ada!"
 
-msgid "Unable to find Android SDK platform-tools' adb command."
-msgstr "Tidak dapat menemukan perintah adb di Android SDK platform-tools."
-
-msgid "Please check in the Android SDK directory specified in Editor Settings."
-msgstr ""
-"Silakan cek direktori Android SDK yang diisikan dalam Pengaturan Editor."
-
 msgid "Missing 'build-tools' directory!"
 msgstr "Direktori 'build-tools' tidak ditemukan!"
-
-msgid "Unable to find Android SDK build-tools' apksigner command."
-msgstr "Tidak dapat menemukan apksigner dalam Android SDK build-tools."
 
 msgid "Could not start apksigner executable."
 msgstr "Tidak dapat memulai apksigner."
@@ -11171,20 +11119,8 @@ msgstr ""
 "keluaran:\n"
 "%s"
 
-msgid "Invalid filename! Android App Bundle requires the *.aab extension."
-msgstr "Nama berkas tak valid! Android App Bundle memerlukan ekstensi *.aab ."
-
-msgid "APK Expansion not compatible with Android App Bundle."
-msgstr "Ekspansi APK tidak kompatibel dengan Android App Bundle."
-
-msgid "Invalid filename! Android APK requires the *.apk extension."
-msgstr "Nama berkas tidak valid! APK Android memerlukan ekstensi *.apk ."
-
 msgid "Unsupported export format!"
 msgstr "Format ekspor tidak didukung!"
-
-msgid "Could not export project files to gradle project."
-msgstr "Tidak dapat mengekspor file proyek ke dalam lokasi proyek gradle."
 
 msgid "Could not write expansion package file!"
 msgstr "Tidak dapat menulis berkas paket ekspansi!"

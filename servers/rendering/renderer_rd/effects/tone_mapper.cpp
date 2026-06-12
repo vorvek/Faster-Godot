@@ -36,96 +36,45 @@
 using namespace RendererRD;
 
 ToneMapper::ToneMapper(bool p_use_mobile_version) {
-#ifdef FASTER_GODOT_FORWARD_PLUS_ONLY
 	(void)p_use_mobile_version;
-	using_mobile_version = false;
-#else
-	using_mobile_version = p_use_mobile_version;
-	if (using_mobile_version) {
-		// Initialize tonemapper
-		Vector<String> tonemap_modes;
-		tonemap_modes.push_back("\n");
-		tonemap_modes.push_back("\n#define USE_1D_LUT\n");
-		tonemap_modes.push_back("\n#define SUBPASS\n");
-		tonemap_modes.push_back("\n#define SUBPASS\n#define USE_1D_LUT\n");
 
-		// multiview versions of our shaders
-		tonemap_modes.push_back("\n#define USE_MULTIVIEW\n");
-		tonemap_modes.push_back("\n#define USE_MULTIVIEW\n#define USE_1D_LUT\n");
-		tonemap_modes.push_back("\n#define USE_MULTIVIEW\n#define SUBPASS\n");
-		tonemap_modes.push_back("\n#define USE_MULTIVIEW\n#define SUBPASS\n#define USE_1D_LUT\n");
+	Vector<String> tonemap_modes;
+	tonemap_modes.push_back("\n");
+	tonemap_modes.push_back("\n#define USE_GLOW_FILTER_BICUBIC\n");
+	tonemap_modes.push_back("\n#define USE_1D_LUT\n");
+	tonemap_modes.push_back("\n#define USE_GLOW_FILTER_BICUBIC\n#define USE_1D_LUT\n");
 
-		tonemap_mobile.shader.initialize(tonemap_modes);
+	// multiview versions of our shaders
+	tonemap_modes.push_back("\n#define USE_MULTIVIEW\n");
+	tonemap_modes.push_back("\n#define USE_MULTIVIEW\n#define USE_GLOW_FILTER_BICUBIC\n");
+	tonemap_modes.push_back("\n#define USE_MULTIVIEW\n#define USE_1D_LUT\n");
+	tonemap_modes.push_back("\n#define USE_MULTIVIEW\n#define USE_GLOW_FILTER_BICUBIC\n#define USE_1D_LUT\n");
 
-		if (!RendererCompositorRD::get_singleton()->is_xr_enabled()) {
-			tonemap_mobile.shader.set_variant_enabled(TONEMAP_MOBILE_MODE_NORMAL_MULTIVIEW, false);
-			tonemap_mobile.shader.set_variant_enabled(TONEMAP_MOBILE_MODE_1D_LUT_MULTIVIEW, false);
-			tonemap_mobile.shader.set_variant_enabled(TONEMAP_MOBILE_MODE_SUBPASS_MULTIVIEW, false);
-			tonemap_mobile.shader.set_variant_enabled(TONEMAP_MOBILE_MODE_SUBPASS_1D_LUT_MULTIVIEW, false);
-		}
+	tonemap.shader.initialize(tonemap_modes);
 
-		tonemap_mobile.shader_version = tonemap_mobile.shader.version_create();
-
-		for (int i = 0; i < TONEMAP_MODE_MAX; i++) {
-			if (tonemap_mobile.shader.is_variant_enabled(i)) {
-				tonemap_mobile.pipelines[i].setup(tonemap_mobile.shader.version_get_shader(tonemap_mobile.shader_version, i), RD::RENDER_PRIMITIVE_TRIANGLES, RD::PipelineRasterizationState(), RD::PipelineMultisampleState(), RD::PipelineDepthStencilState(), RD::PipelineColorBlendState::create_disabled(), 0);
-			} else {
-				tonemap_mobile.pipelines[i].clear();
-			}
-		}
-
-	} else {
-#endif
-		// Initialize tonemapper
-		Vector<String> tonemap_modes;
-		tonemap_modes.push_back("\n");
-		tonemap_modes.push_back("\n#define USE_GLOW_FILTER_BICUBIC\n");
-		tonemap_modes.push_back("\n#define USE_1D_LUT\n");
-		tonemap_modes.push_back("\n#define USE_GLOW_FILTER_BICUBIC\n#define USE_1D_LUT\n");
-
-		// multiview versions of our shaders
-		tonemap_modes.push_back("\n#define USE_MULTIVIEW\n");
-		tonemap_modes.push_back("\n#define USE_MULTIVIEW\n#define USE_GLOW_FILTER_BICUBIC\n");
-		tonemap_modes.push_back("\n#define USE_MULTIVIEW\n#define USE_1D_LUT\n");
-		tonemap_modes.push_back("\n#define USE_MULTIVIEW\n#define USE_GLOW_FILTER_BICUBIC\n#define USE_1D_LUT\n");
-
-		tonemap.shader.initialize(tonemap_modes);
-
-		if (!RendererCompositorRD::get_singleton()->is_xr_enabled()) {
-			tonemap.shader.set_variant_enabled(TONEMAP_MODE_NORMAL_MULTIVIEW, false);
-			tonemap.shader.set_variant_enabled(TONEMAP_MODE_BICUBIC_GLOW_FILTER_MULTIVIEW, false);
-			tonemap.shader.set_variant_enabled(TONEMAP_MODE_1D_LUT_MULTIVIEW, false);
-			tonemap.shader.set_variant_enabled(TONEMAP_MODE_BICUBIC_GLOW_FILTER_1D_LUT_MULTIVIEW, false);
-		}
-
-		tonemap.shader_version = tonemap.shader.version_create();
-
-		for (int i = 0; i < TONEMAP_MODE_MAX; i++) {
-			if (tonemap.shader.is_variant_enabled(i)) {
-				tonemap.pipelines[i].setup(tonemap.shader.version_get_shader(tonemap.shader_version, i), RD::RENDER_PRIMITIVE_TRIANGLES, RD::PipelineRasterizationState(), RD::PipelineMultisampleState(), RD::PipelineDepthStencilState(), RD::PipelineColorBlendState::create_disabled(), 0);
-			} else {
-				tonemap.pipelines[i].clear();
-			}
-		}
-#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
+	if (!RendererCompositorRD::get_singleton()->is_xr_enabled()) {
+		tonemap.shader.set_variant_enabled(TONEMAP_MODE_NORMAL_MULTIVIEW, false);
+		tonemap.shader.set_variant_enabled(TONEMAP_MODE_BICUBIC_GLOW_FILTER_MULTIVIEW, false);
+		tonemap.shader.set_variant_enabled(TONEMAP_MODE_1D_LUT_MULTIVIEW, false);
+		tonemap.shader.set_variant_enabled(TONEMAP_MODE_BICUBIC_GLOW_FILTER_1D_LUT_MULTIVIEW, false);
 	}
-#endif
+
+	tonemap.shader_version = tonemap.shader.version_create();
+
+	for (int i = 0; i < TONEMAP_MODE_MAX; i++) {
+		if (tonemap.shader.is_variant_enabled(i)) {
+			tonemap.pipelines[i].setup(tonemap.shader.version_get_shader(tonemap.shader_version, i), RD::RENDER_PRIMITIVE_TRIANGLES, RD::PipelineRasterizationState(), RD::PipelineMultisampleState(), RD::PipelineDepthStencilState(), RD::PipelineColorBlendState::create_disabled(), 0);
+		} else {
+			tonemap.pipelines[i].clear();
+		}
+	}
 }
 
 ToneMapper::~ToneMapper() {
-#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
-	if (using_mobile_version) {
-		tonemap_mobile.shader.version_free(tonemap_mobile.shader_version);
-	} else {
-#endif
-		tonemap.shader.version_free(tonemap.shader_version);
-#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
-	}
-#endif
+	tonemap.shader.version_free(tonemap.shader_version);
 }
 
 void ToneMapper::tonemapper(RID p_source_color, RID p_dst_framebuffer, const TonemapSettings &p_settings) {
-	ERR_FAIL_COND_MSG(using_mobile_version, "Can't use the non mobile version of the tonemapper with the Mobile renderer.");
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
@@ -227,191 +176,3 @@ void ToneMapper::tonemapper(RID p_source_color, RID p_dst_framebuffer, const Ton
 	RD::get_singleton()->draw_list_draw(draw_list, false, 1u, 3u);
 	RD::get_singleton()->draw_list_end();
 }
-
-#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
-void ToneMapper::tonemapper_mobile(RID p_source_color, RID p_dst_framebuffer, const TonemapSettings &p_settings) {
-	ERR_FAIL_COND_MSG(!using_mobile_version, "Can't use the mobile version of the tonemapper with the clustered renderer.");
-	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
-	ERR_FAIL_NULL(uniform_set_cache);
-	MaterialStorage *material_storage = MaterialStorage::get_singleton();
-	ERR_FAIL_NULL(material_storage);
-
-	memset(&tonemap_mobile.push_constant, 0, sizeof(TonemapPushConstantMobile));
-
-	tonemap_mobile.push_constant.bcs[0] = p_settings.brightness;
-	tonemap_mobile.push_constant.bcs[1] = p_settings.contrast;
-	tonemap_mobile.push_constant.bcs[2] = p_settings.saturation;
-
-	tonemap_mobile.push_constant.src_pixel_size[0] = 1.0 / p_settings.texture_size.x;
-	tonemap_mobile.push_constant.src_pixel_size[1] = 1.0 / p_settings.texture_size.y;
-	tonemap_mobile.push_constant.dest_pixel_size[0] = 1.0 / p_settings.dest_texture_size.x;
-	tonemap_mobile.push_constant.dest_pixel_size[1] = 1.0 / p_settings.dest_texture_size.y;
-	tonemap_mobile.push_constant.glow_intensity = p_settings.glow_intensity;
-	tonemap_mobile.push_constant.glow_map_strength = p_settings.glow_map_strength;
-
-	tonemap_mobile.push_constant.exposure = p_settings.exposure;
-	tonemap_mobile.push_constant.white = p_settings.white;
-	tonemap_mobile.push_constant.luminance_multiplier = p_settings.luminance_multiplier;
-
-	tonemap_mobile.push_constant.tonemapper_params[0] = p_settings.tonemapper_params[0];
-	tonemap_mobile.push_constant.tonemapper_params[1] = p_settings.tonemapper_params[1];
-	tonemap_mobile.push_constant.tonemapper_params[2] = p_settings.tonemapper_params[2];
-	tonemap_mobile.push_constant.tonemapper_params[3] = p_settings.tonemapper_params[3];
-
-	uint32_t spec_constant = 0;
-	spec_constant |= p_settings.use_bcs ? TONEMAP_MOBILE_FLAG_USE_BCS : 0;
-	spec_constant |= p_settings.use_glow ? TONEMAP_MOBILE_FLAG_USE_GLOW : 0;
-	spec_constant |= p_settings.glow_map_strength > 0.01 ? TONEMAP_MOBILE_FLAG_USE_GLOW_MAP : 0;
-	spec_constant |= p_settings.use_color_correction ? TONEMAP_MOBILE_FLAG_USE_COLOR_CORRECTION : 0;
-	spec_constant |= p_settings.use_fxaa ? TONEMAP_MOBILE_FLAG_USE_FXAA : 0;
-	spec_constant |= p_settings.debanding_mode == TonemapSettings::DEBANDING_MODE_8_BIT ? TONEMAP_MOBILE_FLAG_USE_8_BIT_DEBANDING : 0;
-	spec_constant |= p_settings.debanding_mode == TonemapSettings::DEBANDING_MODE_10_BIT ? TONEMAP_MOBILE_FLAG_USE_10_BIT_DEBANDING : 0;
-	spec_constant |= p_settings.convert_to_srgb ? TONEMAP_MOBILE_FLAG_CONVERT_TO_SRGB : 0;
-	spec_constant |= p_settings.tonemap_mode == RS::ENV_TONE_MAPPER_LINEAR ? TONEMAP_MOBILE_FLAG_TONEMAPPER_LINEAR : 0;
-	spec_constant |= p_settings.tonemap_mode == RS::ENV_TONE_MAPPER_REINHARD ? TONEMAP_MOBILE_FLAG_TONEMAPPER_REINHARD : 0;
-	spec_constant |= p_settings.tonemap_mode == RS::ENV_TONE_MAPPER_FILMIC ? TONEMAP_MOBILE_FLAG_TONEMAPPER_FILMIC : 0;
-	spec_constant |= p_settings.tonemap_mode == RS::ENV_TONE_MAPPER_ACES ? TONEMAP_MOBILE_FLAG_TONEMAPPER_ACES : 0;
-	spec_constant |= p_settings.tonemap_mode == RS::ENV_TONE_MAPPER_AGX ? TONEMAP_MOBILE_FLAG_TONEMAPPER_AGX : 0;
-	spec_constant |= p_settings.glow_mode == RS::ENV_GLOW_BLEND_MODE_ADDITIVE ? TONEMAP_MOBILE_FLAG_GLOW_MODE_ADD : 0;
-	spec_constant |= p_settings.glow_mode == RS::ENV_GLOW_BLEND_MODE_SCREEN ? TONEMAP_MOBILE_FLAG_GLOW_MODE_SCREEN : 0;
-	spec_constant |= p_settings.glow_mode == RS::ENV_GLOW_BLEND_MODE_SOFTLIGHT ? TONEMAP_MOBILE_FLAG_GLOW_MODE_SOFTLIGHT : 0;
-	spec_constant |= p_settings.glow_mode == RS::ENV_GLOW_BLEND_MODE_REPLACE ? TONEMAP_MOBILE_FLAG_GLOW_MODE_REPLACE : 0;
-	spec_constant |= p_settings.glow_mode == RS::ENV_GLOW_BLEND_MODE_MIX ? TONEMAP_MOBILE_FLAG_GLOW_MODE_MIX : 0;
-
-	int mode = p_settings.use_1d_color_correction ? TONEMAP_MOBILE_MODE_1D_LUT : TONEMAP_MOBILE_MODE_NORMAL;
-
-	if (p_settings.view_count > 1) {
-		// Use USE_MULTIVIEW versions
-		mode += 4;
-	}
-
-	RID default_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
-	RID default_mipmap_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
-
-	RD::Uniform u_source_color(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ default_sampler, p_source_color }));
-
-	RD::Uniform u_glow_texture;
-	u_glow_texture.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
-	u_glow_texture.binding = 1;
-	u_glow_texture.append_id(default_mipmap_sampler);
-	u_glow_texture.append_id(p_settings.glow_texture);
-
-	RD::Uniform u_glow_map;
-	u_glow_map.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
-	u_glow_map.binding = 2;
-	u_glow_map.append_id(default_mipmap_sampler);
-	u_glow_map.append_id(p_settings.glow_map);
-
-	RD::Uniform u_color_correction_texture;
-	u_color_correction_texture.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
-	u_color_correction_texture.binding = 3;
-	u_color_correction_texture.append_id(default_sampler);
-	u_color_correction_texture.append_id(p_settings.color_correction_texture);
-
-	RID shader = tonemap_mobile.shader.version_get_shader(tonemap_mobile.shader_version, mode);
-	ERR_FAIL_COND(shader.is_null());
-
-	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_dst_framebuffer);
-	RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, tonemap_mobile.pipelines[mode].get_render_pipeline(RD::INVALID_ID, RD::get_singleton()->framebuffer_get_format(p_dst_framebuffer), false, RD::get_singleton()->draw_list_get_current_pass(), spec_constant));
-	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 0, u_source_color, u_glow_texture, u_glow_map, u_color_correction_texture), 0);
-	RD::get_singleton()->draw_list_set_push_constant(draw_list, &tonemap_mobile.push_constant, sizeof(TonemapPushConstantMobile));
-	RD::get_singleton()->draw_list_draw(draw_list, false, 1u, 3u);
-	RD::get_singleton()->draw_list_end();
-}
-
-void ToneMapper::tonemapper_subpass(RD::DrawListID p_subpass_draw_list, RID p_source_color, RD::FramebufferFormatID p_dst_format_id, const TonemapSettings &p_settings) {
-	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
-	ERR_FAIL_NULL(uniform_set_cache);
-	MaterialStorage *material_storage = MaterialStorage::get_singleton();
-	ERR_FAIL_NULL(material_storage);
-
-	ERR_FAIL_COND_MSG(p_settings.use_glow, "Glow is not supported when using subpasses.");
-
-	memset(&tonemap_mobile.push_constant, 0, sizeof(TonemapPushConstantMobile));
-
-	tonemap_mobile.push_constant.bcs[0] = p_settings.brightness;
-	tonemap_mobile.push_constant.bcs[1] = p_settings.contrast;
-	tonemap_mobile.push_constant.bcs[2] = p_settings.saturation;
-
-	tonemap_mobile.push_constant.src_pixel_size[0] = 1.0 / p_settings.texture_size.x;
-	tonemap_mobile.push_constant.src_pixel_size[1] = 1.0 / p_settings.texture_size.y;
-	tonemap_mobile.push_constant.glow_intensity = p_settings.glow_intensity;
-	tonemap_mobile.push_constant.glow_map_strength = p_settings.glow_map_strength;
-
-	tonemap_mobile.push_constant.exposure = p_settings.exposure;
-	tonemap_mobile.push_constant.white = p_settings.white;
-	tonemap_mobile.push_constant.luminance_multiplier = p_settings.luminance_multiplier;
-
-	tonemap_mobile.push_constant.tonemapper_params[0] = p_settings.tonemapper_params[0];
-	tonemap_mobile.push_constant.tonemapper_params[1] = p_settings.tonemapper_params[1];
-	tonemap_mobile.push_constant.tonemapper_params[2] = p_settings.tonemapper_params[2];
-	tonemap_mobile.push_constant.tonemapper_params[3] = p_settings.tonemapper_params[3];
-
-	uint32_t spec_constant = TONEMAP_MOBILE_ADRENO_BUG;
-	spec_constant |= p_settings.use_bcs ? TONEMAP_MOBILE_FLAG_USE_BCS : 0;
-	//spec_constant |= p_settings.use_glow ? TONEMAP_MOBILE_FLAG_USE_GLOW : 0;
-	//spec_constant |= p_settings.glow_map_strength > 0.01 ? TONEMAP_MOBILE_FLAG_USE_GLOW_MAP : 0;
-	spec_constant |= p_settings.use_color_correction ? TONEMAP_MOBILE_FLAG_USE_COLOR_CORRECTION : 0;
-	//spec_constant |= p_settings.use_fxaa ? TONEMAP_MOBILE_FLAG_USE_FXAA : 0;
-	spec_constant |= p_settings.debanding_mode == TonemapSettings::DEBANDING_MODE_8_BIT ? TONEMAP_MOBILE_FLAG_USE_8_BIT_DEBANDING : 0;
-	spec_constant |= p_settings.convert_to_srgb ? TONEMAP_MOBILE_FLAG_CONVERT_TO_SRGB : 0;
-	spec_constant |= p_settings.tonemap_mode == RS::ENV_TONE_MAPPER_LINEAR ? TONEMAP_MOBILE_FLAG_TONEMAPPER_LINEAR : 0;
-	spec_constant |= p_settings.tonemap_mode == RS::ENV_TONE_MAPPER_REINHARD ? TONEMAP_MOBILE_FLAG_TONEMAPPER_REINHARD : 0;
-	spec_constant |= p_settings.tonemap_mode == RS::ENV_TONE_MAPPER_FILMIC ? TONEMAP_MOBILE_FLAG_TONEMAPPER_FILMIC : 0;
-	spec_constant |= p_settings.tonemap_mode == RS::ENV_TONE_MAPPER_ACES ? TONEMAP_MOBILE_FLAG_TONEMAPPER_ACES : 0;
-	spec_constant |= p_settings.tonemap_mode == RS::ENV_TONE_MAPPER_AGX ? TONEMAP_MOBILE_FLAG_TONEMAPPER_AGX : 0;
-	//spec_constant |= p_settings.glow_mode == RS::ENV_GLOW_BLEND_MODE_ADDITIVE ? TONEMAP_MOBILE_FLAG_GLOW_MODE_ADD : 0;
-	//spec_constant |= p_settings.glow_mode == RS::ENV_GLOW_BLEND_MODE_SCREEN ? TONEMAP_MOBILE_FLAG_GLOW_MODE_SCREEN : 0;
-	//spec_constant |= p_settings.glow_mode == RS::ENV_GLOW_BLEND_MODE_SOFTLIGHT ? TONEMAP_MOBILE_FLAG_GLOW_MODE_SOFTLIGHT : 0;
-	//spec_constant |= p_settings.glow_mode == RS::ENV_GLOW_BLEND_MODE_REPLACE ? TONEMAP_MOBILE_FLAG_GLOW_MODE_REPLACE : 0;
-	//spec_constant |= p_settings.glow_mode == RS::ENV_GLOW_BLEND_MODE_MIX ? TONEMAP_MOBILE_FLAG_GLOW_MODE_MIX : 0;
-
-	int mode = p_settings.use_1d_color_correction ? TONEMAP_MOBILE_MODE_SUBPASS_1D_LUT : TONEMAP_MOBILE_MODE_SUBPASS;
-	if (p_settings.view_count > 1) {
-		// Use USE_MULTIVIEW versions
-		mode += 4;
-	}
-
-	RID default_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
-	RID default_mipmap_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
-
-	RD::Uniform u_source_color;
-	u_source_color.uniform_type = RD::UNIFORM_TYPE_INPUT_ATTACHMENT;
-	u_source_color.binding = 0;
-	u_source_color.append_id(p_source_color);
-
-	RD::Uniform u_glow_texture;
-	u_glow_texture.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
-	u_glow_texture.binding = 1;
-	u_glow_texture.append_id(default_mipmap_sampler);
-	u_glow_texture.append_id(p_settings.glow_texture);
-
-	RD::Uniform u_glow_map;
-	u_glow_map.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
-	u_glow_map.binding = 2;
-	u_glow_map.append_id(default_mipmap_sampler);
-	u_glow_map.append_id(p_settings.glow_map);
-
-	RD::Uniform u_color_correction_texture;
-	u_color_correction_texture.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
-	u_color_correction_texture.binding = 3;
-	u_color_correction_texture.append_id(default_sampler);
-	u_color_correction_texture.append_id(p_settings.color_correction_texture);
-
-	RID shader = tonemap_mobile.shader.version_get_shader(tonemap_mobile.shader_version, mode);
-	ERR_FAIL_COND(shader.is_null());
-
-	RD::get_singleton()->draw_list_bind_render_pipeline(p_subpass_draw_list, tonemap_mobile.pipelines[mode].get_render_pipeline(RD::INVALID_ID, p_dst_format_id, false, RD::get_singleton()->draw_list_get_current_pass(), spec_constant));
-	RD::get_singleton()->draw_list_bind_uniform_set(p_subpass_draw_list, uniform_set_cache->get_cache(shader, 0, u_source_color, u_glow_texture, u_glow_map, u_color_correction_texture), 0);
-	RD::get_singleton()->draw_list_set_push_constant(p_subpass_draw_list, &tonemap_mobile.push_constant, sizeof(TonemapPushConstantMobile));
-	RD::get_singleton()->draw_list_draw(p_subpass_draw_list, false, 1u, 3u);
-}
-#else
-void ToneMapper::tonemapper_mobile(RID p_source_color, RID p_dst_framebuffer, const TonemapSettings &p_settings) {
-	tonemapper(p_source_color, p_dst_framebuffer, p_settings);
-}
-
-void ToneMapper::tonemapper_subpass(RD::DrawListID p_subpass_draw_list, RID p_source_color, RD::FramebufferFormatID p_dst_format_id, const TonemapSettings &p_settings) {
-	ERR_FAIL_MSG("Subpass tonemapping is not available in Forward+ only builds.");
-}
-#endif

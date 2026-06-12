@@ -24,7 +24,6 @@
 		</member>
 		<member name="compress/high_quality" type="bool" setter="" getter="" default="false">
 			If [code]true[/code], uses BPTC compression on desktop platforms and ASTC compression on mobile platforms. When using BPTC, BC7 is used for SDR textures and BC6H is used for HDR textures.
-			If [code]false[/code], uses the faster but lower-quality S3TC compression on desktop platforms and ETC2 on mobile/web platforms. When using S3TC, DXT1 (BC1) is used for opaque textures and DXT5 (BC3) is used for transparent or normal map (RGTC) textures.
 			BPTC and ASTC support VRAM compression for HDR textures, but S3TC and ETC2 do not (see [member compress/hdr_compression]).
 		</member>
 		<member name="compress/lossy_quality" type="float" setter="" getter="" default="0.7">
@@ -153,7 +152,6 @@
 		</member>
 		<member name="process/size_limit" type="int" setter="" getter="" default="0">
 			If set to a value greater than [code]0[/code], the size of the texture is limited on import to a value smaller than or equal to the value specified here. For non-square textures, the size limit affects the longer dimension, with the shorter dimension scaled to preserve aspect ratio. Resizing is performed using cubic interpolation.
-			This can be used to reduce memory usage without affecting the source images, or avoid issues with textures not displaying on mobile/web platforms (as these usually can't display textures larger than 4096×4096).
 			[b]Note:[/b] Even if this is set to [code]0[/code], import size is limited to the following dimensions for technical reasons. Depending on [member compress/mode], textures will be downsampled on import if necessary:
 			- [b]Lossy:[/b] 16383 pixels width or height, whichever is larger;
 			- [b]Basis Universal:[/b] 16384 pixels width or height, whichever is larger;

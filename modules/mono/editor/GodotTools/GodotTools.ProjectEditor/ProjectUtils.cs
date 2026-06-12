@@ -32,10 +32,6 @@ namespace GodotTools.ProjectEditor
         {
             "windows",
             "linuxbsd",
-            "macos",
-            "android",
-            "ios",
-            "web",
         };
 
         public static void MSBuildLocatorRegisterLatest(out Version version, out string path)

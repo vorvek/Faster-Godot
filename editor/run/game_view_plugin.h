@@ -264,27 +264,20 @@ public:
 class GameViewPluginBase : public EditorPlugin {
 	GDCLASS(GameViewPluginBase, EditorPlugin);
 
-#ifndef ANDROID_ENABLED
 	GameView *game_view = nullptr;
 	WindowWrapper *window_wrapper = nullptr;
-#endif // ANDROID_ENABLED
 
 	Ref<GameViewDebugger> debugger;
 
 	String last_editor;
 
-#ifndef ANDROID_ENABLED
-	void _window_visibility_changed(bool p_visible);
-#endif // ANDROID_ENABLED
 	void _save_last_editor(const String &p_editor);
 	void _focus_another_editor();
 	bool _is_window_wrapper_enabled() const;
 
 protected:
 	void _notification(int p_what);
-#ifndef ANDROID_ENABLED
 	void setup(Ref<GameViewDebugger> p_debugger, EmbeddedProcessBase *p_embedded_process);
-#endif
 
 public:
 	virtual String get_plugin_name() const override { return TTRC("Game"); }
@@ -295,12 +288,10 @@ public:
 
 	Ref<GameViewDebugger> get_debugger() const { return debugger; }
 
-#ifndef ANDROID_ENABLED
 	virtual void make_visible(bool p_visible) override;
 
 	virtual void set_window_layout(Ref<ConfigFile> p_layout) override;
 	virtual void get_window_layout(Ref<ConfigFile> p_layout) override;
-#endif // ANDROID_ENABLED
 	GameViewPluginBase();
 };
 

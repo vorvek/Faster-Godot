@@ -263,14 +263,8 @@ msgstr "Menyematkan Subjendela"
 msgid "Frame Pacing"
 msgstr "Konsistensi kecepatan bingkai"
 
-msgid "Android"
-msgstr "Android"
-
 msgid "Enable Frame Pacing"
 msgstr "Aktifkan Konsistensi kecepatan bingkai"
-
-msgid "Swappy Mode"
-msgstr "Mode Swappy"
 
 msgid "Physics"
 msgstr "Fisika"
@@ -2432,9 +2426,6 @@ msgstr "File Log Maks"
 msgid "Driver"
 msgstr "Pengemudi"
 
-msgid "GL Compatibility"
-msgstr "Kompatibilitas GL"
-
 msgid "Nvidia Disable Threaded Optimization"
 msgstr "Nvidia Nonaktifkan Optimasi Berulir"
 
@@ -2485,9 +2476,6 @@ msgstr "Menekan Gerakan UI"
 
 msgid "XR"
 msgstr "XR"
-
-msgid "OpenXR"
-msgstr "OpenXR"
 
 msgid "Default Action Map"
 msgstr "Peta Tindakan Default"
@@ -3269,9 +3257,6 @@ msgstr "IGD Alamat Kami"
 msgid "IGD Status"
 msgstr "Status IGD"
 
-msgid "WebRTC"
-msgstr "WebRTC"
-
 msgid "Max Channel in Buffer (KB)"
 msgstr "Saluran Maksimal dalam Buffer (KB)"
 
@@ -3334,12 +3319,6 @@ msgstr "Latar Depan Adaptif 432 X 432"
 
 msgid "Adaptive Background 432 X 432"
 msgstr "Latar Belakang Adaptif 432 X 432"
-
-msgid "Gradle Build"
-msgstr "Gradle Build"
-
-msgid "Use Gradle Build"
-msgstr "Gunakan Gradle Build"
 
 msgid "Export Format"
 msgstr "Format Ekspor"

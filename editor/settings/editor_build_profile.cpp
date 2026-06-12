@@ -50,16 +50,11 @@ const char *EditorBuildProfile::build_option_identifiers[BUILD_OPTION_MAX] = {
 	"disable_3d",
 	"disable_navigation_2d",
 	"disable_navigation_3d",
-	"disable_xr",
-	"module_openxr_enabled",
 	"wayland",
 	"x11",
 	"rendering_device", // FIXME: There's no scons option to disable rendering device.
 	"forward_plus_renderer",
-	"forward_mobile_renderer",
 	"vulkan",
-	"metal",
-	"opengl3",
 	"disable_physics_2d",
 	"module_rapier_2d_enabled",
 	"disable_physics_3d",
@@ -77,16 +72,11 @@ const bool EditorBuildProfile::build_option_disabled_by_default[BUILD_OPTION_MAX
 	false, // 3D
 	false, // NAVIGATION_2D
 	false, // NAVIGATION_3D
-	false, // XR
-	false, // OPENXR
 	false, // WAYLAND
 	false, // X11
 	false, // RENDERING_DEVICE
 	false, // FORWARD_RENDERER
-	false, // MOBILE_RENDERER
 	false, // VULKAN
-	false, // METAL
-	false, // OPENGL
 	false, // PHYSICS_2D
 	false, // PHYSICS_RAPIER_2D
 	false, // PHYSICS_3D
@@ -104,16 +94,11 @@ const bool EditorBuildProfile::build_option_disable_values[BUILD_OPTION_MAX] = {
 	true, // 3D
 	true, // NAVIGATION_2D
 	true, // NAVIGATION_3D
-	true, // XR
-	false, // OPENXR
 	false, // WAYLAND
 	false, // X11
 	false, // RENDERING_DEVICE
 	false, // FORWARD_RENDERER
-	false, // MOBILE_RENDERER
 	false, // VULKAN
-	false, // METAL
-	false, // OPENGL
 	true, // PHYSICS_2D
 	false, // PHYSICS_RAPIER_2D
 	true, // PHYSICS_3D
@@ -131,16 +116,11 @@ const bool EditorBuildProfile::build_option_explicit_use[BUILD_OPTION_MAX] = {
 	false, // 3D
 	false, // NAVIGATION_2D
 	false, // NAVIGATION_3D
-	false, // XR
-	false, // OPENXR
 	false, // WAYLAND
 	false, // X11
 	false, // RENDERING_DEVICE
 	false, // FORWARD_RENDERER
-	false, // MOBILE_RENDERER
 	false, // VULKAN
-	false, // METAL
-	false, // OPENGL
 	false, // PHYSICS_2D
 	false, // PHYSICS_RAPIER_2D
 	false, // PHYSICS_3D
@@ -157,16 +137,11 @@ const EditorBuildProfile::BuildOptionCategory EditorBuildProfile::build_option_c
 	BUILD_OPTION_CATEGORY_GENERAL, // 3D
 	BUILD_OPTION_CATEGORY_GENERAL, // NAVIGATION_2D
 	BUILD_OPTION_CATEGORY_GENERAL, // NAVIGATION_3D
-	BUILD_OPTION_CATEGORY_GENERAL, // XR
-	BUILD_OPTION_CATEGORY_GENERAL, // OPENXR
 	BUILD_OPTION_CATEGORY_GENERAL, // WAYLAND
 	BUILD_OPTION_CATEGORY_GENERAL, // X11
 	BUILD_OPTION_CATEGORY_GRAPHICS, // RENDERING_DEVICE
 	BUILD_OPTION_CATEGORY_GRAPHICS, // FORWARD_RENDERER
-	BUILD_OPTION_CATEGORY_GRAPHICS, // MOBILE_RENDERER
 	BUILD_OPTION_CATEGORY_GRAPHICS, // VULKAN
-	BUILD_OPTION_CATEGORY_GRAPHICS, // METAL
-	BUILD_OPTION_CATEGORY_GRAPHICS, // OPENGL
 	BUILD_OPTION_CATEGORY_PHYSICS, // PHYSICS_2D
 	BUILD_OPTION_CATEGORY_PHYSICS, // PHYSICS_RAPIER_2D
 	BUILD_OPTION_CATEGORY_PHYSICS, // PHYSICS_3D
@@ -185,22 +160,11 @@ HashMap<EditorBuildProfile::BuildOption, HashMap<String, LocalVector<Variant>>> 
 /* clang-format off */
 
 const HashMap<EditorBuildProfile::BuildOption, LocalVector<EditorBuildProfile::BuildOption>> EditorBuildProfile::build_option_dependencies = {
-	{ BUILD_OPTION_OPENXR, {
-			BUILD_OPTION_XR,
-	} },
 	{ BUILD_OPTION_FORWARD_RENDERER, {
-			BUILD_OPTION_RENDERING_DEVICE,
-	} },
-	{ BUILD_OPTION_MOBILE_RENDERER, {
 			BUILD_OPTION_RENDERING_DEVICE,
 	} },
 	{ BUILD_OPTION_VULKAN, {
 			BUILD_OPTION_FORWARD_RENDERER,
-			BUILD_OPTION_MOBILE_RENDERER,
-	} },
-	{ BUILD_OPTION_METAL, {
-			BUILD_OPTION_FORWARD_RENDERER,
-			BUILD_OPTION_MOBILE_RENDERER,
 	} },
 	{ BUILD_OPTION_PHYSICS_RAPIER_2D, {
 			BUILD_OPTION_PHYSICS_2D,
@@ -238,24 +202,6 @@ const HashMap<EditorBuildProfile::BuildOption, LocalVector<String>> EditorBuildP
 			"NavigationMeshSourceGeometryData3D",
 			"NavigationObstacle3D",
 			"NavigationRegion3D",
-	} },
-	{ BUILD_OPTION_XR, {
-			"XRBodyModifier3D",
-			"XRBodyTracker",
-			"XRControllerTracker",
-			"XRFaceModifier3D",
-			"XRFaceTracker",
-			"XRHandModifier3D",
-			"XRHandTracker",
-			"XRInterface",
-			"XRInterfaceExtension",
-			"XRNode3D",
-			"XROrigin3D",
-			"XRPose",
-			"XRPositionalTracker",
-			"XRServer",
-			"XRTracker",
-			"XRVRS",
 	} },
 	{ BUILD_OPTION_RENDERING_DEVICE, {
 			"RenderingDevice",
@@ -369,16 +315,11 @@ String EditorBuildProfile::get_build_option_name(BuildOption p_build_option) {
 		TTRC("3D Engine"),
 		TTRC("Navigation (2D)"),
 		TTRC("Navigation (3D)"),
-		TTRC("XR"),
-		TTRC("OpenXR"),
 		TTRC("Wayland"),
 		TTRC("X11"),
 		TTRC("RenderingDevice"),
 		TTRC("Forward+ Renderer"),
-		TTRC("Mobile Renderer"),
 		TTRC("Vulkan"),
-		TTRC("Metal"),
-		TTRC("OpenGL"),
 		TTRC("Physics Server (2D)"),
 		TTRC("Rapier Physics (2D)"),
 		TTRC("Physics Server (3D)"),
@@ -400,16 +341,11 @@ String EditorBuildProfile::get_build_option_description(BuildOption p_build_opti
 		TTRC("3D Nodes as well as RenderingServer access to 3D features."),
 		TTRC("Navigation Server and capabilities for 2D."),
 		TTRC("Navigation Server and capabilities for 3D."),
-		TTRC("XR (AR and VR)."),
-		TTRC("OpenXR standard implementation (requires XR to be enabled)."),
 		TTRC("Wayland display (Linux only)."),
 		TTRC("X11 display (Linux only)."),
-		TTRC("RenderingDevice based rendering (if disabled, the OpenGL backend is required)."),
+		TTRC("RenderingDevice based rendering."),
 		TTRC("Forward+ renderer for advanced 3D graphics."),
-		TTRC("Mobile renderer for less advanced 3D graphics."),
 		TTRC("Vulkan backend of RenderingDevice."),
-		TTRC("Metal backend of RenderingDevice (Apple arm64 only)."),
-		TTRC("OpenGL backend (if disabled, the RenderingDevice backend is required)."),
 		TTRC("Physics Server and capabilities for 2D."),
 		TTRC("Rapier Physics backend (2D)."),
 		TTRC("Physics Server and capabilities for 3D."),
@@ -570,16 +506,11 @@ void EditorBuildProfile::_bind_methods() {
 	BIND_ENUM_CONSTANT(BUILD_OPTION_3D);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_NAVIGATION_2D);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_NAVIGATION_3D);
-	BIND_ENUM_CONSTANT(BUILD_OPTION_XR);
-	BIND_ENUM_CONSTANT(BUILD_OPTION_OPENXR);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_WAYLAND);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_X11);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_RENDERING_DEVICE);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_FORWARD_RENDERER);
-	BIND_ENUM_CONSTANT(BUILD_OPTION_MOBILE_RENDERER);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_VULKAN);
-	BIND_ENUM_CONSTANT(BUILD_OPTION_METAL);
-	BIND_ENUM_CONSTANT(BUILD_OPTION_OPENGL);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_PHYSICS_2D);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_PHYSICS_RAPIER_2D);
 	BIND_ENUM_CONSTANT(BUILD_OPTION_PHYSICS_3D);
@@ -602,11 +533,6 @@ void EditorBuildProfile::_bind_methods() {
 EditorBuildProfile::EditorBuildProfile() {
 	reset_build_options();
 
-	HashMap<String, LocalVector<Variant>> settings_openxr = {
-		{ "xr/openxr/enabled", { true } },
-	};
-	build_option_settings.insert(BUILD_OPTION_OPENXR, settings_openxr);
-
 	HashMap<String, LocalVector<Variant>> settings_wayland = {
 		{ "display/display_server/driver.linuxbsd", { "default", "wayland" } },
 	};
@@ -618,9 +544,7 @@ EditorBuildProfile::EditorBuildProfile() {
 	build_option_settings.insert(BUILD_OPTION_X11, settings_x11);
 
 	HashMap<String, LocalVector<Variant>> settings_rd = {
-		{ "rendering/renderer/rendering_method", { "forward_plus", "mobile" } },
-		{ "rendering/renderer/rendering_method.mobile", { "forward_plus", "mobile" } },
-		{ "rendering/renderer/rendering_method.web", { "forward_plus", "mobile" } },
+		{ "rendering/renderer/rendering_method", { "forward_plus" } },
 	};
 	build_option_settings.insert(BUILD_OPTION_RENDERING_DEVICE, settings_rd);
 
@@ -628,27 +552,8 @@ EditorBuildProfile::EditorBuildProfile() {
 		{ "rendering/rendering_device/driver", { "vulkan" } },
 		{ "rendering/rendering_device/driver.windows", { "vulkan" } },
 		{ "rendering/rendering_device/driver.linuxbsd", { "vulkan" } },
-		{ "rendering/rendering_device/driver.android", { "vulkan" } },
-		{ "rendering/rendering_device/driver.ios", { "vulkan" } },
-		{ "rendering/rendering_device/driver.macos", { "vulkan" } },
-		{ "rendering/rendering_device/fallback_to_vulkan", { true } },
 	};
 	build_option_settings.insert(BUILD_OPTION_VULKAN, settings_vulkan);
-
-	HashMap<String, LocalVector<Variant>> settings_metal = {
-		{ "rendering/rendering_device/driver", { "metal" } },
-		{ "rendering/rendering_device/driver.ios", { "metal" } },
-		{ "rendering/rendering_device/driver.macos", { "metal" } },
-	};
-	build_option_settings.insert(BUILD_OPTION_METAL, settings_metal);
-
-	HashMap<String, LocalVector<Variant>> settings_opengl = {
-		{ "rendering/renderer/rendering_method", { "gl_compatibility" } },
-		{ "rendering/renderer/rendering_method.mobile", { "gl_compatibility" } },
-		{ "rendering/renderer/rendering_method.web", { "gl_compatibility" } },
-		{ "rendering/rendering_device/fallback_to_opengl3", { true } },
-	};
-	build_option_settings.insert(BUILD_OPTION_OPENGL, settings_opengl);
 
 	HashMap<String, LocalVector<Variant>> settings_rapier_2d = {
 		{ "physics/2d/physics_engine", { "DEFAULT", "Rapier2D" } },

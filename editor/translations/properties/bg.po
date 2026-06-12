@@ -236,14 +236,8 @@ msgstr "Вмъкни Подпрозорци"
 msgid "Frame Pacing"
 msgstr "Темпо на Кадрите"
 
-msgid "Android"
-msgstr "Android"
-
 msgid "Enable Frame Pacing"
 msgstr "Позволи Темпо на Кадрите"
-
-msgid "Swappy Mode"
-msgstr "Режим Swappy"
 
 msgid "Physics"
 msgstr "Физики"
@@ -2988,9 +2982,6 @@ msgstr "Стандартна Анимационна Стъпка"
 msgid "Default FPS Mode"
 msgstr "Стандартен Режим на FPS"
 
-msgid "Default FPS Compatibility"
-msgstr "Стандартна Съвместимост на FPS"
-
 msgid "Autorename Animation Tracks"
 msgstr "Авто-преименуване на Анимационни Пътечки"
 
@@ -3053,9 +3044,6 @@ msgstr "Rect Персонализирана Позиция"
 
 msgid "Screen"
 msgstr "Екран"
-
-msgid "Android Window"
-msgstr "Android Прозорец"
 
 msgid "Game Embed Mode"
 msgstr "Режим на Вградена Игра"
@@ -3288,9 +3276,6 @@ msgstr "Използвай D3D12 като Резерва"
 msgid "Fallback to OpenGL 3"
 msgstr "Използвай OpenGL 3 като Резерва"
 
-msgid "GL Compatibility"
-msgstr "Съвместимост с GL"
-
 msgid "Nvidia Disable Threaded Optimization"
 msgstr "Nvidia Изключи Нишкова Оптимизация"
 
@@ -3359,9 +3344,6 @@ msgstr "Потискане на Жестове на Потребителския
 
 msgid "XR"
 msgstr "XR"
-
-msgid "OpenXR"
-msgstr "OpenXR"
 
 msgid "Default Action Map"
 msgstr "Стандартна Карта за Действия"
@@ -4710,14 +4692,8 @@ msgstr "Следващ"
 msgid "Layer Viewport"
 msgstr "Виз. Прозорец на Слоя"
 
-msgid "Use Android Surface"
-msgstr "Ползвай Android Surface"
-
 msgid "Protected Content"
 msgstr "Защитено Съдържание"
-
-msgid "Android Surface Size"
-msgstr "Размер на Android Surface"
 
 msgid "Sort Order"
 msgstr "Ред на Сортиране"
@@ -4836,9 +4812,6 @@ msgstr "IGD Our Адрес"
 msgid "IGD Status"
 msgstr "IGD Статус"
 
-msgid "WebRTC"
-msgstr "WebRTC"
-
 msgid "Max Channel in Buffer (KB)"
 msgstr "Макс. Канал в Буфера (KB)"
 
@@ -4902,9 +4875,6 @@ msgstr "Инсталирай Експортирана Мобилна Аплик�
 msgid "Java SDK Path"
 msgstr "Java SDK Път"
 
-msgid "Android SDK Path"
-msgstr "Android SDK Път"
-
 msgid "scrcpy"
 msgstr "scrcpy"
 
@@ -4949,18 +4919,6 @@ msgstr "Адаптивен Заден План 432 X 432"
 
 msgid "Adaptive Monochrome 432 X 432"
 msgstr "Адаптивен Монохром 432 X 432"
-
-msgid "Gradle Build"
-msgstr "Gradle Компилация"
-
-msgid "Use Gradle Build"
-msgstr "Използвай Gradle Компилация"
-
-msgid "Gradle Build Directory"
-msgstr "Директория на Gradle Компилация"
-
-msgid "Android Source Template"
-msgstr "Android Източник Шаблон"
 
 msgid "Compress Native Libraries"
 msgstr "Компресирай Родни Библиотеки"
@@ -5012,9 +4970,6 @@ msgstr "Запазване на Данни при Деинсталиране"
 
 msgid "Exclude From Recents"
 msgstr "Изключване от Последните"
-
-msgid "Show in Android TV"
-msgstr "Покажи в Android TV"
 
 msgid "Show in App Library"
 msgstr "Покажи в"
@@ -5088,14 +5043,8 @@ msgstr "Достъп"
 msgid "Custom Permissions"
 msgstr "Персонализирани Разрешения"
 
-msgid "iOS Deploy"
-msgstr "iOS Инсталирай"
-
 msgid "Targeted Device Family"
 msgstr "Целева Фамилия Устройства"
-
-msgid "Min iOS Version"
-msgstr "Мин. iOS Версия"
 
 msgid "Storyboard"
 msgstr "iOS Storyboard"
@@ -5150,15 +5099,6 @@ msgstr "iPad 167 X 167"
 
 msgid "iPad 152 X 152"
 msgstr "iPad 152 X 152"
-
-msgid "iOS 128 X 128"
-msgstr "iOS 128 X 128"
-
-msgid "iOS 192 X 192"
-msgstr "iOS 192 X 192"
-
-msgid "iOS 136 X 136"
-msgstr "iOS 136 X 136"
 
 msgid "App Store 1024 X 1024"
 msgstr "App Store 1024 X 1024"

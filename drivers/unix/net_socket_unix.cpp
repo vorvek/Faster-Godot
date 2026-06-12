@@ -48,10 +48,6 @@
 #include <cstdio>
 #include <cstdlib>
 
-#ifdef WEB_ENABLED
-#include <arpa/inet.h>
-#endif
-
 // BSD calls this flag IPV6_JOIN_GROUP
 #if !defined(IPV6_ADD_MEMBERSHIP) && defined(IPV6_JOIN_GROUP)
 #define IPV6_ADD_MEMBERSHIP IPV6_JOIN_GROUP

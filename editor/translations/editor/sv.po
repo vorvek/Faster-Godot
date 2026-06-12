@@ -2830,21 +2830,6 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "Liten sjösättning med nätverks-filsystem"
 
-msgid ""
-"When this option is enabled, using one-click deploy for Android will only "
-"export an executable without the project data.\n"
-"The filesystem will be provided from the project by the editor over the "
-"network.\n"
-"On Android, deploying will use the USB cable for faster performance. This "
-"option speeds up testing for projects with large assets."
-msgstr ""
-"Med den här inställningen aktiv kommer ett-klicks-sjösätt för Android bara "
-"att exportera en körbar fil utan projektdatan.\n"
-"Filsystemet kommer att tillhandahållas från projektet av redigeraren över "
-"nätverket.\n"
-"På Android kommer sjösättning att använda USB-porten för högre prestanda. "
-"Inställningen gör tester snabbare för projekt med stora assets."
-
 msgid "Visible Collision Shapes"
 msgstr "Synliga kollisionsformer"
 
@@ -4878,26 +4863,6 @@ msgstr "Redigerarens meddelanden"
 msgid "Toggle visibility of editor messages."
 msgstr "Växla synlighet av redigerarmeddelanden."
 
-msgid ""
-"The Android build template is already installed in this project and it won't "
-"be overwritten.\n"
-"Remove the \"%s\" directory manually before attempting this operation again."
-msgstr ""
-"Byggda Android‑mallen är redan installerad i projektet och skrivs inte över.\n"
-"Ta bort mappen \\\"%s\\\" manuellt innan du försöker igen."
-
-msgid ""
-"This will set up your project for gradle Android builds by installing the "
-"source template to \"%s\".\n"
-"Note that in order to make gradle builds instead of using pre-built APKs, the "
-"\"Use Gradle Build\" option should be enabled in the Android export preset."
-msgstr ""
-"Detta kommer att konfigurera ditt projekt för Gradle‑Androidbyggen genom att "
-"installera källmallen i \\\"%s\\\".\n"
-"Observera att för att kunna göra Gradle‑byggen istället för att använda "
-"förbyggda APK:er måste alternativet \\\"Använd Gradle‑build\\\" vara "
-"aktiverat i förvalda exportläget för Android."
-
 msgid "Unnamed Project"
 msgstr "Namnlöst projekt"
 
@@ -5474,21 +5439,6 @@ msgstr "Omladdning klar."
 msgid "Save & Restart"
 msgstr "Spara & starta om"
 
-msgid ""
-"Changing the renderer requires restarting the editor.\n"
-"\n"
-"Choosing Save & Restart will change the renderer to:\n"
-"- Desktop platforms: %s\n"
-"- Mobile platforms: %s\n"
-"- Web platform: %s"
-msgstr ""
-"Att byta renderare kräver att editorn startas om.\n"
-"\n"
-"Om du väljer Spara & Starta om ändras renderaren till:\n"
-"- Skrivbordsplattformar: %s\n"
-"- Mobilplattformar: %s\n"
-"- Webbplattform: %s"
-
 msgid "Forward+"
 msgstr "Forward+"
 
@@ -5515,9 +5465,6 @@ msgstr "Versionshanterings-inställningar..."
 
 msgid "Pack Project as ZIP..."
 msgstr "Arkivera project som ZIP..."
-
-msgid "Install Android Build Template..."
-msgstr "Installera Android-byggmall…"
 
 msgid "Open User Data Folder"
 msgstr "Öppna användardata-mapp"
@@ -5732,20 +5679,6 @@ msgstr "Öppna föregående redigerare"
 msgid "Project"
 msgstr "Projekt"
 
-msgid ""
-"Choose a renderer.\n"
-"\n"
-"Notes:\n"
-"- On mobile platforms, the Mobile renderer is used if Forward+ is selected "
-"here.\n"
-"- On the web platform, the Compatibility renderer is always used."
-msgstr ""
-"Välj en renderare.\n"
-"\n"
-"Noteringar:\n"
-"- På mobilplattformar används mobilrenderaren om Forward+ väljs här.\n"
-"- På webbplattformen används alltid kompatibilitetsrenderaren."
-
 msgid "Renderer"
 msgstr "Renderare"
 
@@ -5764,17 +5697,11 @@ msgstr "Göm uppdateringssnurra"
 msgid "Don't Save"
 msgstr "Spara inte"
 
-msgid "Android build template is missing, please install relevant templates."
-msgstr "Android-byggmall saknas, vänligen installera relevanta mallar."
-
 msgid "Manage Templates"
 msgstr "Hantera mallar"
 
 msgid "Install from file"
 msgstr "Installera från fil"
-
-msgid "Select Android sources file"
-msgstr "Välj Android sources-fil"
 
 msgid "Import Templates From ZIP File"
 msgstr "Importera mallar från ZIP-arkiv"
@@ -5985,9 +5912,6 @@ msgstr "Minst en åtkomstanledning för diskutrymme måste markeras."
 msgid "At least one system boot time access reason should be selected."
 msgstr "Minst en åtkomstanledning för systemstarttid måste markeras."
 
-msgid "\"Shader Baker\" doesn't work with the Compatibility renderer."
-msgstr "\"Shader Baker\" kan inte användas med kompatibilitetsrenderaren."
-
 msgid ""
 "The editor is currently using a different renderer than what the target "
 "platform will use. \"Shader Baker\" won't be able to include core shaders. "
@@ -6115,9 +6039,6 @@ msgstr "Tecknet '%s' är inte tillåtet i identifierare."
 msgid "Running on %s"
 msgstr "Kör på %s"
 
-msgid "Could not start ios-deploy executable."
-msgstr "Kunde inte starta den körbara ios‑deploy‑filen."
-
 msgid "Installation/running failed, see editor log for details."
 msgstr "Installation/körning misslyckades, se logg för detaljer."
 
@@ -6126,9 +6047,6 @@ msgstr "Installation misslyckades, se logg för detaljer."
 
 msgid "Running failed, see editor log for details."
 msgstr "Körning misslyckades, se logg för detaljer."
-
-msgid "\"Shader Baker\" is not supported when using the Compatibility renderer."
-msgstr "\"Shader Baker\" kan inte användas med kompatibilitetsrenderaren."
 
 msgid ""
 "The editor is currently using a different renderer than what the target "
@@ -6307,9 +6225,6 @@ msgstr "Inga mallar för dubbelprecisionbyggen"
 
 msgid "Official export templates aren't available for double-precision builds."
 msgstr "Officiella exportmallar är inte tillgängliga för dubbelprecisionbyggen."
-
-msgid "Uncompressing Android Build Sources"
-msgstr "Dekomprimerar Android-byggkällor"
 
 msgid "Export Template Manager"
 msgstr "Exportmallshanterare"
@@ -8432,17 +8347,11 @@ msgstr "Mindre skalbar för komplexa scener."
 msgid "Fast rendering of simple scenes."
 msgstr "Snabb rendering av enkla scener."
 
-msgid "Supports desktop, mobile + web platforms."
-msgstr "Stödjer stationära-, webb- och mobilplattformar."
-
 msgid "Least advanced 3D graphics."
 msgstr "Lägsta nivå för 3D-grafik."
 
 msgid "Intended for low-end/older devices."
 msgstr "Avsedd för sämre/äldre enheter."
-
-msgid "Uses OpenGL 3 backend (OpenGL 3.3/ES 3.0/WebGL2)."
-msgstr "Använder OpenGL 3 som backend (OpenGL 3.3/ES 3.0/WebGL2)."
 
 msgid "Fastest rendering of simple scenes."
 msgstr "Snabbast rendering av enkla scener."
@@ -8517,15 +8426,6 @@ msgstr "Renderare:"
 
 msgid "More information"
 msgstr "Mer information"
-
-msgid ""
-"RenderingDevice-based methods not available on this GPU:\n"
-"%s\n"
-"Please use the Compatibility renderer."
-msgstr ""
-"RenderingDevice‑baserade metoder är inte tillgängliga på denna GPU:\n"
-"%s\n"
-"Använd kompatibilitetsrenderaren i stället."
 
 msgid "The renderer can be changed later, but scenes may need to be adjusted."
 msgstr ""
@@ -9222,20 +9122,8 @@ msgstr "Avbryt projektkörning"
 msgid "Run Current Scene"
 msgstr "Kör nuvarande scen"
 
-msgid "Run Scene in Regular Mode"
-msgstr "Kör scenen i reguljärt läge"
-
-msgid "Run Scene in XR Mode"
-msgstr "Kör scenen i XR-läge"
-
 msgid "Run Specific Scene"
 msgstr "Kör specifik scen"
-
-msgid "Run in Regular Mode"
-msgstr "Kör i reguljärt läge"
-
-msgid "Run in XR Mode"
-msgstr "Kör i XR-läge"
 
 msgid "Enable Movie Maker Mode"
 msgstr "Aktivera Movie Maker‑läge"
@@ -15501,9 +15389,6 @@ msgstr "Navigering (3D)"
 msgid "XR"
 msgstr "XR"
 
-msgid "OpenXR"
-msgstr "OpenXR"
-
 msgid "Wayland"
 msgstr "Wayland"
 
@@ -15576,9 +15461,6 @@ msgstr "Navigationsserver och förmågor för 3D."
 msgid "XR (AR and VR)."
 msgstr "XR (AR och VR)."
 
-msgid "OpenXR standard implementation (requires XR to be enabled)."
-msgstr "OpenXR standardimplementation (kräver att XR är aktiverat)."
-
 msgid "Wayland display (Linux only)."
 msgstr "Wayland display (endast Linux)."
 
@@ -15591,9 +15473,6 @@ msgstr "RenderingDevice-baserad rendering (om av krävs OpenGL backend)."
 
 msgid "Forward+ renderer for advanced 3D graphics."
 msgstr "Framåt+ rendering för avancerad 3D-grafik."
-
-msgid "Mobile renderer for less advanced 3D graphics."
-msgstr "Mobil rendering för mindre avancerad 3D-grafik."
 
 msgid "Vulkan backend of RenderingDevice."
 msgstr "Vulkan back-end av RenderingDevice."
@@ -16624,15 +16503,6 @@ msgstr "Kopiera parametrar från material"
 
 msgid "Paste Parameters To Material"
 msgstr "Klistra in parametrar till material"
-
-msgid "Forward+/Mobile"
-msgstr "Forward+/Mobil"
-
-msgid ""
-"Only supported in the Forward+ and Mobile rendering methods, not "
-"Compatibility."
-msgstr ""
-"Stöds endast i renderingsmetoderna Forward+ och Mobil, inte i Kompatibilitet."
 
 msgid "Create Shader Node"
 msgstr "Skapa shader-nod"
@@ -19026,17 +18896,8 @@ msgstr "Fel vid inläsning av %s: %s."
 msgid "Error saving file %s: %s"
 msgstr "Fel vid sparande av fil %s: %s"
 
-msgid "OpenXR Action map:"
-msgstr "OpenXR-åtgärdskarta:"
-
 msgid "Remove interaction profile"
 msgstr "Ta bort interaktionsprofil"
-
-msgid "OpenXR Action Map"
-msgstr "OpenXR-åtgärdskarta"
-
-msgid "Toggle OpenXR Action Map Dock"
-msgstr "Växla OpenXR‑åtgardskartsdocka"
 
 msgid "Add Action Set"
 msgstr "Lägg till åtgärds-sätt"
@@ -19049,12 +18910,6 @@ msgstr "Lägg till profil"
 
 msgid "Add an interaction profile."
 msgstr "Lägg till en interaktionsprofil."
-
-msgid "Save this OpenXR action map."
-msgstr "Spara den här OpenXR-åtgärdskartan."
-
-msgid "Reset to default OpenXR action map."
-msgstr "Återgå till standard-OpenXR-åtgärdskartan."
 
 msgid "Action Sets"
 msgstr "Åtgärds-sätt"
@@ -19163,64 +19018,16 @@ msgid "Choose an XR runtime."
 msgstr "Välj en XR-runtime."
 
 msgid ""
-"Cannot use the same SubViewport with multiple OpenXR composition layers. "
-"Clear it from its current layer first."
-msgstr ""
-"Kan inte använda samma SubViewport med flera OpenXR-kompositionslager. Rensa "
-"den från dess nuvarande lager först."
-
-msgid ""
-"Cannot set SubViewport on an OpenXR composition layer when using an Android "
-"surface."
-msgstr ""
-"Det går inte att ställa in SubViewport på ett OpenXR-kompositionslager när en "
-"Android-surface används."
-
-msgid "OpenXR composition layers must have an XROrigin3D node as their parent."
-msgstr "OpenXR-kompositionslager måste ha en XROrigin3D-nod som sin förälder."
-
-msgid ""
-"OpenXR composition layers must have orthonormalized transforms (ie. no scale "
-"or shearing)."
-msgstr ""
-"OpenXR-kompositionslager måste ha ortnormaliserade transformationer (d.v.s, "
-"ingen skalning eller skjuvning)."
-
-msgid ""
 "Hole punching won't work as expected unless the sort order is less than zero."
 msgstr ""
 "Hålslagning kommer inte att fungera som förväntat om inte sorteringsordningen "
 "är mindre än noll."
-
-msgid "OpenXR visibility mask must have an XRCamera3D node as their parent."
-msgstr "OpenXR-kompositionslager måste ha en XROrigin3D-nod som sin förälder."
-
-msgid "Building Android Project (gradle)"
-msgstr "Bygger Android projekt (gradle)"
-
-msgid "> Connecting to Gradle Build Environment..."
-msgstr "> Ansluter till Gradle‑byggmiljö..."
-
-msgid "Unable to connect to Gradle Build Environment service"
-msgstr "Det går inte att ansluta till tjänsten för Gradle‑byggmiljö"
-
-msgid "> Starting Gradle build..."
-msgstr "> Startar Gradle‑bygge..."
-
-msgid "Failed to execute Gradle command"
-msgstr "Misslyckades med att köra Gradle‑kommando"
-
-msgid "> Copying Gradle artifacts..."
-msgstr "> Kopierar Gradle‑artefakter..."
 
 msgid "Package name is missing."
 msgstr "Packetnamnet saknas."
 
 msgid "Package segments must be of non-zero length."
 msgstr "Paketsegmentens längd får inte vara noll."
-
-msgid "The character '%s' is not allowed in Android application package names."
-msgstr "Tecknet \"%s\" är inte tillåtet i Android-applikations-paketnamn."
 
 msgid "A digit cannot be the first character in a package segment."
 msgstr "En siffra får inte vara det första tecknet i ett paketsegment."
@@ -19240,30 +19047,6 @@ msgstr "Ogiltig publik nyckel för APK-expansion."
 msgid "Invalid package name:"
 msgstr "Ogiltigt paketnamn:"
 
-msgid "\"Use Gradle Build\" is required to enable \"Swipe to dismiss\"."
-msgstr "\"Använd Gradle Build\" krävs för att aktivera \"Drag för att stänga\"."
-
-msgid "\"Use Gradle Build\" must be enabled to use the plugins."
-msgstr "\"Use Gradle Build\" måste vara på för att använda pluginnen."
-
-msgid "Support for \"Use Gradle Build\" on Android is currently experimental."
-msgstr ""
-"Stöd för ”Använd Gradle‑bygge” på Android är för närvarande experimentellt."
-
-msgid ""
-"\"Compress Native Libraries\" is only valid when \"Use Gradle Build\" is "
-"enabled."
-msgstr ""
-"\"Komprimerade inbyggda bibliotek\" fungerar endast när \"Använd "
-"Gradle‑bygge\" är aktiverat."
-
-msgid "\"Export AAB\" is only valid when \"Use Gradle Build\" is enabled."
-msgstr "\"Export AAB\" gäller bara när \"Use Gradle Build\" är på."
-
-msgid "\"Min SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
-msgstr ""
-"\"Min SDK\" kan bara skrivas över när \"Använd Gradle Build\" är påslaget."
-
 msgid "\"Min SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
 "\"Min SDK\" ska vara ett giltigt heltal, fick \"%s\" vilket är ogiltigt."
@@ -19276,11 +19059,6 @@ msgstr ""
 "biblioteket."
 
 msgid ""
-"\"Target SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
-msgstr ""
-"\"Target SDK\" kan bara skrivas över när \"Använd Gradle Build\" är påslaget."
-
-msgid ""
 "\"Target SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
 "\"Target SDK\" måste vara ett giltigt heltal, var \"%s\" vilket är ogiltigt."
@@ -19288,28 +19066,6 @@ msgstr ""
 msgid "\"Target SDK\" version must be greater or equal to \"Min SDK\" version."
 msgstr ""
 "\"Target SDK\" måste vara större än eller lika med \"Min SDK\"-versionen."
-
-msgid "\"Use Gradle Build\" is required to add custom theme attributes."
-msgstr ""
-"\"Använd Gradle‑bygge\" krävs för att lägga till anpassade temaattribut."
-
-msgid "\"Use Gradle Build\" must be enabled to enable \"Show In Android Tv\"."
-msgstr ""
-"\"Use Gradle Build\" måste vara aktiverad för att aktivera \"Show In Android "
-"Tv\"."
-
-msgid "\"Use Gradle Build\" must be enabled to enable \"Show As Launcher App\"."
-msgstr ""
-"\"Use Gradle Build\" måste vara aktiverat för att använda \"Show As Launcher "
-"App\"."
-
-msgid "\"Use Gradle Build\" must be enabled to disable \"Show In App Library\"."
-msgstr ""
-"\"Use Gradle Build\" måste vara aktiverat för att avaktivera \"Show In App "
-"Library\"."
-
-msgid "Mirror Android devices"
-msgstr "Spegla Android‑enheter"
 
 msgid ""
 "If enabled, \"scrcpy\" is used to start the project and automatically stream "
@@ -19333,13 +19089,6 @@ msgstr "Kunde inte installera på enhet: %s"
 msgid "Running on device..."
 msgstr "Kör på enhet..."
 
-msgid ""
-"Could not start scrcpy executable. Configure scrcpy path in the Editor "
-"Settings (Export > Android > scrcpy > Path)."
-msgstr ""
-"Kunde inte starta scrcpy‑programfilen. Konfigurera sökvägen till scrcpy i "
-"Editorinställningar (Export > Android > scrcpy > Path)."
-
 msgid "Could not execute on device."
 msgstr "Kunde inte köra på enhet."
 
@@ -19347,35 +19096,6 @@ msgid "Error: There was a problem validating the keystore username and password"
 msgstr ""
 "Fel: Ett problem uppstod när keystore-användarnamnet och -lösenordet skulle "
 "valideras"
-
-msgid ""
-"Unable to determine the C# project's TFM, it may be incompatible. The export "
-"template only supports '%s'. Make sure the project targets '%s' or consider "
-"using gradle builds instead."
-msgstr ""
-"Det gick inte att fastställa C#-projektets TFM, det kan vara inkompatibelt. "
-"Exportmallen stöder endast '%s'. Se till att projektet riktar sig mot '%s' "
-"eller överväg att använda gradle-byggen istället."
-
-msgid ""
-"C# project targets '%s' but the export template only supports '%s'. Consider "
-"using gradle builds instead."
-msgstr ""
-"C#-projektet riktar sig mot '%s' men exportmallen stöder bara '%s'. Överväg "
-"att använda gradle-builds istället."
-
-msgid "Exporting to Android when using C#/.NET is experimental."
-msgstr "Export till Android med C#/.NET är experimentellt."
-
-msgid "Custom Android source template not found."
-msgstr "Anpassat Android-källmall hittades inte."
-
-msgid ""
-"Android build template not installed in the project. Install it from the "
-"Project menu."
-msgstr ""
-"Android-byggmall inte installerad i projektet. Installera den från projekt-"
-"menyn."
 
 msgid ""
 "Either Debug Keystore, Debug User AND Debug Password settings must be "
@@ -19413,29 +19133,11 @@ msgstr "Kunde inte hitta \"java\"-kommando med JavaSDK-sökvägen."
 msgid "Please check the Java SDK directory specified in Editor Settings."
 msgstr "Kontrollera den angivna Java SDK-sökvägen i redigerarinställningar."
 
-msgid "A valid Android SDK path is required in Editor Settings."
-msgstr "En giltig Android SDK-sökväg måste anges i redigerarinställningar."
-
-msgid "Invalid Android SDK path in Editor Settings."
-msgstr "Ogiltig Android SDK-sökväg i redigerarinställningar."
-
 msgid "Missing 'platform-tools' directory!"
 msgstr "\"platform-tools\"-katalog saknas!"
 
-msgid "Unable to find Android SDK platform-tools' adb command."
-msgstr "Kunde ej hitta Android SDK platform-tools' adb kommando."
-
-msgid "Please check in the Android SDK directory specified in Editor Settings."
-msgstr "Kontrollera den angivna Android SDK-sökvägen i redigerarinställningar."
-
 msgid "Missing 'build-tools' directory!"
 msgstr "\"build-tools\"-katalog saknas!"
-
-msgid "Unable to find Android SDK build-tools' apksigner command."
-msgstr "Kunde ej hitta Android SDK build-tools' apksigner kommando."
-
-msgid "\"Use Gradle Build\" is required for transparent background on Android"
-msgstr "\"Använd Gradle Build\" krävs för transparent bakgrund på Android"
 
 msgid ""
 "\"Target SDK\" %d is higher than the default version %d. This may work, but "
@@ -19443,13 +19145,6 @@ msgid ""
 msgstr ""
 "\"Target SDK\" %d är högre än standardversionen %d. Kombinationen kanske "
 "fungerar, men har ej testats och kan vara instabil."
-
-msgid ""
-"The \"%s\" renderer is designed for Desktop devices, and is not suitable for "
-"Android devices."
-msgstr ""
-"\"%s\"-renderaren är utformad för stationära enheter och ej lämpad för "
-"Android-enheter."
 
 msgid ""
 "The project name does not meet the requirement for the package name format "
@@ -19477,23 +19172,6 @@ msgstr "Kunde inte hitta keystore, kan inte exportera."
 msgid "Unable to sign apk."
 msgstr "Det gick ej att signera apk."
 
-msgid ""
-"All 'apksigner' tools located in Android SDK 'build-tools' directory failed "
-"to execute. Please check that you have the correct version installed for your "
-"target sdk version. The resulting APK is unsigned."
-msgstr ""
-"Alla 'apksigner' verktyg som finns i Android SDK 'build-tools' katalogen "
-"misslyckades. Kontrollera att du har rätt version installerad för din önskade "
-"sdk version. Den resulterande APK-filen är inte signerad."
-
-msgid ""
-"'apksigner' could not be found. Please check that the command is available in "
-"the Android SDK build-tools directory. The resulting APK is unsigned."
-msgstr ""
-"'apksigner' kunde inte hittas. Kontrollera att kommandot är tillgängligt i "
-"Android SDK build-tools katalogen. Den resulterande APK-filen är inte "
-"signerad."
-
 msgid "Could not start apksigner executable."
 msgstr "Kunde inte start apksigner-körbar fil."
 
@@ -19519,27 +19197,8 @@ msgstr "'apksigner'-verifiering av APK misslyckades."
 msgid "Could not create temporary file!"
 msgstr "Kunde ej skapa temporär fil!"
 
-msgid "Exporting for Android"
-msgstr "Exporterar för Android"
-
-msgid "Invalid filename! Android App Bundle requires the *.aab extension."
-msgstr "Ogiltigt filnamn! Android App Bundle kräver *.aab filändelsen."
-
-msgid "APK Expansion not compatible with Android App Bundle."
-msgstr "APK-expansion ej kompatibel med Android App Bundle."
-
-msgid "Invalid filename! Android APK requires the *.apk extension."
-msgstr "Ogiltigt filnamn! Android APK kräver *.apk som filändelse."
-
 msgid "Unsupported export format!"
 msgstr "Exportformatet stöds inte!"
-
-msgid ""
-"Trying to build from a gradle built template, but no version info for it "
-"exists. Please reinstall from the 'Project' menu."
-msgstr ""
-"Försöker bygga från en mall som byggts i Gradle, men det finns ingen "
-"versionsinformation för den. Installera om den från menyn 'Projekt'."
 
 msgid ""
 "Java SDK path must be configured in Editor Settings at 'export/android/"
@@ -19547,13 +19206,6 @@ msgid ""
 msgstr ""
 "Java SDK-sökväg måste ställas in i redigerarinställningarna under \"export/"
 "android/java_sdk_path\"."
-
-msgid ""
-"Android SDK path must be configured in Editor Settings at 'export/android/"
-"android_sdk_path'."
-msgstr ""
-"Android-SDK-sökvägen måste ställas in i Redigerarinställningar vid 'export/"
-"android/android_sdk_path'."
 
 msgid "Unable to overwrite res/*.xml files with project name."
 msgstr "Kunde inte skriva över res/*.xml-filer med projektnamnet."
@@ -19564,14 +19216,8 @@ msgstr "Kunde inte generera glest pck-metadata!"
 msgid "Could not write PCK directory!"
 msgstr "Kunde inte skriva till PCK-katalogen!"
 
-msgid "Could not export project files to gradle project."
-msgstr "Kunde inte exportera projektfiler till ett gradle projekt."
-
 msgid "Could not write expansion package file!"
 msgstr "Kunde inte skriva expansionspaketfil!"
-
-msgid "Building of Android project failed, check output for the error:"
-msgstr "Bygget av Android-projektet misslyckades, se utmatningen för fel:"
 
 msgid "Moving output"
 msgstr "Flyttar utmatning"
@@ -19611,9 +19257,6 @@ msgstr "Justerar APK..."
 
 msgid "Could not unzip temporary unaligned APK."
 msgstr "Kunde inte packa upp temporärt ojusterat APK."
-
-msgid "Metal renderer require iOS 14+."
-msgstr "Metal-renderare kräver iOS 14+."
 
 msgid "Export Icons"
 msgstr "Exportera ikoner"
@@ -20249,17 +19892,6 @@ msgstr ""
 "påslaget."
 
 msgid ""
-"Particle trails are only available when using the Forward+ or Mobile renderer."
-msgstr ""
-"Partikelspår är endast tillgängliga när Forward+‑ eller Mobile‑renderaren "
-"används."
-
-msgid ""
-"Particle sub-emitters are not available when using the Compatibility renderer."
-msgstr ""
-"Partikel‑subemitterare stöds inte när kompatibilitetsrenderaren används."
-
-msgid ""
 "A texture with the shape of the light must be supplied to the \"Texture\" "
 "property."
 msgstr "En textur med formen av lampan måste anges i \"Texture\"-egenskapen."
@@ -20537,10 +20169,6 @@ msgstr ""
 "CPUParticles3D-animation kräver ett StandardMaterial3D vars billboardläge "
 "ställts in till \"Partikelbillboard\"."
 
-msgid "Decals are only available when using the Forward+ or Mobile renderer."
-msgstr ""
-"Dekaler är endast tillgängliga när Forward+‑ eller Mobile‑renderaren används."
-
 msgid ""
 "The decal has no textures loaded into any of its texture properties, and will "
 "therefore not be visible."
@@ -20637,13 +20265,6 @@ msgstr "En ljuskällas skala påverkar inte den visuella storleken av ljuset."
 
 msgid "Projector texture only works with shadows active."
 msgstr "Projektor-textur fungerar bara med skuggor aktiverade."
-
-msgid ""
-"Projector textures are not supported when using the Compatibility renderer "
-"yet. Support will be added in a future release."
-msgstr ""
-"Projektortexturer stöds ännu inte när kompatibilitetsrenderaren används. Stöd "
-"kommer att läggas till i en framtida version."
 
 msgid "A SpotLight3D with an angle wider than 90 degrees cannot cast shadows."
 msgstr "En SpotLight3D med bredare vinkel än 90° kastar inga skuggor."
@@ -21060,13 +20681,6 @@ msgstr "Genererar Distance Field"
 msgid "Finishing Plot"
 msgstr "Slutför plottning"
 
-msgid ""
-"VoxelGI nodes are not supported when using the Compatibility renderer yet. "
-"Support will be added in a future release."
-msgstr ""
-"Projektor-texturer stöds inte än med GL-kompatibilitetsbackend. Stöd för det "
-"kommer i en framtida version."
-
 msgid "VoxelGI nodes are not supported when using the Dummy renderer."
 msgstr ""
 "Projektor-texturer stöds inte än med GL-kompatibilitetsbackend. Stöd för det "
@@ -21450,13 +21064,6 @@ msgstr "Ogiltig källa för shader."
 
 msgid "Invalid operator for that type."
 msgstr "Ogiltig operator för den typen."
-
-msgid ""
-"`%s` precision mode is not available for `gl_compatibility` profile.\n"
-"Reverted to `None` precision."
-msgstr ""
-"Precisionsläget `%s` är inte tillgängligt för profilen `gl_compatibility`.\n"
-"Återställdes till `None`‑precision."
 
 msgid "'%s' type is incompatible with '%s' source."
 msgstr "'%s'-typen är inte kompatibel med '%s'-källan."

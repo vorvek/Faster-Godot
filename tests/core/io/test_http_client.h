@@ -88,7 +88,7 @@ TEST_CASE("[HTTPClient] verify_headers") {
 	ERR_PRINT_ON;
 }
 
-#if defined(MODULE_MBEDTLS_ENABLED) || defined(WEB_ENABLED)
+#ifdef MODULE_MBEDTLS_ENABLED
 TEST_CASE("[HTTPClient] connect_to_host") {
 	Ref<HTTPClient> client = HTTPClient::create();
 	String host = "https://www.example.com";
@@ -99,6 +99,6 @@ TEST_CASE("[HTTPClient] connect_to_host") {
 	Error err = client->connect_to_host(host, port, tls_options);
 	CHECK_MESSAGE(err == OK, "Expected OK for successful connection");
 }
-#endif // MODULE_MBEDTLS_ENABLED || WEB_ENABLED
+#endif // MODULE_MBEDTLS_ENABLED
 
 } // namespace TestHTTPClient

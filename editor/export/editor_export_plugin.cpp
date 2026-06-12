@@ -75,73 +75,6 @@ void EditorExportPlugin::_add_shared_object(const SharedObject &p_shared_object)
 	shared_objects.push_back(p_shared_object);
 }
 
-void EditorExportPlugin::add_apple_embedded_platform_framework(const String &p_path) {
-	apple_embedded_platform_frameworks.push_back(p_path);
-}
-
-void EditorExportPlugin::add_apple_embedded_platform_embedded_framework(const String &p_path) {
-	apple_embedded_platform_embedded_frameworks.push_back(p_path);
-}
-
-Vector<String> EditorExportPlugin::get_apple_embedded_platform_frameworks() const {
-	return apple_embedded_platform_frameworks;
-}
-
-Vector<String> EditorExportPlugin::get_apple_embedded_platform_embedded_frameworks() const {
-	return apple_embedded_platform_embedded_frameworks;
-}
-
-void EditorExportPlugin::add_apple_embedded_platform_plist_content(const String &p_plist_content) {
-	apple_embedded_platform_plist_content += p_plist_content + "\n";
-}
-
-String EditorExportPlugin::get_apple_embedded_platform_plist_content() const {
-	return apple_embedded_platform_plist_content;
-}
-
-void EditorExportPlugin::add_apple_embedded_platform_linker_flags(const String &p_flags) {
-	if (apple_embedded_platform_linker_flags.length() > 0) {
-		apple_embedded_platform_linker_flags += ' ';
-	}
-	apple_embedded_platform_linker_flags += p_flags;
-}
-
-String EditorExportPlugin::get_apple_embedded_platform_linker_flags() const {
-	return apple_embedded_platform_linker_flags;
-}
-
-void EditorExportPlugin::add_apple_embedded_platform_bundle_file(const String &p_path) {
-	apple_embedded_platform_bundle_files.push_back(p_path);
-}
-
-Vector<String> EditorExportPlugin::get_apple_embedded_platform_bundle_files() const {
-	return apple_embedded_platform_bundle_files;
-}
-
-void EditorExportPlugin::add_apple_embedded_platform_cpp_code(const String &p_code) {
-	apple_embedded_platform_cpp_code += p_code;
-}
-
-String EditorExportPlugin::get_apple_embedded_platform_cpp_code() const {
-	return apple_embedded_platform_cpp_code;
-}
-
-void EditorExportPlugin::add_macos_plugin_file(const String &p_path) {
-	macos_plugin_files.push_back(p_path);
-}
-
-const Vector<String> &EditorExportPlugin::get_macos_plugin_files() const {
-	return macos_plugin_files;
-}
-
-void EditorExportPlugin::add_apple_embedded_platform_project_static_lib(const String &p_path) {
-	apple_embedded_platform_project_static_libs.push_back(p_path);
-}
-
-Vector<String> EditorExportPlugin::get_apple_embedded_platform_project_static_libs() const {
-	return apple_embedded_platform_project_static_libs;
-}
-
 Variant EditorExportPlugin::get_option(const StringName &p_name) const {
 	ERR_FAIL_COND_V(export_preset.is_null(), Variant());
 	return export_preset->get(p_name);
@@ -236,48 +169,6 @@ PackedStringArray EditorExportPlugin::get_export_features(const Ref<EditorExport
 	return _get_export_features(p_export_platform, p_debug);
 }
 
-PackedStringArray EditorExportPlugin::get_android_dependencies(const Ref<EditorExportPlatform> &p_export_platform, bool p_debug) const {
-	PackedStringArray ret;
-	GDVIRTUAL_CALL(_get_android_dependencies, p_export_platform, p_debug, ret);
-	return ret;
-}
-
-PackedStringArray EditorExportPlugin::get_android_dependencies_maven_repos(const Ref<EditorExportPlatform> &p_export_platform, bool p_debug) const {
-	PackedStringArray ret;
-	GDVIRTUAL_CALL(_get_android_dependencies_maven_repos, p_export_platform, p_debug, ret);
-	return ret;
-}
-
-PackedStringArray EditorExportPlugin::get_android_libraries(const Ref<EditorExportPlatform> &p_export_platform, bool p_debug) const {
-	PackedStringArray ret;
-	GDVIRTUAL_CALL(_get_android_libraries, p_export_platform, p_debug, ret);
-	return ret;
-}
-
-String EditorExportPlugin::get_android_manifest_activity_element_contents(const Ref<EditorExportPlatform> &p_export_platform, bool p_debug) const {
-	String ret;
-	GDVIRTUAL_CALL(_get_android_manifest_activity_element_contents, p_export_platform, p_debug, ret);
-	return ret;
-}
-
-String EditorExportPlugin::get_android_manifest_application_element_contents(const Ref<EditorExportPlatform> &p_export_platform, bool p_debug) const {
-	String ret;
-	GDVIRTUAL_CALL(_get_android_manifest_application_element_contents, p_export_platform, p_debug, ret);
-	return ret;
-}
-
-String EditorExportPlugin::get_android_manifest_element_contents(const Ref<EditorExportPlatform> &p_export_platform, bool p_debug) const {
-	String ret;
-	GDVIRTUAL_CALL(_get_android_manifest_element_contents, p_export_platform, p_debug, ret);
-	return ret;
-}
-
-PackedByteArray EditorExportPlugin::update_android_prebuilt_manifest(const Ref<EditorExportPlatform> &p_export_platform, const PackedByteArray &p_manifest_data) const {
-	PackedByteArray ret;
-	GDVIRTUAL_CALL(_update_android_prebuilt_manifest, p_export_platform, p_manifest_data, ret);
-	return ret;
-}
-
 PackedStringArray EditorExportPlugin::_get_export_features(const Ref<EditorExportPlatform> &p_platform, bool p_debug) const {
 	PackedStringArray ret;
 	GDVIRTUAL_CALL(_get_export_features, p_platform, p_debug, ret);
@@ -338,25 +229,6 @@ void EditorExportPlugin::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("add_shared_object", "path", "tags", "target"), &EditorExportPlugin::add_shared_object);
 	ClassDB::bind_method(D_METHOD("add_file", "path", "file", "remap"), &EditorExportPlugin::add_file);
 
-	ClassDB::bind_method(D_METHOD("add_apple_embedded_platform_project_static_lib", "path"), &EditorExportPlugin::add_apple_embedded_platform_project_static_lib);
-	ClassDB::bind_method(D_METHOD("add_apple_embedded_platform_framework", "path"), &EditorExportPlugin::add_apple_embedded_platform_framework);
-	ClassDB::bind_method(D_METHOD("add_apple_embedded_platform_embedded_framework", "path"), &EditorExportPlugin::add_apple_embedded_platform_embedded_framework);
-	ClassDB::bind_method(D_METHOD("add_apple_embedded_platform_plist_content", "plist_content"), &EditorExportPlugin::add_apple_embedded_platform_plist_content);
-	ClassDB::bind_method(D_METHOD("add_apple_embedded_platform_linker_flags", "flags"), &EditorExportPlugin::add_apple_embedded_platform_linker_flags);
-	ClassDB::bind_method(D_METHOD("add_apple_embedded_platform_bundle_file", "path"), &EditorExportPlugin::add_apple_embedded_platform_bundle_file);
-	ClassDB::bind_method(D_METHOD("add_apple_embedded_platform_cpp_code", "code"), &EditorExportPlugin::add_apple_embedded_platform_cpp_code);
-
-#ifndef DISABLE_DEPRECATED
-	ClassDB::bind_method(D_METHOD("add_ios_project_static_lib", "path"), &EditorExportPlugin::add_apple_embedded_platform_project_static_lib);
-	ClassDB::bind_method(D_METHOD("add_ios_framework", "path"), &EditorExportPlugin::add_apple_embedded_platform_framework);
-	ClassDB::bind_method(D_METHOD("add_ios_embedded_framework", "path"), &EditorExportPlugin::add_apple_embedded_platform_embedded_framework);
-	ClassDB::bind_method(D_METHOD("add_ios_plist_content", "plist_content"), &EditorExportPlugin::add_apple_embedded_platform_plist_content);
-	ClassDB::bind_method(D_METHOD("add_ios_linker_flags", "flags"), &EditorExportPlugin::add_apple_embedded_platform_linker_flags);
-	ClassDB::bind_method(D_METHOD("add_ios_bundle_file", "path"), &EditorExportPlugin::add_apple_embedded_platform_bundle_file);
-	ClassDB::bind_method(D_METHOD("add_ios_cpp_code", "code"), &EditorExportPlugin::add_apple_embedded_platform_cpp_code);
-#endif
-
-	ClassDB::bind_method(D_METHOD("add_macos_plugin_file", "path"), &EditorExportPlugin::add_macos_plugin_file);
 	ClassDB::bind_method(D_METHOD("skip"), &EditorExportPlugin::skip);
 	ClassDB::bind_method(D_METHOD("get_option", "name"), &EditorExportPlugin::get_option);
 
@@ -389,11 +261,4 @@ void EditorExportPlugin::_bind_methods() {
 
 	GDVIRTUAL_BIND(_supports_platform, "platform");
 
-	GDVIRTUAL_BIND(_get_android_dependencies, "platform", "debug");
-	GDVIRTUAL_BIND(_get_android_dependencies_maven_repos, "platform", "debug");
-	GDVIRTUAL_BIND(_get_android_libraries, "platform", "debug");
-	GDVIRTUAL_BIND(_get_android_manifest_activity_element_contents, "platform", "debug");
-	GDVIRTUAL_BIND(_get_android_manifest_application_element_contents, "platform", "debug");
-	GDVIRTUAL_BIND(_get_android_manifest_element_contents, "platform", "debug");
-	GDVIRTUAL_BIND(_update_android_prebuilt_manifest, "platform", "manifest_data");
 }

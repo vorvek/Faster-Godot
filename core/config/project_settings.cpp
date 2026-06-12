@@ -101,11 +101,6 @@ const PackedStringArray ProjectSettings::_get_supported_features() {
 
 #ifdef RD_ENABLED
 	features.append("Forward Plus");
-	features.append("Mobile");
-#endif
-
-#ifdef GLES3_ENABLED
-	features.append("GL Compatibility");
 #endif
 	return features;
 }
@@ -118,6 +113,11 @@ const PackedStringArray ProjectSettings::get_unsupported_features(const PackedSt
 		if (!supported_features.has(p_project_features[i])) {
 			// Temporary compatibility code to ease upgrade to 4.0 beta 2+.
 			if (p_project_features[i].begins_with("Vulkan")) {
+				continue;
+			}
+			// Legacy renderer feature tags from upstream projects are accepted so
+			// old projects can be migrated to Forward+ instead of being rejected.
+			if (p_project_features[i] == "Mobile" || p_project_features[i] == "GL Compatibility") {
 				continue;
 			}
 			unsupported_features.append(p_project_features[i]);
@@ -589,7 +589,7 @@ bool ProjectSettings::_load_resource_pack(const String &p_pack, bool p_replace_f
 
 	if (!p_main_pack && !using_datapack && !OS::get_singleton()->get_resource_dir().is_empty()) {
 		// Add the project's resource file system to PackedData so directory access keeps working when
-		// the game is running without a main pack, like in the editor or on Android.
+		// the game is running without a main pack, like in the editor.
 		PackedData::get_singleton()->add_pack_source(memnew(PackedSourceDirectory));
 		PackedData::get_singleton()->add_pack("res://", false, 0);
 		DirAccess::make_default<DirAccessPack>(DirAccess::ACCESS_RESOURCES);
@@ -657,9 +657,7 @@ void ProjectSettings::_convert_to_last_version(int p_from_version) {
  *      appending '.pck' to the binary name (e.g. 'linux_game' -> 'linux_game.pck').
  *    o PCK with the same basename as the binary in the current working directory.
  *      Same as above for the two possible PCK file names.
- *  - On Android, look for 'assets.sparsepck' and try loading it, if it doesn't work,
- *    proceed to the next step.
- *  - On relevant platforms (Android/iOS), lookup project file in OS resource path.
+ *  - Lookup project file in the OS resource path.
  *    If found, load it or fail.
  *  - Lookup project file in passed `p_path` (--path passed by the user), i.e. we
  *    are running from source code.
@@ -755,13 +753,7 @@ Error ProjectSettings::_setup(const String &p_path, const String &p_main_pack, b
 		}
 	}
 
-#ifdef ANDROID_ENABLED
-	// Attempt to load sparse PCK assets.
-	_load_resource_pack("res://assets.sparsepck", false, 0, true);
-#endif
-
 	// Try to use the filesystem for files, according to OS.
-	// (Only Android -when reading from PCK-.)
 
 	if (!OS::get_singleton()->get_resource_dir().is_empty()) {
 		Error err = _load_settings_text_or_binary("res://project.godot", "res://project.binary");
@@ -1746,9 +1738,6 @@ ProjectSettings::ProjectSettings() {
 	GLOBAL_DEF_RST(PropertyInfo(Variant::FLOAT, "audio/general/2d_panning_strength", PROPERTY_HINT_RANGE, "0,2,0.01"), 0.5f);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::FLOAT, "audio/general/3d_panning_strength", PROPERTY_HINT_RANGE, "0,2,0.01"), 0.5f);
 
-	GLOBAL_DEF(PropertyInfo(Variant::INT, "audio/general/ios/session_category", PROPERTY_HINT_ENUM, "Ambient,Multi Route,Play and Record,Playback,Record,Solo Ambient"), 0);
-	GLOBAL_DEF("audio/general/ios/mix_with_others", false);
-
 	_add_builtin_input_map();
 
 	// Keep the enum values in sync with the `DisplayServer::ScreenOrientation` enum.
@@ -1756,9 +1745,6 @@ ProjectSettings::ProjectSettings() {
 	GLOBAL_DEF("display/window/subwindows/embed_subwindows", true);
 	// Keep the enum values in sync with the `DisplayServer::VSyncMode` enum.
 	custom_prop_info["display/window/vsync/vsync_mode"] = PropertyInfo(Variant::INT, "display/window/vsync/vsync_mode", PROPERTY_HINT_ENUM, "Disabled,Enabled,Adaptive,Mailbox");
-
-	GLOBAL_DEF("display/window/frame_pacing/android/enable_frame_pacing", true);
-	GLOBAL_DEF(PropertyInfo(Variant::INT, "display/window/frame_pacing/android/swappy_mode", PROPERTY_HINT_ENUM, "pipeline_forced_on,auto_fps_pipeline_forced_on,auto_fps_auto_pipeline"), 2);
 
 #ifdef DISABLE_DEPRECATED
 	custom_prop_info["rendering/driver/threads/thread_model"] = PropertyInfo(Variant::INT, "rendering/driver/threads/thread_model", PROPERTY_HINT_ENUM, "Safe:1,Separate");

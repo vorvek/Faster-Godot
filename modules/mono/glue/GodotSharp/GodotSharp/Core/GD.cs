@@ -205,7 +205,7 @@ namespace Godot
         /// Unsupported tags will be left as-is in standard output.
         /// When printing to standard output, the supported subset of BBCode is converted to
         /// ANSI escape codes for the terminal emulator to display. Displaying ANSI escape codes
-        /// is currently only supported on Linux and macOS. Support for ANSI escape codes may vary
+        /// is currently only supported on Linux. Support for ANSI escape codes may vary
         /// across terminal emulators, especially for italic and strikethrough.
         ///
         /// Note: Consider using <see cref="PushError(string)"/> and <see cref="PushWarning(string)"/>
@@ -230,7 +230,7 @@ namespace Godot
         /// Unsupported tags will be left as-is in standard output.
         /// When printing to standard output, the supported subset of BBCode is converted to
         /// ANSI escape codes for the terminal emulator to display. Displaying ANSI escape codes
-        /// is currently only supported on Linux and macOS. Support for ANSI escape codes may vary
+        /// is currently only supported on Linux. Support for ANSI escape codes may vary
         /// across terminal emulators, especially for italic and strikethrough.
         ///
         /// Note: Consider using <see cref="PushError(object[])"/> and <see cref="PushWarning(object[])"/>

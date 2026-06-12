@@ -308,7 +308,6 @@
 			<param index="0" name="position" type="Vector2" />
 			<description>
 				Moves the mouse pointer to the specified position in this [Viewport] using the coordinate system of this [Viewport].
-				[b]Note:[/b] [method warp_mouse] is only supported on Windows, macOS and Linux. It has no effect on Android, iOS and Web.
 			</description>
 		</method>
 	</methods>
@@ -467,11 +466,11 @@
 		</member>
 		<member name="taa_jitter_phase_count" type="int" setter="set_taa_jitter_phase_count" getter="get_taa_jitter_phase_count" default="16">
 			Sets the number of jitter positions used by TAA. Higher values can improve still-image convergence, but take more frames to converge and can increase temporal instability in motion.
-			[b]Note:[/b] This does not affect FSR2 or MetalFX temporal upscaling.
+			[b]Note:[/b] This does not affect FSR2 temporal upscaling.
 		</member>
 		<member name="taa_jitter_scale" type="float" setter="set_taa_jitter_scale" getter="get_taa_jitter_scale" default="1.0">
 			Scales the camera jitter offset used by TAA. Lower values reduce subpixel jitter, which can reduce shimmering but also reduces TAA's ability to reconstruct subpixel detail. A value of [code]0.0[/code] disables TAA camera jitter while leaving TAA resolve enabled.
-			[b]Note:[/b] This does not affect FSR2 or MetalFX temporal upscaling.
+			[b]Note:[/b] This does not affect FSR2 temporal upscaling.
 		</member>
 		<member name="taa_sharpness" type="float" setter="set_taa_sharpness" getter="get_taa_sharpness" default="0.0">
 			Sets how much sharpening is applied during the TAA resolve. Higher values counteract TAA blur, but can increase shimmering or edge halos.
@@ -481,15 +480,13 @@
 			Enabling temporal antialiasing ([member use_taa]) will automatically apply a [code]-0.5[/code] offset to this value, while enabling FXAA ([member screen_space_aa]) will automatically apply a [code]-0.25[/code] offset to this value. If both TAA and FXAA are enabled at the same time, an offset of [code]-0.75[/code] is applied to this value.
 			To control this property on the root viewport, set the [member ProjectSettings.rendering/textures/default_filters/texture_mipmap_bias] project setting.
 			[b]Note:[/b] If [member scaling_3d_scale] is lower than [code]1.0[/code] (exclusive), [member texture_mipmap_bias] is used to adjust the automatic mipmap bias which is calculated internally based on the scale factor. The formula for this is [code]log2(scaling_3d_scale) + mipmap_bias[/code].
-			[b]Note:[/b] This property is only supported in the Forward+ and Mobile renderers, not Compatibility. In Compatibility, this property is always treated as if it was set to [code]0.0[/code].
 		</member>
 		<member name="transparent_bg" type="bool" setter="set_transparent_background" getter="has_transparent_background" default="false">
 			If [code]true[/code], the viewport should render its background as transparent.
 			[b]Note:[/b] Due to technical limitations, certain rendering features are disabled when a viewport has a transparent background. This currently applies to screen-space reflections, subsurface scattering, and depth of field.
 		</member>
 		<member name="use_debanding" type="bool" setter="set_use_debanding" getter="is_using_debanding" default="false">
-			When using the Mobile or Forward+ renderers, set [member use_debanding] to enable or disable the debanding feature of this [Viewport]. If [member use_hdr_2d] is [code]false[/code], 2D rendering is [i]not[/i] affected by debanding unless the [member Environment.background_mode] is [constant Environment.BG_CANVAS]. If [member use_hdr_2d] is [code]true[/code], debanding will only be applied if this is the root [Viewport] and will affect all 2D and 3D rendering, including canvas items.
-			[member use_debanding] has no effect when using the Compatibility rendering method. The Mobile renderer can also use material debanding, which can be set with [method RenderingServer.material_set_use_debanding] or configured with [member ProjectSettings.rendering/anti_aliasing/quality/use_debanding].
+			Set [member use_debanding] to enable or disable the debanding feature of this [Viewport]. If [member use_hdr_2d] is [code]false[/code], 2D rendering is [i]not[/i] affected by debanding unless the [member Environment.background_mode] is [constant Environment.BG_CANVAS]. If [member use_hdr_2d] is [code]true[/code], debanding will only be applied if this is the root [Viewport] and will affect all 2D and 3D rendering, including canvas items.
 			See also [member ProjectSettings.rendering/anti_aliasing/quality/use_debanding], [method RenderingServer.material_set_use_debanding], and [method RenderingServer.viewport_set_use_debanding].
 		</member>
 		<member name="use_hdr_2d" type="bool" setter="set_use_hdr_2d" getter="is_using_hdr_2d" default="false">
@@ -499,7 +496,6 @@
 		<member name="use_occlusion_culling" type="bool" setter="set_use_occlusion_culling" getter="is_using_occlusion_culling" default="false">
 			If [code]true[/code], [OccluderInstance3D] nodes will be usable for occlusion culling in 3D for this viewport. For the root viewport, [member ProjectSettings.rendering/occlusion_culling/use_occlusion_culling] must be set to [code]true[/code] instead.
 			[b]Note:[/b] Enabling occlusion culling has a cost on the CPU. Only enable occlusion culling if you actually plan to use it, and think whether your scene can actually benefit from occlusion culling. Large, open scenes with few or no objects blocking the view will generally not benefit much from occlusion culling. Large open scenes generally benefit more from mesh LOD and visibility ranges ([member GeometryInstance3D.visibility_range_begin] and [member GeometryInstance3D.visibility_range_end]) compared to occlusion culling.
-			[b]Note:[/b] Due to memory constraints, occlusion culling is not supported by default in Web export templates. It can be enabled by compiling custom Web export templates with [code]module_raycast_enabled=yes[/code].
 		</member>
 		<member name="use_taa" type="bool" setter="set_use_taa" getter="is_using_taa" default="false">
 			Enables temporal antialiasing for this viewport. TAA works by jittering the camera and accumulating the images of the last rendered frames, motion vector rendering is used to account for camera and object motion.
@@ -585,20 +581,6 @@
 		</constant>
 		<constant name="SCALING_3D_MODE_FSR2" value="2" enum="Scaling3DMode">
 			Use AMD FidelityFX Super Resolution 2.2 upscaling for the viewport's 3D buffer. The amount of scaling can be set using [member Viewport.scaling_3d_scale]. Values less than [code]1.0[/code] will result in the viewport being upscaled using FSR2. Values greater than [code]1.0[/code] are not supported and bilinear downsampling will be used instead. A value of [code]1.0[/code] will use FSR2 at native resolution as a TAA solution.
-		</constant>
-		<constant name="SCALING_3D_MODE_METALFX_SPATIAL" value="3" enum="Scaling3DMode">
-			Use the [url=https://developer.apple.com/documentation/metalfx/mtlfxspatialscaler#overview]MetalFX spatial upscaler[/url] for the viewport's 3D buffer.
-			The amount of scaling can be set using [member scaling_3d_scale].
-			Values less than [code]1.0[/code] will result in the viewport being upscaled using MetalFX. Values greater than [code]1.0[/code] are not supported and bilinear downsampling will be used instead. A value of [code]1.0[/code] disables scaling.
-			More information: [url=https://developer.apple.com/documentation/metalfx]MetalFX[/url].
-			[b]Note:[/b] Only supported when the Metal rendering driver is in use, which limits this scaling mode to macOS and iOS.
-		</constant>
-		<constant name="SCALING_3D_MODE_METALFX_TEMPORAL" value="4" enum="Scaling3DMode">
-			Use the [url=https://developer.apple.com/documentation/metalfx/mtlfxtemporalscaler#overview]MetalFX temporal upscaler[/url] for the viewport's 3D buffer.
-			The amount of scaling can be set using [member scaling_3d_scale]. To determine the minimum input scale, use the [method RenderingDevice.limit_get] method with [constant RenderingDevice.LIMIT_METALFX_TEMPORAL_SCALER_MIN_SCALE].
-			Values less than [code]1.0[/code] will result in the viewport being upscaled using MetalFX. Values greater than [code]1.0[/code] are not supported and bilinear downsampling will be used instead. A value of [code]1.0[/code] will use MetalFX at native resolution as a TAA solution.
-			More information: [url=https://developer.apple.com/documentation/metalfx]MetalFX[/url].
-			[b]Note:[/b] Only supported when the Metal rendering driver is in use, which limits this scaling mode to macOS and iOS.
 		</constant>
 		<constant name="SCALING_3D_MODE_NEAREST" value="5" enum="Scaling3DMode">
 			Use nearest-neighbor scaling for the viewport's 3D buffer.
@@ -712,7 +694,6 @@
 		</constant>
 		<constant name="DEBUG_DRAW_WIREFRAME" value="4" enum="DebugDraw">
 			Objects are displayed as wireframe models.
-			[b]Note:[/b] [method RenderingServer.set_debug_generate_wireframes] must be called before loading any meshes for wireframes to be visible when using the Compatibility renderer.
 		</constant>
 		<constant name="DEBUG_DRAW_NORMAL_BUFFER" value="5" enum="DebugDraw">
 			Objects are displayed without lighting information and their textures replaced by normal mapping.
@@ -738,7 +719,7 @@
 		</constant>
 		<constant name="DEBUG_DRAW_SCENE_LUMINANCE" value="11" enum="DebugDraw">
 			Draws the scene luminance buffer (if available) in the upper left quadrant of the [Viewport].
-			[b]Note:[/b] Only supported when using the Forward+ or Mobile rendering methods.
+			[b]Note:[/b] Only supported when using the Forward+ rendering method.
 		</constant>
 		<constant name="DEBUG_DRAW_SSAO" value="12" enum="DebugDraw">
 			Draws the screen-space ambient occlusion texture instead of the scene so that you can clearly see how it is affecting objects. In order for this display mode to work, you must have [member Environment.ssao_enabled] set in your [WorldEnvironment].
@@ -751,11 +732,11 @@
 		<constant name="DEBUG_DRAW_PSSM_SPLITS" value="14" enum="DebugDraw">
 			Colors each PSSM split for the [DirectionalLight3D]s in the scene a different color so you can see where the splits are. In order (from closest to furthest from the camera), they are colored red, green, blue, and yellow.
 			[b]Note:[/b] When using this debug draw mode, custom shaders are ignored since all materials in the scene temporarily use a debug material. This means the result from custom shader functions (such as vertex displacement) won't be visible anymore when using this debug draw mode.
-			[b]Note:[/b] Only supported when using the Forward+ or Mobile rendering methods.
+			[b]Note:[/b] Only supported when using the Forward+ rendering method.
 		</constant>
 		<constant name="DEBUG_DRAW_DECAL_ATLAS" value="15" enum="DebugDraw">
 			Draws the decal atlas used by [Decal]s and light projector textures in the upper left quadrant of the [Viewport].
-			[b]Note:[/b] Only supported when using the Forward+ or Mobile rendering methods.
+			[b]Note:[/b] Only supported when using the Forward+ rendering method.
 		</constant>
 		<constant name="DEBUG_DRAW_SDFGI" value="16" enum="DebugDraw">
 			Draws the cascades used to render signed distance field global illumination (SDFGI).
@@ -793,7 +774,7 @@
 		</constant>
 		<constant name="DEBUG_DRAW_OCCLUDERS" value="24" enum="DebugDraw">
 			Draws the buffer used for occlusion culling.
-			[b]Note:[/b] Only supported when using the Forward+ or Mobile rendering methods.
+			[b]Note:[/b] Only supported when using the Forward+ rendering method.
 		</constant>
 		<constant name="DEBUG_DRAW_MOTION_VECTORS" value="25" enum="DebugDraw">
 			Draws vector lines over the viewport to indicate the movement of pixels between frames.
@@ -801,7 +782,7 @@
 		</constant>
 		<constant name="DEBUG_DRAW_INTERNAL_BUFFER" value="26" enum="DebugDraw">
 			Draws the internal resolution buffer of the scene in linear colorspace before tonemapping or post-processing is applied.
-			[b]Note:[/b] Only supported when using the Forward+ or Mobile rendering methods.
+			[b]Note:[/b] Only supported when using the Forward+ rendering method.
 		</constant>
 		<constant name="DEBUG_DRAW_CLUSTER_AREA_LIGHTS" value="27" enum="DebugDraw">
 			Draws the cluster used by [AreaLight3D] nodes to optimize light rendering.

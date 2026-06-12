@@ -34,9 +34,6 @@
 #include "core/io/dir_access.h"
 
 #include "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h"
-#ifndef FASTER_GODOT_FORWARD_PLUS_ONLY
-#include "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h"
-#endif
 
 void RendererCompositorRD::blit_render_targets_to_screen(DisplayServer::WindowID p_screen, const BlitToScreen *p_render_targets, int p_amount) {
 	Error err = RD::get_singleton()->screen_prepare_for_drawing(p_screen);
@@ -325,7 +322,6 @@ RendererCompositorRD::RendererCompositorRD() {
 	String rendering_method = OS::get_singleton()->get_current_rendering_method();
 	uint64_t textures_per_stage = RD::get_singleton()->limit_get(RD::LIMIT_MAX_TEXTURES_PER_SHADER_STAGE);
 
-#ifdef FASTER_GODOT_FORWARD_PLUS_ONLY
 	if (rendering_method != "forward_plus") {
 		ERR_PRINT(vformat("Faster-Godot only supports Forward+ rendering, got '%s'. Defaulting to Forward+ renderer.", rendering_method));
 	}
@@ -333,20 +329,6 @@ RendererCompositorRD::RendererCompositorRD() {
 		ERR_PRINT("Faster-Godot requires at least 48 textures per shader stage for the Forward+ clustered renderer.");
 	}
 	scene = memnew(RendererSceneRenderImplementation::RenderForwardClustered());
-#else
-	if (rendering_method == "mobile" || textures_per_stage < 48) {
-		if (rendering_method == "forward_plus") {
-			WARN_PRINT_ONCE("Platform supports less than 48 textures per stage which is less than required by the Clustered renderer. Defaulting to Mobile renderer.");
-		}
-		scene = memnew(RendererSceneRenderImplementation::RenderForwardMobile());
-	} else if (rendering_method == "forward_plus") {
-		scene = memnew(RendererSceneRenderImplementation::RenderForwardClustered());
-	} else {
-		// Fall back to our high end renderer.
-		ERR_PRINT(vformat("Cannot instantiate RenderingDevice-based renderer with renderer type '%s'. Defaulting to Forward+ renderer.", rendering_method));
-		scene = memnew(RendererSceneRenderImplementation::RenderForwardClustered());
-	}
-#endif
 
 	scene->init();
 }

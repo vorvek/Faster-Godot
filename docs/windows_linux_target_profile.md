@@ -12,10 +12,8 @@ deployment profile.
   - Rejects platforms other than `windows` and `linuxbsd`.
   - Rejects non-`x86_64` architectures.
   - Disables non-target graphics backends in the fork profile.
-- `platform/windows/SCsub`
-  - Builds OpenGL Windows support files only when `opengl3` is enabled.
-- `platform/linuxbsd/wayland/SCsub`
-  - Builds `detect_prime_egl.cpp` only when `opengl3` is enabled.
+- `platform/windows` and `platform/linuxbsd`
+  - Build only the Vulkan desktop glue needed by the target profile.
 
 ## Pros
 

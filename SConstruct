@@ -44,7 +44,6 @@ def _helper_module(name, path):
         setattr(parent_module, child_name, child_module)
 
 
-_helper_module("gles3_builders", "gles3_builders.py")
 _helper_module("glsl_builders", "glsl_builders.py")
 _helper_module("methods", "methods.py")
 _helper_module("platform_methods", "platform_methods.py")
@@ -54,7 +53,6 @@ _helper_module("main.main_builders", "main/main_builders.py")
 _helper_module("misc.utility.color", "misc/utility/color.py")
 
 # Local
-import gles3_builders
 import glsl_builders
 import methods
 import scu_builders
@@ -68,11 +66,13 @@ if ARGUMENTS.get("target", "editor") == "editor":
 # Scan possible build platforms
 
 platform_list = []  # list of platforms
+platform_can_build = {}
 platform_opts = {}  # options for each platform
 platform_flags = {}  # flags for each platform
 platform_doc_class_path = {}
 platform_exporters = []
 platform_apis = []
+supported_platforms = {"linuxbsd", "windows"}
 
 for x in sorted(glob.glob("platform/*")):
     if not os.path.isdir(x) or not os.path.exists(x + "/detect.py"):
@@ -92,19 +92,23 @@ for x in sorted(glob.glob("platform/*")):
         pass
 
     platform_name = x[9:]
+    if platform_name not in supported_platforms:
+        sys.path.remove(tmppath)
+        sys.modules.pop("detect")
+        continue
 
     if os.path.exists(x + "/export/export.cpp"):
         platform_exporters.append(platform_name)
     if os.path.exists(x + "/api/api.cpp"):
         platform_apis.append(platform_name)
-    if detect.can_build():
-        x = x.replace("platform/", "")  # rest of world
-        x = x.replace("platform\\", "")  # win32
-        platform_list += [x]
-        platform_opts[x] = detect.get_opts()
-        platform_flags[x] = detect.get_flags()
-        if isinstance(platform_flags[x], list):  # backwards compatibility
-            platform_flags[x] = {flag[0]: flag[1] for flag in platform_flags[x]}
+    x = x.replace("platform/", "")  # rest of world
+    x = x.replace("platform\\", "")  # win32
+    platform_list += [x]
+    platform_can_build[x] = detect.can_build()
+    platform_opts[x] = detect.get_opts()
+    platform_flags[x] = detect.get_flags()
+    if isinstance(platform_flags[x], list):  # backwards compatibility
+        platform_flags[x] = {flag[0]: flag[1] for flag in platform_flags[x]}
     sys.path.remove(tmppath)
     sys.modules.pop("detect")
 
@@ -205,7 +209,6 @@ opts.Add(BoolVariable("minizip", "Enable ZIP archive support using minizip", Tru
 opts.Add(BoolVariable("brotli", "Enable Brotli for decompression and WOFF2 fonts support", True))
 opts.Add(BoolVariable("xaudio2", "Enable the XAudio2 audio driver on supported platforms", False))
 opts.Add(BoolVariable("vulkan", "Enable the Vulkan rendering driver", True))
-opts.Add(BoolVariable("opengl3", "Enable the OpenGL/GLES3 rendering driver", True))
 opts.Add(BoolVariable("use_volk", "Use the volk library to load the Vulkan loader dynamically", True))
 opts.Add(BoolVariable("accesskit", "Use AccessKit C SDK", True))
 opts.Add(("accesskit_sdk_path", "Path to the AccessKit C SDK", ""))
@@ -337,7 +340,6 @@ opts.Add(BoolVariable("builtin_libwebp", "Use the built-in libwebp library", Tru
 opts.Add(BoolVariable("builtin_wslay", "Use the built-in wslay library", True))
 opts.Add(BoolVariable("builtin_mbedtls", "Use the built-in mbedTLS library", True))
 opts.Add(BoolVariable("builtin_miniupnpc", "Use the built-in miniupnpc library", True))
-opts.Add(BoolVariable("builtin_openxr", "Use the built-in OpenXR library", True))
 opts.Add(BoolVariable("builtin_pcre2", "Use the built-in PCRE2 library", True))
 opts.Add(BoolVariable("builtin_pcre2_with_jit", "Use JIT compiler for the built-in PCRE2 library", True))
 opts.Add(BoolVariable("builtin_recastnavigation", "Use the built-in Recast navigation library", True))
@@ -423,6 +425,12 @@ if env["platform"] not in platform_list:
         print_error(f'Invalid target platform "{env["platform"]}".\n' + text)
 
     Exit(0 if env["platform"] == "list" else 255)
+
+if not platform_can_build[env["platform"]]:
+    print_error(
+        f'Platform "{env["platform"]}" is supported by this fork, but it cannot be built from this host/toolchain.'
+    )
+    Exit(255)
 
 # Add platform-specific options.
 if env["platform"] in platform_opts:
@@ -525,12 +533,8 @@ for tool in custom_tools:
 env.Prepend(CPPPATH=["#"])
 
 # configure ENV for platform
-# Faster-Godot ships desktop Windows and Linux templates only, so the editor must
-# not compile or register export plugins / platform APIs for Web, Android, iOS, or
-# macOS. Restricting these lists drops those EditorExportPlatform* classes (and the
-# per-platform export/*.cpp sources) from the editor binary. Projects that still
-# carry presets for the excluded platforms keep loading; the presets are just not
-# offered. (Disabling the profile would restore the full upstream platform set.)
+# Faster-Godot ships Windows and Linux templates only, so the editor registers
+# only the desktop export plugins and platform APIs.
 if env["faster_godot"]:
     faster_godot_export_platforms = ("windows", "linuxbsd")
     platform_exporters = [p for p in platform_exporters if p in faster_godot_export_platforms]
@@ -686,8 +690,6 @@ if env["dev_mode"]:
 if env["production"]:
     env["use_static_cpp"] = methods.get_cmdline_bool("use_static_cpp", True)
     env["debug_symbols"] = methods.get_cmdline_bool("debug_symbols", False)
-    if env["platform"] == "android":
-        env["swappy"] = methods.get_cmdline_bool("swappy", True)
     # LTO "auto" means we handle the preferred option in each platform detect.py.
     env["lto"] = ARGUMENTS.get("lto", "auto")
 
@@ -704,7 +706,6 @@ if env["precision"] != "single":
     Exit(255)
 
 env["vulkan"] = True
-env["opengl3"] = False
 env["disable_xr"] = True
 env["deprecated"] = False
 env["accesskit"] = False
@@ -712,7 +713,6 @@ faster_godot_disabled_modules = [
     "camera",
     "enet",
     "jsonrpc",
-    "mobile_vr",
     "multiplayer",
     "objectdb_profiler",
     "openxr",
@@ -930,13 +930,7 @@ else:
             # Adding dwarf-4 explicitly makes stacktraces work with clang builds,
             # otherwise addr2line doesn't understand them
             env.AppendUnique(CCFLAGS=["-gdwarf-4"])
-        if methods.using_emcc(env):
-            # Emscripten only produces dwarf symbols when using "-g3".
-            env.AppendUnique(CCFLAGS=["-g3"])
-            # Emscripten linker needs debug symbols options too.
-            env.AppendUnique(LINKFLAGS=["-gdwarf-4"])
-            env.AppendUnique(LINKFLAGS=["-g3"])
-        elif env.dev_build:
+        if env.dev_build:
             env.AppendUnique(CCFLAGS=["-g3"])
         else:
             env.AppendUnique(CCFLAGS=["-g2"])
@@ -951,8 +945,7 @@ else:
         else:
             env.AppendUnique(LINKFLAGS=["-s"])
 
-    # Linker needs optimization flags too, at least for Emscripten.
-    # For other toolchains, this _may_ be useful for LTO too to disambiguate.
+    # Linker optimization flags may be useful for LTO to disambiguate.
     env.AppendUnique(LINKFLAGS=["$OPTIMIZELEVEL"])
 
     if env["optimize"] == "speed":
@@ -1176,9 +1169,7 @@ modules_enabled = OrderedDict()
 env.module_dependencies = {}
 env.module_icons_paths = []
 if env["faster_godot"]:
-    # Faster-Godot only ships Windows and Linux export platforms, so the class
-    # documentation for the excluded platforms (Web, Android, iOS, macOS, visionOS)
-    # is not embedded in the editor binary.
+    # Faster-Godot only embeds documentation for shipped desktop export platforms.
     platform_doc_class_path = {
         class_name: doc_dir
         for class_name, doc_dir in platform_doc_class_path.items()
@@ -1258,11 +1249,6 @@ GLSL_BUILDERS = {
     ),
     "GLSL_HEADER": env.Builder(
         action=env.Run(glsl_builders.build_raw_headers),
-        suffix="glsl.gen.h",
-        src_suffix=".glsl",
-    ),
-    "GLES3_GLSL": env.Builder(
-        action=env.Run(gles3_builders.build_gles3_headers),
         suffix="glsl.gen.h",
         src_suffix=".glsl",
     ),

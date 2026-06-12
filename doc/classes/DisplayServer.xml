@@ -653,7 +653,6 @@
 			<return type="Image" />
 			<description>
 				Returns the user's clipboard as an image if possible.
-				[b]Note:[/b] This method uses the copied pixel data, e.g. from an image editing software or a web browser, not an image file copied from file explorer.
 			</description>
 		</method>
 		<method name="clipboard_get_primary" qualifiers="const">
@@ -724,7 +723,6 @@
 			<description>
 				Sets a custom mouse cursor image for the given [param shape]. This means the user's operating system and mouse cursor theme will no longer influence the mouse cursor's appearance.
 				[param cursor] can be either a [Texture2D] or an [Image], and it should not be larger than 256×256 to display correctly. Optionally, [param hotspot] can be set to offset the image's position relative to the click point. By default, [param hotspot] is set to the top-left corner of the image. See also [method cursor_set_shape].
-				[b]Note:[/b] On Web, calling this method every frame can cause the cursor to flicker.
 			</description>
 		</method>
 		<method name="cursor_set_shape">
@@ -749,7 +747,6 @@
 			<param index="3" name="callback" type="Callable" />
 			<description>
 				Shows a text input dialog which uses the operating system's native look-and-feel. [param callback] should accept a single [String] parameter which contains the text field's contents.
-				[b]Note:[/b] This method is implemented if the display server has the [constant FEATURE_NATIVE_DIALOG_INPUT] feature. Supported platforms include macOS, Windows, and Android.
 			</description>
 		</method>
 		<method name="dialog_show">
@@ -760,7 +757,6 @@
 			<param index="3" name="callback" type="Callable" />
 			<description>
 				Shows a text dialog which uses the operating system's native look-and-feel. [param callback] should accept a single [int] parameter which corresponds to the index of the pressed button.
-				[b]Note:[/b] This method is implemented if the display server has the [constant FEATURE_NATIVE_DIALOG] feature. Supported platforms include macOS, Windows, and Android.
 			</description>
 		</method>
 		<method name="enable_for_stealing_focus">
@@ -784,23 +780,14 @@
 			<description>
 				Displays OS native dialog for selecting files or directories in the file system.
 				Each filter string in the [param filters] array should be formatted like this: [code]*.png,*.jpg,*.jpeg;Image Files;image/png,image/jpeg[/code]. The description text of the filter is optional and can be omitted. It is recommended to set both file extension and MIME type. See also [member FileDialog.filters].
-				Callbacks have the following arguments: [code]status: bool, selected_paths: PackedStringArray, selected_filter_index: int[/code]. [b]On Android,[/b] the third callback argument ([code]selected_filter_index[/code]) is always [code]0[/code].
-				[b]Note:[/b] This method is implemented if the display server has the [constant FEATURE_NATIVE_DIALOG_FILE] feature. Supported platforms include Linux (X11/Wayland), Windows, macOS, and Android.
 				[b]Note:[/b] [param current_directory] might be ignored.
-				[b]Note:[/b] Embedded file dialogs and Windows file dialogs support only file extensions, while Android, Linux, and macOS file dialogs also support MIME types.
-				[b]Note:[/b] On Android and Linux, [param show_hidden] is ignored.
-				[b]Note:[/b] On Android and macOS, native file dialogs have no title.
 				[b]Note:[/b] On macOS, sandboxed apps will save security-scoped bookmarks to retain access to the opened folders across multiple sessions. Use [method OS.get_granted_permissions] to get a list of saved bookmarks.
-				[b]Note:[/b] On Android, this method uses the Android Storage Access Framework (SAF).
 				The file picker returns a URI instead of a filesystem path. This URI can be passed directly to [FileAccess] to perform read/write operations.
 				When using [constant FILE_DIALOG_MODE_OPEN_DIR], it returns a tree URI that grants full access to the selected directory. File operations inside this directory can be performed by passing a path on the form [code]treeUri#relative/path/to/file[/code] to [FileAccess].
 				To avoid opening the file picker again after each app restart, you can take persistable URI permission as follows:
 				[codeblocks]
 				[gdscript]
-				val uri = "content://com.android..." # URI of the selected file or folder.
 				val persist = true # Set to false to release the persistable permission.
-				var android_runtime = Engine.get_singleton("AndroidRuntime")
-				android_runtime.updatePersistableUriPermission(uri, persist)
 				[/gdscript]
 				[/codeblocks]
 				The persistable URI permission remains valid across app restarts as long as the directory is not moved, renamed, or deleted.
@@ -828,7 +815,6 @@
 				Callbacks have the following arguments: [code]status: bool, selected_paths: PackedStringArray, selected_filter_index: int, selected_option: Dictionary[/code].
 				[b]Note:[/b] This method is implemented if the display server has the [constant FEATURE_NATIVE_DIALOG_FILE_EXTRA] feature. Supported platforms include Linux (X11/Wayland), Windows, and macOS.
 				[b]Note:[/b] [param current_directory] might be ignored.
-				[b]Note:[/b] Embedded file dialogs and Windows file dialogs support only file extensions, while Android, Linux, and macOS file dialogs also support MIME types.
 				[b]Note:[/b] On Linux (X11), [param show_hidden] is ignored.
 				[b]Note:[/b] On macOS, native file dialogs have no title.
 				[b]Note:[/b] On macOS, sandboxed apps will save security-scoped bookmarks to retain access to the opened folders across multiple sessions. Use [method OS.get_granted_permissions] to get a list of saved bookmarks.
@@ -845,28 +831,24 @@
 			<return type="Color" />
 			<description>
 				Returns OS theme accent color. Returns [code]Color(0, 0, 0, 0)[/code], if accent color is unknown.
-				[b]Note:[/b] This method is implemented on macOS, Windows, Android, and Linux (X11/Wayland).
 			</description>
 		</method>
 		<method name="get_base_color" qualifiers="const">
 			<return type="Color" />
 			<description>
 				Returns the OS theme base color (default control background). Returns [code]Color(0, 0, 0, 0)[/code] if the base color is unknown.
-				[b]Note:[/b] This method is implemented on macOS, Windows, and Android.
 			</description>
 		</method>
 		<method name="get_display_cutouts" qualifiers="const">
 			<return type="Rect2[]" />
 			<description>
 				Returns an [Array] of [Rect2], each of which is the bounding rectangle for a display cutout or notch. These are non-functional areas on edge-to-edge screens used by cameras and sensors. Returns an empty array if the device does not have cutouts. See also [method get_display_safe_area].
-				[b]Note:[/b] Currently only implemented on Android. Other platforms will return an empty array even if they do have display cutouts or notches.
 			</description>
 		</method>
 		<method name="get_display_safe_area" qualifiers="const">
 			<return type="Rect2i" />
 			<description>
 				Returns the unobscured area of the display where interactive controls should be rendered. See also [method get_display_cutouts].
-				[b]Note:[/b] Currently only implemented on Android and iOS. On other platforms, [code]screen_get_usable_rect(SCREEN_OF_MAIN_WINDOW)[/code] will be returned as a fallback. See also [method screen_get_usable_rect].
 			</description>
 		</method>
 		<method name="get_keyboard_focus_screen" qualifiers="const">
@@ -880,7 +862,6 @@
 			<return type="String" />
 			<description>
 				Returns the name of the [DisplayServer] currently in use. Most operating systems only have a single [DisplayServer], but Linux has access to more than one [DisplayServer] (currently X11 and Wayland).
-				The names of built-in display servers are [code]Windows[/code], [code]macOS[/code], [code]X11[/code] (Linux), [code]Wayland[/code] (Linux), [code]Android[/code], [code]iOS[/code], [code]web[/code] (HTML5), and [code]headless[/code] (when started with the [code]--headless[/code] [url=$DOCS_URL/tutorials/editor/command_line_tutorial.html]command line argument[/url]).
 			</description>
 		</method>
 		<method name="get_primary_screen" qualifiers="const">
@@ -1562,7 +1543,6 @@
 			<return type="bool" />
 			<description>
 				Returns [code]true[/code] if a hardware keyboard is connected.
-				[b]Note:[/b] This method is implemented on Android and iOS. On other platforms, this method always returns [code]true[/code].
 			</description>
 		</method>
 		<method name="help_set_search_callbacks">
@@ -1594,20 +1574,17 @@
 			<return type="bool" />
 			<description>
 				Returns [code]true[/code] if OS is using dark mode.
-				[b]Note:[/b] This method is implemented on Android, iOS, macOS, Windows, and Linux (X11/Wayland).
 			</description>
 		</method>
 		<method name="is_dark_mode_supported" qualifiers="const">
 			<return type="bool" />
 			<description>
 				Returns [code]true[/code] if OS supports dark mode.
-				[b]Note:[/b] This method is implemented on Android, iOS, macOS, Windows, and Linux (X11/Wayland).
 			</description>
 		</method>
 		<method name="is_touchscreen_available" qualifiers="const">
 			<return type="bool" />
 			<description>
-				Returns [code]true[/code] if touch events are available (Android or iOS), the capability is detected on the Web platform or if [member ProjectSettings.input_devices/pointing/emulate_touch_from_mouse] is [code]true[/code].
 			</description>
 		</method>
 		<method name="is_window_transparency_available" qualifiers="const">
@@ -1716,7 +1693,6 @@
 				Returns the dots per inch density of the specified screen. Returns platform specific default value if [param screen] is invalid.
 				[b]Note:[/b] One of the following constants can be used as [param screen]: [constant SCREEN_OF_MAIN_WINDOW], [constant SCREEN_PRIMARY], [constant SCREEN_WITH_MOUSE_FOCUS], or [constant SCREEN_WITH_KEYBOARD_FOCUS].
 				[b]Note:[/b] On macOS, returned value is inaccurate if fractional display scaling mode is used.
-				[b]Note:[/b] On Android devices, the actual screen densities are grouped into six generalized densities:
 				[codeblock lang=text]
 				   ldpi - 120 dpi
 				   mdpi - 160 dpi
@@ -1725,7 +1701,6 @@
 				 xxhdpi - 480 dpi
 				xxxhdpi - 640 dpi
 				[/codeblock]
-				[b]Note:[/b] This method is implemented on Android, iOS, Linux (X11/Wayland), macOS, Web, and Windows. On other platforms, this method always returns [code]72[/code].
 			</description>
 		</method>
 		<method name="screen_get_image" qualifiers="const">
@@ -1761,7 +1736,6 @@
 			<description>
 				Returns the [param screen]'s current orientation. See also [method screen_set_orientation]. Returns [constant SCREEN_LANDSCAPE] if [param screen] is invalid.
 				[b]Note:[/b] One of the following constants can be used as [param screen]: [constant SCREEN_OF_MAIN_WINDOW], [constant SCREEN_PRIMARY], [constant SCREEN_WITH_MOUSE_FOCUS], or [constant SCREEN_WITH_KEYBOARD_FOCUS].
-				[b]Note:[/b] This method is implemented on Android and iOS. On other platforms, this method always returns [constant SCREEN_LANDSCAPE].
 			</description>
 		</method>
 		<method name="screen_get_pixel" qualifiers="const">
@@ -1802,7 +1776,6 @@
 					refresh_rate = 60.0
 				[/codeblock]
 				[b]Note:[/b] One of the following constants can be used as [param screen]: [constant SCREEN_OF_MAIN_WINDOW], [constant SCREEN_PRIMARY], [constant SCREEN_WITH_MOUSE_FOCUS], or [constant SCREEN_WITH_KEYBOARD_FOCUS].
-				[b]Note:[/b] This method is implemented on Android, iOS, macOS, Linux (X11 and Wayland), and Windows. On other platforms, this method always returns [code]-1.0[/code].
 			</description>
 		</method>
 		<method name="screen_get_scale" qualifiers="const">
@@ -1813,7 +1786,6 @@
 				[b]Note:[/b] One of the following constants can be used as [param screen]: [constant SCREEN_OF_MAIN_WINDOW], [constant SCREEN_PRIMARY], [constant SCREEN_WITH_MOUSE_FOCUS], or [constant SCREEN_WITH_KEYBOARD_FOCUS].
 				[b]Note:[/b] On macOS, the returned value is [code]2.0[/code] for hiDPI (Retina) screens, and [code]1.0[/code] for all other cases.
 				[b]Note:[/b] On Linux (Wayland), the returned value is accurate only when [param screen] is [constant SCREEN_OF_MAIN_WINDOW]. Due to API limitations, passing a direct index will return a rounded-up integer, if the screen has a fractional scale (e.g. [code]1.25[/code] would get rounded up to [code]2.0[/code]).
-				[b]Note:[/b] This method is implemented on Android, iOS, Web, macOS, and Linux (Wayland). On other platforms, this method always returns [code]1.0[/code].
 			</description>
 		</method>
 		<method name="screen_get_size" qualifiers="const">
@@ -1853,7 +1825,6 @@
 			<description>
 				Sets the [param screen]'s [param orientation]. See also [method screen_get_orientation].
 				[b]Note:[/b] One of the following constants can be used as [param screen]: [constant SCREEN_OF_MAIN_WINDOW], [constant SCREEN_PRIMARY], [constant SCREEN_WITH_MOUSE_FOCUS], or [constant SCREEN_WITH_KEYBOARD_FOCUS].
-				[b]Note:[/b] This method is implemented on Android and iOS.
 				[b]Note:[/b] On iOS, this method has no effect if [member ProjectSettings.display/window/handheld/orientation] is not set to [constant SCREEN_SENSOR].
 			</description>
 		</method>
@@ -1862,7 +1833,6 @@
 			<param index="0" name="callable" type="Callable" />
 			<description>
 				Sets the callback that should be called when a hardware keyboard is connected or disconnected. [param callable] should accept a single [bool] argument indicating whether the keyboard has been connected ([code]true[/code]) or disconnected ([code]false[/code]).
-				[b]Note:[/b] This method is only implemented on Android.
 			</description>
 		</method>
 		<method name="set_icon">
@@ -1886,7 +1856,6 @@
 			<param index="0" name="callable" type="Callable" />
 			<description>
 				Sets the callback that should be called when the system's theme settings are changed. [param callable] should accept zero arguments.
-				[b]Note:[/b] This method is implemented on Android, iOS, macOS, Windows, and Linux (X11/Wayland).
 			</description>
 		</method>
 		<method name="show_emoji_and_symbol_picker" qualifiers="const">
@@ -1985,7 +1954,6 @@
 				- [code]id[/code] is voice identifier.
 				- [code]language[/code] is language code in [code]lang_Variant[/code] format. The [code]lang[/code] part is a 2 or 3-letter code based on the ISO-639 standard, in lowercase. The [code skip-lint]Variant[/code] part is an engine-dependent string describing country, region or/and dialect.
 				Note that Godot depends on system libraries for text-to-speech functionality. These libraries are installed by default on Windows and macOS, but not on all Linux distributions. If they are not present, this method will return an empty list. This applies to both Godot users on Linux, as well as end-users on Linux running Godot games that use text-to-speech.
-				[b]Note:[/b] This method is implemented on Android, iOS, Web, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="tts_get_voices_for_language" qualifiers="const">
@@ -1993,35 +1961,30 @@
 			<param index="0" name="language" type="String" />
 			<description>
 				Returns a [PackedStringArray] of voice identifiers for the [param language].
-				[b]Note:[/b] This method is implemented on Android, iOS, Web, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="tts_is_paused" qualifiers="const">
 			<return type="bool" />
 			<description>
 				Returns [code]true[/code] if the synthesizer is in a paused state.
-				[b]Note:[/b] This method is implemented on Android, iOS, Web, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="tts_is_speaking" qualifiers="const">
 			<return type="bool" />
 			<description>
 				Returns [code]true[/code] if the synthesizer is generating speech, or have utterance waiting in the queue.
-				[b]Note:[/b] This method is implemented on Android, iOS, Web, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="tts_pause">
 			<return type="void" />
 			<description>
 				Puts the synthesizer into a paused state.
-				[b]Note:[/b] This method is implemented on Android, iOS, Web, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="tts_resume">
 			<return type="void" />
 			<description>
 				Resumes the synthesizer if it was paused.
-				[b]Note:[/b] This method is implemented on Android, iOS, Web, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="tts_set_utterance_callback">
@@ -2033,7 +1996,6 @@
 				- [constant TTS_UTTERANCE_STARTED], [constant TTS_UTTERANCE_ENDED], and [constant TTS_UTTERANCE_CANCELED] callable's method should take one [int] parameter, the utterance ID.
 				- [constant TTS_UTTERANCE_BOUNDARY] callable's method should take two [int] parameters, the index of the character and the utterance ID.
 				[b]Note:[/b] The granularity of the boundary callbacks is engine dependent.
-				[b]Note:[/b] This method is implemented on Android, iOS, Web, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="tts_speak">
@@ -2054,14 +2016,12 @@
 				- [param utterance_id] is passed as a parameter to the callback functions.
 				[b]Note:[/b] On Windows and Linux (X11/Wayland), utterance [param text] can use SSML markup. SSML support is engine and voice dependent. If the engine does not support SSML, you should strip out all XML markup before calling [method tts_speak].
 				[b]Note:[/b] The granularity of pitch, rate, and volume is engine and voice dependent. Values may be truncated.
-				[b]Note:[/b] This method is implemented on Android, iOS, Web, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="tts_stop">
 			<return type="void" />
 			<description>
 				Stops synthesis in progress and removes all utterances from the queue.
-				[b]Note:[/b] This method is implemented on Android, iOS, Web, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="unregister_additional_output">
@@ -2075,7 +2035,6 @@
 			<return type="int" />
 			<description>
 				Returns the on-screen keyboard's height in pixels. Returns [code]0[/code] if there is no keyboard or if it is currently hidden.
-				[b]Note:[/b] On Android 7 and 8, the keyboard height may return [code]0[/code] the first time the keyboard is opened in non-immersive mode. This behavior does not occur in immersive mode.
 			</description>
 		</method>
 		<method name="virtual_keyboard_hide">
@@ -2100,7 +2059,6 @@
 				[param max_length] limits the number of characters that can be entered if different from [code]-1[/code].
 				[param cursor_start] can optionally define the current text cursor position if [param cursor_end] is not set.
 				[param cursor_start] and [param cursor_end] can optionally define the current text selection.
-				[b]Note:[/b] This method is implemented on Android, iOS and Web.
 			</description>
 		</method>
 		<method name="warp_mouse">
@@ -2108,7 +2066,6 @@
 			<param index="0" name="position" type="Vector2i" />
 			<description>
 				Sets the mouse cursor position to the given [param position] relative to an origin at the upper left corner of the currently focused game Window Manager window.
-				[b]Note:[/b] [method warp_mouse] is only supported on Windows, macOS, and Linux (X11/Wayland). It has no effect on Android, iOS, and Web.
 			</description>
 		</method>
 		<method name="window_can_draw" qualifiers="const">
@@ -2174,7 +2131,6 @@
 			<param index="1" name="window_id" type="int" default="0" />
 			<description>
 				Returns internal structure pointers for use in plugins.
-				[b]Note:[/b] This method is implemented on Android, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="window_get_popup_safe_rect" qualifiers="const">
@@ -2282,7 +2238,6 @@
 			<param index="0" name="color" type="Color" />
 			<description>
 				Sets the background color of the root window.
-				[b]Note:[/b] This method is implemented only on Android.
 			</description>
 		</method>
 		<method name="window_set_current_screen">
@@ -2302,7 +2257,6 @@
 			<description>
 				Sets the [param callback] that should be called when files are dropped from the operating system's file manager to the window specified by [param window_id]. [param callback] should take one [PackedStringArray] argument, which is the list of dropped files.
 				[b]Warning:[/b] Advanced users only! Adding such a callback to a [Window] node will override its default implementation, which can introduce bugs.
-				[b]Note:[/b] This method is implemented on Windows, macOS, Linux (X11/Wayland), and Web.
 			</description>
 		</method>
 		<method name="window_set_exclusive">
@@ -2385,7 +2339,6 @@
 			<param index="1" name="window_id" type="int" default="0" />
 			<description>
 				Sets window mode for the given window to [param mode].
-				[b]Note:[/b] On Android, setting it to [constant WINDOW_MODE_FULLSCREEN] or [constant WINDOW_MODE_EXCLUSIVE_FULLSCREEN] will enable immersive mode.
 				[b]Note:[/b] Setting the window to full screen forcibly sets the borderless flag to [code]true[/code], so make sure to set it back to [code]false[/code] when not wanted.
 			</description>
 		</method>
@@ -2494,7 +2447,7 @@
 			<description>
 				Sets the V-Sync mode of the given window. See also [member ProjectSettings.display/window/vsync/vsync_mode].
 				Depending on the platform and used renderer, the engine will fall back to [constant VSYNC_ENABLED] if the desired mode is not supported.
-				[b]Note:[/b] V-Sync modes other than [constant VSYNC_ENABLED] are only supported in the Forward+ and Mobile rendering methods, not Compatibility.
+				[b]Note:[/b] V-Sync modes other than [constant VSYNC_ENABLED] are only supported in the Forward+ rendering method.
 			</description>
 		</method>
 		<method name="window_set_window_buttons_offset">
@@ -2541,25 +2494,19 @@
 			Display server supports multiple windows that can be moved outside of the main window. [b]Windows, macOS, Linux (X11)[/b]
 		</constant>
 		<constant name="FEATURE_TOUCHSCREEN" value="2" enum="Feature">
-			Display server supports touchscreen input. [b]Windows, Linux (X11), Android, iOS, Web[/b]
 		</constant>
 		<constant name="FEATURE_MOUSE" value="3" enum="Feature">
-			Display server supports mouse input. [b]Windows, macOS, Linux (X11/Wayland), Android, Web[/b]
 		</constant>
 		<constant name="FEATURE_MOUSE_WARP" value="4" enum="Feature">
 			Display server supports warping mouse coordinates to keep the mouse cursor constrained within an area, but looping when one of the edges is reached. [b]Windows, macOS, Linux (X11/Wayland)[/b]
 		</constant>
 		<constant name="FEATURE_CLIPBOARD" value="5" enum="Feature">
-			Display server supports setting and getting clipboard data. See also [constant FEATURE_CLIPBOARD_PRIMARY]. [b]Windows, macOS, Linux (X11/Wayland), Android, iOS, Web[/b]
 		</constant>
 		<constant name="FEATURE_VIRTUAL_KEYBOARD" value="6" enum="Feature">
-			Display server supports popping up a virtual keyboard when requested to input text without a physical keyboard. [b]Android, iOS, Web[/b]
 		</constant>
 		<constant name="FEATURE_CURSOR_SHAPE" value="7" enum="Feature">
-			Display server supports setting the mouse cursor shape to be different from the default. [b]Windows, macOS, Linux (X11/Wayland), Android, Web[/b]
 		</constant>
 		<constant name="FEATURE_CUSTOM_CURSOR_SHAPE" value="8" enum="Feature">
-			Display server supports setting the mouse cursor shape to a custom image. [b]Windows, macOS, Linux (X11/Wayland), Web[/b]
 		</constant>
 		<constant name="FEATURE_NATIVE_DIALOG" value="9" enum="Feature">
 			Display server supports spawning text dialogs using the operating system's native look-and-feel. See [method dialog_show]. [b]Windows, macOS[/b]
@@ -2568,7 +2515,6 @@
 			Display server supports [url=https://en.wikipedia.org/wiki/Input_method]Input Method Editor[/url], which is commonly used for inputting Chinese/Japanese/Korean text. This is handled by the operating system, rather than by Godot. [b]Windows, macOS, Linux (X11)[/b]
 		</constant>
 		<constant name="FEATURE_WINDOW_TRANSPARENCY" value="11" enum="Feature">
-			Display server supports windows can use per-pixel transparency to make windows behind them partially or fully visible. [b]Windows, macOS, Linux (X11/Wayland), Android[/b]
 		</constant>
 		<constant name="FEATURE_HIDPI" value="12" enum="Feature">
 			Display server supports querying the operating system's display scale factor. This allows automatically detecting the hiDPI display [i]reliably[/i], instead of guessing based on the screen resolution and the display's reported DPI (which might be unreliable due to broken monitor EDID). [b]Windows, Linux (Wayland), macOS[/b]
@@ -2581,7 +2527,6 @@
 			Display server supports changing the window icon (usually displayed in the top-left corner). [b]Windows, macOS[/b]
 		</constant>
 		<constant name="FEATURE_ORIENTATION" value="15" enum="Feature">
-			Display server supports changing the screen orientation. [b]Android, iOS[/b]
 		</constant>
 		<constant name="FEATURE_SWAP_BUFFERS" value="16" enum="Feature">
 			Display server supports V-Sync status can be changed from the default (which is forced to be enabled platforms not supporting this feature). [b]Windows, macOS, Linux (X11/Wayland)[/b]
@@ -2590,7 +2535,6 @@
 			Display server supports Primary clipboard can be used. This is a different clipboard from [constant FEATURE_CLIPBOARD]. [b]Linux (X11/Wayland)[/b]
 		</constant>
 		<constant name="FEATURE_TEXT_TO_SPEECH" value="19" enum="Feature">
-			Display server supports text-to-speech. See [code]tts_*[/code] methods. [b]Windows, macOS, Linux (X11/Wayland), Android, iOS, Web[/b]
 		</constant>
 		<constant name="FEATURE_EXTEND_TO_TITLE" value="20" enum="Feature">
 			Display server supports expanding window content to the title. See [constant WINDOW_FLAG_EXTEND_TO_TITLE]. [b]macOS[/b]
@@ -2608,7 +2552,6 @@
 			Display server supports spawning text input dialogs using the operating system's native look-and-feel. See [method dialog_input_text]. [b]Windows, macOS[/b]
 		</constant>
 		<constant name="FEATURE_NATIVE_DIALOG_FILE" value="25" enum="Feature">
-			Display server supports spawning dialogs for selecting files or directories using the operating system's native look-and-feel. See [method file_dialog_show]. [b]Windows, macOS, Linux (X11/Wayland), Android[/b]
 		</constant>
 		<constant name="FEATURE_NATIVE_DIALOG_FILE_EXTRA" value="26" enum="Feature">
 			The display server supports all features of [constant FEATURE_NATIVE_DIALOG_FILE], with the added functionality of Options and native dialog file access to [code]res://[/code] and [code]user://[/code] paths. See [method file_dialog_show] and [method file_dialog_with_options_show]. [b]Windows, macOS, Linux (X11/Wayland)[/b]
@@ -2947,19 +2890,15 @@
 		</constant>
 		<constant name="SCREEN_WITH_MOUSE_FOCUS" value="-4">
 			Represents the screen containing the mouse pointer.
-			[b]Note:[/b] On Android, iOS, Web, and Linux (Wayland), this constant always represents the screen at index [code]0[/code].
 		</constant>
 		<constant name="SCREEN_WITH_KEYBOARD_FOCUS" value="-3">
 			Represents the screen containing the window with the keyboard focus.
-			[b]Note:[/b] On Android, iOS, Web, and Linux (Wayland), this constant always represents the screen at index [code]0[/code].
 		</constant>
 		<constant name="SCREEN_PRIMARY" value="-2">
 			Represents the primary screen.
-			[b]Note:[/b] On Android, iOS, Web, and Linux (Wayland), this constant always represents the screen at index [code]0[/code].
 		</constant>
 		<constant name="SCREEN_OF_MAIN_WINDOW" value="-1">
 			Represents the screen where the main window is located. This is usually the default value in functions that allow specifying one of several screens.
-			[b]Note:[/b] On Android, iOS, Web, and Linux (Wayland), this constant always represents the screen at index [code]0[/code].
 		</constant>
 		<constant name="MAIN_WINDOW_ID" value="0">
 			The ID of the main window spawned by the engine, which can be passed to methods expecting a [code]window_id[/code].
@@ -3011,7 +2950,6 @@
 		</constant>
 		<constant name="KEYBOARD_TYPE_PASSWORD" value="6" enum="VirtualKeyboardType">
 			Virtual keyboard for entering a password. On most platforms, this should disable autocomplete and autocapitalization.
-			[b]Note:[/b] This is not supported on Web. Instead, this behaves identically to [constant KEYBOARD_TYPE_DEFAULT].
 		</constant>
 		<constant name="KEYBOARD_TYPE_URL" value="7" enum="VirtualKeyboardType">
 			Virtual keyboard with additional keys to assist with typing URLs.
@@ -3097,7 +3035,6 @@
 		<constant name="WINDOW_MODE_FULLSCREEN" value="3" enum="WindowMode">
 			Full screen mode with full multi-window support.
 			Full screen window covers the entire display area of a screen and has no decorations. The display's video mode is not changed.
-			[b]On Android:[/b] This enables immersive mode.
 			[b]On macOS:[/b] A new desktop is used to display the running project.
 			[b]Note:[/b] Regardless of the platform, enabling full screen will change the window size to match the monitor's size. Therefore, make sure your project supports [url=$DOCS_URL/tutorials/rendering/multiple_resolutions.html]multiple resolutions[/url] when enabling full screen mode.
 		</constant>
@@ -3105,7 +3042,6 @@
 			A single window full screen mode. This mode has less overhead, but only one window can be open on a given screen at a time (opening a child window or application switching will trigger a full screen transition).
 			Full screen window covers the entire display area of a screen and has no border or decorations. The display's video mode is not changed.
 			[b]Note:[/b] This mode might not work with screen recording software.
-			[b]On Android:[/b] This enables immersive mode.
 			[b]On Windows:[/b] Depending on video driver, full screen transition might cause screens to go black for a moment.
 			[b]On macOS:[/b] A new desktop is used to display the running project. Exclusive full screen mode prevents Dock and Menu from showing up when the mouse pointer is hovering the edge of the screen.
 			[b]On Linux (X11):[/b] Exclusive full screen mode bypasses compositor.
@@ -3125,7 +3061,6 @@
 			The window background can be transparent.
 			[b]Note:[/b] This flag has no effect if [method is_window_transparency_available] returns [code]false[/code].
 			[b]Note:[/b] Transparency support is implemented on Linux (X11/Wayland), macOS, and Windows, but availability might vary depending on GPU driver, display manager, and compositor capabilities.
-			[b]Note:[/b] Transparency support is implemented on Android, but can only be enabled via [member ProjectSettings.display/window/per_pixel_transparency/allowed]. This flag has no effect on Android.
 		</constant>
 		<constant name="WINDOW_FLAG_NO_FOCUS" value="4" enum="WindowFlags">
 			The window can't be focused. No-focus window will ignore all input, except mouse clicks.
@@ -3182,7 +3117,6 @@
 		</constant>
 		<constant name="WINDOW_EVENT_GO_BACK_REQUEST" value="5" enum="WindowEvent">
 			Sent when the device "Back" button is pressed.
-			[b]Note:[/b] This event is implemented only on Android.
 		</constant>
 		<constant name="WINDOW_EVENT_DPI_CHANGE" value="6" enum="WindowEvent">
 			Sent when the window is moved to the display with different DPI, or display DPI is changed.
@@ -3230,50 +3164,32 @@
 			Default vertical synchronization mode, the image is displayed only on vertical blanking intervals (no tearing is visible). Framerate is limited by the monitor refresh rate (regardless of [member Engine.max_fps]).
 		</constant>
 		<constant name="VSYNC_ADAPTIVE" value="2" enum="VSyncMode">
-			Behaves like [constant VSYNC_DISABLED] when the framerate drops below the screen's refresh rate to reduce stuttering (tearing may be visible). Otherwise, vertical synchronization is enabled to avoid tearing. Framerate is limited by the monitor refresh rate (regardless of [member Engine.max_fps]). Behaves like [constant VSYNC_ENABLED] when using the Compatibility rendering method.
+			Behaves like [constant VSYNC_DISABLED] when the framerate drops below the screen's refresh rate to reduce stuttering (tearing may be visible). Otherwise, vertical synchronization is enabled to avoid tearing. Framerate is limited by the monitor refresh rate (regardless of [member Engine.max_fps]).
 		</constant>
 		<constant name="VSYNC_MAILBOX" value="3" enum="VSyncMode">
 			Displays the most recent image in the queue on vertical blanking intervals, while rendering to the other images (no tearing is visible). Framerate is unlimited (regardless of [member Engine.max_fps]).
-			Although not guaranteed, the images can be rendered as fast as possible, which may reduce input lag (also called "Fast" V-Sync mode). [constant VSYNC_MAILBOX] works best when at least twice as many frames as the display refresh rate are rendered. Behaves like [constant VSYNC_ENABLED] when using the Compatibility rendering method.
+			Although not guaranteed, the images can be rendered as fast as possible, which may reduce input lag (also called "Fast" V-Sync mode). [constant VSYNC_MAILBOX] works best when at least twice as many frames as the display refresh rate are rendered.
 		</constant>
 		<constant name="DISPLAY_HANDLE" value="0" enum="HandleType">
 			Display handle:
 			- Linux (X11): [code]X11::Display*[/code] for the display.
 			- Linux (Wayland): [code]wl_display[/code] for the display.
-			- Android: [code]EGLDisplay[/code] for the display.
+
 		</constant>
 		<constant name="WINDOW_HANDLE" value="1" enum="HandleType">
 			Window handle:
 			- Windows: [code]HWND[/code] for the window.
 			- Linux (X11): [code]X11::Window*[/code] for the window.
 			- Linux (Wayland): [code]wl_surface[/code] for the window.
-			- macOS: [code]NSWindow*[/code] for the window.
-			- iOS: [code]UIViewController*[/code] for the view controller.
-			- Android: [code]jObject[/code] for the activity.
+
+
+
 		</constant>
 		<constant name="WINDOW_VIEW" value="2" enum="HandleType">
 			Window view:
-			- Windows: [code]HDC[/code] for the window (only with the Compatibility renderer).
-			- macOS: [code]NSView*[/code] for the window main view.
-			- iOS: [code]UIView*[/code] for the window main view.
-		</constant>
-		<constant name="OPENGL_CONTEXT" value="3" enum="HandleType">
-			OpenGL context (only with the Compatibility renderer):
-			- Windows: [code]HGLRC[/code] for the window (native GL), or [code]EGLContext[/code] for the window (ANGLE).
-			- Linux (X11): [code]GLXContext*[/code] for the window.
-			- Linux (Wayland): [code]EGLContext[/code] for the window.
-			- macOS: [code]NSOpenGLContext*[/code] for the window (native GL), or [code]EGLContext[/code] for the window (ANGLE).
-			- Android: [code]EGLContext[/code] for the window.
-		</constant>
-		<constant name="EGL_DISPLAY" value="4" enum="HandleType">
-			- Windows: [code]EGLDisplay[/code] for the window (ANGLE).
-			- macOS: [code]EGLDisplay[/code] for the window (ANGLE).
-			- Linux (Wayland): [code]EGLDisplay[/code] for the window.
-		</constant>
-		<constant name="EGL_CONFIG" value="5" enum="HandleType">
-			- Windows: [code]EGLConfig[/code] for the window (ANGLE).
-			- macOS: [code]EGLConfig[/code] for the window (ANGLE).
-			- Linux (Wayland): [code]EGLConfig[/code] for the window.
+			- Windows: [code]HDC[/code] for the window.
+
+
 		</constant>
 		<constant name="TTS_UTTERANCE_STARTED" value="0" enum="TTSUtteranceEvent">
 			Utterance has begun to be spoken.

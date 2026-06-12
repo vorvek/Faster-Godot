@@ -2112,21 +2112,6 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "Exportación Reducida co Sistema de Arquivos en Rede"
 
-msgid ""
-"When this option is enabled, using one-click deploy for Android will only "
-"export an executable without the project data.\n"
-"The filesystem will be provided from the project by the editor over the "
-"network.\n"
-"On Android, deploying will use the USB cable for faster performance. This "
-"option speeds up testing for projects with large assets."
-msgstr ""
-"Cando esta opción está activada, usar o despregue don só clic para Android "
-"exportará só o executable, sen os datos do proxecto.\n"
-"O sistema de arquivos proporcionarase por o editor na rede.\n"
-"En Android ao despregar a aplicación usarase o USB para obter maior "
-"rendemento. Esta opción acelera o proceso de proba en proxectos con gran "
-"cantidade de Assets."
-
 msgid "Visible Navigation"
 msgstr "Navegación Visible"
 
@@ -2902,9 +2887,6 @@ msgstr "Abrir Recente"
 msgid "Version Control"
 msgstr "Control de Versións"
 
-msgid "Install Android Build Template..."
-msgstr "Instalar plantilla de compilación de Android..."
-
 msgid "Tools"
 msgstr "Ferramentas"
 
@@ -3063,9 +3045,6 @@ msgstr "Non se pode eliminar o arquivo temporal:"
 
 msgid "Importing:"
 msgstr "Importando:"
-
-msgid "Uncompressing Android Build Sources"
-msgstr "Descomprimindo Recursos de Compilación de Android"
 
 msgid "Current Version:"
 msgstr "Versión Actual:"
@@ -5296,9 +5275,6 @@ msgstr "Eliminar Propiedad?"
 
 msgid "Remove all vertices?"
 msgstr "Eliminar todos os vértices?"
-
-msgid "Building Android Project (gradle)"
-msgstr "Construir Proxecto Android (gradle)"
 
 msgid "Debug keystore not configured in the Editor Settings nor in the preset."
 msgstr ""

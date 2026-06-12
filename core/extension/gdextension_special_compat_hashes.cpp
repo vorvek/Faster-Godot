@@ -477,9 +477,6 @@ void GDExtensionSpecialCompatHashes::initialize() {
 	mappings.insert("JSON", {
 		{ "stringify", 2656701787, 462733549 },
 	});
-	mappings.insert("JavaScriptBridge", {
-		{ "download_buffer", 4123979296, 3352272093 },
-	});
 	mappings.insert("Line2D", {
 		{ "add_point", 468506575, 2654014372 },
 	});
@@ -963,35 +960,11 @@ void GDExtensionSpecialCompatHashes::initialize() {
 	mappings.insert("UDPServer", {
 		{ "listen", 4025329869, 3167955072 },
 	});
-	mappings.insert("UPNP", {
-		{ "add_port_mapping", 3358934458, 818314583 },
-		{ "delete_port_mapping", 760296170, 3444187325 },
-	});
-	mappings.insert("UPNPDevice", {
-		{ "add_port_mapping", 3358934458, 818314583 },
-		{ "delete_port_mapping", 760296170, 3444187325 },
-	});
 	mappings.insert("UndoRedo", {
 		{ "create_action", 3900135403, 3171901514 },
 	});
 	mappings.insert("VideoStreamPlayback", {
 		{ "mix_audio", 1369271885, 93876830 },
-	});
-	mappings.insert("WebRTCMultiplayerPeer", {
-		{ "create_client", 1777354631, 2641732907 },
-		{ "create_mesh", 1777354631, 2641732907 },
-		{ "add_peer", 2555866323, 4078953270 },
-	});
-	mappings.insert("WebRTCPeerConnection", {
-		{ "create_data_channel", 3997447457, 1288557393 },
-	});
-	mappings.insert("WebSocketMultiplayerPeer", {
-		{ "create_client", 3097527179, 1966198364 },
-		{ "create_server", 337374795, 2400822951 },
-	});
-	mappings.insert("WebSocketPeer", {
-		{ "connect_to_url", 3097527179, 1966198364 },
-		{ "send", 3440492527, 2780360567 },
 	});
 	mappings.insert("Window", {
 		{ "get_theme_icon", 2336455395, 3163973443 },

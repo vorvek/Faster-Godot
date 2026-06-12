@@ -1617,19 +1617,6 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "Deploy โดยใช้ระบบไฟล์เครือข่าย"
 
-msgid ""
-"When this option is enabled, using one-click deploy for Android will only "
-"export an executable without the project data.\n"
-"The filesystem will be provided from the project by the editor over the "
-"network.\n"
-"On Android, deploying will use the USB cable for faster performance. This "
-"option speeds up testing for projects with large assets."
-msgstr ""
-"ถ้าเปิดตัวเลือกนี้ การใช้ deploy สำหรับแอนดรอยด์จะส่งออกเฉพาะไฟล์ปฏิบัติการ ไม่มีข้อมูลโปรเจกต์\n"
-"ระบบไฟล์จะถูกจัดเตรียมจากโปรเจ็กต์โดยตัวแก้ไขบนเครือข่าย\n"
-"บน Android จะ deploy โดยใช้สาย USB เพื่อประสิทธิภาพที่ดี "
-"ตัวเลือกนี้จะช่วยให้การทดสอบเกมเร็วขึ้น สำหรับโปรเจกต์ขนาดใหญ่"
-
 msgid "Visible Collision Shapes"
 msgstr "ขอบเขตการชนที่มองเห็นได้"
 
@@ -2532,9 +2519,6 @@ msgstr "เวอร์ชันคอนโทรล"
 msgid "Version Control Settings..."
 msgstr "การตั้งค่าระบบจัดการเวอร์ชัน"
 
-msgid "Install Android Build Template..."
-msgstr "ติดตั้งเทมเพลตการสร้างของแอนดรอยด์"
-
 msgid "Tools"
 msgstr "เครื่องมือ"
 
@@ -2664,9 +2648,6 @@ msgstr "ซ่อนตัวหมุนการอัพเดท"
 msgid "Don't Save"
 msgstr "ไม่บันทึก"
 
-msgid "Android build template is missing, please install relevant templates."
-msgstr "เทมเพลตการสร้างบนแอนดรอยด์หายไป กรุณาติดตั้งเทมเพลตที่เกี่ยวข้อง"
-
 msgid "Manage Templates"
 msgstr "จัดการเทมเพลต"
 
@@ -2747,9 +2728,6 @@ msgstr "กำลังนำเข้า:"
 
 msgid "Official export templates aren't available for development builds."
 msgstr "ไม่มีเทมเพลตการส่งออกอย่างเป็นทางการสำหรับรุ่นผู้พัฒนา"
-
-msgid "Uncompressing Android Build Sources"
-msgstr "กำลังคลาย Android Build Sources"
 
 msgid "Export Template Manager"
 msgstr "จัดการเทมเพลตส่งออก"
@@ -6228,19 +6206,11 @@ msgstr "สร้างรูปทรงนำทาง"
 msgid "A NavigationMesh resource must be set or created for this node to work."
 msgstr "ต้องมี NavigationMesh เพื่อให้โหนดนี้ทำงานได้"
 
-msgid "Building Android Project (gradle)"
-msgstr "กำลังสร้างโปรเจคแอนดรอยด์ (gradle)"
-
 msgid "Invalid public key for APK expansion."
 msgstr "public key ผิดพลาดสำหรับ APK expansion"
 
 msgid "Invalid package name:"
 msgstr "ชื่อแพ็คเกจผิดพลาด:"
-
-msgid ""
-"Android build template not installed in the project. Install it from the "
-"Project menu."
-msgstr "เทมเพลตการสร้างสำหรับแอนดรอยด์ไม่ถูกติดตั้ง สามารถติดตั้งจากเมนูโปรเจกต์"
 
 msgid "Debug keystore not configured in the Editor Settings nor in the preset."
 msgstr "ดีบัก Keystore ไม่ได้ถูกตั้งไว้ในตั้งค่าของตัวแก้ไขหรือในพรีเซ็ต"
@@ -6248,38 +6218,11 @@ msgstr "ดีบัก Keystore ไม่ได้ถูกตั้งไว�
 msgid "Release keystore incorrectly configured in the export preset."
 msgstr "Release keystore กำหนดค่าไว้อย่างไม่ถูกต้องในพรีเซ็ตสำหรับการส่งออก"
 
-msgid "A valid Android SDK path is required in Editor Settings."
-msgstr "ต้องการที่อยู่ของ Android SDK ที่ถูกต้อง ในการตั้งค่าตัวแก้ไข"
-
-msgid "Invalid Android SDK path in Editor Settings."
-msgstr "ที่อยู่ Android SDK ไม่ถูกต้องในการตั้งค่าตัวแก้ไข"
-
 msgid "Missing 'platform-tools' directory!"
 msgstr "ไดเร็กทอรี 'platform-tools' หายไป!"
 
-msgid "Unable to find Android SDK platform-tools' adb command."
-msgstr "ไม่พบคำสั่ง adb ของ Android SDK platform-tools"
-
-msgid "Please check in the Android SDK directory specified in Editor Settings."
-msgstr "กรุณาตรวจสอบในตำแหน่งของ Android SDK ที่ระบุไว้ในการตั้งค่าตัวแก้ไข"
-
 msgid "Missing 'build-tools' directory!"
 msgstr "ไดเร็กทอรี 'build-tools' หายไป!"
-
-msgid "Unable to find Android SDK build-tools' apksigner command."
-msgstr "ไม่พบคำสั่ง apksigner ของ Android SDK build-tools"
-
-msgid "Invalid filename! Android App Bundle requires the *.aab extension."
-msgstr "ชื่อไฟล์ผิดพลาด! แอนดรอยด์แอปบันเดิลจำเป็นต้องมีนามสกุล *.aab"
-
-msgid "APK Expansion not compatible with Android App Bundle."
-msgstr "การขยาย APK เข้ากันไม่ได้กับแอนดรอยด์แอปบันเดิล"
-
-msgid "Invalid filename! Android APK requires the *.apk extension."
-msgstr "ชื่อไฟล์ผิดพลาด! แอนดรอยด์ APK จำเป็นต้องมีนามสกุล *.apk"
-
-msgid "Could not export project files to gradle project."
-msgstr "ไม่สามารถส่งออกไฟล์โปรเจคไปยังโปรเจค gradle ได้"
 
 msgid "Moving output"
 msgstr "กำลังย้ายเอาต์พุต"

@@ -11,15 +11,9 @@ from typing import Any, Callable
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../"))
 
-from gles3_builders import build_gles3_header
 from glsl_builders import build_raw_header, build_rd_header
 
 FUNC_PATH_KWARGS: list[tuple[Callable[..., None], str, dict[str, Any]]] = [
-    (
-        build_gles3_header,
-        "tests/python_build/fixtures/gles3/vertex_fragment.out",
-        {"shader": "tests/python_build/fixtures/gles3/vertex_fragment.glsl"},
-    ),
     (
         build_raw_header,
         "tests/python_build/fixtures/glsl/compute.out",

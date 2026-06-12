@@ -12,7 +12,7 @@ namespace GodotTools.Utils
 
         private static bool PathStartsWithAlreadyNorm(this string childPath, string parentPath)
         {
-            // This won't work for Linux/macOS case insensitive file systems, but it's enough for our current problems
+            // This won't work for Linux case-insensitive file systems, but it's enough for our current problems
             bool caseSensitive = !OS.IsWindows;
 
             string parentPathNorm = parentPath.NormalizePath() + Path.DirectorySeparatorChar;

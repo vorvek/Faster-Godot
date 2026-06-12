@@ -114,9 +114,9 @@ with a verb in imperative form. A typical bugfix would start with "Fix", while
 the addition of a new feature would start with "Add". A prefix can be added to
 specify the engine area affected by the commit. Some examples:
 
-- Add C# iOS support
+- Add C# Linux export support
 - Show doc tooltips when hovering properties in the theme editor
-- Fix GLES3 instanced rendering color and custom data defaults
+- Fix Vulkan instanced rendering color and custom data defaults
 - Core: Fix `Object::has_method()` for script static methods
 
 If your commit fixes a reported issue, please include it in the _description_

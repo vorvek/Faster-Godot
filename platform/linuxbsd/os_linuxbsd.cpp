@@ -43,12 +43,10 @@
 #include "servers/rendering/rendering_server.h"
 
 #ifdef X11_ENABLED
-#include "x11/detect_prime_x11.h"
 #include "x11/display_server_x11.h"
 #endif
 
 #ifdef WAYLAND_ENABLED
-#include "wayland/detect_prime_egl.h"
 #include "wayland/display_server_wayland.h"
 #endif
 
@@ -68,9 +66,6 @@
 #ifdef WAYLAND_ENABLED
 #include "wayland/rendering_context_driver_vulkan_wayland.h"
 #endif
-#endif
-#if defined(GLES3_ENABLED)
-#include "drivers/gles3/rasterizer_gles3.h"
 #endif
 
 #include <dlfcn.h>
@@ -1253,31 +1248,7 @@ bool OS_LinuxBSD::_test_create_rendering_device(const String &p_display_driver) 
 }
 
 bool OS_LinuxBSD::_test_create_rendering_device_and_gl(const String &p_display_driver) const {
-	// Tests OpenGL context and Rendering Device simultaneous creation. This function is expected to crash on some drivers.
-
-#ifdef GLES3_ENABLED
-#ifdef X11_ENABLED
-	if (p_display_driver == "x11" || p_display_driver.is_empty()) {
-#ifdef SOWRAP_ENABLED
-		if (initialize_xlib(0) != 0) {
-			return false;
-		}
-#endif
-		DetectPrimeX11::create_context();
-	}
-#endif
-#ifdef WAYLAND_ENABLED
-	if (p_display_driver == "wayland") {
-#ifdef SOWRAP_ENABLED
-		if (initialize_wayland_egl(0) != 0) {
-			return false;
-		}
-#endif
-		DetectPrimeEGL::create_context(EGL_PLATFORM_WAYLAND_KHR);
-	}
-#endif
-	RasterizerGLES3::make_current(true);
-#endif
+	// Tests Rendering Device creation in a probe window.
 	return _test_create_rendering_device(p_display_driver);
 }
 #endif

@@ -84,30 +84,8 @@ Files: icon.png
  misc/dist/linux/icons/hicolor/scalable/mimetypes/x-faster-godot-shader.svg
  main/app_icon.png
  main/splash.png
- misc/dist/apple_embedded_xcode/godot_apple_embedded/Images.xcassets/SplashImage.imageset/splash@2x.png
- misc/dist/apple_embedded_xcode/godot_apple_embedded/Images.xcassets/SplashImage.imageset/splash@3x.png
- misc/dist/macos/FasterGodot.icon/Assets/layer_0.svg
- misc/dist/macos/FasterGodot.icon/Assets/layer_1.svg
- misc/dist/macos/FasterGodot.icon/Assets/layer_2.svg
- misc/dist/macos_template.app/Contents/Resources/icon.icns
- misc/dist/macos_tools.app/Contents/Resources/FasterGodot.icns
- misc/dist/macos_tools.app/Contents/Resources/Project.icns
- platform/android/export/logo.svg
- platform/android/export/run_icon.svg
- platform/android/java/app/src/instrumented/assets/icon.svg
- platform/android/java/lib/src/main/res/mipmap*/icon*.webp
- platform/android/java/editor/src/horizonos/assets/vr_splash.png
- platform/android/java/editor/src/picoos/assets/vr_splash.png
- platform/ios/export/logo.svg
- platform/ios/export/run_icon.svg
  platform/linuxbsd/export/logo.svg
  platform/linuxbsd/export/run_icon.svg
- platform/macos/export/logo.svg
- platform/macos/export/run_icon.svg
- platform/visionos/export/logo.svg
- platform/visionos/export/run_icon.svg
- platform/web/export/logo.svg
- platform/web/export/run_icon.svg
  platform/windows/export/logo.svg
  platform/windows/export/run_icon.svg
  platform/windows/godot.ico
@@ -162,20 +140,6 @@ Copyright: 2020, Manuel Prandini
  2014-present, Godot Engine contributors
  2007-2014, Juan Linietsky, Ariel Manzur
 License: Expat
-
-Files: platform/android/java/editor/src/main/java/com/android/*
- platform/android/java/lib/src/main/aidl/com/android/*
- platform/android/java/lib/src/main/res/layout/status_bar_ongoing_event_progress_bar.xml
- platform/android/java/lib/src/main/java/com/google/android/*
-Comment: The Android Open Source Project
-Copyright: 2008-2016, The Android Open Source Project
- 2002, Google, Inc.
-License: Apache-2.0
-
-Files: platform/android/java/lib/src/main/java/org/godotengine/godot/utils/ProcessPhoenix.java
-Comment: ProcessPhoenix
-Copyright: 2015, Jake Wharton
-License: Apache-2.0
 
 Files: scene/animation/easing_equations.h
 Comment: Robert Penner's Easing Functions
@@ -615,11 +579,6 @@ License: Apache-2.0 or Expat
 Files: thirdparty/spirv-reflect/*
 Comment: SPIRV-Reflect
 Copyright: 2017-2022, Google Inc.
-License: Apache-2.0
-
-Files: thirdparty/swappy-frame-pacing/*
-Comment: Swappy
-Copyright: 2019, The Android Open Source Project
 License: Apache-2.0
 
 Files: thirdparty/thorvg/*

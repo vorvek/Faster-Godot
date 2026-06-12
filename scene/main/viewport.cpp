@@ -4979,6 +4979,9 @@ float Viewport::get_frame_generation_latency() const {
 
 void Viewport::set_scaling_3d_mode(Scaling3DMode p_scaling_3d_mode) {
 	ERR_MAIN_THREAD_GUARD;
+	if (int(p_scaling_3d_mode) == 3 || int(p_scaling_3d_mode) == 4) {
+		p_scaling_3d_mode = SCALING_3D_MODE_FSR2;
+	}
 	if (scaling_3d_mode == p_scaling_3d_mode) {
 		return;
 	}
@@ -5399,8 +5402,6 @@ void Viewport::_bind_methods() {
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_BILINEAR);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_FSR);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_FSR2);
-	BIND_ENUM_CONSTANT(SCALING_3D_MODE_METALFX_SPATIAL);
-	BIND_ENUM_CONSTANT(SCALING_3D_MODE_METALFX_TEMPORAL);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_NEAREST);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_SHARP_BILINEAR);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_BICUBIC);

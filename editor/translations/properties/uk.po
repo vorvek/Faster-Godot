@@ -251,14 +251,8 @@ msgstr "Вставити підвікна"
 msgid "Frame Pacing"
 msgstr "Швидкість кадрів"
 
-msgid "Android"
-msgstr "Android"
-
 msgid "Enable Frame Pacing"
 msgstr "Увімкнути частоту кадрів"
-
-msgid "Swappy Mode"
-msgstr "Режим Swappy"
 
 msgid "Physics"
 msgstr "Фізика"
@@ -3009,9 +3003,6 @@ msgstr "Крок анімації за замовчуванням"
 msgid "Default FPS Mode"
 msgstr "Режим FPS за замовчуванням"
 
-msgid "Default FPS Compatibility"
-msgstr "Сумісність FPS за замовчуванням"
-
 msgid "Autorename Animation Tracks"
 msgstr "Автоматично перейменовувати доріжки анімації"
 
@@ -3074,9 +3065,6 @@ msgstr "Нетипове розташування прямокутника"
 
 msgid "Screen"
 msgstr "Екран"
-
-msgid "Android Window"
-msgstr "Вікно Android"
 
 msgid "Game Embed Mode"
 msgstr "Режим вставки гри"
@@ -3309,9 +3297,6 @@ msgstr "Повернення до D3D12"
 msgid "Fallback to OpenGL 3"
 msgstr "Повернення до OpenGL 3"
 
-msgid "GL Compatibility"
-msgstr "GL Сумісність"
-
 msgid "Nvidia Disable Threaded Optimization"
 msgstr "Nvidia Вимкнути потокову оптимізацію"
 
@@ -3380,9 +3365,6 @@ msgstr "Придушити жест інтерфейсу користувача"
 
 msgid "XR"
 msgstr "XR"
-
-msgid "OpenXR"
-msgstr "OpenXR"
 
 msgid "Target API Version"
 msgstr "Цільова версія API"
@@ -4734,14 +4716,8 @@ msgstr "Далі"
 msgid "Layer Viewport"
 msgstr "Вікно перегляду шару"
 
-msgid "Use Android Surface"
-msgstr "Використовувати Android Surface"
-
 msgid "Protected Content"
 msgstr "Захищений контент"
-
-msgid "Android Surface Size"
-msgstr "Розмір поверхні Android"
 
 msgid "Sort Order"
 msgstr "Порядок сортування"
@@ -4860,9 +4836,6 @@ msgstr "IGD Наша адреса"
 msgid "IGD Status"
 msgstr "Стан IGD"
 
-msgid "WebRTC"
-msgstr "WebRTC"
-
 msgid "Max Channel in Buffer (KB)"
 msgstr "Макс. канал у буфері (КБ)"
 
@@ -4926,9 +4899,6 @@ msgstr "Установіть експортований APK"
 msgid "Java SDK Path"
 msgstr "Шлях Java SDK"
 
-msgid "Android SDK Path"
-msgstr "Шлях Android SDK"
-
 msgid "scrcpy"
 msgstr "scrcpy"
 
@@ -4973,18 +4943,6 @@ msgstr "Адаптивний фон 432 X 432"
 
 msgid "Adaptive Monochrome 432 X 432"
 msgstr "Адаптивний монохромний 432 X 432"
-
-msgid "Gradle Build"
-msgstr "Збірка Gradle"
-
-msgid "Use Gradle Build"
-msgstr "Використовувати Gradle Build"
-
-msgid "Gradle Build Directory"
-msgstr "Каталог збірок Gradle"
-
-msgid "Android Source Template"
-msgstr "Шаблон вихідного коду Android"
 
 msgid "Compress Native Libraries"
 msgstr "Стиснення рідних бібліотек"
@@ -5036,9 +4994,6 @@ msgstr "Зберігати дані під час видалення"
 
 msgid "Exclude From Recents"
 msgstr "Виключити з нещодавніх"
-
-msgid "Show in Android TV"
-msgstr "Показати в Android TV"
 
 msgid "Show in App Library"
 msgstr "Показати в бібліотеці програм"
@@ -5112,14 +5067,8 @@ msgstr "Права доступу"
 msgid "Custom Permissions"
 msgstr "Нетипові права доступу"
 
-msgid "iOS Deploy"
-msgstr "Розгортання iOS"
-
 msgid "Targeted Device Family"
 msgstr "Сімейство цільових пристроїв"
-
-msgid "Min iOS Version"
-msgstr "Мінімальна версія iOS"
 
 msgid "Storyboard"
 msgstr "Розкадрування"
@@ -5174,15 +5123,6 @@ msgstr "IPad 167 X 167"
 
 msgid "iPad 152 X 152"
 msgstr "IPad 152 X 152"
-
-msgid "iOS 128 X 128"
-msgstr "iOS 128 X 128"
-
-msgid "iOS 192 X 192"
-msgstr "iOS 192 X 192"
-
-msgid "iOS 136 X 136"
-msgstr "iOS 136 X 136"
 
 msgid "App Store 1024 X 1024"
 msgstr "App Store 1024 X 1024'"
@@ -5495,9 +5435,6 @@ msgstr "Піктограма 180⨯180"
 
 msgid "Icon 512 X 512"
 msgstr "Піктограма 512⨯12"
-
-msgid "Emscripten Pool Size"
-msgstr "Розмір пулу Емскрипти"
 
 msgid "Godot Pool Size"
 msgstr "Розмір басейну Godot"
