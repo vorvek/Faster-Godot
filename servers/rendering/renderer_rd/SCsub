@@ -8,6 +8,8 @@ env.add_source_files(env.servers_sources, "*.cpp")
 SConscript("effects/SCsub")
 SConscript("environment/SCsub")
 SConscript("forward_clustered/SCsub")
+if not env["faster_godot"]:
+    SConscript("forward_mobile/SCsub")
 SConscript("shaders/SCsub")
 SConscript("spirv-reflect/SCsub")
 SConscript("storage_rd/SCsub")

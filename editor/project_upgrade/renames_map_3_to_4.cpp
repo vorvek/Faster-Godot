@@ -175,6 +175,7 @@ const char *RenamesMap3To4::gdscript_function_renames[][2] = {
 	// { "get_network_peer", "has_multiplayer_peer" }, // MultiplayerAPI -- Breaks SceneTree.
 	// { "get_network_unique_id", "get_unique_id"}, // MultiplayerAPI -- Breaks SceneTree.
 	// { "get_offset", "get_position_offset" }, // GraphNode -- Breaks Gradient.
+	// { "get_peer_port", "get_peer" }, // ENetMultiplayerPeer -- Breaks WebSocketServer.
 	// { "get_points", "get_points_id" }, // AStar -- Breaks Line2D, ConvexPolygonShape.
 	// { "get_process_mode", "get_process_callback" }, // ClippedCamera3D -- Breaks Node, Sky.
 	// { "get_render_info", "get_rendering_info" }, // RenderingServer -- Breaks Viewport.
@@ -1650,6 +1651,9 @@ const char *RenamesMap3To4::class_renames[][2] = {
 	{ "VisualShaderNodeVec3Uniform", "VisualShaderNodeVec3Parameter" },
 	{ "VisualShaderNodeUniform", "VisualShaderNodeParameter" },
 	{ "VisualShaderNodeUniformRef", "VisualShaderNodeParameterRef" },
+	{ "WebRTCDataChannelGDNative", "WebRTCDataChannelExtension" },
+	{ "WebRTCMultiplayer", "WebRTCMultiplayerPeer" },
+	{ "WebRTCPeerConnectionGDNative", "WebRTCPeerConnectionExtension" },
 	{ "WindowDialog", "Window" },
 	{ "XRAnchor", "XRAnchor3D" },
 	{ "XRController", "XRController3D" },

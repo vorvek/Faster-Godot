@@ -597,10 +597,13 @@ String EditorExportPreset::get_version(const StringName &p_preset_string, bool p
 		const PackedStringArray result_split = result.split(".", false);
 		bool valid_version = !result_split.is_empty();
 
-		for (const String &E : result_split) {
-			if (!_check_digits(E)) {
-				valid_version = false;
-				break;
+		// Android supports non-numeric characters for version name.
+		if (!platform->is_class("EditorExportPlatformAndroid")) {
+			for (const String &E : result_split) {
+				if (!_check_digits(E)) {
+					valid_version = false;
+					break;
+				}
 			}
 		}
 

@@ -824,6 +824,7 @@
 			<param index="0" name="meta" type="Variant" />
 			<description>
 				Triggered when the user clicks on content between meta (URL) tags. If the meta is defined in BBCode, e.g. [code skip-lint][url={"key": "value"}]Text[/url][/code], then the parameter for this signal will always be a [String] type. If a particular type or an object is desired, the [method push_meta] method must be used to manually insert the data into the tag stack. Alternatively, you can convert the [String] input to the desired type based on its contents (such as calling [method JSON.parse] on it).
+				For example, the following method can be connected to [signal meta_clicked] to open clicked URLs using the user's default web browser:
 				[codeblocks]
 				[gdscript]
 				# This assumes RichTextLabel's `meta_clicked` signal was connected to

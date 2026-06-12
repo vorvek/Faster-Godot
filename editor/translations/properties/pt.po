@@ -240,8 +240,14 @@ msgstr "Categoria da sessão"
 msgid "Subwindows"
 msgstr "Subjanelas"
 
+msgid "Android"
+msgstr "Android"
+
 msgid "Enable Frame Pacing"
 msgstr "Ativar sincronia de frames"
+
+msgid "Swappy Mode"
+msgstr "Modo Swappy"
 
 msgid "Physics"
 msgstr "Física"
@@ -2788,6 +2794,9 @@ msgstr "Posição Personalizada do Retângulo"
 msgid "Screen"
 msgstr "Tela"
 
+msgid "Android Window"
+msgstr "Janela Android"
+
 msgid "Game Embed Mode"
 msgstr "Modo de Jogo Integrado"
 
@@ -3013,6 +3022,9 @@ msgstr "Recurso para D3D12"
 msgid "Fallback to OpenGL 3"
 msgstr "Recurso para OpenGL 3"
 
+msgid "GL Compatibility"
+msgstr "Compatibilidade GL"
+
 msgid "Nvidia Disable Threaded Optimization"
 msgstr "Nvidia Desabilitar Otimização em Threads"
 
@@ -3078,6 +3090,9 @@ msgstr "Suprimir Interface de Utilizador para Gestures"
 
 msgid "XR"
 msgstr "XR"
+
+msgid "OpenXR"
+msgstr "Tecnologia OpenXR"
 
 msgid "Default Action Map"
 msgstr "Mapa de Ações Padrão"
@@ -4204,6 +4219,12 @@ msgstr "Próximo"
 msgid "Layer Viewport"
 msgstr "Viewport da Camada"
 
+msgid "Use Android Surface"
+msgstr "Usar Superfície Android"
+
+msgid "Android Surface Size"
+msgstr "Tamanho da Superfície Android"
+
 msgid "Sort Order"
 msgstr "Ordenação"
 
@@ -4291,6 +4312,9 @@ msgstr "IGD Nosso Endereço"
 msgid "IGD Status"
 msgstr "Estado do IGD"
 
+msgid "WebRTC"
+msgstr "WebRTC"
+
 msgid "Max Channel in Buffer (KB)"
 msgstr "Máximo de Canais no Buffer (KB)"
 
@@ -4354,6 +4378,9 @@ msgstr "Instalar APK Exportado"
 msgid "Java SDK Path"
 msgstr "Caminho do SDK Java"
 
+msgid "Android SDK Path"
+msgstr "Caminho do SDK Android"
+
 msgid "Force System User"
 msgstr "Forçar Usuário do Sistema"
 
@@ -4383,6 +4410,18 @@ msgstr "Plano de Fundo Adaptável 432 X 432"
 
 msgid "Adaptive Monochrome 432 X 432"
 msgstr "Adaptável: Monocromático 432 X 432"
+
+msgid "Gradle Build"
+msgstr "'Gradle'"
+
+msgid "Use Gradle Build"
+msgstr "Usar Build Gradle Personalizada"
+
+msgid "Gradle Build Directory"
+msgstr "Pasta de Compilação do Gradle"
+
+msgid "Android Source Template"
+msgstr "Fonte do Modelo para Android"
 
 msgid "Export Format"
 msgstr "Exportar Formato"
@@ -4428,6 +4467,9 @@ msgstr "Manter Dados ao Desinstalar"
 
 msgid "Exclude From Recents"
 msgstr "Excluir de Recentes"
+
+msgid "Show in Android TV"
+msgstr "Mostrar em Android TV"
 
 msgid "Show in App Library"
 msgstr "Mostrar na Biblioteca de Aplicativos"
@@ -4498,8 +4540,14 @@ msgstr "Permissões"
 msgid "Custom Permissions"
 msgstr "Permissões Personalizadas"
 
+msgid "iOS Deploy"
+msgstr "Implantação para iOS"
+
 msgid "Targeted Device Family"
 msgstr "Família de Dispositivos Visados"
+
+msgid "Min iOS Version"
+msgstr "Versão Mínima do iOS"
 
 msgid "Storyboard"
 msgstr "Storyboard"
@@ -4554,6 +4602,15 @@ msgstr "iPad 167 X 167"
 
 msgid "iPad 152 X 152"
 msgstr "iPad 152 X 152"
+
+msgid "iOS 128 X 128"
+msgstr "iOS 128 X 128"
+
+msgid "iOS 192 X 192"
+msgstr "iOS 192 X 192"
+
+msgid "iOS 136 X 136"
+msgstr "iOS 136 X 136"
 
 msgid "App Store 1024 X 1024"
 msgstr "App Store 1024 X 1024"

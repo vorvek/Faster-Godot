@@ -102,6 +102,10 @@ class ProjectSettingsEditor;
 class SceneImportSettingsDialog;
 class ProjectUpgradeTool;
 
+#ifdef ANDROID_ENABLED
+class TouchActionsPanel;
+#endif
+
 struct EditorProgress {
 	String task;
 	bool force_background = false;
@@ -164,6 +168,7 @@ public:
 		PROJECT_VERSION_CONTROL,
 		PROJECT_EXPORT,
 		PROJECT_PACK_AS_ZIP,
+		PROJECT_INSTALL_ANDROID_SOURCE,
 		PROJECT_OPEN_USER_DATA_FOLDER,
 		PROJECT_RELOAD_CURRENT_PROJECT,
 		PROJECT_QUIT_TO_PROJECT_MANAGER,
@@ -242,6 +247,7 @@ private:
 		String path;
 		bool debug = false;
 		bool pack_only = false;
+		bool android_build_template = false;
 		bool patch = false;
 		Vector<String> patches;
 	} export_defer;
@@ -281,6 +287,13 @@ private:
 	Control *gui_base = nullptr;
 	VBoxContainer *main_vbox = nullptr;
 	OptionButton *renderer = nullptr;
+
+#ifdef ANDROID_ENABLED
+	VBoxContainer *base_vbox = nullptr; // It only contains the title_bar and main_hbox.
+	HBoxContainer *main_hbox = nullptr; // It only contains the touch_actions_panel and main_vbox.
+	TouchActionsPanel *touch_actions_panel = nullptr;
+	void _touch_actions_panel_mode_changed();
+#endif
 
 	ConfirmationDialog *video_restart_dialog = nullptr;
 
@@ -377,6 +390,13 @@ private:
 	PopupMenu *editor_layouts = nullptr;
 	EditorLayoutsDialog *layout_dialog = nullptr;
 
+	ConfirmationDialog *gradle_build_manage_templates = nullptr;
+	ConfirmationDialog *install_android_build_template = nullptr;
+	ConfirmationDialog *remove_android_build_template = nullptr;
+	Label *install_android_build_template_message = nullptr;
+	OptionButton *choose_android_export_profile = nullptr;
+	Ref<EditorExportPreset> android_export_preset;
+
 	PopupMenu *vcs_actions_menu = nullptr;
 	EditorFileDialog *file = nullptr;
 	ExportTemplateManager *export_template_manager = nullptr;
@@ -384,6 +404,7 @@ private:
 	EditorBuildProfileManager *build_profile_manager = nullptr;
 	EditorFileDialog *file_templates = nullptr;
 	EditorFileDialog *file_export_lib = nullptr;
+	EditorFileDialog *file_android_build_source = nullptr;
 	EditorFileDialog *file_pack_zip = nullptr;
 	MenuButton *update_spinner = nullptr;
 
@@ -519,6 +540,11 @@ private:
 	void _menu_option(int p_option);
 	void _menu_confirm_current();
 	void _menu_option_confirm(int p_option, bool p_confirmed);
+
+	void _android_build_source_selected(const String &p_file);
+	void _android_export_preset_selected(int p_index);
+	void _android_install_build_template();
+	void _android_explore_build_templates();
 
 	void _request_screenshot();
 	void _screenshot(bool p_use_utc = false);
@@ -948,7 +974,7 @@ public:
 
 	void _copy_warning(const String &p_str);
 
-	Error export_preset(const String &p_preset, const String &p_path, bool p_debug, bool p_pack_only, bool p_patch, const Vector<String> &p_patches);
+	Error export_preset(const String &p_preset, const String &p_path, bool p_debug, bool p_pack_only, bool p_android_build_template, bool p_patch, const Vector<String> &p_patches);
 	bool is_project_exporting() const;
 
 	Control *get_gui_base() { return gui_base; }

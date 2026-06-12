@@ -286,6 +286,9 @@ def generate_scu_files(max_includes_per_scu):
     process_folder(["drivers/unix"])
     process_folder(["drivers/png"])
 
+    process_folder(["drivers/gles3/effects"])
+    process_folder(["drivers/gles3/storage"])
+
     process_folder(["editor"], [], 32)
     process_folder(["editor/animation"])
     process_folder(["editor/asset_library"])
@@ -319,7 +322,9 @@ def generate_scu_files(max_includes_per_scu):
     process_folder(["editor/translations"])
     process_folder(["editor/version_control"])
 
+    process_folder(["platform/android/export"])
     process_folder(["platform/linuxbsd/export"])
+    process_folder(["platform/web/export"])
     process_folder(["platform/windows/export"])
 
     process_folder(["modules/lightmapper_rd"])
@@ -332,15 +337,23 @@ def generate_scu_files(max_includes_per_scu):
     process_folder(["modules/navigation_3d/3d"])
     process_folder(["modules/navigation_2d"])
     process_folder(["modules/navigation_2d/2d"])
+    process_folder(["modules/webrtc"])
+    process_folder(["modules/websocket"])
     process_folder(["modules/gridmap"])
     process_folder(["modules/multiplayer"])
     process_folder(["modules/multiplayer/editor"])
+    process_folder(["modules/openxr"], ["register_types"])
+    process_folder(["modules/openxr/action_map"])
+    process_folder(["modules/openxr/editor"])
+    # process_folder(["modules/openxr/extensions"])  # Sensitive include order for platform code.
+    process_folder(["modules/openxr/scene"])
     process_folder(["modules/rapier_2d"], ["register_types"])
     process_folder(["modules/jolt_physics"], ["register_types"])
 
     process_folder(["modules/csg"])
     process_folder(["modules/gdscript"])
     process_folder(["modules/gdscript/editor"])
+    process_folder(["modules/gdscript/language_server"])
 
     process_folder(["scene/2d"])
     process_folder(["scene/2d/physics"])
@@ -367,6 +380,7 @@ def generate_scu_files(max_includes_per_scu):
     process_folder(["servers/rendering/renderer_rd/environment"])
     process_folder(["servers/rendering/renderer_rd/storage_rd"])
     process_folder(["servers/rendering/renderer_rd/forward_clustered"])
+    process_folder(["servers/rendering/renderer_rd/forward_mobile"])
     process_folder(["servers/audio"])
     process_folder(["servers/audio/effects"])
     process_folder(["servers/navigation_2d"])

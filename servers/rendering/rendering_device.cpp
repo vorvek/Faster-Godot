@@ -8607,7 +8607,14 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 
 	if (is_main_instance) {
 		// Only the singleton instance with a display should print this information.
-		String rendering_method = "Forward+";
+		String rendering_method;
+		if (OS::get_singleton()->get_current_rendering_method() == "mobile") {
+			rendering_method = "Forward Mobile";
+		} else if (OS::get_singleton()->get_current_rendering_method() == "forward_plus") {
+			rendering_method = "Forward+";
+		} else {
+			rendering_method = "Unknown";
+		}
 
 		// Output our device version.
 		Engine::get_singleton()->print_header(vformat("%s %s - %s - Using Device #%d: %s - %s", get_device_api_name(), get_device_api_version(), rendering_method, device_index, _get_device_vendor_name(device), device.name));
@@ -10013,6 +10020,8 @@ void RenderingDevice::_bind_methods() {
 	BIND_ENUM_CONSTANT(PIPELINE_SPECIALIZATION_CONSTANT_TYPE_INT);
 	BIND_ENUM_CONSTANT(PIPELINE_SPECIALIZATION_CONSTANT_TYPE_FLOAT);
 
+	BIND_ENUM_CONSTANT(SUPPORTS_METALFX_SPATIAL);
+	BIND_ENUM_CONSTANT(SUPPORTS_METALFX_TEMPORAL);
 	BIND_ENUM_CONSTANT(SUPPORTS_BUFFER_DEVICE_ADDRESS);
 	BIND_ENUM_CONSTANT(SUPPORTS_IMAGE_ATOMIC_32_BIT);
 	BIND_ENUM_CONSTANT(SUPPORTS_RAY_QUERY);
@@ -10056,6 +10065,8 @@ void RenderingDevice::_bind_methods() {
 	BIND_ENUM_CONSTANT(LIMIT_MAX_COMPUTE_WORKGROUP_SIZE_Z);
 	BIND_ENUM_CONSTANT(LIMIT_MAX_VIEWPORT_DIMENSIONS_X);
 	BIND_ENUM_CONSTANT(LIMIT_MAX_VIEWPORT_DIMENSIONS_Y);
+	BIND_ENUM_CONSTANT(LIMIT_METALFX_TEMPORAL_SCALER_MIN_SCALE);
+	BIND_ENUM_CONSTANT(LIMIT_METALFX_TEMPORAL_SCALER_MAX_SCALE);
 
 	BIND_ENUM_CONSTANT(MEMORY_TEXTURES);
 	BIND_ENUM_CONSTANT(MEMORY_BUFFERS);

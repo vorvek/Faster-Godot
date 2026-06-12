@@ -1587,6 +1587,14 @@
 		<member name="InputMap" type="InputMap" setter="" getter="">
 			The [InputMap] singleton.
 		</member>
+		<member name="JavaClassWrapper" type="JavaClassWrapper" setter="" getter="">
+			The [JavaClassWrapper] singleton.
+			[b]Note:[/b] Only implemented on Android.
+		</member>
+		<member name="JavaScriptBridge" type="JavaScriptBridge" setter="" getter="">
+			The [JavaScriptBridge] singleton.
+			[b]Note:[/b] Only implemented on the Web platform.
+		</member>
 		<member name="Marshalls" type="Marshalls" setter="" getter="">
 			The [Marshalls] singleton.
 		</member>
@@ -2511,6 +2519,7 @@
 		</constant>
 		<constant name="JOY_BUTTON_MAX" value="128" enum="JoyButton">
 			The maximum number of game controller buttons supported by the engine. The actual limit may be lower on specific platforms:
+			- [b]Android:[/b] Up to 36 buttons.
 			- [b]Linux:[/b] Up to 80 buttons.
 			- [b]Windows[/b] and [b]macOS:[/b] Up to 128 buttons.
 		</constant>
@@ -3040,7 +3049,7 @@
 			When duplicating a resource with [method Resource.duplicate], and this flag is set on a property of that resource, the property should never be duplicated, regardless of the [code]subresources[/code] bool parameter.
 		</constant>
 		<constant name="PROPERTY_USAGE_HIGH_END_GFX" value="2097152" enum="PropertyUsageFlags" is_bitfield="true">
-			The property is shown in the editor when Forward+ rendering is available.
+			The property is only shown in the editor if modern renderers are supported (the Compatibility rendering method is excluded).
 		</constant>
 		<constant name="PROPERTY_USAGE_NODE_PATH_FROM_SCENE_ROOT" value="4194304" enum="PropertyUsageFlags" is_bitfield="true">
 			The [NodePath] property will always be relative to the scene's root. Mostly useful for local resources.

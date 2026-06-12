@@ -262,8 +262,14 @@ msgstr "جاسازی زیرپنجره‌ها"
 msgid "Frame Pacing"
 msgstr "فاصله گذاری فریم"
 
+msgid "Android"
+msgstr "اندروید"
+
 msgid "Enable Frame Pacing"
 msgstr "فعالسازی فاصله گذاری فریم"
+
+msgid "Swappy Mode"
+msgstr "حالت چرخان"
 
 msgid "Physics"
 msgstr "فیزیک"
@@ -1798,6 +1804,9 @@ msgstr "بیشینهٔ هشدار بر ثانیه"
 
 msgid "Driver"
 msgstr "درایور"
+
+msgid "GL Compatibility"
+msgstr "سازگاری با جی.ال"
 
 msgid "Renderer"
 msgstr "نماپرداز"

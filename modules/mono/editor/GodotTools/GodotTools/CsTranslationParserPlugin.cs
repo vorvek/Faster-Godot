@@ -37,7 +37,7 @@ public partial class CsTranslationParserPlugin : EditorTranslationParserPlugin
     private const string TranslationMethodTr = "Tr";
     private const string TranslationMethodTrN = "TrN";
     private static readonly string[] _configurations = ["Debug", "Release"];
-    private static readonly string[] _targetPlatforms = ["windows", "linuxbsd"];
+    private static readonly string[] _targetPlatforms = ["windows", "linuxbsd", "macos", "android", "ios", "web"];
 
     public override string[] _GetRecognizedExtensions()
     {

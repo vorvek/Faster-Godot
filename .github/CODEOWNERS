@@ -31,6 +31,8 @@
 /drivers/sdl/                                 @godotengine/input
 
 ## Rendering
+/drivers/egl/                                 @godotengine/rendering
+/drivers/gles3/                               @godotengine/rendering
 /drivers/vulkan/                              @godotengine/rendering
 
 ## OS
@@ -121,6 +123,13 @@
 /modules/multiplayer/doc_classes/             @godotengine/network @godotengine/documentation
 /modules/multiplayer/editor/                  @godotengine/network @godotengine/editor
 /modules/multiplayer/tests/                   @godotengine/network @godotengine/tests
+/modules/upnp/                                @godotengine/network
+/modules/upnp/doc_classes/                    @godotengine/network @godotengine/documentation
+/modules/webrtc/                              @godotengine/network
+/modules/webrtc/doc_classes/                  @godotengine/network @godotengine/documentation
+/modules/websocket/                           @godotengine/network
+/modules/websocket/doc_classes/               @godotengine/network @godotengine/documentation
+/modules/websocket/editor/                    @godotengine/network @godotengine/editor
 
 ## Physics
 /modules/jolt_physics/                        @godotengine/physics @godotengine/jolt-physics
@@ -154,6 +163,14 @@
 /modules/text_server_fb/doc_classes/          @godotengine/gui-nodes @godotengine/documentation
 
 ## XR
+/modules/camera/                              @godotengine/xr
+/modules/mobile_vr/                           @godotengine/xr
+/modules/mobile_vr/doc_classes/               @godotengine/xr @godotengine/documentation
+/modules/openxr/                              @godotengine/xr
+/modules/openxr/doc_classes/                  @godotengine/xr @godotengine/documentation
+/modules/openxr/editor/                       @godotengine/xr @godotengine/editor
+/modules/webxr/                               @godotengine/xr
+/modules/webxr/doc_classes/                   @godotengine/xr @godotengine/documentation
 
 ## Misc
 /modules/register_module_types.*              @godotengine/buildsystem
@@ -184,8 +201,12 @@
 # Platform
 
 /platform/register_platform_apis.*            @godotengine/buildsystem
+/platform/android/                            @godotengine/android
+/platform/android/doc_classes/                @godotengine/android @godotengine/documentation
 /platform/linuxbsd/                           @godotengine/linux-bsd
 /platform/linuxbsd/doc_classes/               @godotengine/linux-bsd @godotengine/documentation
+/platform/web/                                @godotengine/web
+/platform/web/doc_classes/                    @godotengine/web @godotengine/documentation
 /platform/windows/                            @godotengine/windows
 /platform/windows/doc_classes/                @godotengine/windows @godotengine/documentation
 

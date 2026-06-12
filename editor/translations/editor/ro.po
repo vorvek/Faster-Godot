@@ -2566,6 +2566,10 @@ msgstr "Dezactivează Cercul de Actualizare"
 msgid "Don't Save"
 msgstr "Nu Salva"
 
+msgid "Android build template is missing, please install relevant templates."
+msgstr ""
+"Android construi șablon lipsește, vă rugăm să instalați șabloane relevante."
+
 msgid "Manage Templates"
 msgstr "Gestionați șabloanele"
 
@@ -2645,6 +2649,9 @@ msgstr "Se extrag Șabloanele de Export"
 
 msgid "Importing:"
 msgstr "Se importă:"
+
+msgid "Uncompressing Android Build Sources"
+msgstr "Decomprimare Surse de compilare Android"
 
 msgid "Export Template Manager"
 msgstr "Exportă Managerul de Șabloane"

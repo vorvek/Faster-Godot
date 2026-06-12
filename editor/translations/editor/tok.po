@@ -1660,6 +1660,21 @@ msgstr "kama lon sin li pini."
 msgid "Save & Restart"
 msgstr "o awen o open sin"
 
+msgid ""
+"Changing the renderer requires restarting the editor.\n"
+"\n"
+"Choosing Save & Restart will change the renderer to:\n"
+"- Desktop platforms: %s\n"
+"- Mobile platforms: %s\n"
+"- Web platform: %s"
+msgstr ""
+"sina ante e ilo sitelen la ilo ante li wile open sin.\n"
+"\n"
+"sina pilin e \"o awen o open sin\" la ilo sitelen li ante tawa:\n"
+"- ilo ma Desktop: %s\n"
+"- ilo ma Mobile: %s\n"
+"- ilo ma linluwi: %s"
+
 msgid "Forward+"
 msgstr "nasin Forward+"
 
@@ -2824,6 +2839,18 @@ msgstr "o pini e pali ni"
 
 msgid "Run Current Scene"
 msgstr "o kepeken ma pali ni"
+
+msgid "Run Scene in Regular Mode"
+msgstr "o kepeken ma pali lon nasin meso"
+
+msgid "Run Scene in XR Mode"
+msgstr "o kepeken ma pali lon nasin XR"
+
+msgid "Run in Regular Mode"
+msgstr "o kepeken lon nasin meso"
+
+msgid "Run in XR Mode"
+msgstr "o kepeken lon nasin XR"
 
 msgid ""
 "Enable Movie Maker mode.\n"

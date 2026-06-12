@@ -218,6 +218,7 @@ Dictionary DebugAdapterParser::_launch_process(const Dictionary &p_params) const
 			EditorRunBar::get_singleton()->play_custom_scene(scene, play_args);
 		}
 	} else {
+		// Not limited to Android, iOS, Web.
 		const int platform_idx = EditorExport::get_singleton()->get_export_platform_index_by_name(platform_string);
 		if (platform_idx == -1) {
 			return prepare_error_response(p_params, DAP::ErrorType::UNKNOWN_PLATFORM);

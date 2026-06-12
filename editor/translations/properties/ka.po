@@ -200,8 +200,14 @@ msgstr "ქვეფანჯრების ჩაშენება"
 msgid "Frame Pacing"
 msgstr "კადრების სიჩქარე"
 
+msgid "Android"
+msgstr "Android"
+
 msgid "Enable Frame Pacing"
 msgstr "კადრების სიჩქარის ჩართვა"
+
+msgid "Swappy Mode"
+msgstr "რეჟიმი Swappy"
 
 msgid "Physics"
 msgstr "ფიზიკა"
@@ -2052,6 +2058,9 @@ msgstr "ნაგულისხმევი ანიმაციის ნა�
 msgid "Default FPS Mode"
 msgstr "ნაგულისხმევი FPS-ის რეჟიმი"
 
+msgid "Default FPS Compatibility"
+msgstr "ნაგულისხმევი FPS-ის თავსებადობა"
+
 msgid "Autorename Animation Tracks"
 msgstr "ანიმაციის ტრეკების სახელის ავტომატური გადარქმევა"
 
@@ -2090,6 +2099,9 @@ msgstr "მართკუთხედი მომხმარებლის �
 
 msgid "Screen"
 msgstr "ეკრანი"
+
+msgid "Android Window"
+msgstr "Android-ის ფანჯარა"
 
 msgid "Auto Save"
 msgstr "ავტომატური შენახვა"
@@ -2244,6 +2256,9 @@ msgstr "გადართვა D3D12-ზე"
 msgid "Fallback to OpenGL 3"
 msgstr "გადართვა OpenGL 3-ზე"
 
+msgid "GL Compatibility"
+msgstr "GL თავსებადობა"
+
 msgid "Fallback to Angle"
 msgstr "გადართვა კუთხეზე"
 
@@ -2285,6 +2300,9 @@ msgstr "მდგომარეობის ზოლის დამალვ�
 
 msgid "XR"
 msgstr "XR"
+
+msgid "OpenXR"
+msgstr "OpenXR"
 
 msgid "Default Action Map"
 msgstr "ნაგულისხმევი ქმედების რუკა"
@@ -2816,6 +2834,9 @@ msgstr "აღწერის URL"
 
 msgid "Service Type"
 msgstr "სერვისის ტიპი"
+
+msgid "WebRTC"
+msgstr "WebRTC"
 
 msgid "Write Mode"
 msgstr "ჩაწერის რეჟიმი"

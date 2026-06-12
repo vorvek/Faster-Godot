@@ -2329,7 +2329,8 @@ This tool only reports memory allocations tracked by the engine.
 Therefore, total VRAM usage is inaccurate compared to what the Monitors tab or external tools can report.
 Instead, use the monitors tab to obtain more precise VRAM usage.
 
-- Buffer Memory (e.g. GPUParticles) is not tracked.)"));
+- Buffer Memory (e.g. GPUParticles) is not tracked.
+- Meshes are not tracked in the Compatibility renderer.)"));
 			vmem_hb->add_child(vmem_notice_icon);
 		}
 

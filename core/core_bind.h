@@ -172,6 +172,8 @@ protected:
 public:
 	enum RenderingDriver {
 		RENDERING_DRIVER_VULKAN = 0,
+		RENDERING_DRIVER_OPENGL3 = 1,
+		RENDERING_DRIVER_METAL = 3,
 	};
 
 	PackedByteArray get_entropy(int p_bytes);

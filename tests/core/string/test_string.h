@@ -1445,8 +1445,8 @@ TEST_CASE("[String] Capitalize against many strings") {
 	output = "2 Db";
 	CHECK(input.capitalize() == output);
 
-	input = "HTTP2 Http2 http2 http_2";
-	output = "Http 2 Http 2 Http 2 Http 2";
+	input = "HTML5 Html5 html5 html_5";
+	output = "Html 5 Html 5 Html 5 Html 5";
 	CHECK(input.capitalize() == output);
 
 	input = "Node2D Node2d NODE2D NODE_2D node_2d";
@@ -1560,7 +1560,7 @@ TEST_CASE("[String] Checking case conversion methods") {
 		{ U"sha256",                 U"sha256",               U"Sha256",               U"sha_256",                 U"sha-256"                 },
 		{ U"Node2D",                 U"node2d",               U"Node2d",               U"node_2d",                 U"node-2d"                 },
 		{ U"RichTextLabel",          U"richTextLabel",        U"RichTextLabel",        U"rich_text_label",         U"rich-text-label"         },
-		{ U"HTTP2",                  U"http2",                U"Http2",                U"http_2",                  U"http-2"                  },
+		{ U"HTML5",                  U"html5",                U"Html5",                U"html_5",                  U"html-5"                  },
 		{ U"Node2DPosition",         U"node2dPosition",       U"Node2dPosition",       U"node_2d_position",        U"node-2d-position"        },
 		{ U"Number2Digits",          U"number2Digits",        U"Number2Digits",        U"number_2_digits",         U"number-2-digits"         },
 		{ U"get_property_list",      U"getPropertyList",      U"GetPropertyList",      U"get_property_list",       U"get-property-list"       },

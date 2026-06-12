@@ -95633,6 +95633,216 @@
 					]
 				},
 				{
+					"name": "add_apple_embedded_platform_project_static_lib",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 83702148,
+					"arguments": [
+						{
+							"name": "path",
+							"type": "String"
+						}
+					]
+				},
+				{
+					"name": "add_apple_embedded_platform_framework",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 83702148,
+					"arguments": [
+						{
+							"name": "path",
+							"type": "String"
+						}
+					]
+				},
+				{
+					"name": "add_apple_embedded_platform_embedded_framework",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 83702148,
+					"arguments": [
+						{
+							"name": "path",
+							"type": "String"
+						}
+					]
+				},
+				{
+					"name": "add_apple_embedded_platform_plist_content",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 83702148,
+					"arguments": [
+						{
+							"name": "plist_content",
+							"type": "String"
+						}
+					]
+				},
+				{
+					"name": "add_apple_embedded_platform_linker_flags",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 83702148,
+					"arguments": [
+						{
+							"name": "flags",
+							"type": "String"
+						}
+					]
+				},
+				{
+					"name": "add_apple_embedded_platform_bundle_file",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 83702148,
+					"arguments": [
+						{
+							"name": "path",
+							"type": "String"
+						}
+					]
+				},
+				{
+					"name": "add_apple_embedded_platform_cpp_code",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 83702148,
+					"arguments": [
+						{
+							"name": "code",
+							"type": "String"
+						}
+					]
+				},
+				{
+					"name": "add_ios_project_static_lib",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 83702148,
+					"arguments": [
+						{
+							"name": "path",
+							"type": "String"
+						}
+					]
+				},
+				{
+					"name": "add_ios_framework",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 83702148,
+					"arguments": [
+						{
+							"name": "path",
+							"type": "String"
+						}
+					]
+				},
+				{
+					"name": "add_ios_embedded_framework",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 83702148,
+					"arguments": [
+						{
+							"name": "path",
+							"type": "String"
+						}
+					]
+				},
+				{
+					"name": "add_ios_plist_content",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 83702148,
+					"arguments": [
+						{
+							"name": "plist_content",
+							"type": "String"
+						}
+					]
+				},
+				{
+					"name": "add_ios_linker_flags",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 83702148,
+					"arguments": [
+						{
+							"name": "flags",
+							"type": "String"
+						}
+					]
+				},
+				{
+					"name": "add_ios_bundle_file",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 83702148,
+					"arguments": [
+						{
+							"name": "path",
+							"type": "String"
+						}
+					]
+				},
+				{
+					"name": "add_ios_cpp_code",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 83702148,
+					"arguments": [
+						{
+							"name": "code",
+							"type": "String"
+						}
+					]
+				},
+				{
+					"name": "add_macos_plugin_file",
+					"is_const": false,
+					"is_vararg": false,
+					"is_static": false,
+					"is_virtual": false,
+					"hash": 83702148,
+					"arguments": [
+						{
+							"name": "path",
+							"type": "String"
+						}
+					]
+				},
+				{
 					"name": "skip",
 					"is_const": false,
 					"is_vararg": false,
@@ -228811,6 +229021,14 @@
 					"is_bitfield": false,
 					"values": [
 						{
+							"name": "SUPPORTS_METALFX_SPATIAL",
+							"value": 3
+						},
+						{
+							"name": "SUPPORTS_METALFX_TEMPORAL",
+							"value": 4
+						},
+						{
 							"name": "SUPPORTS_BUFFER_DEVICE_ADDRESS",
 							"value": 6
 						},
@@ -228983,6 +229201,14 @@
 						{
 							"name": "LIMIT_MAX_VIEWPORT_DIMENSIONS_Y",
 							"value": 36
+						},
+						{
+							"name": "LIMIT_METALFX_TEMPORAL_SCALER_MIN_SCALE",
+							"value": 46
+						},
+						{
+							"name": "LIMIT_METALFX_TEMPORAL_SCALER_MAX_SCALE",
+							"value": 47
 						}
 					]
 				},
@@ -233381,6 +233607,14 @@
 						{
 							"name": "VIEWPORT_SCALING_3D_MODE_FSR2",
 							"value": 2
+						},
+						{
+							"name": "VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL",
+							"value": 3
+						},
+						{
+							"name": "VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL",
+							"value": 4
 						},
 						{
 							"name": "VIEWPORT_SCALING_3D_MODE_NEAREST",
@@ -315554,6 +315788,14 @@
 						{
 							"name": "SCALING_3D_MODE_FSR2",
 							"value": 2
+						},
+						{
+							"name": "SCALING_3D_MODE_METALFX_SPATIAL",
+							"value": 3
+						},
+						{
+							"name": "SCALING_3D_MODE_METALFX_TEMPORAL",
+							"value": 4
 						},
 						{
 							"name": "SCALING_3D_MODE_NEAREST",

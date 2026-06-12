@@ -786,6 +786,8 @@ void FileDialog::_popup_menu(const Vector2 &p_pos, int p_for_item) {
 		item_menu->set_item_shortcut(-1, action_shortcuts[ITEM_MENU_REFRESH]);
 	}
 
+#if !defined(ANDROID_ENABLED) && !defined(WEB_ENABLED)
+	// Opening the system file manager is not supported on the Android and web editors.
 	item_menu->add_separator();
 
 	Dictionary meta;
@@ -797,6 +799,7 @@ void FileDialog::_popup_menu(const Vector2 &p_pos, int p_for_item) {
 	if (meta["bundle"]) {
 		item_menu->add_item(ETR("Show Package Contents"), ITEM_MENU_SHOW_BUNDLE_CONTENT);
 	}
+#endif
 
 	if (item_menu->get_item_count() == 0) {
 		return;
@@ -1515,6 +1518,9 @@ void FileDialog::set_access(Access p_access) {
 	switch (p_access) {
 		case ACCESS_FILESYSTEM: {
 			dir_access = DirAccess::create(DirAccess::ACCESS_FILESYSTEM);
+#ifdef ANDROID_ENABLED
+			set_current_dir(OS::get_singleton()->get_system_dir(OS::SYSTEM_DIR_DESKTOP));
+#endif
 		} break;
 		case ACCESS_RESOURCES: {
 			dir_access = DirAccess::create(DirAccess::ACCESS_RESOURCES);

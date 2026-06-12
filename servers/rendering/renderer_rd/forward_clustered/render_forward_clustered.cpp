@@ -3112,11 +3112,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	enum {
 		SCALE_NONE,
 		SCALE_FSR2,
+		SCALE_MFX,
 	} scale_type = SCALE_NONE;
 
 	switch (rb->get_scaling_3d_mode()) {
 		case RSE::VIEWPORT_SCALING_3D_MODE_FSR2:
 			scale_type = SCALE_FSR2;
+			break;
+		case RSE::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL:
+			scale_type = SCALE_NONE;
 			break;
 		default:
 			break;
@@ -3869,10 +3873,16 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->draw_command_end_label();
 
 			if (using_motion_pass) {
-				Vector<Color> motion_vector_clear_colors;
-				motion_vector_clear_colors.push_back(Color(-1, -1, 0, 0));
-				RD::get_singleton()->draw_list_begin(rb_data->get_velocity_only_fb(), RD::DRAW_CLEAR_ALL, motion_vector_clear_colors);
-				RD::get_singleton()->draw_list_end();
+				if (scale_type == SCALE_MFX) {
+					motion_vectors_store->process(rb,
+							p_render_data->scene_data->cam_projection, p_render_data->scene_data->cam_transform,
+							p_render_data->scene_data->prev_cam_projection, p_render_data->scene_data->prev_cam_transform);
+				} else {
+					Vector<Color> motion_vector_clear_colors;
+					motion_vector_clear_colors.push_back(Color(-1, -1, 0, 0));
+					RD::get_singleton()->draw_list_begin(rb_data->get_velocity_only_fb(), RD::DRAW_CLEAR_ALL, motion_vector_clear_colors);
+					RD::get_singleton()->draw_list_end();
+				}
 			}
 
 			if (render_motion_pass) {
@@ -4188,9 +4198,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// is never set in Hybrid, so the Hybrid composite stays byte-identical. The deep-path oracle
 			// (rt_fpt_reference) is excluded so its raw beauty stays un-stabilized. Multiview is not
 			// handled (single-layer ping-pong) -> falls through to the raw RT color, no crash.
-			// Gate OUT FSR2: the path-traced primary is per-frame stochastic (NEE re-seed), and a
+			// Gate OUT FSR2 and MetalFX (XeSS is deliberately NOT gated; it converges the stabilized
+			// primary cleanly): the path-traced primary is per-frame stochastic (NEE re-seed), and a
 			// feed-forward temporal upscaler like FSR2 cannot lock that stochastic base the way it
-			// locks a deterministic raster primary, so it boils. Pre-averaging the primary at the rt scale before the upscaler does
+			// locks a deterministic raster primary, so it boils; MetalFX shares the gate as the same
+			// class of upscaler. Pre-averaging the primary at the rt scale before the upscaler does
 			// not fix it (a reduced-strength accumulation was measured: FPT+FSR2 frame-to-frame delta
 			// was unchanged) and a full-strength average instead fights the upscaler's own jitter
 			// accumulation (ghosting), so under a gated upscaler the composite uses the raw RT color.
@@ -4200,11 +4212,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// out (it converges the stabilized primary fine); the no-upscaler path benefits most.
 			// The None denoiser is the raw-inspection mode: it bypasses the stabilizer here and the
 			// resolve's spatial pass (forced to 0 iterations where rt_denoiser is read).
-			const bool fpt_stabilize_ok = scale_type != SCALE_FSR2 &&
+			const bool fpt_stabilize_ok = scale_type != SCALE_FSR2 && scale_type != SCALE_MFX &&
 					rt_denoiser != RSE::PT_DENOISER_NONE;
 			// FSR2 cannot lock the stochastic path-traced primary (gate rationale above), so the
 			// stabilizer is skipped and FPT under FSR2 boils. Warn once; the None-denoiser bypass
 			// is a deliberate user choice and stays silent.
+			// SCALE_MFX stays silent on purpose: MetalFX is not reachable on this fork's platforms
+			// (Windows/Linux Vulkan; viewport coercion maps temporal-upscaler requests to FSR2), so
+			// the FSR2 message covers every reachable gated case.
 			if (rt_radiance_probes_fpt && !rt_fpt_reference && scale_type == SCALE_FSR2) {
 				WARN_PRINT_ONCE("The path-traced primary in Full Scene Path-Traced GI is not temporally stabilized under FSR 2 and will look noisy. Hybrid RTGI is the recommended RTGI mode with FSR 2.");
 			}
@@ -4595,10 +4610,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			}
 
 			RD::get_singleton()->draw_command_end_label();
+		} else if (scale_type == SCALE_MFX) {
 		} else if (using_viewport_taa) {
 			RD::get_singleton()->draw_command_begin_label("TAA");
 			RENDER_TIMESTAMP("TAA");
-			// FPT confidence-relax: on the Full Path Tracing path (this branch already implies no FSR2),
+			// FPT confidence-relax: on the Full Path Tracing path (this branch already implies no FSR2/MetalFX),
 			// feed the FPT primary stabilizer color so TAA reads its .a convergence confidence and relaxes its
 			// clamp / leans on history for converged path-traced pixels. This kills the static-camera boil that
 			// TAA's neighborhood clamp re-introduces on the stabilized primary. The shader only relaxes where a
@@ -6711,6 +6727,15 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 			}
 
 		} break;
+#if 0
+		case RSE::INSTANCE_IMMEDIATE: {
+			RasterizerStorageGLES3::Immediate *immediate = storage->immediate_owner.get_or_null(inst->base);
+			ERR_CONTINUE(!immediate);
+
+			_add_geometry(immediate, inst, nullptr, -1, p_depth_pass, p_shadow_pass);
+
+		} break;
+#endif
 		case RSE::INSTANCE_PARTICLES: {
 			int draw_passes = particles_storage->particles_get_draw_passes(ginstance->data->base);
 

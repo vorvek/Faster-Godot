@@ -312,8 +312,14 @@ msgstr "Altpencereleri Göm"
 msgid "Frame Pacing"
 msgstr "Kare İlerleme Hızı"
 
+msgid "Android"
+msgstr "Android"
+
 msgid "Enable Frame Pacing"
 msgstr "Kare İlerleme Hızını Etkinleştir"
+
+msgid "Swappy Mode"
+msgstr "Swappy Modu"
 
 msgid "Physics"
 msgstr "Fizik"
@@ -2947,6 +2953,9 @@ msgstr "Dikdörtgen Özel Konumu"
 msgid "Screen"
 msgstr "Ekran"
 
+msgid "Android Window"
+msgstr "Android Penceresi"
+
 msgid "Game Embed Mode"
 msgstr "Oyun Gömme Modu"
 
@@ -3175,6 +3184,9 @@ msgstr "Son Çare D3D12'ye Geri Dön"
 msgid "Fallback to OpenGL 3"
 msgstr "Son Çare OpenGL 3'e Geri Dön"
 
+msgid "GL Compatibility"
+msgstr "GL Uyumluluğu"
+
 msgid "Nvidia Disable Threaded Optimization"
 msgstr "Nvidia İş Parçacıklı En İyileştirmeyi Kapat"
 
@@ -3240,6 +3252,9 @@ msgstr "Arayüz Parmak Hareketlerini Baskıla"
 
 msgid "XR"
 msgstr "Genişletilmiş Gerçeklik (XR)"
+
+msgid "OpenXR"
+msgstr "OpenXR"
 
 msgid "Default Action Map"
 msgstr "Varsayılan Eylem Haritası"
@@ -4381,6 +4396,12 @@ msgstr "Sonraki"
 msgid "Layer Viewport"
 msgstr "Katman Çerçevesi"
 
+msgid "Use Android Surface"
+msgstr "Android Surface kullanın"
+
+msgid "Android Surface Size"
+msgstr "Android Surface Boyut"
+
 msgid "Sort Order"
 msgstr "Sıralama Düzeni"
 
@@ -4468,6 +4489,9 @@ msgstr "İnternetGeçidiCihazı Bizim Adres"
 msgid "IGD Status"
 msgstr "İnternetGeçidiCihazı Durumu"
 
+msgid "WebRTC"
+msgstr "WebRTC"
+
 msgid "Max Channel in Buffer (KB)"
 msgstr "Arabellekte En Çok Kanal (KB)"
 
@@ -4531,6 +4555,9 @@ msgstr "Dışa Aktarılan APK'yı Kur"
 msgid "Java SDK Path"
 msgstr "Java SDK Yolu"
 
+msgid "Android SDK Path"
+msgstr "Android SDK Yolu"
+
 msgid "Force System User"
 msgstr "Sistem Kullanıcısına Zorla"
 
@@ -4560,6 +4587,18 @@ msgstr "Uyarlanabilir Arkaplan 432 X 432"
 
 msgid "Adaptive Monochrome 432 X 432"
 msgstr "Uyarlanabilir Tekrenkli 432 X 432"
+
+msgid "Gradle Build"
+msgstr "Gradle Derlemesi"
+
+msgid "Use Gradle Build"
+msgstr "Gradle Derlemesi Kullan"
+
+msgid "Gradle Build Directory"
+msgstr "Gradle Derleme Dizini"
+
+msgid "Android Source Template"
+msgstr "Android Kaynak Şablonu"
 
 msgid "Export Format"
 msgstr "Dışa Aktarım Biçimi"
@@ -4605,6 +4644,9 @@ msgstr "Kurulumu Kaldırınca Verileri Tut"
 
 msgid "Exclude From Recents"
 msgstr "Son Kullanılanlara Koyma"
+
+msgid "Show in Android TV"
+msgstr "Android TV'de göster"
 
 msgid "Show in App Library"
 msgstr "Uygulama Kitaplığında Göster"
@@ -4675,8 +4717,14 @@ msgstr "İzinler"
 msgid "Custom Permissions"
 msgstr "Özel İzinler"
 
+msgid "iOS Deploy"
+msgstr "iOS Dağıtım"
+
 msgid "Targeted Device Family"
 msgstr "Hedeflenen Cihaz Ailesi"
+
+msgid "Min iOS Version"
+msgstr "En düşük iOS Sürümü"
 
 msgid "Storyboard"
 msgstr "Hikaye tahtası"
@@ -4731,6 +4779,15 @@ msgstr "iPad 167 X 167"
 
 msgid "iPad 152 X 152"
 msgstr "iPad 152 X 152"
+
+msgid "iOS 128 X 128"
+msgstr "iOS 128 X 128"
+
+msgid "iOS 192 X 192"
+msgstr "iOS 192 X 192"
+
+msgid "iOS 136 X 136"
+msgstr "iOS 136 X 136"
 
 msgid "App Store 1024 X 1024"
 msgstr "App Store 1024 X 1024"

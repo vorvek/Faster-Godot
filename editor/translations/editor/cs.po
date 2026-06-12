@@ -2829,6 +2829,20 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "Malé nasazení pomocí síťového souborového systému"
 
+msgid ""
+"When this option is enabled, using one-click deploy for Android will only "
+"export an executable without the project data.\n"
+"The filesystem will be provided from the project by the editor over the "
+"network.\n"
+"On Android, deploying will use the USB cable for faster performance. This "
+"option speeds up testing for projects with large assets."
+msgstr ""
+"Když je tato volba povolena, použití nasazení jedním kliknutím exportuje "
+"pouze spustitelný soubor bez dat projektu.\n"
+"Souborový systém bude z projektu sdílen editorem po síti.\n"
+"V systému Android bude nasazení používat kabel USB pro rychlejší výkon. Tato "
+"možnost výrazně zrychluje testování velkých her."
+
 msgid "Visible Collision Shapes"
 msgstr "Viditelné kolizní tvary"
 
@@ -4851,6 +4865,27 @@ msgstr "Zprávy Editoru"
 msgid "Toggle visibility of editor messages."
 msgstr "Přepnout viditelnost zpráv editoru."
 
+msgid ""
+"The Android build template is already installed in this project and it won't "
+"be overwritten.\n"
+"Remove the \"%s\" directory manually before attempting this operation again."
+msgstr ""
+"Šablona buildu Android je již nainstalována v tomto projektu a nebude "
+"přepsána.\n"
+"Odeberte \"%s\" adresář ručně před pokusem o zopakování této operace."
+
+msgid ""
+"This will set up your project for gradle Android builds by installing the "
+"source template to \"%s\".\n"
+"Note that in order to make gradle builds instead of using pre-built APKs, the "
+"\"Use Gradle Build\" option should be enabled in the Android export preset."
+msgstr ""
+"Tímto nastavíte svůj projekt pro sestavení gradle Android instalací zdrojové "
+"šablony \"%s\".\n"
+"Všimněte si, že chcete-li vytvářet sestavení gradle namísto použití předem "
+"sestavených souborů APK, měla by být v předvolbě exportu povolena možnost "
+"\"Použít sestavení Gradle\"."
+
 msgid "Unnamed Project"
 msgstr "Nepojmenovaný projekt"
 
@@ -5419,6 +5454,21 @@ msgstr "Opětovné načítání dokončeno."
 msgid "Save & Restart"
 msgstr "Uložit a restartovat"
 
+msgid ""
+"Changing the renderer requires restarting the editor.\n"
+"\n"
+"Choosing Save & Restart will change the renderer to:\n"
+"- Desktop platforms: %s\n"
+"- Mobile platforms: %s\n"
+"- Web platform: %s"
+msgstr ""
+"Změna vykreslovacího nástroje vyžaduje restart editoru.\n"
+"\n"
+"Volbou Uložit a Restartovat změníte způsob vykreslování na:\n"
+"- Desktopové platformy: %s\n"
+"- Mobilní platformy: %s\n"
+"- Webová platforma: %s"
+
 msgid "Forward+"
 msgstr "Forward+"
 
@@ -5445,6 +5495,9 @@ msgstr "Nastavení správy verzí..."
 
 msgid "Pack Project as ZIP..."
 msgstr "Zabalit projekt jako ZIP..."
+
+msgid "Install Android Build Template..."
+msgstr "Nainstalovat šablonu sestavení pro Android..."
 
 msgid "Open User Data Folder"
 msgstr "Otevřít složku s daty uživatele"
@@ -5659,6 +5712,21 @@ msgstr "Otevřít předchozí editor"
 msgid "Project"
 msgstr "Projekt"
 
+msgid ""
+"Choose a renderer.\n"
+"\n"
+"Notes:\n"
+"- On mobile platforms, the Mobile renderer is used if Forward+ is selected "
+"here.\n"
+"- On the web platform, the Compatibility renderer is always used."
+msgstr ""
+"Zvolte metodu vykreslování.\n"
+"\n"
+"Poznámky:\n"
+"- Zvolíte-li zde Forward+, bude na mobilních platformách použito vykreslování "
+"Mobile.\n"
+"- Na webové platformě se vždy použije vykreslování Compatibility."
+
 msgid "Renderer"
 msgstr "Vykreslovací nástroj"
 
@@ -5677,11 +5745,19 @@ msgstr "Skrýt indikátor aktualizace"
 msgid "Don't Save"
 msgstr "Neukládat"
 
+msgid "Android build template is missing, please install relevant templates."
+msgstr ""
+"Chybějící šablona sestavení pro Android, nainstalujte prosím příslušné "
+"šablony."
+
 msgid "Manage Templates"
 msgstr "Spravovat šablony"
 
 msgid "Install from file"
 msgstr "Instalovat ze souboru"
+
+msgid "Select Android sources file"
+msgstr "Vybrat soubor se zdroji pro Android"
 
 msgid "Import Templates From ZIP File"
 msgstr "Importovat šablony ze ZIP souboru"
@@ -5894,6 +5970,9 @@ msgid "At least one system boot time access reason should be selected."
 msgstr ""
 "Měl by být vybrán alespoň jeden důvod pro přístup k času spuštění systému."
 
+msgid "\"Shader Baker\" doesn't work with the Compatibility renderer."
+msgstr "\"Shader Baker\" nefunguje s rendererem kompatibility."
+
 msgid ""
 "The editor is currently using a different renderer than what the target "
 "platform will use. \"Shader Baker\" won't be able to include core shaders. "
@@ -6023,6 +6102,9 @@ msgstr "Znak '%s' není v identifikátoru povolen."
 msgid "Running on %s"
 msgstr "Běží na %s"
 
+msgid "Could not start ios-deploy executable."
+msgstr "Nelze spustit program ios-deploy."
+
 msgid "Installation/running failed, see editor log for details."
 msgstr "Instalace/běh selhal, více informací naleznete v logu editoru."
 
@@ -6031,6 +6113,11 @@ msgstr "Instalace selhala, více informací naleznete v logu editoru."
 
 msgid "Running failed, see editor log for details."
 msgstr "Běh selhal, více informací naleznete v logu editoru."
+
+msgid "\"Shader Baker\" is not supported when using the Compatibility renderer."
+msgstr ""
+"\"Shader Baker\" není při použití vykreslovacího nástroje Compatibility "
+"podporován."
 
 msgid ""
 "The editor is currently using a different renderer than what the target "
@@ -6213,6 +6300,9 @@ msgid "Official export templates aren't available for double-precision builds."
 msgstr ""
 "Oficiální šablony exportu nejsou k dispozici pro sestavení s dvojitou "
 "přesností."
+
+msgid "Uncompressing Android Build Sources"
+msgstr "Dekomprese zdrojů sestavení pro Android"
 
 msgid "Export Template Manager"
 msgstr "Správce exportních šablon"
@@ -8328,11 +8418,17 @@ msgstr "Hůře škálovatelný pro komplexní scény."
 msgid "Fast rendering of simple scenes."
 msgstr "Rychlé vykreslování jednoduchých scén."
 
+msgid "Supports desktop, mobile + web platforms."
+msgstr "Podporuje desktopové, mobilní i webové platformy."
+
 msgid "Least advanced 3D graphics."
 msgstr "Nejméně pokročilá 3D grafika."
 
 msgid "Intended for low-end/older devices."
 msgstr "Určeno pro málo výkonná/starší zařízení."
+
+msgid "Uses OpenGL 3 backend (OpenGL 3.3/ES 3.0/WebGL2)."
+msgstr "Používá OpenGL 3 backend (OpenGL 3.3/ES 3.0/WebGL2)."
 
 msgid "Fastest rendering of simple scenes."
 msgstr "Nejrychlejší vykreslování jednoduchých scén."
@@ -8407,6 +8503,15 @@ msgstr "Vykreslovací nástroj:"
 
 msgid "More information"
 msgstr "Více informací"
+
+msgid ""
+"RenderingDevice-based methods not available on this GPU:\n"
+"%s\n"
+"Please use the Compatibility renderer."
+msgstr ""
+"Metody založené na RenderingDevice na této GPU nejsou dostpuné:\n"
+"%s\n"
+"Použijte prosím vykreslovací nástroj Compatibility."
 
 msgid "The renderer can be changed later, but scenes may need to be adjusted."
 msgstr ""
@@ -9095,8 +9200,20 @@ msgstr "Zastavit běžící projekt"
 msgid "Run Current Scene"
 msgstr "Spustit aktuální scénu"
 
+msgid "Run Scene in Regular Mode"
+msgstr "Spustit scénu v běžném režimu"
+
+msgid "Run Scene in XR Mode"
+msgstr "Spustit scénu v režimu XR"
+
 msgid "Run Specific Scene"
 msgstr "Spustit konkrétní scénu"
+
+msgid "Run in Regular Mode"
+msgstr "Spustit v běžném režimu"
+
+msgid "Run in XR Mode"
+msgstr "Spustit v režimu XR"
 
 msgid "Enable Movie Maker Mode"
 msgstr "Povolit režim Movie Maker"
@@ -11481,6 +11598,13 @@ msgid ""
 msgstr ""
 "Přetažením přepíšete materiál libovolného uzlu geometrie.\n"
 "Podržením %s při přetažení přepíšete konkrétní povrch."
+
+msgid ""
+"This debug draw mode is only supported when using the Forward+ or Mobile "
+"renderer."
+msgstr ""
+"Tento ladící režim kreslení je podporován jen při použití Forward+ nebo "
+"Mobile rendereru."
 
 msgid "This debug draw mode is only supported when using the Forward+ renderer."
 msgstr ""
@@ -15370,6 +15494,9 @@ msgstr "Navigace (3D)"
 msgid "XR"
 msgstr "XR"
 
+msgid "OpenXR"
+msgstr "OpenXR"
+
 msgid "Wayland"
 msgstr "Wayland"
 
@@ -15443,6 +15570,9 @@ msgstr "Navigační Server a schopnost pro 3D."
 msgid "XR (AR and VR)."
 msgstr "XR (AR a VR)."
 
+msgid "OpenXR standard implementation (requires XR to be enabled)."
+msgstr "Standartní implementace OpenXR (vyžaduje zapnuté XR)."
+
 msgid "Wayland display (Linux only)."
 msgstr "Displej Wayland (pouze pro Linux)."
 
@@ -15457,6 +15587,9 @@ msgstr ""
 
 msgid "Forward+ renderer for advanced 3D graphics."
 msgstr "Vykreslování Forward+ pro pokročilejší 3D grafiku."
+
+msgid "Mobile renderer for less advanced 3D graphics."
+msgstr "Vykreslování Mobile pro méně pokročilou 3D grafiku."
 
 msgid "Vulkan backend of RenderingDevice."
 msgstr "Back-end Vulkan pro RenderingDevice."
@@ -16482,6 +16615,16 @@ msgstr "Kopírovat parametry z materiálu"
 
 msgid "Paste Parameters To Material"
 msgstr "Vložit parametry do materiálu"
+
+msgid "Forward+/Mobile"
+msgstr "Forward+/Mobile"
+
+msgid ""
+"Only supported in the Forward+ and Mobile rendering methods, not "
+"Compatibility."
+msgstr ""
+"Podporováno jen ve vykreslovacích metodách Forward+ a Mobile, nikoli v režimu "
+"Compatibility."
 
 msgid "Create Shader Node"
 msgstr "Vytvořit shader uzel"
@@ -18862,8 +19005,17 @@ msgstr "Chyba při načítání %s: %s."
 msgid "Error saving file %s: %s"
 msgstr "Chyba při ukládání souboru %s: %s"
 
+msgid "OpenXR Action map:"
+msgstr "Mapa akcí OpenXR:"
+
 msgid "Remove interaction profile"
 msgstr "Odstranit profil interakce"
+
+msgid "OpenXR Action Map"
+msgstr "Mapa akcí OpenXR"
+
+msgid "Toggle OpenXR Action Map Dock"
+msgstr "Přepnout dok Mapy akcí OpenXR"
 
 msgid "Add Action Set"
 msgstr "Přidat sadu akcí"
@@ -18876,6 +19028,12 @@ msgstr "Přidat profil"
 
 msgid "Add an interaction profile."
 msgstr "Přidat profil interakce."
+
+msgid "Save this OpenXR action map."
+msgstr "Uložit tuto mapu akcí OpenXR."
+
+msgid "Reset to default OpenXR action map."
+msgstr "Obnovit výchozí mapu akcí OpenXR."
 
 msgid "Action Sets"
 msgstr "Sady akcí"
@@ -18985,15 +19143,63 @@ msgid "Choose an XR runtime."
 msgstr "Zvolit běhové prostředí pro XR."
 
 msgid ""
+"Cannot use the same SubViewport with multiple OpenXR composition layers. "
+"Clear it from its current layer first."
+msgstr ""
+"Nelze použít stejný SubViewport s více vrstvami kompozice OpenXR. Nejprve jej "
+"vymažte z aktuální vrstvy."
+
+msgid ""
+"Cannot set SubViewport on an OpenXR composition layer when using an Android "
+"surface."
+msgstr ""
+"Při použití Android povrchu nelze nastavit SubViewport na kompoziční vrstvě "
+"OpenXR."
+
+msgid "OpenXR composition layers must have an XROrigin3D node as their parent."
+msgstr "Vrstvy kompozice OpenXR musí mít jako rodiče uzel XROrigin3D."
+
+msgid ""
+"OpenXR composition layers must have orthonormalized transforms (ie. no scale "
+"or shearing)."
+msgstr ""
+"Vrstvy kompozice OpenXR musí mít ortonormální transformace (tj. žádné "
+"škálování nebo zkosení)."
+
+msgid ""
 "Hole punching won't work as expected unless the sort order is less than zero."
 msgstr ""
 "Děrování nebude fungovat podle očekávání, pokud není pořadí menší než nula."
+
+msgid "OpenXR visibility mask must have an XRCamera3D node as their parent."
+msgstr "Maska viditelnosti OpenXR musí mít jako rodičovský uzel XRCamera3D."
+
+msgid "Building Android Project (gradle)"
+msgstr "Sestavování projektu pro Android (gradle)"
+
+msgid "> Connecting to Gradle Build Environment..."
+msgstr "> Připojování k prostředí Gradle sestavení..."
+
+msgid "Unable to connect to Gradle Build Environment service"
+msgstr "Nepodařilo se připojit ke službě prostředí Gradle sestavení"
+
+msgid "> Starting Gradle build..."
+msgstr "> Zahájeno Gradle sestavení..."
+
+msgid "Failed to execute Gradle command"
+msgstr "Nepodařilo se spustit příkaz Gradle"
+
+msgid "> Copying Gradle artifacts..."
+msgstr "> Kopírování Gradle artefaktů..."
 
 msgid "Package name is missing."
 msgstr "Chybí název balíčku."
 
 msgid "Package segments must be of non-zero length."
 msgstr "Segmenty balíčku musí mít nenulovou délku."
+
+msgid "The character '%s' is not allowed in Android application package names."
+msgstr "Znak '%s' není v názvech balíčků aplikací pro Android povolen."
 
 msgid "A digit cannot be the first character in a package segment."
 msgstr "První znak segmentu balíčku nesmí být číslice."
@@ -19013,6 +19219,37 @@ msgstr "Neplatný veřejný klíč pro rozšíření APK."
 msgid "Invalid package name:"
 msgstr "Neplatný název balíčku:"
 
+msgid "\"Use Gradle Build\" is required to enable \"Swipe to dismiss\"."
+msgstr ""
+"Pro povolení \"Zavřít přejetím prstu\" musí být povoleno \"Použít Gradle "
+"sestavení\"."
+
+msgid "\"Use Gradle Build\" must be enabled to use the plugins."
+msgstr ""
+"Chcete-li používat doplňky, musí být povoleno \"Použít Gradle sestavení\"."
+
+msgid "Support for \"Use Gradle Build\" on Android is currently experimental."
+msgstr ""
+"Podpora pro \"Použití sestavení Gradle\" na Androidu je v současnosti "
+"experimentální."
+
+msgid ""
+"\"Compress Native Libraries\" is only valid when \"Use Gradle Build\" is "
+"enabled."
+msgstr ""
+"Volba \"Komprimovat nativní knihovny\" je platná pouze tehdy, když je "
+"povolena možnost \"Použít sestavení Gradle\"."
+
+msgid "\"Export AAB\" is only valid when \"Use Gradle Build\" is enabled."
+msgstr ""
+"\"Exportovat AAB\" je platné pouze v případě, že je povolena možnost \"Použít "
+"Gradle sestavení\"."
+
+msgid "\"Min SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
+msgstr ""
+"\"Minimální SDK\" je platné pouze v případě, že je povolena možnost \"Použít "
+"Gradle sestavení\"."
+
 msgid "\"Min SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
 "\"Minimální SDK\" by mělo být platné celé číslo, ale je \"%s\", což je "
@@ -19026,12 +19263,41 @@ msgstr ""
 "Godot."
 
 msgid ""
+"\"Target SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
+msgstr ""
+"\"Cílové SDK\" je platné pouze v případě, že je povolena možnost \"Použít "
+"Gradle sestavení\"."
+
+msgid ""
 "\"Target SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
 "\"Cílové SDK\" by mělo být platné celé číslo, ale je \"%s\", což je neplatné."
 
 msgid "\"Target SDK\" version must be greater or equal to \"Min SDK\" version."
 msgstr "Verze \"Cílové SDK\" musí být vyšší nebo rovna verzi \"Minimální SDK\"."
+
+msgid "\"Use Gradle Build\" is required to add custom theme attributes."
+msgstr ""
+"Pro přidání vlastních atributů šablony je nutné použít \"Použít sestavení "
+"Gradle\"."
+
+msgid "\"Use Gradle Build\" must be enabled to enable \"Show In Android Tv\"."
+msgstr ""
+"Pro povolení \"Zobrazit v Android Tv\" musí být povoleno \"Použít Gradle "
+"sestavení\"."
+
+msgid "\"Use Gradle Build\" must be enabled to enable \"Show As Launcher App\"."
+msgstr ""
+"Pro povolení \"Zobrazit jako aplikaci systémového prostředí\" musí být "
+"povoleno \"Použít Gradle sestavení\"."
+
+msgid "\"Use Gradle Build\" must be enabled to disable \"Show In App Library\"."
+msgstr ""
+"Pro povolení \"Zobrazit v knihovně aplikací\" musí být povoleno \"Použít "
+"Gradle sestavení\"."
+
+msgid "Mirror Android devices"
+msgstr "Zrcadlit zařízení Android"
 
 msgid ""
 "If enabled, \"scrcpy\" is used to start the project and automatically stream "
@@ -19055,6 +19321,13 @@ msgstr "Nepodařilo se nainstalovat na zařízení: %s"
 msgid "Running on device..."
 msgstr "Běží na zařízení..."
 
+msgid ""
+"Could not start scrcpy executable. Configure scrcpy path in the Editor "
+"Settings (Export > Android > scrcpy > Path)."
+msgstr ""
+"Nelze spustit spustitelný soubor scrcpy. Nakonfigurujte cestu k scrcpy v "
+"nastastavení Editoru (Export > Android > scrcpy > Cesta)."
+
 msgid "Could not execute on device."
 msgstr "Nepodařilo se spustit na zařízení."
 
@@ -19062,6 +19335,35 @@ msgid "Error: There was a problem validating the keystore username and password"
 msgstr ""
 "Chyba: Vyskytnul se problém při ověření uživatelského jména a hesla úložiště "
 "klíčů"
+
+msgid ""
+"Unable to determine the C# project's TFM, it may be incompatible. The export "
+"template only supports '%s'. Make sure the project targets '%s' or consider "
+"using gradle builds instead."
+msgstr ""
+"Nelze určit TFM projektu C#, může být nekompatibilní. Exportní šablona "
+"podporuje pouze '%s'. Ujistětese, že projekt cílí na '%s' nebo namísto toho "
+"zvažte použití gradle sestavení."
+
+msgid ""
+"C# project targets '%s' but the export template only supports '%s'. Consider "
+"using gradle builds instead."
+msgstr ""
+"Projekt C# cílí na '%s', ale exportní šablona podporuje pouze '%s'. Zvažte "
+"namísto toho použití gradle sestavení."
+
+msgid "Exporting to Android when using C#/.NET is experimental."
+msgstr "Export pro Android za použití C#/.NET je experimentální."
+
+msgid "Custom Android source template not found."
+msgstr "Vlastní zdrojová šablona pro Android nebyla nalezena."
+
+msgid ""
+"Android build template not installed in the project. Install it from the "
+"Project menu."
+msgstr ""
+"Šablona sestavení Androidu není pro projekt nainstalována. Nainstalujte jej z "
+"nabídky Projekt."
 
 msgid ""
 "Either Debug Keystore, Debug User AND Debug Password settings must be "
@@ -19101,11 +19403,30 @@ msgstr "Nepodařilo se nalézt příkaz 'java' v cestě Java SDK."
 msgid "Please check the Java SDK directory specified in Editor Settings."
 msgstr "Zkontrolujte prosím složku Java SDK uvedenou v Nastavení editoru."
 
+msgid "A valid Android SDK path is required in Editor Settings."
+msgstr "Je vyžadována platná cesta Android SDK v Nastavení editoru."
+
+msgid "Invalid Android SDK path in Editor Settings."
+msgstr "Neplatná cesta k Android SDK v Nastavení editoru."
+
 msgid "Missing 'platform-tools' directory!"
 msgstr "Chybí složka 'platform-tools'!"
 
+msgid "Unable to find Android SDK platform-tools' adb command."
+msgstr "Nelze najít příkaz adb z nástrojů platform-tools Android SDK."
+
+msgid "Please check in the Android SDK directory specified in Editor Settings."
+msgstr "Zkontrolujte ve složce Android SDK uvedené v Nastavení editoru."
+
 msgid "Missing 'build-tools' directory!"
 msgstr "Chybí složka 'build-tools'!"
+
+msgid "Unable to find Android SDK build-tools' apksigner command."
+msgstr "Nelze najít apksigner příkaz nástrojů build-tools Android SDK."
+
+msgid "\"Use Gradle Build\" is required for transparent background on Android"
+msgstr ""
+"Pro průhledné pozadí v Androidu je vyžadováno \"Použít sestavení Gradle\""
 
 msgid ""
 "\"Target SDK\" %d is higher than the default version %d. This may work, but "
@@ -19113,6 +19434,13 @@ msgid ""
 msgstr ""
 "\"Výchozí SDK\" %d je vyšší než výchozí verze %d. Toto může fungovat, ale "
 "nebylo to testováno a nemusí být stabilní."
+
+msgid ""
+"The \"%s\" renderer is designed for Desktop devices, and is not suitable for "
+"Android devices."
+msgstr ""
+"Vykreslovací modul \"%s\" je navržen pro desktopová zařízení a není vhodný "
+"pro zařízení Android."
 
 msgid ""
 "The project name does not meet the requirement for the package name format "
@@ -19140,6 +19468,22 @@ msgstr "Nepodařilo se najít úložiště klíčů pro release, nelze exportova
 msgid "Unable to sign apk."
 msgstr "Nepodařilo se podepsat apk."
 
+msgid ""
+"All 'apksigner' tools located in Android SDK 'build-tools' directory failed "
+"to execute. Please check that you have the correct version installed for your "
+"target sdk version. The resulting APK is unsigned."
+msgstr ""
+"Všechny nástroje 'apksigner' umístěné v adresáři 'build-tools' sady Android "
+"SDK selhaly. Zkontrolujte, zda máte nainstalovanou správnou verzi pro vaši "
+"cílovou verzi sdk. Výsledné APK nebylo podepsáno."
+
+msgid ""
+"'apksigner' could not be found. Please check that the command is available in "
+"the Android SDK build-tools directory. The resulting APK is unsigned."
+msgstr ""
+"Nepodařilo se nalézt 'apksigner'. Prosím ověřte, že je tento příkaz dostupný "
+"v adresáři build-tools sady Android SDK. Výsledné APK nebylo podepsáno."
+
 msgid "Could not start apksigner executable."
 msgstr "Nelze spustit program apksigner."
 
@@ -19165,8 +19509,27 @@ msgstr "Ověření APK pomocí 'apksigner' selhalo."
 msgid "Could not create temporary file!"
 msgstr "Nelze vytvořit dočasný soubor!"
 
+msgid "Exporting for Android"
+msgstr "Export pro systém Android"
+
+msgid "Invalid filename! Android App Bundle requires the *.aab extension."
+msgstr "Neplatný název souboru! Android App Bundle vyžaduje příponu *.aab."
+
+msgid "APK Expansion not compatible with Android App Bundle."
+msgstr "Rozšíření APK není kompatibilní s Android App Bundle."
+
+msgid "Invalid filename! Android APK requires the *.apk extension."
+msgstr "Neplatný název souboru! Android APK vyžaduje příponu *.apk."
+
 msgid "Unsupported export format!"
 msgstr "Nepodporovaný formát exportu!"
+
+msgid ""
+"Trying to build from a gradle built template, but no version info for it "
+"exists. Please reinstall from the 'Project' menu."
+msgstr ""
+"Pokus o sestavení ze šablony sestavené pomocí gradle, ale neexistují pro ni "
+"žádné informace o verzi. Přeinstalujte jej prosím z nabídky 'Projekt'."
 
 msgid ""
 "Java SDK path must be configured in Editor Settings at 'export/android/"
@@ -19174,6 +19537,13 @@ msgid ""
 msgstr ""
 "Cesta pro Java SDK musí být nastavena v Nastavení editoru v 'export/android/"
 "java_sdk_path'."
+
+msgid ""
+"Android SDK path must be configured in Editor Settings at 'export/android/"
+"android_sdk_path'."
+msgstr ""
+"Cesta pro Android SDK musí být nastavena v Nastavení editoru v 'export/"
+"android/android_sdk_path'."
 
 msgid "Unable to overwrite res/*.xml files with project name."
 msgstr "Nepodařilo se přepsat soubory res/*.xml názvem projektu."
@@ -19184,8 +19554,15 @@ msgstr "Nelze generovat sparse pck metadata!"
 msgid "Could not write PCK directory!"
 msgstr "Nelze zapsat PCK adresář!"
 
+msgid "Could not export project files to gradle project."
+msgstr "Nelze exportovat soubory projektu do projektu gradle."
+
 msgid "Could not write expansion package file!"
 msgstr "Nelze zapsat soubor rozšiřujícího balíčku!"
+
+msgid "Building of Android project failed, check output for the error:"
+msgstr ""
+"Sestavení projektu pro Android se nezdařilo, zkontrolujte chybový výstup:"
 
 msgid "Moving output"
 msgstr "Přesunout výstup"
@@ -19225,6 +19602,9 @@ msgstr "Zarovnávání APK..."
 
 msgid "Could not unzip temporary unaligned APK."
 msgstr "Nepodařilo se rozbalit dočasné nezarovnané APK."
+
+msgid "Metal renderer require iOS 14+."
+msgstr "Vykreslovací nástroj Metal vyžaduje iOS 14+."
 
 msgid "Export Icons"
 msgstr "Exportovat ikony"
@@ -19855,6 +20235,18 @@ msgstr ""
 "\"Animace částic\"."
 
 msgid ""
+"Particle trails are only available when using the Forward+ or Mobile renderer."
+msgstr ""
+"Stopy částic jsou dostupné pouze při použití vykreslovacích nástrojů Forward+ "
+"nebo Mobile."
+
+msgid ""
+"Particle sub-emitters are not available when using the Compatibility renderer."
+msgstr ""
+"Dílčí emitory částic nejsou při použití vykreslovcího nástroje Compatibility "
+"dostupné."
+
+msgid ""
 "A texture with the shape of the light must be supplied to the \"Texture\" "
 "property."
 msgstr "Textura tvaru světla musí být nastavena vlastností 'texture'."
@@ -20135,6 +20527,11 @@ msgstr ""
 "Animace CPUParticles3D vyžaduje použití StandardMaterial3D, jehož režim "
 "Billboard je nastaven na \"Částicový billboard\"."
 
+msgid "Decals are only available when using the Forward+ or Mobile renderer."
+msgstr ""
+"Nálepky jsou dostupné pouze při využití vykreslovacích nástrojů Forward+ a "
+"Mobile."
+
 msgid ""
 "The decal has no textures loaded into any of its texture properties, and will "
 "therefore not be visible."
@@ -20237,6 +20634,13 @@ msgstr "Měřítko světla neovlivní vizuální velikost světla."
 
 msgid "Projector texture only works with shadows active."
 msgstr "Projekční textura funguje pouze, jsou-li aktivní stíny."
+
+msgid ""
+"Projector textures are not supported when using the Compatibility renderer "
+"yet. Support will be added in a future release."
+msgstr ""
+"Projekční textury zatím nejsou při využití vykreslovacího nástroje "
+"Compatibility podporovány. Podpora bude přidána v budoucím vydání."
 
 msgid "A SpotLight3D with an angle wider than 90 degrees cannot cast shadows."
 msgstr "SpotLight3D s úhlem širším než 90 stupňů nemůže vrhat stíny."
@@ -20650,6 +21054,13 @@ msgstr "Generování pole vzdáleností"
 msgid "Finishing Plot"
 msgstr "Dokončování vykreslení"
 
+msgid ""
+"VoxelGI nodes are not supported when using the Compatibility renderer yet. "
+"Support will be added in a future release."
+msgstr ""
+"Uzly VoxelGI zatím nejsou při využití vykreslovacího nástroje Compatibility "
+"podporovány. Podpora bude přidána v budoucím vydání."
+
 msgid "VoxelGI nodes are not supported when using the Dummy renderer."
 msgstr ""
 "Uzly VoxelGI zatím nejsou podporovány při použití základního vykreslovacího "
@@ -21027,6 +21438,13 @@ msgstr "Neplatný zdroj pro shader."
 
 msgid "Invalid operator for that type."
 msgstr "Neplatný operátor pro daný typ."
+
+msgid ""
+"`%s` precision mode is not available for `gl_compatibility` profile.\n"
+"Reverted to `None` precision."
+msgstr ""
+"Režim přesnosti `%s` není pro profil `gl_compatibility` k dispozici .\n"
+"Obnoveno na přesnost `None`."
 
 msgid "'%s' type is incompatible with '%s' source."
 msgstr "Typ '%s' není kompatibilní se zdrojem '%s'."

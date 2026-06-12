@@ -162,10 +162,18 @@ void LightmapperRD::add_area_light(const String &p_name, bool p_static, const Ve
 	l.size = p_size;
 	l.shadow_blur = p_shadow_blur;
 
-	l.area_texture_rect[0] = p_texture_rect.position.x;
-	l.area_texture_rect[1] = p_texture_rect.position.y;
-	l.area_texture_rect[2] = p_texture_rect.size.x;
-	l.area_texture_rect[3] = p_texture_rect.size.y;
+	if (RenderingServer::get_singleton()->get_current_rendering_method() == "gl_compatibility") {
+		// area light textures unsupported in compat
+		l.area_texture_rect[0] = 0.0;
+		l.area_texture_rect[1] = 0.0;
+		l.area_texture_rect[2] = 0.0;
+		l.area_texture_rect[3] = 0.0;
+	} else {
+		l.area_texture_rect[0] = p_texture_rect.position.x;
+		l.area_texture_rect[1] = p_texture_rect.position.y;
+		l.area_texture_rect[2] = p_texture_rect.size.x;
+		l.area_texture_rect[3] = p_texture_rect.size.y;
+	}
 	l.cos_spot_angle = p_max_mipmap;
 	lights.push_back(l);
 

@@ -507,7 +507,8 @@ void ResourceImporterLayeredTexture::_check_compress_ctex(const String &p_source
 				Image::COMPRESS_S3TC /* IGNORED */, *r_texture_import->csource, r_texture_import->used_channels, r_texture_import->mipmaps, false, Image::BPTC_DETECT);
 		return;
 	}
-	// Must import in all available GPU-compressed formats so the target can choose the best supported one.
+	// Must import in all formats, in order of priority (so platform chooses the best supported one. IE, etc2 over etc).
+	// Android, GLES 2.x
 
 	const bool can_s3tc_bptc = ResourceImporterTextureSettings::should_import_s3tc_bptc();
 	const bool can_etc2_astc = ResourceImporterTextureSettings::should_import_etc2_astc();

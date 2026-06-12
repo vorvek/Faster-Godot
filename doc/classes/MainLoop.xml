@@ -121,12 +121,15 @@
 		</constant>
 		<constant name="NOTIFICATION_OS_IME_UPDATE" value="2013">
 			Notification received from the OS when an update of the Input Method Engine occurs (e.g. change of IME cursor position or composition string).
+			Implemented on desktop and web platforms.
 		</constant>
 		<constant name="NOTIFICATION_APPLICATION_RESUMED" value="2014">
 			Notification received from the OS when the application is resumed.
+			Specific to the Android and iOS platforms.
 		</constant>
 		<constant name="NOTIFICATION_APPLICATION_PAUSED" value="2015">
 			Notification received from the OS when the application is paused.
+			Specific to the Android and iOS platforms.
 			[b]Note:[/b] On iOS, you only have approximately 5 seconds to finish a task started by this signal. If you go over this allotment, iOS will kill the app instead of pausing it.
 		</constant>
 		<constant name="NOTIFICATION_APPLICATION_FOCUS_IN" value="2016">

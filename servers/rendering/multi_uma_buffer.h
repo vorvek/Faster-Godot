@@ -122,7 +122,7 @@ enum class MultiUmaBufferType : uint8_t {
 /// # What is UMA?
 ///
 /// It stands for Unified Memory Architecture. There are two kinds of UMA:
-///	 1. HW UMA. This is the case of iGPUs and unified-memory desktop systems.
+///	 1. HW UMA. This is the case of iGPUs (specially Android, iOS, Apple ARM-based macOS, PS4 & PS5)
 ///		The CPU and GPU share the same die and same memory. So regular RAM and VRAM are internally the
 ///		same thing. There may be some differences between them in practice due to cache synchronization
 ///		behaviors or the regular BW RAM may be purposely throttled (as is the case of PS4 & PS5).

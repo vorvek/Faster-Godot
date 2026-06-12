@@ -29,6 +29,19 @@ namespace GodotTools.Internals
 
         public static string SimplifyGodotPath(this string path) => Godot.StringExtensions.SimplifyPath(path);
 
+        public static bool IsMacOSAppBundleInstalled(string bundleId)
+        {
+            using godot_string bundleIdIn = Marshaling.ConvertStringToNative(bundleId);
+            return godot_icall_Internal_IsMacOSAppBundleInstalled(bundleIdIn);
+        }
+
+        public static bool LipOCreateFile(string outputPath, string[] files)
+        {
+            using godot_string outputPathIn = Marshaling.ConvertStringToNative(outputPath);
+            using godot_packed_string_array filesIn = Marshaling.ConvertSystemArrayToNativePackedStringArray(files);
+            return godot_icall_Internal_LipOCreateFile(outputPathIn, filesIn);
+        }
+
         public static bool GodotIs32Bits() => godot_icall_Internal_GodotIs32Bits();
 
         public static bool GodotIsRealTDouble() => godot_icall_Internal_GodotIsRealTDouble();
@@ -112,6 +125,10 @@ namespace GodotTools.Internals
             bool forceRefresh);
 
         private static partial void godot_icall_Internal_FullExportTemplatesDir(out godot_string dest);
+
+        private static partial bool godot_icall_Internal_IsMacOSAppBundleInstalled(in godot_string bundleId);
+
+        private static partial bool godot_icall_Internal_LipOCreateFile(in godot_string outputPath, in godot_packed_string_array files);
 
         private static partial bool godot_icall_Internal_GodotIs32Bits();
 

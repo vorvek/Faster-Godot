@@ -58,6 +58,8 @@ OS *OS::get_singleton() {
 bool OS::prefer_meta_over_ctrl() {
 #if defined(MACOS_ENABLED) || defined(APPLE_EMBEDDED_ENABLED)
 	return true;
+#elif defined(WEB_ENABLED)
+	return singleton->has_feature("web_macos") || singleton->has_feature("web_ios");
 #else
 	return false;
 #endif

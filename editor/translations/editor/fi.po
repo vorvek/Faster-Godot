@@ -2608,6 +2608,21 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "Kevyt käyttöönotto verkkolevyltä"
 
+msgid ""
+"When this option is enabled, using one-click deploy for Android will only "
+"export an executable without the project data.\n"
+"The filesystem will be provided from the project by the editor over the "
+"network.\n"
+"On Android, deploying will use the USB cable for faster performance. This "
+"option speeds up testing for projects with large assets."
+msgstr ""
+"Kun tämä on valittuna, yhden napsautuksen käyttöönotto Androidille vie "
+"ainoastaan suoritettavan tiedoston ilman projektin dataa.\n"
+"Editori välittää tiedostojärjestelmän projektilta verkon yli.\n"
+"Androidilla käyttöönotto käyttää USB-kaapelia nopeampaa suorituskykyä varten. "
+"Tämä valinta nopeuttaa testaamista projekteilla, jotka sisältävät suuria "
+"resursseja."
+
 msgid "Visible Collision Shapes"
 msgstr "Näytä törmäysmuodot"
 
@@ -4569,6 +4584,28 @@ msgstr "Editorin Viestit"
 msgid "Toggle visibility of editor messages."
 msgstr "Piilota/näytä editorin viestit."
 
+msgid ""
+"The Android build template is already installed in this project and it won't "
+"be overwritten.\n"
+"Remove the \"%s\" directory manually before attempting this operation again."
+msgstr ""
+"Android-rakennemallipohja on jo asennettu tähän projektiin, eikä sitä "
+"korvata.\n"
+"Poista ”%s”-hakemisto manuaalisesti ennen kuin yrität tätä toimintoa "
+"uudelleen."
+
+msgid ""
+"This will set up your project for gradle Android builds by installing the "
+"source template to \"%s\".\n"
+"Note that in order to make gradle builds instead of using pre-built APKs, the "
+"\"Use Gradle Build\" option should be enabled in the Android export preset."
+msgstr ""
+"Tämä asettaa projektisi gradle Android -rakennuksille asentamalla lähdemallin "
+"kohtaan ”%s”.\n"
+"Huomaa, että voidaksesi tehdä Gradle-rakennuksia valmiiden APK-tiedostojen "
+"sijaan, Android-vientiesiasetuksissa on oltava käytössä vaihtoehto ”Käytä "
+"Gradle-rakennusta”."
+
 msgid "Unnamed Project"
 msgstr "Nimetön projekti"
 
@@ -5143,6 +5180,9 @@ msgstr "Versionhallintajärjestelmän Asetukset..."
 msgid "Pack Project as ZIP..."
 msgstr "Pakkaa projekti ZIP-tiedostona..."
 
+msgid "Install Android Build Template..."
+msgstr "Asenna Androidin käännösmalli..."
+
 msgid "Open User Data Folder"
 msgstr "Avaa käyttäjän datakansio"
 
@@ -5353,11 +5393,17 @@ msgstr "Piilota päivitysanimaatio"
 msgid "Don't Save"
 msgstr "Älä tallenna"
 
+msgid "Android build template is missing, please install relevant templates."
+msgstr "Androidin käännösmalli puuttuu, ole hyvä ja asenna olennaiset mallit."
+
 msgid "Manage Templates"
 msgstr "Hallinnoi malleja"
 
 msgid "Install from file"
 msgstr "Asenna tiedostosta"
+
+msgid "Select Android sources file"
+msgstr "Valitse android-lähdetiedosto"
 
 msgid "Import Templates From ZIP File"
 msgstr "Tuo mallit ZIP-tiedostosta"
@@ -5566,6 +5612,9 @@ msgstr "Ainakin yksi levytilan käyttöperuste on valittava."
 msgid "At least one system boot time access reason should be selected."
 msgstr "Ainakin yksi järjestelmän käynnistysajan käyttöperuste on valittava."
 
+msgid "\"Shader Baker\" doesn't work with the Compatibility renderer."
+msgstr "\"Shader Baker\" ei toimi Compatibility-renderöijän kanssa."
+
 msgid ""
 "The editor is currently using a different renderer than what the target "
 "platform will use. \"Shader Baker\" won't be able to include core shaders. "
@@ -5697,6 +5746,9 @@ msgstr "Merkki '%s' ei ole sallittu Identifier-osiossa."
 msgid "Running on %s"
 msgstr "Ajetaan %s"
 
+msgid "Could not start ios-deploy executable."
+msgstr "ios-deploy-suoritustiedostoa ei voitu käynnistää."
+
 msgid "Installation/running failed, see editor log for details."
 msgstr ""
 "Asennus/käynnistys epäonnistui, tarkista editoriloki saadaksesi lisätietoja."
@@ -5706,6 +5758,10 @@ msgstr "Asennus epäonnistui, tarkista editoriloki saadaksesi lisätietoja."
 
 msgid "Running failed, see editor log for details."
 msgstr "Käynnistys epäonnistui, tarkista editoriloki saadaksesi lisätietoja."
+
+msgid "\"Shader Baker\" is not supported when using the Compatibility renderer."
+msgstr ""
+"Shader Baker -ominaisuutta ei tueta, kun käytetään Compatibility-renderöintiä."
 
 msgid ""
 "A texture format must be selected to export the project. Please select at "
@@ -5868,6 +5924,9 @@ msgstr "Viralliset vientimallit eivät ole saatavilla kehityskäännöksille."
 
 msgid "No templates for double-precision builds"
 msgstr "Ei malleja kaksoistarkkuuksisille versioille"
+
+msgid "Uncompressing Android Build Sources"
+msgstr "Puretaan Android-käännöksen lähdetiedostoja"
 
 msgid "Export Template Manager"
 msgstr "Vientimallien hallinta"
@@ -11755,6 +11814,9 @@ msgstr "Haptinen"
 msgid "Unknown"
 msgstr "Tuntematon"
 
+msgid "Building Android Project (gradle)"
+msgstr "Käännetään Android-projektia (gradle)"
+
 msgid "Invalid public key for APK expansion."
 msgstr "Virheellinen julkinen avain APK-laajennosta varten."
 
@@ -11800,6 +11862,16 @@ msgstr "Ajetaan laitteella..."
 msgid "Could not execute on device."
 msgstr "Ei voitu suorittaa laitteella."
 
+msgid "Exporting to Android when using C#/.NET is experimental."
+msgstr "Androidille vienti C#/.NET-käytössä on kokeellinen."
+
+msgid ""
+"Android build template not installed in the project. Install it from the "
+"Project menu."
+msgstr ""
+"Android-käännösmallia ei ole asennettu projektiin. Asenna se Projekti-"
+"valikosta."
+
 msgid ""
 "Either Debug Keystore, Debug User AND Debug Password settings must be "
 "configured OR none of them."
@@ -11821,11 +11893,27 @@ msgstr ""
 msgid "Release keystore incorrectly configured in the export preset."
 msgstr "Release keystore on konfiguroitu väärin viennin esiasetuksissa."
 
+msgid "A valid Android SDK path is required in Editor Settings."
+msgstr "Editorin asetuksiin tarvitaan kelvollinen Android SDK -polku."
+
+msgid "Invalid Android SDK path in Editor Settings."
+msgstr "Editorin asetuksissa on virheellinen Android SDK -polku."
+
 msgid "Missing 'platform-tools' directory!"
 msgstr "'platform-tools' hakemisto puuttuu!"
 
+msgid "Unable to find Android SDK platform-tools' adb command."
+msgstr "Android SDK platform-tools adb-komentoa ei löydy."
+
+msgid "Please check in the Android SDK directory specified in Editor Settings."
+msgstr ""
+"Ole hyvä ja tarkista editorin asetuksissa määritelty Android SDK -hakemisto."
+
 msgid "Missing 'build-tools' directory!"
 msgstr "'build-tools' hakemisto puuttuu!"
+
+msgid "Unable to find Android SDK build-tools' apksigner command."
+msgstr "Android SDK build-tools apksigner-komentoa ei löydy."
 
 msgid "Could not start apksigner executable."
 msgstr "apkgsigner-käynnistystiedostoa ei voitu käynnistää."
@@ -11840,8 +11928,26 @@ msgstr ""
 "tuloste:\n"
 "%s"
 
+msgid "Exporting for Android"
+msgstr "Viedään Androidille"
+
+msgid "Invalid filename! Android App Bundle requires the *.aab extension."
+msgstr ""
+"Virheellinen tiedostonimi! Android App Bundle tarvitsee *.aab "
+"tiedostopäätteen."
+
+msgid "APK Expansion not compatible with Android App Bundle."
+msgstr "APK Expansion ei ole yhteensopiva Android App Bundlen kanssa."
+
+msgid "Invalid filename! Android APK requires the *.apk extension."
+msgstr ""
+"Virheellinen tiedostonimi! Android APK tarvitsee *.apk tiedostopäätteen."
+
 msgid "Unsupported export format!"
 msgstr "Vientiformaatti ei ole tuettu!"
+
+msgid "Could not export project files to gradle project."
+msgstr "Ei voitu viedä projektitiedostoja gradle-projektiksi."
 
 msgid "Could not write expansion package file!"
 msgstr "Ei voitu kirjoittaa laajennuspakettitiedostoa!"

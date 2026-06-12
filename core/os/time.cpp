@@ -253,6 +253,7 @@ String Time::get_datetime_string_from_unix_time(int64_t p_unix_time_val, bool p_
 
 String Time::get_date_string_from_unix_time(int64_t p_unix_time_val) const {
 	UNIX_TIME_TO_YMD
+	// Android is picky about the types passed to make Variant, so we need a cast.
 	return vformat("%04d-%02d-%02d", year, (uint8_t)month, day);
 }
 
@@ -358,6 +359,7 @@ String Time::get_datetime_string_from_system(bool p_utc, bool p_use_space) const
 
 String Time::get_date_string_from_system(bool p_utc) const {
 	OS::DateTime dt = OS::get_singleton()->get_datetime(p_utc);
+	// Android is picky about the types passed to make Variant, so we need a cast.
 	return vformat("%04d-%02d-%02d", dt.year, (uint8_t)dt.month, dt.day);
 }
 

@@ -37,10 +37,14 @@
 #ifdef SOWRAP_ENABLED
 #include "wayland/dynwrappers/wayland-client-core-so_wrap.h"
 #include "wayland/dynwrappers/wayland-cursor-so_wrap.h"
+#include "wayland/dynwrappers/wayland-egl-core-so_wrap.h"
 #include "xkbcommon-so_wrap.h"
 #else
 #include <wayland-client-core.h>
 #include <wayland-cursor.h>
+#ifdef GLES3_ENABLED
+#include <wayland-egl-core.h>
+#endif
 #include <xkbcommon/xkbcommon-compose.h>
 #include <xkbcommon/xkbcommon.h>
 #endif // SOWRAP_ENABLED

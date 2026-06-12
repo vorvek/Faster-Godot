@@ -2484,6 +2484,20 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "பிணையம் கோப்பு முறைமையுடன் சிறிய வரிசைப்படுத்தல்"
 
+msgid ""
+"When this option is enabled, using one-click deploy for Android will only "
+"export an executable without the project data.\n"
+"The filesystem will be provided from the project by the editor over the "
+"network.\n"
+"On Android, deploying will use the USB cable for faster performance. This "
+"option speeds up testing for projects with large assets."
+msgstr ""
+"இந்த விருப்பம் இயக்கப்பட்டால், ஆண்ட்ராய்டு க்கு ஒரு சொடுக்கு வரிசைப்படுத்தலைப் பயன்படுத்துவது "
+"திட்ட தரவு இல்லாமல் மட்டுமே இயங்கக்கூடியதாக ஏற்றுமதி செய்யும். \n"
+"கோப்பு முறைமை திட்டத்திலிருந்து நெட்வொர்க்கில் எடிட்டரால் வழங்கப்படும். \n"
+"Android இல், வரிசைப்படுத்துதல் வேகமான செயல்திறனுக்காக யூ.எச்.பி கேபிளைப் பயன்படுத்தும். "
+"இந்த விருப்பம் பெரிய சொத்துக்களைக் கொண்ட திட்டங்களுக்கான சோதனையை விரைவுபடுத்துகிறது."
+
 msgid "Visible Collision Shapes"
 msgstr "புலப்படும் மோதல் வடிவங்கள்"
 
@@ -4435,6 +4449,27 @@ msgstr "ஆசிரியர் செய்திகள்"
 msgid "Toggle visibility of editor messages."
 msgstr "ஆசிரியர் செய்திகளின் தெரிவுநிலையை மாற்றவும்."
 
+msgid ""
+"The Android build template is already installed in this project and it won't "
+"be overwritten.\n"
+"Remove the \"%s\" directory manually before attempting this operation again."
+msgstr ""
+"இந்த திட்டத்தில் ஆண்ட்ராய்டு உருவாக்க வார்ப்புரு ஏற்கனவே நிறுவப்பட்டுள்ளது, அது "
+"மேலெழுதப்படாது. \n"
+"இந்த செயல்பாட்டை மீண்டும் முயற்சிக்கும் முன் \"%s\" கோப்பகத்தை கைமுறையாக அகற்றவும்."
+
+msgid ""
+"This will set up your project for gradle Android builds by installing the "
+"source template to \"%s\".\n"
+"Note that in order to make gradle builds instead of using pre-built APKs, the "
+"\"Use Gradle Build\" option should be enabled in the Android export preset."
+msgstr ""
+"இது மூல வார்ப்புருவை \"%s\" க்கு நிறுவுவதன் மூலம் கிரேடில் ஆண்ட்ராய்டு கட்டமைப்பிற்கான "
+"உங்கள் திட்டத்தை அமைக்கும். \n"
+"முன்பே கட்டப்பட்ட APK களைப் பயன்படுத்துவதற்குப் பதிலாக கிரேடில் கட்டமைப்பை உருவாக்க, "
+"ஆண்ட்ராய்டு ஏற்றுமதி முன்னமைவில் \"கிரேடில் பில்ட்\" விருப்பம் இயக்கப்பட வேண்டும் என்பதை "
+"நினைவில் கொள்க."
+
 msgid "Unnamed Project"
 msgstr "பெயரிடப்படாத திட்டம்"
 
@@ -4986,6 +5021,9 @@ msgstr "பதிப்பு கட்டுப்பாட்டு அமை�
 msgid "Pack Project as ZIP..."
 msgstr "பேக் திட்டத்தை சிப் ..."
 
+msgid "Install Android Build Template..."
+msgstr "ஆண்ட்ராய்டு உருவாக்க வார்ப்புருவை நிறுவவும் ..."
+
 msgid "Open User Data Folder"
 msgstr "பயனர் தரவு கோப்புறையைத் திறக்கவும்"
 
@@ -5205,11 +5243,18 @@ msgstr "புதுப்பிப்பு ச்பின்னரை மற�
 msgid "Don't Save"
 msgstr "சேமிக்க வேண்டாம்"
 
+msgid "Android build template is missing, please install relevant templates."
+msgstr ""
+"ஆண்ட்ராய்டு உருவாக்க வார்ப்புரு இல்லை, தயவுசெய்து தொடர்புடைய வார்ப்புருக்கள் நிறுவவும்."
+
 msgid "Manage Templates"
 msgstr "வார்ப்புருக்கள் நிர்வகிக்கவும்"
 
 msgid "Install from file"
 msgstr "கோப்பிலிருந்து நிறுவவும்"
+
+msgid "Select Android sources file"
+msgstr "ஆண்ட்ராய்டு ஆதார கோப்பைத் தேர்ந்தெடுக்கவும்"
 
 msgid "Import Templates From ZIP File"
 msgstr "சிப் கோப்பிலிருந்து வார்ப்புருக்களை இறக்குமதி செய்யுங்கள்"
@@ -5414,6 +5459,9 @@ msgstr "குறைந்தது ஒரு வட்டு இட அணு�
 msgid "At least one system boot time access reason should be selected."
 msgstr "குறைந்தது ஒரு கணினி துவக்க நேர அணுகல் காரணத்தை தேர்ந்தெடுக்க வேண்டும்."
 
+msgid "\"Shader Baker\" doesn't work with the Compatibility renderer."
+msgstr "\"சேடர் பேக்கர்\" பொருந்தக்கூடிய ரெண்டரருடன் வேலை செய்யாது."
+
 msgid ""
 "The editor is currently using a different renderer than what the target "
 "platform will use. \"Shader Baker\" won't be able to include core shaders. "
@@ -5543,6 +5591,9 @@ msgstr "'%s' எழுத்து அடையாளங்காட்டிய
 msgid "Running on %s"
 msgstr "%s இல் இயங்குகிறது"
 
+msgid "Could not start ios-deploy executable."
+msgstr "இயங்கக்கூடிய iOS- வரிசைப்படுத்தல் தொடங்க முடியவில்லை."
+
 msgid "Installation/running failed, see editor log for details."
 msgstr "நிறுவல்/இயங்குதல் தோல்வியுற்றது, விவரங்களுக்கு எடிட்டர் பதிவைப் பார்க்கவும்."
 
@@ -5551,6 +5602,9 @@ msgstr "நிறுவல் தோல்வியடைந்தது, வி
 
 msgid "Running failed, see editor log for details."
 msgstr "இயங்குவது தோல்வியுற்றது, விவரங்களுக்கு எடிட்டர் பதிவைப் பார்க்கவும்."
+
+msgid "\"Shader Baker\" is not supported when using the Compatibility renderer."
+msgstr "பொருந்தக்கூடிய ரெண்டரரைப் பயன்படுத்தும் போது \"சேடர் பேக்கர்\" ஆதரிக்கப்படவில்லை."
 
 msgid ""
 "The editor is currently using a different renderer than what the target "
@@ -5733,6 +5787,9 @@ msgstr "இரட்டை துல்லியமான கட்டமைப�
 msgid "Official export templates aren't available for double-precision builds."
 msgstr ""
 "இரட்டை துல்லியமான கட்டமைப்புகளுக்கு அதிகாரப்பூர்வ ஏற்றுமதி வார்ப்புருக்கள் கிடைக்கவில்லை."
+
+msgid "Uncompressing Android Build Sources"
+msgstr "அண்ட்ராய்டு உருவாக்க ஆதாரங்களை சுருக்குதல்"
 
 msgid "Export Template Manager"
 msgstr "வார்ப்புரு மேலாளர் ஏற்றுமதி"
@@ -7643,11 +7700,17 @@ msgstr "சிக்கலான காட்சிகளுக்கு கு�
 msgid "Fast rendering of simple scenes."
 msgstr "எளிய காட்சிகளை வேகமாக வழங்குதல் செய்தல்."
 
+msgid "Supports desktop, mobile + web platforms."
+msgstr "டெச்க்டாப், மொபைல் + வலை தளங்களை ஆதரிக்கிறது."
+
 msgid "Least advanced 3D graphics."
 msgstr "குறைந்த மேம்பட்ட 3D கிராபிக்ச்."
 
 msgid "Intended for low-end/older devices."
 msgstr "குறைந்த முடிவு/பழைய சாதனங்களுக்கு நோக்கம் கொண்டது."
+
+msgid "Uses OpenGL 3 backend (OpenGL 3.3/ES 3.0/WebGL2)."
+msgstr "OpenGL 3 பின்தளத்தில் பயன்படுத்துகிறது (OpenGL 3.3/ES 3.0/Webgl2)."
 
 msgid "Fastest rendering of simple scenes."
 msgstr "எளிய காட்சிகளின் வேகமாக வழங்குதல்."
@@ -7718,6 +7781,15 @@ msgstr "திட்ட நிறுவல் பாதை:"
 
 msgid "Renderer:"
 msgstr "ரெண்டரர்:"
+
+msgid ""
+"RenderingDevice-based methods not available on this GPU:\n"
+"%s\n"
+"Please use the Compatibility renderer."
+msgstr ""
+"இந்த சி.பீ.யில் வழங்குதல் டெவிச் அடிப்படையிலான முறைகள் கிடைக்கவில்லை: \n"
+"%s \n"
+"பொருந்தக்கூடிய ரெண்டரரைப் பயன்படுத்தவும்."
 
 msgid "The renderer can be changed later, but scenes may need to be adjusted."
 msgstr "ரெண்டரரை பின்னர் மாற்றலாம், ஆனால் காட்சிகளை சரிசெய்ய வேண்டியிருக்கலாம்."
@@ -8354,8 +8426,20 @@ msgstr "இயங்கும் திட்டத்தை நிறுத்�
 msgid "Run Current Scene"
 msgstr "தற்போதைய காட்சியை இயக்கவும்"
 
+msgid "Run Scene in Regular Mode"
+msgstr "வழக்கமான பயன்முறையில் காட்சியை இயக்கவும்"
+
+msgid "Run Scene in XR Mode"
+msgstr "எக்ச்ஆர் பயன்முறையில் காட்சியை இயக்கவும்"
+
 msgid "Run Specific Scene"
 msgstr "குறிப்பிட்ட காட்சியை இயக்கவும்"
+
+msgid "Run in Regular Mode"
+msgstr "வழக்கமான பயன்முறையில் இயக்கவும்"
+
+msgid "Run in XR Mode"
+msgstr "எக்ச்ஆர் பயன்முறையில் இயக்கவும்"
 
 msgid "Enable Movie Maker Mode"
 msgstr "மூவி மேக்கர் பயன்முறையை இயக்கு"
@@ -13962,6 +14046,9 @@ msgstr "வழிசெலுத்தல் (3D)"
 msgid "XR"
 msgstr "எக்ச்ஆர்"
 
+msgid "OpenXR"
+msgstr "Openxr"
+
 msgid "Wayland"
 msgstr "வேலண்ட்"
 
@@ -14031,6 +14118,9 @@ msgstr "வழிசெலுத்தல் சேவையகம் மற்�
 msgid "XR (AR and VR)."
 msgstr "எக்ச்ஆர் (ஏ.ஆர் மற்றும் வி.ஆர்)."
 
+msgid "OpenXR standard implementation (requires XR to be enabled)."
+msgstr "OpenXR நிலையான செயல்படுத்தல் (எக்ச்ஆர் இயக்கப்பட வேண்டும்)."
+
 msgid "Wayland display (Linux only)."
 msgstr "வேலண்ட் டிச்ப்ளே (லினக்ச் மட்டும்)."
 
@@ -14044,6 +14134,9 @@ msgstr ""
 
 msgid "Forward+ renderer for advanced 3D graphics."
 msgstr "மேம்பட்ட 3D கிராபிக்ச் முன்னோக்கி+ ரெண்டரர்."
+
+msgid "Mobile renderer for less advanced 3D graphics."
+msgstr "குறைந்த மேம்பட்ட 3D கிராபிக்ச் மொபைல் ரெண்டரர்."
 
 msgid "Vulkan backend of RenderingDevice."
 msgstr "RenderingDevice இன் வல்கன் பின்தளத்தில்."
@@ -17013,8 +17106,14 @@ msgstr "பிழை ஏற்றுதல் %s: %s."
 msgid "Error saving file %s: %s"
 msgstr "பிழை சேமிப்பு கோப்பு %s: %s"
 
+msgid "OpenXR Action map:"
+msgstr "Openxr செயல் வரைபடம்:"
+
 msgid "Remove interaction profile"
 msgstr "தொடர்பு சுயவிவரத்தை அகற்று"
+
+msgid "OpenXR Action Map"
+msgstr "Openxr செயல் வரைபடம்"
 
 msgid "Add Action Set"
 msgstr "செயல் தொகுப்பைச் சேர்க்கவும்"
@@ -17027,6 +17126,12 @@ msgstr "சுயவிவரத்தைச் சேர்க்கவும�
 
 msgid "Add an interaction profile."
 msgstr "தொடர்பு சுயவிவரத்தைச் சேர்க்கவும்."
+
+msgid "Save this OpenXR action map."
+msgstr "இந்த Openxr செயல் வரைபடத்தை சேமிக்கவும்."
+
+msgid "Reset to default OpenXR action map."
+msgstr "இயல்புநிலை Openxr செயல் வரைபடத்திற்கு மீட்டமைக்கவும்."
 
 msgid "Action Sets"
 msgstr "செயல் தொகுப்புகள்"
@@ -17135,16 +17240,51 @@ msgid "Choose an XR runtime."
 msgstr "எக்ச்ஆர் இயக்க நேரத்தைத் தேர்வுசெய்க."
 
 msgid ""
+"Cannot use the same SubViewport with multiple OpenXR composition layers. "
+"Clear it from its current layer first."
+msgstr ""
+"பல ஓபன்எக்ச்ஆர் கலவை அடுக்குகளுடன் ஒரே சப் வியூ போர்ட்டைப் பயன்படுத்த முடியாது. முதலில் "
+"அதன் தற்போதைய அடுக்கிலிருந்து அழிக்கவும்."
+
+msgid ""
+"Cannot set SubViewport on an OpenXR composition layer when using an Android "
+"surface."
+msgstr ""
+"ஆண்ட்ராய்டு மேற்பரப்பைப் பயன்படுத்தும் போது Openxr கலவை அடுக்கில் SUBVIEWPORT ஐ அமைக்க "
+"முடியாது."
+
+msgid "OpenXR composition layers must have an XROrigin3D node as their parent."
+msgstr ""
+"Openxr கலவை அடுக்குகள் அவற்றின் பெற்றோராக Xrorigin3d முனையைக் கொண்டிருக்க வேண்டும்."
+
+msgid ""
+"OpenXR composition layers must have orthonormalized transforms (ie. no scale "
+"or shearing)."
+msgstr ""
+"OpenXR கலவை அடுக்குகளில் ஆர்த்தோனார்மலைச் மாற்றங்கள் இருக்க வேண்டும் (அதாவது அளவு அல்லது "
+"வெட்டுதல் இல்லை)."
+
+msgid ""
 "Hole punching won't work as expected unless the sort order is less than zero."
 msgstr ""
 "வரிசை வரிசை பூச்சியத்தை விட குறைவாக இல்லாவிட்டால் துளை குத்துதல் எதிர்பார்த்தபடி "
 "செயல்படாது."
+
+msgid "OpenXR visibility mask must have an XRCamera3D node as their parent."
+msgstr ""
+"Openxr தெரிவுநிலை முகமூடியில் அவர்களின் பெற்றோராக XRCAMERA3D முனை இருக்க வேண்டும்."
+
+msgid "Building Android Project (gradle)"
+msgstr "அண்ட்ராய்டு திட்டத்தை உருவாக்குதல் (கிரேடில்)"
 
 msgid "Package name is missing."
 msgstr "தொகுப்பு பெயர் இல்லை."
 
 msgid "Package segments must be of non-zero length."
 msgstr "தொகுப்பு பிரிவுகள் பூச்சியமற்ற நீளமாக இருக்க வேண்டும்."
+
+msgid "The character '%s' is not allowed in Android application package names."
+msgstr "ஆண்ட்ராய்டு பயன்பாட்டு தொகுப்பு பெயர்களில் '%s' எழுத்து அனுமதிக்கப்படவில்லை."
 
 msgid "A digit cannot be the first character in a package segment."
 msgstr "ஒரு இலக்கப் பிரிவில் ஒரு இலக்கமானது முதல் எழுத்தாக இருக்க முடியாது."
@@ -17164,6 +17304,21 @@ msgstr "APK விரிவாக்கத்திற்கான தவறா�
 msgid "Invalid package name:"
 msgstr "தவறான தொகுப்பு பெயர்:"
 
+msgid "\"Use Gradle Build\" is required to enable \"Swipe to dismiss\"."
+msgstr "\"கிராடில் பில்டைப் பயன்படுத்துங்கள்\" \"தள்ளுபடி செய்ய ச்வைப்\" செயல்படுத்த வேண்டும்."
+
+msgid "\"Use Gradle Build\" must be enabled to use the plugins."
+msgstr "செருகுநிரல்களைப் பயன்படுத்த \"கிரேடில் பில்டை பயன்படுத்தவும்\" இயக்கப்பட வேண்டும்."
+
+msgid "\"Export AAB\" is only valid when \"Use Gradle Build\" is enabled."
+msgstr ""
+"\"கிராடில் பில்டை பயன்படுத்துதல்\" இயக்கப்பட்டால் மட்டுமே \"ஏற்றுமதி AAB\" செல்லுபடியாகும்."
+
+msgid "\"Min SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
+msgstr ""
+"\"கிராடில் கட்டமைப்பைப் பயன்படுத்துங்கள்\" இயக்கப்பட்டால் மட்டுமே \"மின் எச்.டி.கே\" மீற "
+"முடியும்."
+
 msgid "\"Min SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
 "\"மின் எச்.டி.கே\" செல்லுபடியாகும் முழு எண்ணாக இருக்க வேண்டும், ஆனால் \"%s\" கிடைத்தது, "
@@ -17177,6 +17332,12 @@ msgstr ""
 "தேவையான பதிப்பாகும்."
 
 msgid ""
+"\"Target SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
+msgstr ""
+"\"கிரேடில் கட்டமைப்பைப் பயன்படுத்துங்கள்\" இயக்கப்பட்டால் மட்டுமே \"இலக்கு SDK\" ஐ மீற "
+"முடியும்."
+
+msgid ""
 "\"Target SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
 "\"இலக்கு எச்.டி.கே\" செல்லுபடியாகும் முழு எண்ணாக இருக்க வேண்டும், ஆனால் \"%s\" "
@@ -17186,6 +17347,22 @@ msgid "\"Target SDK\" version must be greater or equal to \"Min SDK\" version."
 msgstr ""
 "\"இலக்கு SDK\" பதிப்பு \"MIN SDK\" பதிப்பிற்கு அதிகமாகவோ அல்லது சமமாகவோ இருக்க "
 "வேண்டும்."
+
+msgid "\"Use Gradle Build\" is required to add custom theme attributes."
+msgstr "தனிப்பயன் கருப்பொருள் பண்புகளைச் சேர்க்க \"கிரேடில் பில்ட் பயன்படுத்தவும்\" தேவை."
+
+msgid "\"Use Gradle Build\" must be enabled to enable \"Show In Android Tv\"."
+msgstr ""
+"ஆண்ட்ராய்டு டிவியில் \"நிகழ்ச்சியை இயக்க\" கிரேடில் பில்டைப் பயன்படுத்துங்கள் \"இயக்கப்பட "
+"வேண்டும்."
+
+msgid "\"Use Gradle Build\" must be enabled to enable \"Show As Launcher App\"."
+msgstr ""
+"\"கிரேடில் பில்டைப் பயன்படுத்துங்கள்\" \"சோவை லாஞ்சர் பயன்பாடாக\" இயக்க இயக்கப்பட வேண்டும்."
+
+msgid "\"Use Gradle Build\" must be enabled to disable \"Show In App Library\"."
+msgstr ""
+"பயன்பாட்டு நூலகத்தில் \"சோவை முடக்க\" கிரேடில் பில்டைப் பயன்படுத்துங்கள் \"இயக்கப்பட வேண்டும்."
 
 msgid "Exporting APK..."
 msgstr "APK ஏற்றுமதி ..."
@@ -17207,6 +17384,35 @@ msgstr "சாதனத்தில் இயக்க முடியவில�
 
 msgid "Error: There was a problem validating the keystore username and password"
 msgstr "பிழை: கீச்டோர் பயனர்பெயர் மற்றும் கடவுச்சொல்லை சரிபார்க்கும் சிக்கல் இருந்தது"
+
+msgid ""
+"Unable to determine the C# project's TFM, it may be incompatible. The export "
+"template only supports '%s'. Make sure the project targets '%s' or consider "
+"using gradle builds instead."
+msgstr ""
+"சி# திட்டத்தின் TFM ஐ தீர்மானிக்க முடியவில்லை, அது பொருந்தாது. ஏற்றுமதி வார்ப்புரு '%s' "
+"ஐ மட்டுமே ஆதரிக்கிறது. திட்ட இலக்குகளை '%s' இலக்காகக் கொள்ளுங்கள் அல்லது அதற்கு பதிலாக "
+"கிரேடில் கட்டமைப்புகளைப் பயன்படுத்துவதைக் கவனியுங்கள்."
+
+msgid ""
+"C# project targets '%s' but the export template only supports '%s'. Consider "
+"using gradle builds instead."
+msgstr ""
+"சி# திட்ட இலக்குகள் '%s' ஆனால் ஏற்றுமதி வார்ப்புரு '%s' ஐ மட்டுமே ஆதரிக்கிறது. அதற்கு "
+"பதிலாக கிரேடில் பில்ட்சைப் பயன்படுத்துவதைக் கவனியுங்கள்."
+
+msgid "Exporting to Android when using C#/.NET is experimental."
+msgstr "C#/. வலைமம் ஐப் பயன்படுத்தும் போது ஆண்ட்ராய்டு க்கு ஏற்றுமதி செய்வது சோதனை."
+
+msgid "Custom Android source template not found."
+msgstr "தனிப்பயன் ஆண்ட்ராய்டு மூல வார்ப்புரு கிடைக்கவில்லை."
+
+msgid ""
+"Android build template not installed in the project. Install it from the "
+"Project menu."
+msgstr ""
+"திட்டத்தில் ஆண்ட்ராய்டு உருவாக்க வார்ப்புரு நிறுவப்படவில்லை. திட்ட மெனுவிலிருந்து அதை "
+"நிறுவவும்."
 
 msgid ""
 "Either Debug Keystore, Debug User AND Debug Password settings must be "
@@ -17243,11 +17449,26 @@ msgstr "சாவா எச்.டி.கே பாதையைப் பயன�
 msgid "Please check the Java SDK directory specified in Editor Settings."
 msgstr "ஆசிரியர் அமைப்புகளில் குறிப்பிடப்பட்டுள்ள சாவா எச்.டி.கே கோப்பகத்தை சரிபார்க்கவும்."
 
+msgid "A valid Android SDK path is required in Editor Settings."
+msgstr "எடிட்டர் அமைப்புகளில் செல்லுபடியாகும் ஆண்ட்ராய்டு SDK பாதை தேவைப்படுகிறது."
+
+msgid "Invalid Android SDK path in Editor Settings."
+msgstr "ஆசிரியர் அமைப்புகளில் தவறான ஆண்ட்ராய்டு SDK பாதை."
+
 msgid "Missing 'platform-tools' directory!"
 msgstr "'பிளாட்ஃபார்ம்-டூல்ச்' கோப்பகத்தைக் காணவில்லை!"
 
+msgid "Unable to find Android SDK platform-tools' adb command."
+msgstr "ஆண்ட்ராய்டு SDK இயங்குதள-கருவிகளின் ADB கட்டளையை கண்டுபிடிக்க முடியவில்லை."
+
+msgid "Please check in the Android SDK directory specified in Editor Settings."
+msgstr "ஆசிரியர் அமைப்புகளில் குறிப்பிடப்பட்டுள்ள ஆண்ட்ராய்டு SDK கோப்பகத்தை சரிபார்க்கவும்."
+
 msgid "Missing 'build-tools' directory!"
 msgstr "'பில்ட்-டூல்ச்' கோப்பகத்தைக் காணவில்லை!"
+
+msgid "Unable to find Android SDK build-tools' apksigner command."
+msgstr "ஆண்ட்ராய்டு SDK பில்ட்-டூல்சின் APKSIGNER கட்டளையை கண்டுபிடிக்க முடியவில்லை."
 
 msgid ""
 "\"Target SDK\" %d is higher than the default version %d. This may work, but "
@@ -17255,6 +17476,13 @@ msgid ""
 msgstr ""
 "\"இலக்கு SDK\" %d இயல்புநிலை பதிப்பு %d ஐ விட அதிகமாக உள்ளது. இது வேலை செய்யலாம், "
 "ஆனால் சோதிக்கப்படவில்லை மற்றும் நிலையற்றதாக இருக்கலாம்."
+
+msgid ""
+"The \"%s\" renderer is designed for Desktop devices, and is not suitable for "
+"Android devices."
+msgstr ""
+"\"%s\" ரெண்டரர் டெச்க்டாப் சாதனங்களுக்காக வடிவமைக்கப்பட்டுள்ளது, மேலும் இது ஆண்ட்ராய்டு "
+"சாதனங்களுக்கு ஏற்றதல்ல."
 
 msgid ""
 "The project name does not meet the requirement for the package name format "
@@ -17282,6 +17510,22 @@ msgstr "ஏற்றுமதி செய்ய முடியாமல், �
 msgid "Unable to sign apk."
 msgstr "APK இல் கையெழுத்திட முடியவில்லை."
 
+msgid ""
+"All 'apksigner' tools located in Android SDK 'build-tools' directory failed "
+"to execute. Please check that you have the correct version installed for your "
+"target sdk version. The resulting APK is unsigned."
+msgstr ""
+"ஆண்ட்ராய்டு SDK 'பில்ட்-டூல்ச்' கோப்பகத்தில் அமைந்துள்ள அனைத்து 'APKSIGNER' கருவிகளும் "
+"செயல்படுத்தத் தவறிவிட்டன. உங்கள் இலக்கு SDK பதிப்பிற்கு சரியான பதிப்பு நிறுவப்பட்டுள்ளதா "
+"என்பதைச் சரிபார்க்கவும். இதன் விளைவாக APK கையொப்பமிடப்படவில்லை."
+
+msgid ""
+"'apksigner' could not be found. Please check that the command is available in "
+"the Android SDK build-tools directory. The resulting APK is unsigned."
+msgstr ""
+"'அப்க்சிக்னெர்' கண்டுபிடிக்க முடியவில்லை. ஆண்ட்ராய்டு SDK பில்ட்-டூல்ச் கோப்பகத்தில் கட்டளை "
+"கிடைக்கிறது என்பதை சரிபார்க்கவும். இதன் விளைவாக APK கையொப்பமிடப்படவில்லை."
+
 msgid "Could not start apksigner executable."
 msgstr "Apksigner இயங்கக்கூடியதாக தொடங்க முடியவில்லை."
 
@@ -17304,8 +17548,28 @@ msgstr "கையொப்பமிடப்பட்ட APK ஐ சரிபா
 msgid "'apksigner' verification of APK failed."
 msgstr "APK இன் 'apksigner' சரிபார்ப்பு தோல்வியடைந்தது."
 
+msgid "Exporting for Android"
+msgstr "ஆண்ட்ராய்டு க்கான ஏற்றுமதி"
+
+msgid "Invalid filename! Android App Bundle requires the *.aab extension."
+msgstr ""
+"தவறான கோப்பு பெயர்! ஆண்ட்ராய்டு பயன்பாட்டு மூட்டைக்கு *.aab நீட்டிப்பு தேவைப்படுகிறது."
+
+msgid "APK Expansion not compatible with Android App Bundle."
+msgstr "APK விரிவாக்கம் ஆண்ட்ராய்டு பயன்பாடு மூட்டையுடன் பொருந்தாது."
+
+msgid "Invalid filename! Android APK requires the *.apk extension."
+msgstr "தவறான கோப்பு பெயர்! ஆண்ட்ராய்டு APK க்கு *.apk நீட்டிப்பு தேவைப்படுகிறது."
+
 msgid "Unsupported export format!"
 msgstr "ஆதரிக்கப்படாத ஏற்றுமதி வடிவம்!"
+
+msgid ""
+"Trying to build from a gradle built template, but no version info for it "
+"exists. Please reinstall from the 'Project' menu."
+msgstr ""
+"கிரேடில் கட்டப்பட்ட வார்ப்புருவில் இருந்து உருவாக்க முயற்சிக்கிறது, ஆனால் அதற்கான பதிப்பு "
+"தகவல்கள் எதுவும் இல்லை. 'திட்ட' மெனுவிலிருந்து மீண்டும் நிறுவவும்."
 
 msgid ""
 "Java SDK path must be configured in Editor Settings at 'export/android/"
@@ -17314,11 +17578,25 @@ msgstr ""
 "சாவா எச்.டி.கே பாதை எடிட்டர் அமைப்புகளில் 'ஏற்றுமதி/ஆண்ட்ராய்டு/சாவா_எச்டி_பாத்' இல் "
 "கட்டமைக்கப்பட வேண்டும்."
 
+msgid ""
+"Android SDK path must be configured in Editor Settings at 'export/android/"
+"android_sdk_path'."
+msgstr ""
+"ஆண்ட்ராய்டு SDK பாதை 'ஏற்றுமதி/Android/Android_SDK_PATH' இல் எடிட்டர் அமைப்புகளில் "
+"கட்டமைக்கப்பட வேண்டும்."
+
 msgid "Unable to overwrite res/*.xml files with project name."
 msgstr "திட்ட பெயருடன் RES/*. நீகுமொ கோப்புகளை மேலெழுத முடியவில்லை."
 
+msgid "Could not export project files to gradle project."
+msgstr "திட்ட கோப்புகளை கிரேடில் திட்டத்திற்கு ஏற்றுமதி செய்ய முடியவில்லை."
+
 msgid "Could not write expansion package file!"
 msgstr "விரிவாக்க தொகுப்பு கோப்பை எழுத முடியவில்லை!"
+
+msgid "Building of Android project failed, check output for the error:"
+msgstr ""
+"ஆண்ட்ராய்டு திட்டத்தை உருவாக்குவது தோல்வியடைந்தது, பிழைக்கான வெளியீட்டை சரிபார்க்கவும்:"
 
 msgid "Moving output"
 msgstr "நகரும் வெளியீடு"
@@ -17358,6 +17636,9 @@ msgstr "APK ஐ சீரமைத்தல் ..."
 
 msgid "Could not unzip temporary unaligned APK."
 msgstr "தற்காலிகமாக ஒழுங்கமைக்கப்படாத APK ஐ அவிழ்க்க முடியவில்லை."
+
+msgid "Metal renderer require iOS 14+."
+msgstr "மெட்டல் ரெண்டரருக்கு ஐஇமு 14+ தேவை."
 
 msgid "Export Icons"
 msgstr "ஏற்றுமதி சின்னங்கள்"
@@ -17944,6 +18225,10 @@ msgstr ""
 "பதிக்கப்படவில்லை."
 
 msgid ""
+"Particle sub-emitters are not available when using the Compatibility renderer."
+msgstr "பொருந்தக்கூடிய ரெண்டரரைப் பயன்படுத்தும் போது துகள் துணை உமிழ்ப்புகள் கிடைக்காது."
+
+msgid ""
 "A texture with the shape of the light must be supplied to the \"Texture\" "
 "property."
 msgstr "ஒளியின் வடிவத்துடன் ஒரு அமைப்பு \"அமைப்பு\" சொத்துக்கு வழங்கப்பட வேண்டும்."
@@ -18185,6 +18470,13 @@ msgstr "ஒரு ஒளியின் அளவு ஒளியின் க�
 msgid "Projector texture only works with shadows active."
 msgstr "ப்ரொசெக்டர் அமைப்பு நிழல்கள் செயலில் மட்டுமே இயங்குகிறது."
 
+msgid ""
+"Projector textures are not supported when using the Compatibility renderer "
+"yet. Support will be added in a future release."
+msgstr ""
+"பொருந்தக்கூடிய ரெண்டரரைப் பயன்படுத்தும் போது ப்ரொசெக்டர் கட்டமைப்புகள் ஆதரிக்கப்படவில்லை. "
+"எதிர்கால வெளியீட்டில் உதவி சேர்க்கப்படும்."
+
 msgid "Finding meshes, lights and probes"
 msgstr "மெச்கள், விளக்குகள் மற்றும் ஆய்வுகள் ஆகியவற்றைக் கண்டறிதல்"
 
@@ -18370,6 +18662,13 @@ msgstr "தூர புலத்தை உருவாக்குதல்"
 
 msgid "Finishing Plot"
 msgstr "முடித்த சூழ்ச்சி"
+
+msgid ""
+"VoxelGI nodes are not supported when using the Compatibility renderer yet. "
+"Support will be added in a future release."
+msgstr ""
+"பொருந்தக்கூடிய ரெண்டரரைப் பயன்படுத்தும் போது வோக்சல்கி முனைகள் ஆதரிக்கப்படவில்லை. எதிர்கால "
+"வெளியீட்டில் உதவி சேர்க்கப்படும்."
 
 msgid "VoxelGI nodes are not supported when using the Dummy renderer."
 msgstr "போலி ரெண்டரரைப் பயன்படுத்தும் போது வோக்சல்கி முனைகள் ஆதரிக்கப்படவில்லை."
@@ -18699,6 +18998,13 @@ msgstr "சேடருக்கு தவறான சான்று."
 
 msgid "Invalid operator for that type."
 msgstr "அந்த வகைக்கு தவறான ஆபரேட்டர்."
+
+msgid ""
+"`%s` precision mode is not available for `gl_compatibility` profile.\n"
+"Reverted to `None` precision."
+msgstr ""
+"`%s` துல்லிய பயன்முறை` gl_compatibility` சுயவிவரத்திற்கு கிடைக்கவில்லை. \n"
+"`எதுவுமில்லை 'துல்லியமாக மாற்றப்பட்டது."
 
 msgid "'%s' type is incompatible with '%s' source."
 msgstr "'%s' வகை '%s' மூலத்துடன் பொருந்தாது."

@@ -2733,6 +2733,21 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "ネットワークファイルシステムでスモールデプロイ"
 
+msgid ""
+"When this option is enabled, using one-click deploy for Android will only "
+"export an executable without the project data.\n"
+"The filesystem will be provided from the project by the editor over the "
+"network.\n"
+"On Android, deploying will use the USB cable for faster performance. This "
+"option speeds up testing for projects with large assets."
+msgstr ""
+"このオプションを有効にすると、Androidへのワンクリック・デプロイ時にプロジェク"
+"ト用データ無しの実行可能ファイルのみをエクスポートします。\n"
+"ファイルシステムは、エディターによってプロジェクトからネットワークを通じて供給"
+"されます。\n"
+"Androidでは、デプロイはUSBケーブルの利用でさらに高速になります。このオプション"
+"は大きなアセットのあるプロジェクトでテストを高速化できます。"
+
 msgid "Visible Collision Shapes"
 msgstr "コリジョン形状を表示"
 
@@ -4708,6 +4723,26 @@ msgstr "エディターメッセージ"
 msgid "Toggle visibility of editor messages."
 msgstr "エディターメッセージの表示/非表示を切り替えます。"
 
+msgid ""
+"The Android build template is already installed in this project and it won't "
+"be overwritten.\n"
+"Remove the \"%s\" directory manually before attempting this operation again."
+msgstr ""
+"アンドロイド用ビルドテンプレートは既にこのプロジェクトにインストール済みで、上"
+"書きはされません。\n"
+"\"%s\" ディレクトリを手動で削除して再度操作を試してください。"
+
+msgid ""
+"This will set up your project for gradle Android builds by installing the "
+"source template to \"%s\".\n"
+"Note that in order to make gradle builds instead of using pre-built APKs, the "
+"\"Use Gradle Build\" option should be enabled in the Android export preset."
+msgstr ""
+"このプロジェクトの\"%s\"にAndroid Gradleビルド用テンプレートをセットアップしま"
+"す。\n"
+"ビルド済みAPKではなくGradleビルドファイルを生成するには、Android向けエクスポー"
+"トの設定で”Use Gradle Gradle\"オプションをオンにする必要があります。"
+
 msgid "Unnamed Project"
 msgstr "名無しのプロジェクト"
 
@@ -5268,6 +5303,9 @@ msgstr "バージョン管理設定..."
 msgid "Pack Project as ZIP..."
 msgstr "プロジェクトをZIPにパック..."
 
+msgid "Install Android Build Template..."
+msgstr "Androidビルドテンプレートのインストール..."
+
 msgid "Open User Data Folder"
 msgstr "ユーザーデータフォルダーを開く"
 
@@ -5488,11 +5526,19 @@ msgstr "アップデートスピナーを非表示"
 msgid "Don't Save"
 msgstr "保存しない"
 
+msgid "Android build template is missing, please install relevant templates."
+msgstr ""
+"Androidビルドテンプレートがありません。関連するテンプレートをインストールして"
+"ください。"
+
 msgid "Manage Templates"
 msgstr "テンプレートの管理"
 
 msgid "Install from file"
 msgstr "ファイルからインストール"
+
+msgid "Select Android sources file"
+msgstr "Androidのソースファイルを選択"
 
 msgid "Import Templates From ZIP File"
 msgstr "ZIPファイルからテンプレートをインポート"
@@ -5707,6 +5753,9 @@ msgid "At least one system boot time access reason should be selected."
 msgstr ""
 "少なくとも1つのシステムブート時間のアクセス理由を選択する必要があります。"
 
+msgid "\"Shader Baker\" doesn't work with the Compatibility renderer."
+msgstr "「シェーダーベイカー」は\"互換性\"レンダリングでは動作しません。"
+
 msgid ""
 "The editor is currently using a different renderer than what the target "
 "platform will use. \"Shader Baker\" won't be able to include core shaders. "
@@ -5838,6 +5887,9 @@ msgstr "文字 '%s' は識別子に使用できません。"
 msgid "Running on %s"
 msgstr "%s で実行中"
 
+msgid "Could not start ios-deploy executable."
+msgstr "ios-deploy 実行ファイルを起動できませんでした。"
+
 msgid "Installation/running failed, see editor log for details."
 msgstr ""
 "インストール/実行に失敗しました。詳細についてはエディターログを参照してくださ"
@@ -5849,6 +5901,9 @@ msgstr ""
 
 msgid "Running failed, see editor log for details."
 msgstr "実行に失敗しました。詳細についてはエディターログを参照してください。"
+
+msgid "\"Shader Baker\" is not supported when using the Compatibility renderer."
+msgstr "互換性レンダラーを使用する場合、「Shader Baker」はサポートされません。"
 
 msgid ""
 "The editor is currently using a different renderer than what the target "
@@ -6030,6 +6085,9 @@ msgstr "倍精度ビルド用のテンプレート無し"
 
 msgid "Official export templates aren't available for double-precision builds."
 msgstr "公式エクスポートテンプレートは倍精度ビルドでは使用できません。"
+
+msgid "Uncompressing Android Build Sources"
+msgstr "Androidビルドソースの解凍"
 
 msgid "Export Template Manager"
 msgstr "エクスポートテンプレート マネージャー"
@@ -8028,11 +8086,17 @@ msgstr "複雑なシーンへの拡張性が低い。"
 msgid "Fast rendering of simple scenes."
 msgstr "単純なシーンのレンダリング速度が速い。"
 
+msgid "Supports desktop, mobile + web platforms."
+msgstr "デスクトップ、モバイル、WEBプラットフォームに対応。"
+
 msgid "Least advanced 3D graphics."
 msgstr "あまり高度でない3Dグラフィックス。"
 
 msgid "Intended for low-end/older devices."
 msgstr "ローエンド/古いデバイス向け。"
+
+msgid "Uses OpenGL 3 backend (OpenGL 3.3/ES 3.0/WebGL2)."
+msgstr "OpenGL 3バックエンド（OpenGL 3.3/ES 3.0/WebGL 2）を使用します。"
 
 msgid "Fastest rendering of simple scenes."
 msgstr "単純なシーンのレンダリング速度が最も速い。"
@@ -8107,6 +8171,15 @@ msgstr "プロジェクトのインストールパス:"
 
 msgid "Renderer:"
 msgstr "レンダラー:"
+
+msgid ""
+"RenderingDevice-based methods not available on this GPU:\n"
+"%s\n"
+"Please use the Compatibility renderer."
+msgstr ""
+"このGPUではRenderingDeviceベースのメソッドは使用できません:\n"
+"%s\n"
+"互換性レンダラーを使用してください。"
 
 msgid "The renderer can be changed later, but scenes may need to be adjusted."
 msgstr ""
@@ -8754,8 +8827,20 @@ msgstr "プロジェクトの実行を停止"
 msgid "Run Current Scene"
 msgstr "現在のシーンを実行"
 
+msgid "Run Scene in Regular Mode"
+msgstr "シーンを通常モードで実行"
+
+msgid "Run Scene in XR Mode"
+msgstr "シーンをXRモードで実行"
+
 msgid "Run Specific Scene"
 msgstr "特定のシーンを実行"
+
+msgid "Run in Regular Mode"
+msgstr "通常モードで実行"
+
+msgid "Run in XR Mode"
+msgstr "XRモードで実行"
 
 msgid "Enable Movie Maker Mode"
 msgstr "ムービーメーカーモードを有効にします"
@@ -14651,6 +14736,9 @@ msgstr "ナビゲーション(3D)"
 msgid "XR"
 msgstr "XR"
 
+msgid "OpenXR"
+msgstr "OpenXR"
+
 msgid "Wayland"
 msgstr "Wayland"
 
@@ -14723,6 +14811,9 @@ msgstr "3D のナビゲーションサーバーと機能です。"
 msgid "XR (AR and VR)."
 msgstr "XR (AR と VR)."
 
+msgid "OpenXR standard implementation (requires XR to be enabled)."
+msgstr "OpenXR標準実装（XRが有効であることが必要）。"
+
 msgid "Wayland display (Linux only)."
 msgstr "Waylandディスプレイ（Linuxのみ）。"
 
@@ -14737,6 +14828,9 @@ msgstr ""
 
 msgid "Forward+ renderer for advanced 3D graphics."
 msgstr "高度な3Dグラフィックス用のForward+レンダラー。"
+
+msgid "Mobile renderer for less advanced 3D graphics."
+msgstr "あまり高度でない3Dグラフィックス用のモバイルレンダラー。"
 
 msgid "Direct3D 12 backend of RenderingDevice."
 msgstr "RenderingDeviceのDirect3D 12バックエンド。"
@@ -17680,8 +17774,14 @@ msgstr "%s のロード中にエラーが発生しました: %s 。"
 msgid "Error saving file %s: %s"
 msgstr "ファイル %s の保存エラー: %s"
 
+msgid "OpenXR Action map:"
+msgstr "OpenXRアクションマップ:"
+
 msgid "Remove interaction profile"
 msgstr "インタラクションプロファイルを削除"
+
+msgid "OpenXR Action Map"
+msgstr "OpenXRアクションマップ"
 
 msgid "Add Action Set"
 msgstr "アクションセットの追加"
@@ -17694,6 +17794,12 @@ msgstr "プロファイルの追加"
 
 msgid "Add an interaction profile."
 msgstr "インタラクションプロファイルを追加します。"
+
+msgid "Save this OpenXR action map."
+msgstr "このOpenXRアクションマップを保存します。"
+
+msgid "Reset to default OpenXR action map."
+msgstr "デフォルトのOpenXRアクションマップにリセットします。"
 
 msgid "Action Sets"
 msgstr "アクションセット"
@@ -17763,16 +17869,32 @@ msgstr ""
 msgid "Choose an XR runtime."
 msgstr "XRランタイムを選択します。"
 
+msgid "OpenXR composition layers must have an XROrigin3D node as their parent."
+msgstr "OpenXR composition layer には、親として XROrigin3D ノードが必要です。"
+
+msgid ""
+"OpenXR composition layers must have orthonormalized transforms (ie. no scale "
+"or shearing)."
+msgstr ""
+"OpenXR composition layer は、正規直交変換でなければなりません(つまり scale や "
+"shearing は不可です)。"
+
 msgid ""
 "Hole punching won't work as expected unless the sort order is less than zero."
 msgstr ""
 "ホールパンチングは sort order が0より小さくなければ期待通りに動作しません。"
+
+msgid "Building Android Project (gradle)"
+msgstr "Androidプロジェクトのビルド (gradle)"
 
 msgid "Package name is missing."
 msgstr "パッケージ名が設定されていません。"
 
 msgid "Package segments must be of non-zero length."
 msgstr "パッケージ セグメントの長さは 0 以外である必要があります。"
+
+msgid "The character '%s' is not allowed in Android application package names."
+msgstr "文字 '%s' はAndroidアプリケーションのパッケージ名に使用できません。"
 
 msgid "A digit cannot be the first character in a package segment."
 msgstr "パッケージセグメントの最初の文字に数字は使用できません。"
@@ -17792,6 +17914,20 @@ msgstr "APK expansion の公開鍵が無効です。"
 msgid "Invalid package name:"
 msgstr "無効なパッケージ名:"
 
+msgid "\"Use Gradle Build\" must be enabled to use the plugins."
+msgstr ""
+"プラグインを使用するには、「Use Gradle Build」を有効にする必要があります。"
+
+msgid "\"Export AAB\" is only valid when \"Use Gradle Build\" is enabled."
+msgstr ""
+"「AAB のエクスポート」は、「Gradle ビルドの使用」が有効になっている場合にのみ"
+"有効です。"
+
+msgid "\"Min SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
+msgstr ""
+"「Min SDK」は、「Use Gradle Build」が有効になっている場合にのみオーバーライド"
+"できます。"
+
 msgid "\"Min SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr "「Min SDK」は有効な整数である必要がありますが、無効な「%s」を得ました。"
 
@@ -17801,6 +17937,12 @@ msgid ""
 msgstr ""
 "「Min SDK」は、Godot ライブラリに必要なバージョンである %d より低くすることは"
 "できません。"
+
+msgid ""
+"\"Target SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
+msgstr ""
+"「ターゲット SDK」は、「Use Gradle Build」が有効になっている場合にのみオーバー"
+"ライドできます。"
 
 msgid ""
 "\"Target SDK\" should be a valid integer, but got \"%s\" which is invalid."
@@ -17831,6 +17973,19 @@ msgstr "デバイスで実行できませんでした。"
 
 msgid "Error: There was a problem validating the keystore username and password"
 msgstr "エラー: キーストアのユーザー名とパスワードの検証中に問題が発生しました"
+
+msgid "Exporting to Android when using C#/.NET is experimental."
+msgstr "C#/.NET を使用する場合の Android へのエクスポートは実験的です。"
+
+msgid "Custom Android source template not found."
+msgstr "カスタム Android ソーステンプレートが見つかりません。"
+
+msgid ""
+"Android build template not installed in the project. Install it from the "
+"Project menu."
+msgstr ""
+"Android ビルド テンプレートがプロジェクトにインストールされていません。[プロ"
+"ジェクト] メニューからインストールします。"
 
 msgid ""
 "Either Debug Keystore, Debug User AND Debug Password settings must be "
@@ -17867,11 +18022,26 @@ msgstr "Java SDKのパスから 'java' コマンドを見つけることがで�
 msgid "Please check the Java SDK directory specified in Editor Settings."
 msgstr "エディタ設定で指定されたJava SDKディレクトリを確認してください。"
 
+msgid "A valid Android SDK path is required in Editor Settings."
+msgstr "エディター設定でAndroid SDKパスの指定が必要です。"
+
+msgid "Invalid Android SDK path in Editor Settings."
+msgstr "エディター設定のAndroid SDKパスが無効です。"
+
 msgid "Missing 'platform-tools' directory!"
 msgstr "'platform-tools' ディレクトリがありません！"
 
+msgid "Unable to find Android SDK platform-tools' adb command."
+msgstr "Android SDK platform-toolsのadbコマンドが見つかりません。"
+
+msgid "Please check in the Android SDK directory specified in Editor Settings."
+msgstr "エディター設定で指定されたAndroid SDKのディレクトリを確認してください。"
+
 msgid "Missing 'build-tools' directory!"
 msgstr "'build-tools' ディレクトリがありません！"
+
+msgid "Unable to find Android SDK build-tools' apksigner command."
+msgstr "Android SDK build-toolsのapksignerコマンドが見つかりません。"
 
 msgid ""
 "\"Target SDK\" %d is higher than the default version %d. This may work, but "
@@ -17879,6 +18049,13 @@ msgid ""
 msgstr ""
 "「ターゲット SDK」 %d はデフォルトのバージョン %d よりも新しいです。これは機能"
 "する可能性がありますが、テストされていないため、不安定になる可能性があります。"
+
+msgid ""
+"The \"%s\" renderer is designed for Desktop devices, and is not suitable for "
+"Android devices."
+msgstr ""
+"「%s」レンダラーはデスクトップ デバイス用に設計されており、Android デバイスに"
+"は適していません。"
 
 msgid ""
 "The project name does not meet the requirement for the package name format "
@@ -17900,6 +18077,22 @@ msgstr "リリース APK に署名中..."
 msgid "Unable to sign apk."
 msgstr "APKに署名できません。"
 
+msgid ""
+"All 'apksigner' tools located in Android SDK 'build-tools' directory failed "
+"to execute. Please check that you have the correct version installed for your "
+"target sdk version. The resulting APK is unsigned."
+msgstr ""
+"Android SDK の「build-tools」ディレクトリにあるすべての「apksigner」ツールの実"
+"行に失敗しました。ターゲットの SDK バージョンに対応した正しいバージョンがイン"
+"ストールされていることを確認してください。生成されたAPKは未署名です。"
+
+msgid ""
+"'apksigner' could not be found. Please check that the command is available in "
+"the Android SDK build-tools directory. The resulting APK is unsigned."
+msgstr ""
+"'apksigner' が見つかりませんでした。このコマンドが Android SDK build-tools "
+"ディレクトリにあるか確認してください。生成されたAPKは未署名です。"
+
 msgid "Could not start apksigner executable."
 msgstr "apksigner実行ファイルを開始できませんでした。"
 
@@ -17919,8 +18112,27 @@ msgstr "APK を検証中..."
 msgid "'apksigner' verification of APK failed."
 msgstr "'apksigner' による APK の検証に失敗しました。"
 
+msgid "Exporting for Android"
+msgstr "Android用にエクスポート"
+
+msgid "Invalid filename! Android App Bundle requires the *.aab extension."
+msgstr "無効なファイル名です！Android App Bundle には拡張子 *.aab が必要です。"
+
+msgid "APK Expansion not compatible with Android App Bundle."
+msgstr "APK Expansion は Android App Bundle とは互換性がありません。"
+
+msgid "Invalid filename! Android APK requires the *.apk extension."
+msgstr "無効なファイル名です！ Android APKには拡張子 *.apk が必要です。"
+
 msgid "Unsupported export format!"
 msgstr "サポートされていないエクスポート形式です！"
+
+msgid ""
+"Trying to build from a gradle built template, but no version info for it "
+"exists. Please reinstall from the 'Project' menu."
+msgstr ""
+"Gradle でビルドされたテンプレートからビルドしようとしましたが、そのバージョン"
+"情報が存在しません。「プロジェクト」メニューから再インストールしてください。"
 
 msgid ""
 "Java SDK path must be configured in Editor Settings at 'export/android/"
@@ -17929,14 +18141,29 @@ msgstr ""
 "Java SDK パスは、エディタ設定 'export/android/java_sdk_path' にて設定する必要"
 "があります。"
 
+msgid ""
+"Android SDK path must be configured in Editor Settings at 'export/android/"
+"android_sdk_path'."
+msgstr ""
+"Android SDK のパスは、エディター設定 'export/android/android_sdk_path' にて設"
+"定する必要があります。"
+
 msgid "Unable to overwrite res/*.xml files with project name."
 msgstr "res/*.xml ファイルをプロジェクト名で上書きできません。"
 
 msgid "Could not write PCK directory!"
 msgstr "PCK ディレクトリに書き込めませんでした!"
 
+msgid "Could not export project files to gradle project."
+msgstr ""
+"プロジェクトファイルをgradleプロジェクトにエクスポートできませんでした。"
+
 msgid "Could not write expansion package file!"
 msgstr "拡張パッケージファイルを書き込めませんでした！"
+
+msgid "Building of Android project failed, check output for the error:"
+msgstr ""
+"Android プロジェクトのビルドに失敗しました。エラー出力を確認してください:"
 
 msgid "Moving output"
 msgstr "出力結果の移動中"
@@ -17977,6 +18204,9 @@ msgstr "APKを最適化..."
 
 msgid "Could not unzip temporary unaligned APK."
 msgstr "temporary unaligned APKを展開できませんでした。"
+
+msgid "Metal renderer require iOS 14+."
+msgstr "MetalレンダラーにはiOS 14以降が必要です。"
 
 msgid "Export Icons"
 msgstr "エクスポートアイコン"
@@ -19511,6 +19741,13 @@ msgstr "無効なシェーダーのソースです。"
 
 msgid "Invalid operator for that type."
 msgstr "その型には無効な演算子です。"
+
+msgid ""
+"`%s` precision mode is not available for `gl_compatibility` profile.\n"
+"Reverted to `None` precision."
+msgstr ""
+"`%s` 精度モードは `gl_compatibility` プロファイルでは使用できません。\n"
+"「None」に戻しました。"
 
 msgid "'%s' type is incompatible with '%s' source."
 msgstr "'%s' タイプは '%s' ソースと互換性がありません。"

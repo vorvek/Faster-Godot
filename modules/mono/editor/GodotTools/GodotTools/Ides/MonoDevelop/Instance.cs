@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Diagnostics;
+using GodotTools.Internals;
 using GodotTools.Utils;
 
 namespace GodotTools.Ides.MonoDevelop
@@ -25,7 +26,32 @@ namespace GodotTools.Ides.MonoDevelop
 
             string? command;
 
-            command = OS.PathWhich(ExecutableNames[_editorId]);
+            if (OS.IsMacOS)
+            {
+                string bundleId = BundleIds[_editorId];
+
+                if (Internal.IsMacOSAppBundleInstalled(bundleId))
+                {
+                    command = "open";
+
+                    args.Add("-b");
+                    args.Add(bundleId);
+
+                    // The 'open' process must wait until the application finishes
+                    if (newWindow)
+                        args.Add("--wait-apps");
+
+                    args.Add("--args");
+                }
+                else
+                {
+                    command = OS.PathWhich(ExecutableNames[_editorId]);
+                }
+            }
+            else
+            {
+                command = OS.PathWhich(ExecutableNames[_editorId]);
+            }
 
             args.Add("--ipc-tcp");
 
@@ -59,6 +85,9 @@ namespace GodotTools.Ides.MonoDevelop
 
         public Instance(string solutionFile, EditorId editorId)
         {
+            if (editorId == EditorId.VisualStudioForMac && !OS.IsMacOS)
+                throw new InvalidOperationException($"{nameof(EditorId.VisualStudioForMac)} not supported on this platform");
+
             _solutionFile = solutionFile;
             _editorId = editorId;
         }
@@ -70,10 +99,25 @@ namespace GodotTools.Ides.MonoDevelop
         }
 
         private static readonly IReadOnlyDictionary<EditorId, string> ExecutableNames;
+        private static readonly IReadOnlyDictionary<EditorId, string> BundleIds;
 
         static Instance()
         {
-            if (OS.IsWindows)
+            if (OS.IsMacOS)
+            {
+                ExecutableNames = new Dictionary<EditorId, string>
+                {
+                    // Rely on PATH
+                    {EditorId.MonoDevelop, "monodevelop"},
+                    {EditorId.VisualStudioForMac, "VisualStudio"}
+                };
+                BundleIds = new Dictionary<EditorId, string>
+                {
+                    // TODO EditorId.MonoDevelop
+                    {EditorId.VisualStudioForMac, "com.microsoft.visual-studio"}
+                };
+            }
+            else if (OS.IsWindows)
             {
                 ExecutableNames = new Dictionary<EditorId, string>
                 {
@@ -93,6 +137,7 @@ namespace GodotTools.Ides.MonoDevelop
                 };
             }
             ExecutableNames ??= new Dictionary<EditorId, string>();
+            BundleIds ??= new Dictionary<EditorId, string>();
         }
     }
 }

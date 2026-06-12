@@ -2289,6 +2289,20 @@ msgstr "Triển khai gỡ lỗi từ xa"
 msgid "Small Deploy with Network Filesystem"
 msgstr "Triển khai nhỏ với hệ thống tệp mạng"
 
+msgid ""
+"When this option is enabled, using one-click deploy for Android will only "
+"export an executable without the project data.\n"
+"The filesystem will be provided from the project by the editor over the "
+"network.\n"
+"On Android, deploying will use the USB cable for faster performance. This "
+"option speeds up testing for projects with large assets."
+msgstr ""
+"Khi tuỳ chọn này được bật, lúc xuất hoặc triển khai ra Android sẽ chỉ tạo một "
+"tệp thực thi tối giản nhất.\n"
+"Hệ thống tệp tin sẽ được cung cấp từ dự án bởi trình chỉnh sửa qua mạng.\n"
+"Trên nền tảng Android, triển khai sẽ sử dụng cáp USB để có hiệu suất nhanh "
+"hơn. Tuỳ chọn này tăng tốc độ khi thử nghiệm cho các trò chơi nặng."
+
 msgid "Visible Collision Shapes"
 msgstr "Các khối va chạm thấy được"
 
@@ -3473,6 +3487,9 @@ msgstr "Xuất thành..."
 msgid "Version Control"
 msgstr "Theo dõi phiên bản"
 
+msgid "Install Android Build Template..."
+msgstr "Cài đặt mẫu xây dựng Android..."
+
 msgid "Open User Data Folder"
 msgstr "Mở thư mục dữ liệu người dùng"
 
@@ -3616,6 +3633,9 @@ msgstr "Ẩn cập nhật spinner"
 
 msgid "Don't Save"
 msgstr "Không Lưu"
+
+msgid "Android build template is missing, please install relevant templates."
+msgstr "Bản mẫu dựng cho Android bị thiếu, vui lòng cài các bản mẫu liên quan."
 
 msgid "Manage Templates"
 msgstr "Quản lý bản mẫu"
@@ -3801,6 +3821,9 @@ msgstr "Không thấy bản mẫu xuất nào cả. Tải bản mẫu xuống ho
 
 msgid "Official export templates aren't available for development builds."
 msgstr "Các bản mẫu xuất chính thức không có sẵn cho các bản dựng phát triển."
+
+msgid "Uncompressing Android Build Sources"
+msgstr "Giải nén nguồn xây dựng Android"
 
 msgid "Export Template Manager"
 msgstr "Trình quản lý bản mẫu xuất"
@@ -7369,6 +7392,9 @@ msgstr "Lỗi khi tải %s: %s."
 msgid "Error saving file %s: %s"
 msgstr "Lỗi khi lưu tệp %s: %s"
 
+msgid "Building Android Project (gradle)"
+msgstr "Đang dựng dự án Android (gradle)"
+
 msgid "Invalid public key for APK expansion."
 msgstr "Khóa công khai của bộ APK mở rộng không hợp lệ."
 
@@ -7387,11 +7413,46 @@ msgstr "Đang cài vào thiết bị, xin vui lòng chờ..."
 msgid "Could not install to device: %s"
 msgstr "Không thể cài đặt vào thiệt bị: %s"
 
+msgid ""
+"Android build template not installed in the project. Install it from the "
+"Project menu."
+msgstr ""
+"Bản mẫu dựng cho Android chưa được cài đặt trong dự án. Cài đặt nó từ bảng "
+"chọn Dự án."
+
+msgid "A valid Android SDK path is required in Editor Settings."
+msgstr "Cài đặt Trình biên tập yêu cầu một đường dẫn Android SDK hợp lệ."
+
+msgid "Invalid Android SDK path in Editor Settings."
+msgstr "Đường dẫn Android SDK không hợp lệ trong Cài đặt Trình biên tập."
+
 msgid "Missing 'platform-tools' directory!"
 msgstr "Thiếu thư mục 'platform-tools'!"
 
+msgid "Unable to find Android SDK platform-tools' adb command."
+msgstr "Không tìm thấy lệnh adb trong bộ Android SDK platform-tools."
+
+msgid "Please check in the Android SDK directory specified in Editor Settings."
+msgstr ""
+"Hãy kiểm tra thư mục Android SDK được cung cấp ở Cài đặt Trình biên tập."
+
 msgid "Missing 'build-tools' directory!"
 msgstr "Thiếu thư mục 'build-tools'!"
+
+msgid "Unable to find Android SDK build-tools' apksigner command."
+msgstr "Không tìm thấy lệnh apksigner của bộ Android SDK build-tools."
+
+msgid "Exporting for Android"
+msgstr "Đang xuất sang Android"
+
+msgid "Invalid filename! Android App Bundle requires the *.aab extension."
+msgstr "Tên tệp không hợp lệ! Android App Bundle cần đuôi *.aab ở cuối."
+
+msgid "Invalid filename! Android APK requires the *.apk extension."
+msgstr "Tên tệp không hợp lệ! Android APK cần đuôi *.apk ở cuối."
+
+msgid "Building of Android project failed, check output for the error:"
+msgstr "Xây dựng dự án Android thất bại, hãy kiểm tra đầu ra để biết lỗi:"
 
 msgid "Could not find template APK to export: \"%s\"."
 msgstr "Không thể tìm bản mẫu APK để xuất: \"%s\"."

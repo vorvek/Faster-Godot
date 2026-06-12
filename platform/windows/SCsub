@@ -23,6 +23,13 @@ common_win = [
     "drop_target_windows.cpp",
 ]
 
+if env["opengl3"]:
+    common_win += [
+        "gl_manager_windows_native.cpp",
+        "gl_manager_windows_angle.cpp",
+        "wgl_detect_version.cpp",
+    ]
+
 if env["library_type"] == "executable":
     common_win += ["godot_windows.cpp"]
 else:

@@ -353,6 +353,9 @@ def configure(env: "SConsEnvironment"):
         # No pkgconfig file so far, hardcode expected lib name.
         env.Append(LIBS=["embree4"])
 
+    if not env["builtin_openxr"]:
+        env.ParseConfig("pkg-config openxr --cflags --libs")
+
     if env["fontconfig"]:
         if not env["use_sowrap"]:
             if os.system("pkg-config --exists fontconfig") == 0:  # 0 means found
@@ -512,6 +515,10 @@ def configure(env: "SConsEnvironment"):
                 print_error("Wayland cursor library not found. Aborting.")
                 sys.exit(255)
             env.ParseConfig("pkg-config wayland-cursor --cflags --libs")
+            if os.system("pkg-config --exists wayland-egl"):
+                print_error("Wayland EGL library not found. Aborting.")
+                sys.exit(255)
+            env.ParseConfig("pkg-config wayland-egl --cflags --libs")
         else:
             env.Prepend(CPPPATH=["#thirdparty/linuxbsd_headers/wayland/"])
             if env["libdecor"]:
@@ -548,6 +555,9 @@ def configure(env: "SConsEnvironment"):
         if not env["builtin_glslang"]:
             # No pkgconfig file so far, hardcode expected lib name.
             env.Append(LIBS=["glslang", "SPIRV", "glslang-default-resource-limits"])
+
+    if env["opengl3"]:
+        env.Append(CPPDEFINES=["GLES3_ENABLED"])
 
     env.Append(LIBS=["pthread"])
 

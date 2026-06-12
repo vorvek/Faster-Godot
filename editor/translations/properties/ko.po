@@ -268,8 +268,14 @@ msgstr "하위 창 임베딩"
 msgid "Frame Pacing"
 msgstr "프레임 간격"
 
+msgid "Android"
+msgstr "Android"
+
 msgid "Enable Frame Pacing"
 msgstr "프레임 페이싱 활성화"
+
+msgid "Swappy Mode"
+msgstr "Swappy 모드"
 
 msgid "Physics"
 msgstr "물리"
@@ -3020,6 +3026,9 @@ msgstr "디폴트 애니메이션 단계"
 msgid "Default FPS Mode"
 msgstr "디폴트 FPS 모드"
 
+msgid "Default FPS Compatibility"
+msgstr "디폴트 FPS 호환성"
+
 msgid "Autorename Animation Tracks"
 msgstr "애니메이션 트랙 자동 이름 바꾸기"
 
@@ -3082,6 +3091,9 @@ msgstr "직사각형 커스텀 위치"
 
 msgid "Screen"
 msgstr "화면"
+
+msgid "Android Window"
+msgstr "Android 창"
 
 msgid "Game Embed Mode"
 msgstr "게임 임베딩 모드"
@@ -3314,6 +3326,9 @@ msgstr "D3D12로 폴백"
 msgid "Fallback to OpenGL 3"
 msgstr "OpenGL 3로 폴백"
 
+msgid "GL Compatibility"
+msgstr "GL 호환성"
+
 msgid "Nvidia Disable Threaded Optimization"
 msgstr "NVidia 스레드 최적화 사용 안함"
 
@@ -3382,6 +3397,9 @@ msgstr "UI 제스쳐 막기"
 
 msgid "XR"
 msgstr "XR"
+
+msgid "OpenXR"
+msgstr "OpenXR"
 
 msgid "Target API Version"
 msgstr "대상 API 버전"
@@ -4733,8 +4751,14 @@ msgstr "다음"
 msgid "Layer Viewport"
 msgstr "레이어 뷰포트"
 
+msgid "Use Android Surface"
+msgstr "Android 서피스 사용"
+
 msgid "Protected Content"
 msgstr "보호된 내용"
+
+msgid "Android Surface Size"
+msgstr "Android 서피스 경로"
 
 msgid "Sort Order"
 msgstr "정렬 순서"
@@ -4853,6 +4877,9 @@ msgstr "IGD 우리의 주소"
 msgid "IGD Status"
 msgstr "IGD 상태"
 
+msgid "WebRTC"
+msgstr "WebRTC"
+
 msgid "Max Channel in Buffer (KB)"
 msgstr "버퍼 내 최대 채널 (KB)"
 
@@ -4916,6 +4943,9 @@ msgstr "내보낸 APK 설치"
 msgid "Java SDK Path"
 msgstr "Java SDK 경로"
 
+msgid "Android SDK Path"
+msgstr "Android SDK 경로"
+
 msgid "scrcpy"
 msgstr "scrcpy"
 
@@ -4960,6 +4990,18 @@ msgstr "적응형 배경 432 X 432"
 
 msgid "Adaptive Monochrome 432 X 432"
 msgstr "적응형 단색 432 X 432"
+
+msgid "Gradle Build"
+msgstr "Gradle 빌드"
+
+msgid "Use Gradle Build"
+msgstr "Gradle 빌드 사용"
+
+msgid "Gradle Build Directory"
+msgstr "Gradle 빌드 디렉터리"
+
+msgid "Android Source Template"
+msgstr "Android 소스 템플릿"
 
 msgid "Compress Native Libraries"
 msgstr "네이티브 라이브러리 압축"
@@ -5011,6 +5053,9 @@ msgstr "설치 삭제 시 데이터 유지"
 
 msgid "Exclude From Recents"
 msgstr "최근 항목에서 제외"
+
+msgid "Show in Android TV"
+msgstr "Android TV에서 보이기"
 
 msgid "Show in App Library"
 msgstr "앱 라이브러리에서 보이기"
@@ -5084,8 +5129,14 @@ msgstr "권한"
 msgid "Custom Permissions"
 msgstr "커스텀 권한"
 
+msgid "iOS Deploy"
+msgstr "iOS 배포"
+
 msgid "Targeted Device Family"
 msgstr "목표 디바이스 제품군"
+
+msgid "Min iOS Version"
+msgstr "최소 iOS 버전"
 
 msgid "Storyboard"
 msgstr "스토리보드"
@@ -5140,6 +5191,15 @@ msgstr "iPad 167 X 167"
 
 msgid "iPad 152 X 152"
 msgstr "iPad 152 X 152"
+
+msgid "iOS 128 X 128"
+msgstr "iOS 128 X 128"
+
+msgid "iOS 192 X 192"
+msgstr "iOS 192 X 192"
+
+msgid "iOS 136 X 136"
+msgstr "iOS 136 X 136"
 
 msgid "App Store 1024 X 1024"
 msgstr "App Store 1024 X 1024"
@@ -5452,6 +5512,9 @@ msgstr "아이콘 180 X 180"
 
 msgid "Icon 512 X 512"
 msgstr "아이콘 512 X 512"
+
+msgid "Emscripten Pool Size"
+msgstr "Emscripten 풀 크기"
 
 msgid "Godot Pool Size"
 msgstr "Godot 풀 크기"

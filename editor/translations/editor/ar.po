@@ -1,3 +1,130 @@
+# Arabic translation of the Godot Engine editor interface.
+# Copyright (c) 2014-present Godot Engine contributors.
+# Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.
+# This file is distributed under the same license as the Godot source code.
+# Adel <dragonhunter250@gmail.com>, 2018.
+# athomield <athomield@hotmail.com>, 2017.
+# Basil Al-Khateeb <basil.y.alkhateeb@gmail.com>, 2017.
+# Jamal Alyafei <jamal.qassim@gmail.com>, 2017.
+# john lennon <khoanantonio@outlook.com>, 2017.
+# Mohammmad Khashashneh <mohammad.rasmi@gmail.com>, 2016, 2020.
+# Mr ChaosXD <mrchaosxd3@gmail.com>, 2018.
+# Mrwan Ashraf <mrwan.ashraf94@gmail.com>, 2017.
+# noureldin sharaf <sharaf.noureldin@yahoo.com>, 2017.
+# omar anwar aglan <omar.aglan91@yahoo.com>, 2017-2018.
+# OWs Tetra <owstetra@gmail.com>, 2017.
+# Rached Noureddine <rached.noureddine@gmail.com>, 2018.
+# Rex_sa <asd1234567890m@gmail.com>, 2017, 2018, 2019.
+# Wajdi Feki <wajdi.feki@gmail.com>, 2017.
+# Omar Aglan <omar.aglan91@yahoo.com>, 2018, 2019, 2020, 2023.
+# Codes Otaku <ilyas.gamerz@gmail.com>, 2018, 2019.
+# Takai Eddine Kennouche <takai.kenn@gmail.com>, 2018.
+# Mohamed El-Baz <albaz2000eg@gmail.com>, 2018.
+# عاصم شكر - Aasem shokr <aasemshokr@gmail.com>, 2018.
+# Mohammad Fares <mhdchehade@gmail.com>, 2018.
+# NewFriskFan26 <newfriskfan26@gmail.com>, 2019.
+# spiderx0x <legendofdarks@gmail.com>, 2019.
+# Ibraheem Tawfik <tawfikibraheem@gmail.com>, 2019.
+# DiscoverSquishy <noaimi@discoversquishy.me>, 2019.
+# ButterflyOfFire <ButterflyOfFire@protonmail.com>, 2019.
+# PhoenixHO <oussamahaddouche0@gmail.com>, 2019.
+# orcstudio <orcstudio@orcstudio.org>, 2019.
+# Rachid Graphicos <graphicos1d@gmail.com>, 2019.
+# traveller010 <manar.bushnaq.001@gmail.com>, 2019.
+# Ahmed Shahwan <dev.ahmed.shahwan@gmail.com>, 2019.
+# hshw <shw@tutanota.com>, 2020.
+# Youssef Harmal <the.coder.crab@gmail.com>, 2020.
+# Nabeel20 <nabeelandnizam@gmail.com>, 2020, 2021, 2022, 2023.
+# merouche djallal <kbordora@gmail.com>, 2020.
+# Airbus5717 <Abdussamadf350@gmail.com>, 2020.
+# tamsamani mohamed <tamsmoha@gmail.com>, 2020.
+# Anas <anas.ghamdi61@gmail.com>, 2020.
+# R-K <raouf9005@gmail.com>, 2020.
+# HeroFight dev <abdkafi2002@gmail.com>, 2020.
+# أحمد مصطفى الطبراني <eltabaraniahmed@gmail.com>, 2020.
+# ChemicalInk <aladdinalkhafaji@gmail.com>, 2020.
+# Musab Alasaifer <mousablasefer@gmail.com>, 2020.
+# Yassine Oudjana <y.oudjana@protonmail.com>, 2020, 2022.
+# bruvzg <bruvzg13@gmail.com>, 2020.
+# StarlkYT <mrsstarlkps4@gmail.com>, 2020, 2021.
+# Games Toon <xxtvgoodxx@gmail.com>, 2021, 2022.
+# Kareem Abduljaleel <karemjaleel34@gmail.com>, 2021.
+# ILG - Game <moegypt277@gmail.com>, 2021.
+# Hatim Jamal <hatimjamal8@gmail.com>, 2021.
+# HASSAN GAMER - حسن جيمر <gamerhassan55@gmail.com>, 2021, 2022.
+# abubakrAlsaab <madeinsudan19@gmail.com>, 2021.
+# Hafid Talbi <atalbiie@gmail.com>, 2021.
+# Hareth Mohammed <harethpy@gmail.com>, 2021.
+# Mohammed Mubarak <modymu9@gmail.com>, 2021, 2022.
+# Spirit <i8bou3@gmail.com>, 2021, 2022.
+# TURKYM7MD <turkytb7700@gmail.com>, 2022.
+# zeyad majed <zmajd62@gmail.com>, 2022.
+# Whales State <whalesstate@gmail.com>, 2022, 2024.
+# Mr.k <mineshtine28546271@gmail.com>, 2022.
+# ywmaa <ywmaa.personal@gmail.com>, 2022.
+# Awab Najim <dev.djvan@gmail.com>, 2022.
+# Abderrahim <abdoudido117@gmail.com>, 2022.
+# Jhon Smith <jhonsmaith3@gmail.com>, 2022.
+# Oo mohab oO <mohab9225@gmail.com>, 2022.
+# عبد الرحمن أبو سعدة ||Abd Alrahman abo saada <abdalrahmanabs2005@gmail.com>, 2022.
+# xX-Void-Xx <arandomdude75@gmail.com>, 2022.
+# أحمد النور <ahmed2699@gmail.com>, 2022.
+# Commander Gordon <gordoncommander@gmail.com>, 2022.
+# Abdulrahman <abdelrahman.ramadan686@gmail.com>, 2022.
+# "Ali F. Abbas" <alifuadabbas@gmail.com>, 2023.
+# Youssef Mohamed <starmod300@gmail.com>, 2023.
+# "Mr.k" <mineshtine28546271@gmail.com>, 2023, 2024.
+# Mohammedi Mohammed Djawad <smallcloverstudio@gmail.com>, 2023.
+# Hamed Mohammed Almuslhi <wbk7777@hotmail.com>, 2023.
+# KhalilBenGaied <grozz1@yahoo.com>, 2023.
+# بسام العوفي <co-able@hotmail.com>, 2023, 2024.
+# Abdulkarim <abwkhaldalhwsawy@gmail.com>, 2023.
+# Rémi Verschelde <remi@godotengine.org>, 2023.
+# Omran Alsaedi <Omran2222@outlook.sa>, 2023.
+# Android Prime <abodinagdat16@gmail.com>, 2023.
+# Ibraheem Asad <ibo.asad.97@gmail.com>, 2023.
+# Aya Ichrak <ayaichrack@gmail.com>, 2023.
+# ZAID G <zaidm1122334455@gmail.com>, 2023.
+# Jugy <hellowo038@gmail.com>, 2023.
+# 7D <miuatoro.exe@gmail.com>, 2023.
+# Emad Alhaddad <emad142240@gmail.com>, 2023, 2025.
+# Varga <vancouver_cliparf@simplelogin.com>, 2024.
+# Ahmed Nehad <nmkao333@gmail.com>, 2024.
+# Rashid Al Haqbany <haqbany@gmail.com>, 2024.
+# cat lover <mongo@users.noreply.hosted.weblate.org>, 2024.
+# Mohammed Almosawy <nairex1212m1@gmail.com>, 2024.
+# Ali al khawaja <ali.al.khuwaja@gmail.com>, 2024.
+# Spirit <spirit@programmer.net>, 2024.
+# Saif El-Din Ahmed <sa435995@gmail.com>, 2025.
+# ابْنُ السَدِيمِ <amarlubs2@gmail.com>, 2025.
+# Zeyad Alsultan <z.t.alsultan@gmail.com>, 2025.
+# TonyxDz <tony23dz@gmail.com>, 2025.
+# Modem Hexagon <nexusnecromance@gmail.com>, 2025.
+# 7Xme <ayoubatigui33@gmail.com>, 2025.
+# عمّار عبدالله <ammar-dmour19@proton.me>, 2025.
+# Elias Dammach <eliasdammach208@gmail.com>, 2025.
+# Ihab Shoully <shoully@gmail.com>, 2025.
+# "A Thousand Ships (she/her)" <over999ships@gmail.com>, 2025.
+# ahmad aaaz <aaazahmad8@gmail.com>, 2025.
+# kyan <heiorun.eks@gmail.com>, 2026.
+# Khaled Aboud <khaledaboud700@gmail.com>, 2026.
+msgid ""
+msgstr ""
+"Project-Id-Version: Godot Engine editor interface\n"
+"Report-Msgid-Bugs-To: https://github.com/godotengine/godot\n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: 2026-01-23 01:57+0000\n"
+"Last-Translator: Khaled Aboud <khaledaboud700@gmail.com>\n"
+"Language-Team: Arabic <https://hosted.weblate.org/projects/godot-engine/godot/"
+"ar/>\n"
+"Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=6; plural=n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && "
+"n%100<=10 ? 3 : n%100>=11 ? 4 : 5;\n"
+"X-Generator: Weblate 5.16-dev\n"
+
 msgid "OK"
 msgstr "حسنا"
 
@@ -2472,6 +2599,20 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "نشر صغير مع نظام ملفات الشبكة"
 
+msgid ""
+"When this option is enabled, using one-click deploy for Android will only "
+"export an executable without the project data.\n"
+"The filesystem will be provided from the project by the editor over the "
+"network.\n"
+"On Android, deploying will use the USB cable for faster performance. This "
+"option speeds up testing for projects with large assets."
+msgstr ""
+"عند تمكين هذا الخيار، فإن استخدام النشر بنقرة واحدة لنظام الأندرويد لن يؤدي "
+"إلا إلى تصدير ملف قابل للتنفيذ بدون بيانات المشروع.\n"
+"نظام الملفات سوف يتم توفيره بواسطة المُعدل من خلال الشبكة.\n"
+"على الأندرويد، النشر سوف يستخدم وصلة اليو إس بي للحصول على أداء أسرع. هذا "
+"الإعداد يسرّع إختبار الألعاب ذات الحجم الكبير."
+
 msgid "Visible Collision Shapes"
 msgstr "الأشكال المتصادمة ظاهرة"
 
@@ -4264,6 +4405,26 @@ msgstr "رؤية التحذيرات."
 msgid "Toggle visibility of editor messages."
 msgstr "رؤية رسائل المُحرر."
 
+msgid ""
+"The Android build template is already installed in this project and it won't "
+"be overwritten.\n"
+"Remove the \"%s\" directory manually before attempting this operation again."
+msgstr ""
+"تم تثبيت قالب البناء الخاص بنظام أندرويد مسبقًا في هذا المشروع، ولن يتم "
+"الكتابة فوقه.\n"
+"يرجى إزالة مجلد \"%s\" يدويًا قبل محاولة تنفيذ هذه العملية مرة أخرى."
+
+msgid ""
+"This will set up your project for gradle Android builds by installing the "
+"source template to \"%s\".\n"
+"Note that in order to make gradle builds instead of using pre-built APKs, the "
+"\"Use Gradle Build\" option should be enabled in the Android export preset."
+msgstr ""
+"سيقوم هذا الإجراء بإعداد مشروعك لبناءات أندرويد باستخدام Gradle عن طريق تثبيت "
+"قالب المصدر في «%s».\n"
+"لاحظ أنه لجعل البناءات تتم بواسطة Gradle بدلاً من استخدام ملفات APK الجاهزة، "
+"يجب تفعيل خيار «استخدام بناء Gradle» في إعداد التصدير الخاص بأندرويد."
+
 msgid "Unnamed Project"
 msgstr "مشروع غير مسمى"
 
@@ -4788,6 +4949,9 @@ msgstr "إعدادات التحكم في الإصدارات..."
 msgid "Pack Project as ZIP..."
 msgstr "حزم المشروع كملف ZIP..."
 
+msgid "Install Android Build Template..."
+msgstr "تحميل قالب البناء للأندرويد..."
+
 msgid "Open User Data Folder"
 msgstr "فتح مجلّد بيانات المستخدم"
 
@@ -4998,11 +5162,17 @@ msgstr "إخفاء دوران التحديث"
 msgid "Don't Save"
 msgstr "لا تحفظ"
 
+msgid "Android build template is missing, please install relevant templates."
+msgstr "قالب البناء الخاص بالأندرويد مفقود، فضلا نزلْ القوالب المتعلقة."
+
 msgid "Manage Templates"
 msgstr "إدارة القوالب"
 
 msgid "Install from file"
 msgstr "تثبيت من ملف"
+
+msgid "Select Android sources file"
+msgstr "اخترْ مصدر ملفات الأندرويد"
 
 msgid "Import Templates From ZIP File"
 msgstr "استيراد القوالب من ملف مضغوط بصيغة Zip"
@@ -5225,6 +5395,9 @@ msgstr "اختر جهازاً من القائمة"
 msgid "Running on %s"
 msgstr "يعمل على %s"
 
+msgid "Could not start ios-deploy executable."
+msgstr "تعذر بدء تشغيل نظام التشغيل iOS - قم بنشر الملف القابل للتنفيذ."
+
 msgid "Installation/running failed, see editor log for details."
 msgstr "فشل التثبيت/التشغيل، راجع سجل المحرر للحصول على التفاصيل."
 
@@ -5395,6 +5568,9 @@ msgstr "لا يوجد قوالب لأجل البناء التطوير"
 
 msgid "Official export templates aren't available for development builds."
 msgstr "قوالب التصدير الرسمية غير مدعومة لأجل البناء الخاص بالتطوير."
+
+msgid "Uncompressing Android Build Sources"
+msgstr "يتم تفكيك مصادر بناء أندرويد Android"
 
 msgid "Export Template Manager"
 msgstr "‌تصدير مدير القوالب"
@@ -7083,8 +7259,14 @@ msgstr "أقل قابلية للتوسع للمشاهد المعقدة."
 msgid "Fast rendering of simple scenes."
 msgstr "عرض سريع للمشاهد البسيطة."
 
+msgid "Supports desktop, mobile + web platforms."
+msgstr "يدعم منصات سطح المكتب والجوال + الويب."
+
 msgid "Intended for low-end/older devices."
 msgstr "مخصص للأجهزة ذات القوة المنخفضة او القديمة."
+
+msgid "Uses OpenGL 3 backend (OpenGL 3.3/ES 3.0/WebGL2)."
+msgstr "يستخدم الواجهة الخلفية لبرنامج OpenGL 3 (OpenGL 3.3/ES 3.0/WebGL2)."
 
 msgid "Fastest rendering of simple scenes."
 msgstr "أسرع عرض للمشاهد البسيطة."
@@ -7598,6 +7780,12 @@ msgstr "أوقِفْ المشروع"
 
 msgid "Run Current Scene"
 msgstr "شغّل المشهد الحالي"
+
+msgid "Run Scene in Regular Mode"
+msgstr "تشغيل المشهد في الوضع العادي"
+
+msgid "Run Scene in XR Mode"
+msgstr "تشغيل المشهد في وضع الواقع الممتد"
 
 msgid "Run Specific Scene"
 msgstr "شغّل المشهد المُختار"
@@ -14563,6 +14751,9 @@ msgstr "خطأ في تحميل %s: %s."
 msgid "Error saving file %s: %s"
 msgstr "خطأ في حفظ الملف %s: %s"
 
+msgid "OpenXR Action map:"
+msgstr "خريطة عمل OpenXR:"
+
 msgid "Remove interaction profile"
 msgstr "إزالة ملف تعريف التفاعل"
 
@@ -14577,6 +14768,12 @@ msgstr "إضافة الملف الشخصي"
 
 msgid "Add an interaction profile."
 msgstr "إضافة ملف تعريف التفاعل."
+
+msgid "Save this OpenXR action map."
+msgstr "احفظ خريطة عمل OpenXR هذه."
+
+msgid "Reset to default OpenXR action map."
+msgstr "إعادة التعيين إلى خريطة عمل OpenXR الافتراضية."
 
 msgid "Action Sets"
 msgstr "مجموعات العمل"
@@ -14617,11 +14814,23 @@ msgstr "مجهول"
 msgid "Select an action"
 msgstr "حدد إجراءً"
 
+msgid "Building Android Project (gradle)"
+msgstr "بناء مشروع الأندرويد (gradle)"
+
 msgid "Invalid public key for APK expansion."
 msgstr "مفتاح عام غير صالح لأجل تصدير حزمة تطبيق أندرويد APK."
 
 msgid "Invalid package name:"
 msgstr "اسم رُزمة غير صالح:"
+
+msgid "\"Use Gradle Build\" must be enabled to use the plugins."
+msgstr "يجب تفعيل \"‏use Custom Build\" لاستخدام المكونات الإضافية."
+
+msgid "\"Export AAB\" is only valid when \"Use Gradle Build\" is enabled."
+msgstr "يكون \"تصدير AAB\" صالحًا فقط عند تمكين \"استخدام Gradle Build\"."
+
+msgid "\"Min SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
+msgstr "لا يمكن تجاوز \"Min SDK\" إلا عند تمكين \"Use Gradle Build\"."
 
 msgid "\"Min SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
@@ -14632,6 +14841,10 @@ msgid ""
 "library."
 msgstr ""
 "لا يمكن أن يكون \"Min SDK\" أقل من %d، وهو الإصدار الذي تحتاجه مكتبة جوْدَتْ."
+
+msgid ""
+"\"Target SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
+msgstr "لا يمكن تجاوز \"Target SDK\" إلا عند تمكين \"Use Gradle Build\"."
 
 msgid ""
 "\"Target SDK\" should be a valid integer, but got \"%s\" which is invalid."
@@ -14659,6 +14872,15 @@ msgstr "يعمل على الجهاز..."
 
 msgid "Could not execute on device."
 msgstr "لا يمكن التنفيذ على الجهاز."
+
+msgid "Exporting to Android when using C#/.NET is experimental."
+msgstr "يعد التصدير إلى الاندرويد عند استخدام C#/.NET أمرًا تجريبيًا."
+
+msgid ""
+"Android build template not installed in the project. Install it from the "
+"Project menu."
+msgstr ""
+"لم يتم تنزيل قالب بناء Android لهذا المشروع. نزّل واحداً من قائمة المشروع."
 
 msgid ""
 "Either Debug Keystore, Debug User AND Debug Password settings must be "
@@ -14690,11 +14912,28 @@ msgstr "مسار الحزمة-التطويرية (SDK) لـ جافا غير صح
 msgid "Please check the Java SDK directory specified in Editor Settings."
 msgstr "تأكد من المسار المحدد للحزمة-التطويرية (SDK) لـ جافا في إعدادات المُحرر."
 
+msgid "A valid Android SDK path is required in Editor Settings."
+msgstr "مطلوب مسار حزمة أندرويد (SDK) صحيح في إعدادات المُحرر."
+
+msgid "Invalid Android SDK path in Editor Settings."
+msgstr "مسار حزمة أندرويد (SDK) غير صحيح في إعدادات المُحرر."
+
 msgid "Missing 'platform-tools' directory!"
 msgstr "المجلد 'أدوات-المنصة (platform-tools)' مفقود!"
 
+msgid "Unable to find Android SDK platform-tools' adb command."
+msgstr "تعذر العثور على أمر adb الخاص بأدوات النظام الأساسي لـ Android SDK."
+
+msgid "Please check in the Android SDK directory specified in Editor Settings."
+msgstr "تأكد من مسار حزمة أندرويد (SDK) المحدد في إعدادات المُحرر."
+
 msgid "Missing 'build-tools' directory!"
 msgstr "مجلد 'أدوات البناء' (build-tools) مفقود!"
+
+msgid "Unable to find Android SDK build-tools' apksigner command."
+msgstr ""
+"تعذر العثور على أمر أدوات البناء الخاص بالأندرويد Android SDK build-tools "
+"الخاص بتوقيع ملف apk (apksigner)."
 
 msgid ""
 "\"Target SDK\" %d is higher than the default version %d. This may work, but "
@@ -14702,6 +14941,11 @@ msgid ""
 msgstr ""
 "\"Target SDK\" %d أعلى من الإصدار الافتراضي %d. قد ينجح، ولكن لن يتم اختباره "
 "وقد يكون غير مستقر."
+
+msgid ""
+"The \"%s\" renderer is designed for Desktop devices, and is not suitable for "
+"Android devices."
+msgstr "نظام التكوين \"%s\" مصمم لأجهزة سطح المكتب، وليس مناسبا لأجهزة أندرويد."
 
 msgid ""
 "The project name does not meet the requirement for the package name format "
@@ -14724,8 +14968,28 @@ msgstr ""
 "المخرجات:\n"
 "%s"
 
+msgid "Exporting for Android"
+msgstr "التصدير للاندرويد"
+
+msgid "Invalid filename! Android App Bundle requires the *.aab extension."
+msgstr ""
+"اسم ملف غير صالح! تتطلب حزمة تطبيق الأندرويد Android App Bundle لاحقة *.aab."
+
+msgid "APK Expansion not compatible with Android App Bundle."
+msgstr "توسيع APK غير متوافق مع حزمة تطبيق الأندرويد Android App Bundle."
+
+msgid "Invalid filename! Android APK requires the *.apk extension."
+msgstr "أسم الملف غير صالح! يتطلب ملف اندرويد APK أمتداد *.apk لتعمل."
+
 msgid "Unsupported export format!"
 msgstr "تنسيق تصدير غير مدعوم!"
+
+msgid ""
+"Trying to build from a gradle built template, but no version info for it "
+"exists. Please reinstall from the 'Project' menu."
+msgstr ""
+"محاولة الإنشاء من قالب تم إنشاؤه على مستوى gradle، ولكن لا توجد معلومات إصدار "
+"له. الرجاء إعادة التثبيت من قائمة \"المشروع\"."
 
 msgid ""
 "Java SDK path must be configured in Editor Settings at 'export/android/"
@@ -14734,8 +14998,21 @@ msgstr ""
 "مسار الحزمة-التطويرية لـ جافا يجب أن يكون مهيأ في إعدادات المحرر عند 'export/"
 "android/java_sdk_path'."
 
+msgid ""
+"Android SDK path must be configured in Editor Settings at 'export/android/"
+"android_sdk_path'."
+msgstr ""
+"مسار حزمة-تطوير-أندرويد يجب أن يكون مهيأ في إعدادات المحرر عند 'export/"
+"android/android_sdk_path'."
+
+msgid "Could not export project files to gradle project."
+msgstr "لم يتمكن من تصدير ملفات المشروع إلى مشروع gradle."
+
 msgid "Could not write expansion package file!"
 msgstr "لا يمكن كتابة ملف الحزمة الإضافية!"
+
+msgid "Building of Android project failed, check output for the error:"
+msgstr "فشل إنشاء مشروع أندرويد، تحقق من الخطأ:"
 
 msgid "Moving output"
 msgstr "جاري تحريك المخرجات"

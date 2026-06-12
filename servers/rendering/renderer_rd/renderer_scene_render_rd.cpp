@@ -503,7 +503,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 	}
 
 	RSE::ViewportScaling3DMode scale_mode = rb->get_scaling_3d_mode();
-	bool use_upscaled_texture = rb->has_upscaled_texture() && scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_FSR2;
+	bool use_upscaled_texture = rb->has_upscaled_texture() && (scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_FSR2 || scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL);
 	SpatialUpscaler *spatial_upscaler = nullptr;
 	if (can_use_effects) {
 		if (scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_FSR) {
@@ -512,7 +512,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 	}
 
 	// SMAA causes issues when enabled with temporal upscalers.
-	bool temporal_upscaler_active = scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_FSR2;
+	bool temporal_upscaler_active = scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_FSR2 || scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL;
 	bool use_fxaa = rb->get_screen_space_aa() == RSE::VIEWPORT_SCREEN_SPACE_AA_FXAA;
 	bool use_smaa = smaa && rb->get_screen_space_aa() == RSE::VIEWPORT_SCREEN_SPACE_AA_SMAA && !temporal_upscaler_active;
 	// If doing bilinear or nearest scaling + FXAA / SMAA, the framebuffer must be scaled in a framebuffer copy after AA is applied.
@@ -686,7 +686,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 			}
 			RD::get_singleton()->draw_command_end_label();
 		} else {
-			// The raster glow path blurs down and up the mip chain. This works out to (2*level-1) passes. This
+			// For the mobile renderer we blur down and up the mip chain. Which works out to (2*level-1) passes. This
 			// allows us to gather our levels at low resolutions and ultimately save a lot of texture read bandwidth.
 			// The tradeoff is that we need to use single-pass blur to minimize the number of render passes.
 
@@ -874,7 +874,11 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 			}
 		}
 
-		tone_mapper->tonemapper(color_texture, dest_fb, tonemap);
+		if (can_use_storage) {
+			tone_mapper->tonemapper(color_texture, dest_fb, tonemap);
+		} else {
+			tone_mapper->tonemapper_mobile(color_texture, dest_fb, tonemap);
+		}
 
 		RD::get_singleton()->draw_command_end_label();
 	}
@@ -961,10 +965,94 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 }
 
 void RendererSceneRenderRD::_post_process_subpass(RID p_source_texture, RID p_framebuffer, const RenderDataRD *p_render_data) {
-	(void)p_source_texture;
-	(void)p_framebuffer;
-	(void)p_render_data;
-	ERR_FAIL_MSG("Subpass post-processing is not available in Forward+ only builds.");
+	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
+	RD::get_singleton()->draw_command_begin_label("Post Process Subpass");
+
+	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
+	ERR_FAIL_COND(rb.is_null());
+
+	// FIXME: Our input it our internal_texture, shouldn't this be using internal_size ??
+	// Seeing we don't support FSR in our mobile renderer right now target_size = internal_size...
+	Size2i target_size = rb->get_target_size();
+	bool can_use_effects = target_size.x >= 8 && target_size.y >= 8 && debug_draw == RSE::VIEWPORT_DEBUG_DRAW_DISABLED;
+
+	RD::DrawListID draw_list = RD::get_singleton()->draw_list_switch_to_next_pass();
+
+	RendererRD::ToneMapper::TonemapSettings tonemap;
+
+	bool using_hdr = texture_storage->render_target_is_using_hdr(rb->get_render_target());
+
+	if (p_render_data->environment.is_valid()) {
+		// When we are using RGB10A2 render buffer format, our scene
+		// is limited to a maximum of 2.0. In this case we should limit
+		// the max white of tonemappers, specifically AgX which defaults
+		// to a high white value.
+		bool limit_agx_white = rb->get_base_data_format() == RD::DATA_FORMAT_A2B10G10R10_UNORM_PACK32;
+
+		// When using HDR 2D, we use the parent window's output max value.
+		// Otherwise, we're tonemapping to an SDR low bit depth buffer, so
+		// we need to use SDR range with a max value of 1.0.
+		float max_value = using_hdr ? p_render_data->window_output_max_value : 1.0;
+
+		tonemap.tonemap_mode = environment_get_tone_mapper(p_render_data->environment);
+		RendererEnvironmentStorage::TonemapParameters params = environment_get_tonemap_parameters(p_render_data->environment, limit_agx_white, max_value);
+		tonemap.tonemapper_params[0] = params.tonemapper_params[0];
+		tonemap.tonemapper_params[1] = params.tonemapper_params[1];
+		tonemap.tonemapper_params[2] = params.tonemapper_params[2];
+		tonemap.tonemapper_params[3] = params.tonemapper_params[3];
+		tonemap.exposure = environment_get_exposure(p_render_data->environment);
+		tonemap.white = environment_get_white(p_render_data->environment, limit_agx_white, max_value);
+		tonemap.max_value = max_value;
+	}
+
+	// We don't support glow or auto exposure here, if they are needed, don't use subpasses!
+	// The problem is that we need to use the result so far and process them before we can
+	// apply this to our results.
+	if (can_use_effects && p_render_data->environment.is_valid() && environment_get_glow_enabled(p_render_data->environment)) {
+		ERR_FAIL_MSG("Glow is not supported when using subpasses.");
+	}
+
+	if (can_use_effects && RSG::camera_attributes->camera_attributes_uses_auto_exposure(p_render_data->camera_attributes)) {
+		ERR_FAIL_MSG("Auto Exposure is not supported when using subpasses.");
+	}
+
+	tonemap.use_glow = false;
+	tonemap.glow_texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+	tonemap.glow_map = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
+	tonemap.use_auto_exposure = false;
+	tonemap.exposure_texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
+
+	tonemap.use_color_correction = false;
+	tonemap.use_1d_color_correction = false;
+	tonemap.color_correction_texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_3D_WHITE);
+	tonemap.convert_to_srgb = !using_hdr;
+
+	if (can_use_effects && p_render_data->environment.is_valid()) {
+		tonemap.use_bcs = environment_get_adjustments_enabled(p_render_data->environment);
+		tonemap.brightness = environment_get_adjustments_brightness(p_render_data->environment);
+		tonemap.contrast = environment_get_adjustments_contrast(p_render_data->environment);
+		tonemap.saturation = environment_get_adjustments_saturation(p_render_data->environment);
+		if (environment_get_adjustments_enabled(p_render_data->environment) && environment_get_color_correction(p_render_data->environment).is_valid()) {
+			tonemap.use_color_correction = true;
+			tonemap.use_1d_color_correction = environment_get_use_1d_color_correction(p_render_data->environment);
+			tonemap.color_correction_texture = texture_storage->texture_get_rd_texture(environment_get_color_correction(p_render_data->environment), !tonemap.convert_to_srgb);
+		}
+	}
+
+	tonemap.texture_size = Vector2i(target_size.x, target_size.y);
+
+	tonemap.luminance_multiplier = rb->get_luminance_multiplier();
+	tonemap.view_count = rb->get_view_count();
+
+	if (rb->get_use_debanding() && !using_hdr) {
+		tonemap.debanding_mode = RendererRD::ToneMapper::TonemapSettings::DebandingMode::DEBANDING_MODE_8_BIT;
+	} else {
+		tonemap.debanding_mode = RendererRD::ToneMapper::TonemapSettings::DebandingMode::DEBANDING_MODE_DISABLED;
+	}
+
+	tone_mapper->tonemapper_subpass(draw_list, p_source_texture, RD::get_singleton()->framebuffer_get_format(p_framebuffer), tonemap);
+
+	RD::get_singleton()->draw_command_end_label();
 }
 
 void RendererSceneRenderRD::_disable_clear_request(const RenderDataRD *p_render_data) {
@@ -1867,7 +1955,7 @@ void RendererSceneRenderRD::init() {
 		// This path can be used to redirect certain devices to use the raster version of the effect, either due to performance, lack of capabilities, or driver errors.
 		bool use_raster_for_octmaps = false;
 
-		// Some devices may not support the A2B10G10R10 format as a storage image.
+		// Some devices may not support the A2B10G10R10 format as a storage image on the Mobile renderer.
 		if (!RD::get_singleton()->texture_is_format_supported_for_usage(_render_buffers_get_preferred_color_format(), RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT)) {
 			use_raster_for_octmaps = true;
 		}
@@ -1885,7 +1973,7 @@ void RendererSceneRenderRD::init() {
 	debug_effects = memnew(RendererRD::DebugEffects);
 	luminance = memnew(RendererRD::Luminance(!can_use_storage));
 	smaa = memnew(RendererRD::SMAA);
-	tone_mapper = memnew(RendererRD::ToneMapper(false));
+	tone_mapper = memnew(RendererRD::ToneMapper(!can_use_storage));
 	if (can_use_vrs) {
 		vrs = memnew(RendererRD::VRS);
 	}

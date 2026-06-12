@@ -1239,9 +1239,11 @@
 		</constant>
 		<constant name="NOTIFICATION_WM_MOUSE_ENTER" value="1002">
 			Notification received when the mouse enters the window.
+			Implemented for embedded windows and on desktop and web platforms.
 		</constant>
 		<constant name="NOTIFICATION_WM_MOUSE_EXIT" value="1003">
 			Notification received when the mouse leaves the window.
+			Implemented for embedded windows and on desktop and web platforms.
 		</constant>
 		<constant name="NOTIFICATION_WM_WINDOW_FOCUS_IN" value="1004">
 			Notification received from the OS when the node's [Window] ancestor is focused. This may be a change of focus between two windows of the same engine instance, or from the OS desktop or a third-party application to a window of the game (in which case [constant NOTIFICATION_APPLICATION_FOCUS_IN] is also received).
@@ -1256,6 +1258,8 @@
 			Implemented on desktop platforms.
 		</constant>
 		<constant name="NOTIFICATION_WM_GO_BACK_REQUEST" value="1007">
+			Notification received from the OS when a go back request is sent (e.g. pressing the "Back" button on Android).
+			Implemented only on Android.
 		</constant>
 		<constant name="NOTIFICATION_WM_SIZE_CHANGED" value="1008">
 			Notification received when the window is resized.
@@ -1298,12 +1302,15 @@
 		</constant>
 		<constant name="NOTIFICATION_OS_IME_UPDATE" value="2013">
 			Notification received from the OS when an update of the Input Method Engine occurs (e.g. change of IME cursor position or composition string).
+			Implemented on desktop and web platforms.
 		</constant>
 		<constant name="NOTIFICATION_APPLICATION_RESUMED" value="2014">
 			Notification received from the OS when the application is resumed.
+			Specific to the Android and iOS platforms.
 		</constant>
 		<constant name="NOTIFICATION_APPLICATION_PAUSED" value="2015">
 			Notification received from the OS when the application is paused.
+			Specific to the Android and iOS platforms.
 			[b]Note:[/b] On iOS, you only have approximately 5 seconds to finish a task started by this signal. If you go over this allotment, iOS will kill the app instead of pausing it.
 		</constant>
 		<constant name="NOTIFICATION_APPLICATION_FOCUS_IN" value="2016">

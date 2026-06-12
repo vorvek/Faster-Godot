@@ -26,11 +26,14 @@
 function godot_rendering_method_args
     # Use a function instead of a fixed string to customize the argument descriptions.
     echo -e "forward_plus\tHigh-end desktop renderer"
+    echo -e "mobile\tHigh-end mobile/desktop renderer"
+    echo -e "gl_compatibility\tLow-end desktop, mobile and web renderer"
 end
 
 function godot_rendering_driver_args
     # Use a function instead of a fixed string to customize the argument descriptions.
     echo -e "vulkan\tVulkan renderer"
+    echo -e "opengl3\tOpenGL ES 3.0 renderer"
     echo -e "dummy\tDummy renderer"
 end
 
@@ -74,6 +77,7 @@ complete -c faster-godot -s t -l always-on-top -d "Request an always-on-top wind
 complete -c faster-godot -l resolution -d "Request window resolution" -x
 complete -c faster-godot -l position -d "Request window position" -x
 complete -c faster-godot -l single-window -d "Use a single window (no separate subwindows)"
+complete -c faster-godot -l xr-mode -d "Select Extended Reality (XR) mode" -a "default off on"
 
 # Debug options:
 complete -c faster-godot -s d -l debug -d "Debug (local stdout debugger)"

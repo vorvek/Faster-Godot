@@ -13,6 +13,7 @@ namespace GodotTools.Ides
         private MessagingServer? _messagingServer;
 
         private MonoDevelop.Instance? _monoDevelInstance;
+        private MonoDevelop.Instance? _vsForMacInstance;
 
         private MessagingServer GetRunningOrNewServer()
         {
@@ -67,8 +68,8 @@ namespace GodotTools.Ides
                     return "Rider";
                 case ExternalEditorId.Fleet:
                     return "Fleet";
-                case ExternalEditorId.ReservedLegacyEditor:
-                    return "MonoDevelop";
+                case ExternalEditorId.VisualStudioForMac:
+                    return "VisualStudioForMac";
                 case ExternalEditorId.MonoDevelop:
                     return "MonoDevelop";
                 case ExternalEditorId.CustomEditor:
@@ -111,12 +112,19 @@ namespace GodotTools.Ides
                 case ExternalEditorId.Fleet:
                 case ExternalEditorId.CustomEditor:
                     throw new NotSupportedException();
-                case ExternalEditorId.ReservedLegacyEditor:
+                case ExternalEditorId.VisualStudioForMac:
                     goto case ExternalEditorId.MonoDevelop;
                 case ExternalEditorId.MonoDevelop:
                 {
                     MonoDevelop.Instance GetMonoDevelopInstance(string solutionPath)
                     {
+                        if (Utils.OS.IsMacOS && editorId == ExternalEditorId.VisualStudioForMac)
+                        {
+                            _vsForMacInstance = (_vsForMacInstance?.IsDisposed ?? true ? null : _vsForMacInstance) ??
+                                               new MonoDevelop.Instance(solutionPath, MonoDevelop.EditorId.VisualStudioForMac);
+                            return _vsForMacInstance;
+                        }
+
                         _monoDevelInstance = (_monoDevelInstance?.IsDisposed ?? true ? null : _monoDevelInstance) ??
                                             new MonoDevelop.Instance(solutionPath, MonoDevelop.EditorId.MonoDevelop);
                         return _monoDevelInstance;
@@ -144,7 +152,8 @@ namespace GodotTools.Ides
                     }
                     catch (FileNotFoundException)
                     {
-                        GD.PushError("Cannot find code editor: MonoDevelop");
+                        string editorName = editorId == ExternalEditorId.VisualStudioForMac ? "Visual Studio" : "MonoDevelop";
+                        GD.PushError($"Cannot find code editor: {editorName}");
                     }
 
                     break;

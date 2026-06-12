@@ -3191,6 +3191,9 @@ msgstr "Внимание!"
 msgid "Completed with warnings."
 msgstr "Завършено с предупредителни съобщения."
 
+msgid "Could not open file to read from path \"%s\"."
+msgstr "Файловете на проекта не могат да бъдат изнесени като проект на gradle."
+
 msgid "Can't open file for writing at path \"%s\"."
 msgstr "Файлът не може да бъде отворен за запис към пътя „%s“."
 
@@ -3250,6 +3253,9 @@ msgstr "Внасяне:"
 
 msgid "Export templates are missing. Install them from a file."
 msgstr "Шаблоните за експортиране липсват. Инсталирайте ги от файл."
+
+msgid "Uncompressing Android Build Sources"
+msgstr "Разархивиране на изходния код на компилацията за Андроид"
 
 msgid "Installed Path"
 msgstr "Инсталиран Път"
@@ -6361,6 +6367,9 @@ msgstr "Грешка при зареждането на %s: %s."
 msgid "Add an action set."
 msgstr "Добавяне на набор от действия."
 
+msgid "Building Android Project (gradle)"
+msgstr "Компилиране на проект за Android (gradle)"
+
 msgid "Invalid public key for APK expansion."
 msgstr "Неправилен публичен ключ за разширение към APK."
 
@@ -6385,17 +6394,45 @@ msgstr "Изпълнение на устройство…"
 msgid "Could not execute on device."
 msgstr "Изпълнението на устройството е невъзможно."
 
+msgid "A valid Android SDK path is required in Editor Settings."
+msgstr ""
+"В настройките на редактора трябва да бъде посочен правилен път към Android "
+"SDK."
+
+msgid "Invalid Android SDK path in Editor Settings."
+msgstr "Пътят до Android SDK в настройките на редактора е грешен."
+
 msgid "Missing 'platform-tools' directory!"
 msgstr "Липсва папката „platform-tools“!"
+
+msgid "Unable to find Android SDK platform-tools' adb command."
+msgstr "Не е намерена командата „adb“ от Android SDK – platform-tools."
+
+msgid "Please check in the Android SDK directory specified in Editor Settings."
+msgstr ""
+"Моля, проверете папката на Android SDK, която е посочена в настройките на "
+"редактора."
 
 msgid "Missing 'build-tools' directory!"
 msgstr "Липсва папката „build-tools“!"
 
+msgid "Unable to find Android SDK build-tools' apksigner command."
+msgstr "Не е намерена командата „apksigner “ от Android SDK – build-tools."
+
 msgid "'apksigner' returned with error #%d"
 msgstr "„apksigner“ завърши с грешка #%d"
 
+msgid "Exporting for Android"
+msgstr "Изнасяне за Android"
+
+msgid "Invalid filename! Android APK requires the *.apk extension."
+msgstr "Неправилно име! Android APK изисква разширение *.apk."
+
 msgid "Unsupported export format!"
 msgstr "Неподдържан формат за изнасяне!"
+
+msgid "Could not export project files to gradle project."
+msgstr "Файловете на проекта не могат да бъдат изнесени като проект на gradle."
 
 msgid "Could not write expansion package file!"
 msgstr "Файлът с пакета за разширение не може да бъде записан!"

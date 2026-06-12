@@ -2491,6 +2491,9 @@ msgstr "সংরক্ষণ করবেন না"
 msgid "Install from file"
 msgstr "ফাইল থেকে ইন্সটল করুন"
 
+msgid "Select Android sources file"
+msgstr "অ্যান্ড্রয়েড সোর্স ফাইল নির্বাচন করুন"
+
 msgid "Import Templates From ZIP File"
 msgstr "ZIP ফাইল হতে টেমপ্লেট-সমূহ ইম্পোর্ট করুন"
 
@@ -2589,6 +2592,9 @@ msgstr "লিস্ট থেকে ডিভাইস সিলেক্ট �
 
 msgid "The character '%s' is not allowed in Identifier."
 msgstr "আইডেন্টিফায়ারে '%s' অক্ষরটি অনুমোদিত নয়।"
+
+msgid "Could not start ios-deploy executable."
+msgstr "ios-deploy executable শুরু করা যায়নি।"
 
 msgid "Template file not found: \"%s\"."
 msgstr "টেমপ্লেট ফাইল পাওয়া যায়নি: \"%s\"।"
@@ -5468,6 +5474,9 @@ msgstr "লোড করার সময় ত্রুটি %s: %s।"
 msgid "Error saving file %s: %s"
 msgstr "ফাইল সংরক্ষণে ত্রুটি%s: %s"
 
+msgid "OpenXR Action map:"
+msgstr "OpenXR একশন মানচিত্র:"
+
 msgid "Add an action set."
 msgstr "নতুন ইনপুট অ্যাকশন ইভেন্ট সেট করুন।"
 
@@ -5482,6 +5491,9 @@ msgstr "ইন্টারেকশন প্রোফাইল নির্ব�
 
 msgid "Choose an XR runtime."
 msgstr "একটি XR রানটাইম চয়ন করুন।"
+
+msgid "The character '%s' is not allowed in Android application package names."
+msgstr "অ্যান্ড্রয়েড অ্যাপ্লিকেশন প্যাকেজ নামগুলিতে '%s' অক্ষরটি অনুমোদিত নয়।"
 
 msgid "Error creating keystores directory:"
 msgstr "কীস্টোর ডিরেক্টরি তৈরিতে ত্রুটি:"
@@ -5510,6 +5522,9 @@ msgid ""
 msgstr ""
 "আউটপুট: \n"
 "%s"
+
+msgid "Exporting for Android"
+msgstr "অ্যান্ড্রয়েডের জন্য রপ্তানি করা হচ্ছে"
 
 msgid "Could not write expansion package file!"
 msgstr "সম্প্রসারণ প্যাকেজ ফাইল লিখতে পারিনি!"

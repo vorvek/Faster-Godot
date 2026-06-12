@@ -695,6 +695,11 @@ float RendererEnvironmentStorage::environment_get_ssr_depth_tolerance(RID p_env)
 void RendererEnvironmentStorage::environment_set_ssao(RID p_env, bool p_enable, float p_radius, float p_intensity, float p_power, float p_detail, float p_horizon, float p_sharpness, float p_light_affect, float p_ao_channel_affect) {
 	Environment *env = environment_owner.get_or_null(p_env);
 	ERR_FAIL_NULL(env);
+#ifdef DEBUG_ENABLED
+	if (OS::get_singleton()->get_current_rendering_method() == "mobile" && p_enable) {
+		WARN_PRINT_ONCE_ED("Screen-space ambient occlusion (SSAO) is only available when using the Forward+ or Compatibility renderers.");
+	}
+#endif
 	env->ssao_enabled = p_enable;
 	env->ssao_radius = p_radius;
 	env->ssao_intensity = p_intensity;

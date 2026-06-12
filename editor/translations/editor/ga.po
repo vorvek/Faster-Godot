@@ -2801,6 +2801,22 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "Imscaradh Beag le Córas Comhad Líonra"
 
+msgid ""
+"When this option is enabled, using one-click deploy for Android will only "
+"export an executable without the project data.\n"
+"The filesystem will be provided from the project by the editor over the "
+"network.\n"
+"On Android, deploying will use the USB cable for faster performance. This "
+"option speeds up testing for projects with large assets."
+msgstr ""
+"Nuair a chumasaítear an rogha seo, ní dhéanfaidh úsáid aonchliceála le "
+"haghaidh Android ach inrite a onnmhairiú gan sonraí an tionscadail.\n"
+"Cuirfidh an t-eagarthóir thar an líonra an córas comhad ar fáil ón "
+"tionscadal.\n"
+"Ar Android, beidh imscaradh úsáid a bhaint as an cábla USB le haghaidh "
+"feidhmíochta níos tapúla. Cuireann an rogha seo dlús le tástáil do "
+"thionscadail a bhfuil sócmhainní móra acu."
+
 msgid "Visible Collision Shapes"
 msgstr "Cruthanna Imbhuailtí Infheicthe"
 
@@ -4869,6 +4885,28 @@ msgstr "Teachtaireachtaí Eagarthóra"
 msgid "Toggle visibility of editor messages."
 msgstr "Scoránaigh infheictheacht teachtaireachtaí eagarthóra."
 
+msgid ""
+"The Android build template is already installed in this project and it won't "
+"be overwritten.\n"
+"Remove the \"%s\" directory manually before attempting this operation again."
+msgstr ""
+"Tá an teimpléad tógála Android suiteáilte cheana féin sa tionscadal seo agus "
+"ní dhéanfar é a athscríobh.\n"
+"Bain an eolaire \"%s\" de láimh sula ndéanann tú iarracht an oibríocht seo a "
+"dhéanamh arís."
+
+msgid ""
+"This will set up your project for gradle Android builds by installing the "
+"source template to \"%s\".\n"
+"Note that in order to make gradle builds instead of using pre-built APKs, the "
+"\"Use Gradle Build\" option should be enabled in the Android export preset."
+msgstr ""
+"Cuirfidh sé seo do thionscadal ar bun le haghaidh tógálacha Gradle Android "
+"tríd an teimpléad foinse a shuiteáil chuig \"%s\".\n"
+"Tabhair faoi deara, chun tógálacha Gradle a dhéanamh in ionad APKanna "
+"réamhthógtha a úsáid, gur cheart an rogha \"Úsáid Tógáil Gradle\" a chumasú "
+"sa réamhshocrú easpórtála Android."
+
 msgid "Unnamed Project"
 msgstr "Tionscadal Gan Ainm"
 
@@ -5467,6 +5505,21 @@ msgstr "Athluchtú déanta."
 msgid "Save & Restart"
 msgstr "Sábháil & Atosaigh"
 
+msgid ""
+"Changing the renderer requires restarting the editor.\n"
+"\n"
+"Choosing Save & Restart will change the renderer to:\n"
+"- Desktop platforms: %s\n"
+"- Mobile platforms: %s\n"
+"- Web platform: %s"
+msgstr ""
+"Éilíonn sé atosú an eagarthóir chun an rindreálaí a athrú.\n"
+"\n"
+"Athróidh Sábháil & Atosaigh an rindreálaí go:\n"
+"- Ardáin deisce: %s\n"
+"- Ardáin shoghluaiste: %s\n"
+"- Ardán gréasáin: %s"
+
 msgid "Forward+"
 msgstr "Ar Aghaidh+"
 
@@ -5493,6 +5546,9 @@ msgstr "Socruithe Rialaithe Leagain..."
 
 msgid "Pack Project as ZIP..."
 msgstr "Pacáil an Tionscadail mar ZIP..."
+
+msgid "Install Android Build Template..."
+msgstr "Suiteáil Teimpléad Tógála Android..."
 
 msgid "Open User Data Folder"
 msgstr "Oscail Fillteán Sonraí Úsáideora"
@@ -5708,6 +5764,21 @@ msgstr "Oscail an tEagarthóir roimhe seo"
 msgid "Project"
 msgstr "Tionscadal"
 
+msgid ""
+"Choose a renderer.\n"
+"\n"
+"Notes:\n"
+"- On mobile platforms, the Mobile renderer is used if Forward+ is selected "
+"here.\n"
+"- On the web platform, the Compatibility renderer is always used."
+msgstr ""
+"Roghnaigh rindreálaí.\n"
+"\n"
+"Nótaí:\n"
+"- Ar ardáin shoghluaiste, úsáidtear an rindreálaí Soghluaiste má roghnaítear "
+"Forward+ anseo.\n"
+"- Ar an ardán gréasáin, úsáidtear an rindreálaí Comhoiriúnachta i gcónaí."
+
 msgid "Renderer"
 msgstr "Rindreálaí"
 
@@ -5726,11 +5797,19 @@ msgstr "Folaigh Spinner Nuashonraithe"
 msgid "Don't Save"
 msgstr "Ná Sábháil"
 
+msgid "Android build template is missing, please install relevant templates."
+msgstr ""
+"Tá teimpléad tógála Android ar iarraidh, suiteáil teimpléid ábhartha le do "
+"thoil."
+
 msgid "Manage Templates"
 msgstr "Bainistigh Teimpléid"
 
 msgid "Install from file"
 msgstr "Suiteáil ó chomhad"
+
+msgid "Select Android sources file"
+msgstr "Roghnaigh comhad foinsí Android"
 
 msgid "Import Templates From ZIP File"
 msgstr "Iompórtáil teimpléid ó chomhad ZIP"
@@ -5946,6 +6025,9 @@ msgstr "Ba cheart cúis rochtana spáis diosca amháin ar a laghad a roghnú."
 msgid "At least one system boot time access reason should be selected."
 msgstr "Ba chóir cúis rochtana ama tosaithe córais amháin ar a laghad a roghnú."
 
+msgid "\"Shader Baker\" doesn't work with the Compatibility renderer."
+msgstr "Ní oibríonn \"Shader Baker\" leis an rindreálaí Comhoiriúnachta."
+
 msgid ""
 "The editor is currently using a different renderer than what the target "
 "platform will use. \"Shader Baker\" won't be able to include core shaders. "
@@ -6079,6 +6161,9 @@ msgstr "Ní cheadaítear an carachtar '%s' san Aitheantóir."
 msgid "Running on %s"
 msgstr "Ag rith ar %s"
 
+msgid "Could not start ios-deploy executable."
+msgstr "Níorbh fhéidir inrite ios-deploy a thosú."
+
 msgid "Installation/running failed, see editor log for details."
 msgstr ""
 "Theip ar shuiteáil / rith, féach logchomhad an eagarthóra le haghaidh sonraí."
@@ -6088,6 +6173,10 @@ msgstr "Theip ar shuiteáil, féach logchomhad an eagarthóra le haghaidh sonra�
 
 msgid "Running failed, see editor log for details."
 msgstr "Theip ar rith, féach logchomhad an eagarthóra le haghaidh sonraí."
+
+msgid "\"Shader Baker\" is not supported when using the Compatibility renderer."
+msgstr ""
+"Ní thacaítear le \"Shader Baker\" agus an rindreálaí Comhoiriúnachta in úsáid."
 
 msgid ""
 "The editor is currently using a different renderer than what the target "
@@ -6277,6 +6366,9 @@ msgid "Official export templates aren't available for double-precision builds."
 msgstr ""
 "Níl teimpléid easpórtála oifigiúla ar fáil le haghaidh tógálacha cruinneas "
 "dúbailte."
+
+msgid "Uncompressing Android Build Sources"
+msgstr "Dí-chomhbhrú Foinsí Tógála Android"
 
 msgid "Export Template Manager"
 msgstr "Easpórtáil Bainisteoir Teimpléad"
@@ -8438,11 +8530,17 @@ msgstr "Níos lú inscálaithe le haghaidh radhairc chasta."
 msgid "Fast rendering of simple scenes."
 msgstr "Rindreáil tapa radhairc shimplí."
 
+msgid "Supports desktop, mobile + web platforms."
+msgstr "Tacaíochtaí deisce, soghluaiste + ardáin ghréasáin."
+
 msgid "Least advanced 3D graphics."
 msgstr "Grafaicí 3D is lú chun cinn."
 
 msgid "Intended for low-end/older devices."
 msgstr "Beartaithe le haghaidh feistí íseal-deireadh/níos sine."
+
+msgid "Uses OpenGL 3 backend (OpenGL 3.3/ES 3.0/WebGL2)."
+msgstr "Úsáideann inneall OpenGL 3 (OpenGL 3.3 / ES 3.0 / WebGL2)."
 
 msgid "Fastest rendering of simple scenes."
 msgstr "Rindreáil is tapúla de radhairc shimplí."
@@ -8518,6 +8616,15 @@ msgstr "Rindreálaí:"
 
 msgid "More information"
 msgstr "Tuilleadh eolais"
+
+msgid ""
+"RenderingDevice-based methods not available on this GPU:\n"
+"%s\n"
+"Please use the Compatibility renderer."
+msgstr ""
+"Modhanna bunaithe ar ghléasanna rindreála nach bhfuil ar fáil ar an GPU seo:\n"
+"%s\n"
+"Úsáid an rindreálaí comhoiriúnachta le do thoil."
 
 msgid "The renderer can be changed later, but scenes may need to be adjusted."
 msgstr ""
@@ -9230,8 +9337,20 @@ msgstr "Stop an Tionscadal Rith"
 msgid "Run Current Scene"
 msgstr "Rith an Radharc Reatha"
 
+msgid "Run Scene in Regular Mode"
+msgstr "Rith Radharc i Mód Rialta"
+
+msgid "Run Scene in XR Mode"
+msgstr "Rith Radharc i Mód XR"
+
 msgid "Run Specific Scene"
 msgstr "Rith Radharc Ar Leith"
+
+msgid "Run in Regular Mode"
+msgstr "Rith i Mód Rialta"
+
+msgid "Run in XR Mode"
+msgstr "Rith i Mód XR"
 
 msgid "Enable Movie Maker Mode"
 msgstr "Cumasaigh Mód Déantóra Scannán"
@@ -15611,6 +15730,9 @@ msgstr "Loingseoireacht (3T)"
 msgid "XR"
 msgstr "XRName"
 
+msgid "OpenXR"
+msgstr "OpenXR"
+
 msgid "Wayland"
 msgstr "Wayland"
 
@@ -15683,6 +15805,9 @@ msgstr "Freastalaí Loingseoireachta agus cumais le haghaidh 3T."
 msgid "XR (AR and VR)."
 msgstr "XR (AR agus VR)."
 
+msgid "OpenXR standard implementation (requires XR to be enabled)."
+msgstr "Cur i bhfeidhm caighdeánach OpenXR (ní mór XR a bheith cumasaithe)."
+
 msgid "Wayland display (Linux only)."
 msgstr "Taispeántas Wayland (Linux amháin)."
 
@@ -15697,6 +15822,10 @@ msgstr ""
 
 msgid "Forward+ renderer for advanced 3D graphics."
 msgstr "Rindreálaí Forward+ le haghaidh grafaicí 3T chun cinn."
+
+msgid "Mobile renderer for less advanced 3D graphics."
+msgstr ""
+"Rindreálaí soghluaiste le haghaidh grafaicí 3T nach bhfuil chomh forbartha."
 
 msgid "Vulkan backend of RenderingDevice."
 msgstr "Cúltaca Vulkan de RenderingDevice."
@@ -16749,6 +16878,16 @@ msgstr "Cóipeáil Paraiméadair Ó Ábhar"
 
 msgid "Paste Parameters To Material"
 msgstr "Greamaigh Paraiméadair chuig Ábhar"
+
+msgid "Forward+/Mobile"
+msgstr "Ar Aghaidh+/Soghluaiste"
+
+msgid ""
+"Only supported in the Forward+ and Mobile rendering methods, not "
+"Compatibility."
+msgstr ""
+"Ní thacaítear leis seo ach sna modhanna rindreála Forward+ agus Mobile, ní i "
+"gComhoiriúnacht."
 
 msgid "Create Shader Node"
 msgstr "Cruthaigh Nód Scáthaigh"
@@ -19189,8 +19328,17 @@ msgstr "Earráid agus %s á luchtú: %s."
 msgid "Error saving file %s: %s"
 msgstr "Earráid agus comhad %s á shábháil: %s"
 
+msgid "OpenXR Action map:"
+msgstr "Mapa gníomhaíochta OpenXR:"
+
 msgid "Remove interaction profile"
 msgstr "Bain próifíl idirghníomhaíochta"
+
+msgid "OpenXR Action Map"
+msgstr "Mapa Gníomhaíochta OpenXR"
+
+msgid "Toggle OpenXR Action Map Dock"
+msgstr "Duga Léarscáil Gníomhaíochta OpenXR a Athrú"
 
 msgid "Add Action Set"
 msgstr "Cuir Tacar Gníomhartha Leis"
@@ -19203,6 +19351,12 @@ msgstr "Cuir próifíl leis"
 
 msgid "Add an interaction profile."
 msgstr "Cuir próifíl idirghníomhaíochta leis."
+
+msgid "Save this OpenXR action map."
+msgstr "Sábháil an léarscáil ghníomhaíochta OpenXR seo."
+
+msgid "Reset to default OpenXR action map."
+msgstr "Athshocraigh go mapa réamhshocraithe gníomhaíochta OpenXR."
 
 msgid "Action Sets"
 msgstr "Seiteanna Gníomhaíochta"
@@ -19315,16 +19469,69 @@ msgid "Choose an XR runtime."
 msgstr "Roghnaigh am rite XR."
 
 msgid ""
+"Cannot use the same SubViewport with multiple OpenXR composition layers. "
+"Clear it from its current layer first."
+msgstr ""
+"Ní féidir an SubViewport céanna a úsáid le sraitheanna comhdhéanamh OpenXR "
+"iolracha. Glan é óna chiseal reatha ar dtús."
+
+msgid ""
+"Cannot set SubViewport on an OpenXR composition layer when using an Android "
+"surface."
+msgstr ""
+"Ní féidir SubViewport a shocrú ar shraith chomhdhéanamh OpenXR agus dromchla "
+"Android á úsáid."
+
+msgid "OpenXR composition layers must have an XROrigin3D node as their parent."
+msgstr ""
+"Ní mór nód XROrigin3D a bheith ag sraitheanna comhdhéanamh OpenXR mar "
+"thuismitheoir."
+
+msgid ""
+"OpenXR composition layers must have orthonormalized transforms (ie. no scale "
+"or shearing)."
+msgstr ""
+"Ní mór go mbeadh claochluithe orthonormalized ag sraitheanna comhdhéanamh "
+"OpenXR (ie gan aon scála nó lomadh)."
+
+msgid ""
 "Hole punching won't work as expected unless the sort order is less than zero."
 msgstr ""
 "Ní oibreoidh polladh poll mar a bheifí ag súil leis mura bhfuil an t-ordú "
 "sórtála níos lú ná nialas."
+
+msgid "OpenXR visibility mask must have an XRCamera3D node as their parent."
+msgstr ""
+"Ní mór nód XRCamera3D a bheith mar thuismitheoir ag masc infheictheachta "
+"OpenXR."
+
+msgid "Building Android Project (gradle)"
+msgstr "Tionscadal Android a Thógáil (gradle)"
+
+msgid "> Connecting to Gradle Build Environment..."
+msgstr "> Ag ceangal le Timpeallacht Tógála Gradle..."
+
+msgid "Unable to connect to Gradle Build Environment service"
+msgstr "Ní féidir ceangal le seirbhís Timpeallacht Tógála Gradle"
+
+msgid "> Starting Gradle build..."
+msgstr "> Ag tosú tógáil Gradle..."
+
+msgid "Failed to execute Gradle command"
+msgstr "Theip ar an ordú Gradle a fhorghníomhú"
+
+msgid "> Copying Gradle artifacts..."
+msgstr "> Ag cóipeáil déantáin Gradle..."
 
 msgid "Package name is missing."
 msgstr "Tá ainm an phacáiste ar iarraidh."
 
 msgid "Package segments must be of non-zero length."
 msgstr "Ní mór do dheighleoga pacáiste a bheith ar fhad neamh-nialasach."
+
+msgid "The character '%s' is not allowed in Android application package names."
+msgstr ""
+"Ní cheadaítear an carachtar '%s' in ainmneacha pacáiste feidhmchlár Android."
 
 msgid "A digit cannot be the first character in a package segment."
 msgstr "Ní féidir le digit a bheith ar an gcéad charachtar i mír phacáiste."
@@ -19346,6 +19553,33 @@ msgstr "Eochair phoiblí neamhbhailí le haghaidh leathnú APK."
 msgid "Invalid package name:"
 msgstr "Ainm neamhbhailí an phacáiste:"
 
+msgid "\"Use Gradle Build\" is required to enable \"Swipe to dismiss\"."
+msgstr ""
+"Tá \"Úsáid Gradle Build\" riachtanach chun \"Swipe to dismiss\" a chumasú."
+
+msgid "\"Use Gradle Build\" must be enabled to use the plugins."
+msgstr "Ní mór \"Úsáid Gradle Build\" a chumasú chun na breiseáin a úsáid."
+
+msgid "Support for \"Use Gradle Build\" on Android is currently experimental."
+msgstr ""
+"Tá tacaíocht do \"Úsáid Gradle Build\" ar Android turgnamhach faoi láthair."
+
+msgid ""
+"\"Compress Native Libraries\" is only valid when \"Use Gradle Build\" is "
+"enabled."
+msgstr ""
+"Ní bhíonn \"Compress Native Leaflets\" bailí ach amháin nuair atá \"Use "
+"Gradle Build\" cumasaithe."
+
+msgid "\"Export AAB\" is only valid when \"Use Gradle Build\" is enabled."
+msgstr ""
+"Níl \"Export AAB\" bailí ach amháin nuair a chumasaítear \"Use Gradle Build\"."
+
+msgid "\"Min SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
+msgstr ""
+"Ní féidir \"Min SDK\" a shárú ach amháin nuair a chumasaítear \"Use Gradle "
+"Build\"."
+
 msgid "\"Min SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
 "Ba chóir go mbeadh \"Min SDK\" ina slánuimhir bhailí, ach fuair sé \"%s\" atá "
@@ -19359,6 +19593,12 @@ msgstr ""
 "theastaíonn ó leabharlann Godot."
 
 msgid ""
+"\"Target SDK\" can only be overridden when \"Use Gradle Build\" is enabled."
+msgstr ""
+"Ní féidir \"Sprioc SDK\" a shárú ach amháin nuair a chumasaítear \"Use Gradle "
+"Build\"."
+
+msgid ""
 "\"Target SDK\" should be a valid integer, but got \"%s\" which is invalid."
 msgstr ""
 "Ba chóir go mbeadh \"Sprioc SDK\" ina slánuimhir bhailí, ach fuair sé \"%s\" "
@@ -19368,6 +19608,29 @@ msgid "\"Target SDK\" version must be greater or equal to \"Min SDK\" version."
 msgstr ""
 "Ní mór leagan \"Sprioc SDK\" a bheith níos mó nó cothrom le leagan \"Min "
 "SDK\"."
+
+msgid "\"Use Gradle Build\" is required to add custom theme attributes."
+msgstr ""
+"Tá \"Úsáid Gradle Build\" riachtanach chun tréithe téama saincheaptha a chur "
+"leis."
+
+msgid "\"Use Gradle Build\" must be enabled to enable \"Show In Android Tv\"."
+msgstr ""
+"Ní mór \"Úsáid Gradle Build\" a bheith cumasaithe chun \"Taispeáin in Android "
+"Tv\" a chumasú."
+
+msgid "\"Use Gradle Build\" must be enabled to enable \"Show As Launcher App\"."
+msgstr ""
+"Ní mór \"Úsáid Gradle Build\" a bheith cumasaithe chun \"Taispeáin mar Aip "
+"Lainseálaí\" a chumasú."
+
+msgid "\"Use Gradle Build\" must be enabled to disable \"Show In App Library\"."
+msgstr ""
+"Ní mór \"Úsáid Gradle Build\" a bheith cumasaithe chun \"Taispeáin i "
+"Leabharlann na nAipeanna\" a dhíchumasú."
+
+msgid "Mirror Android devices"
+msgstr "Gléasanna Android scátháin"
 
 msgid ""
 "If enabled, \"scrcpy\" is used to start the project and automatically stream "
@@ -19391,12 +19654,49 @@ msgstr "Níorbh fhéidir suiteáil sa ghléas: %s"
 msgid "Running on device..."
 msgstr "Ag rith ar an ngléas..."
 
+msgid ""
+"Could not start scrcpy executable. Configure scrcpy path in the Editor "
+"Settings (Export > Android > scrcpy > Path)."
+msgstr ""
+"Níorbh fhéidir an comhad inrite scrcpy a thosú. Cumraigh cosán scrcpy sna "
+"Socruithe Eagarthóra (Easpórtáil > Android > scrcpy > Cosán)."
+
 msgid "Could not execute on device."
 msgstr "Níorbh fhéidir rith ar an ngléas."
 
 msgid "Error: There was a problem validating the keystore username and password"
 msgstr ""
 "Earráid: Bhí fadhb ann ainm úsáideora agus pasfhocal an keystore a bhailíochtú"
+
+msgid ""
+"Unable to determine the C# project's TFM, it may be incompatible. The export "
+"template only supports '%s'. Make sure the project targets '%s' or consider "
+"using gradle builds instead."
+msgstr ""
+"Ní féidir TFM an tionscadail C# a chinneadh, b'fhéidir nach bhfuil sé "
+"comhoiriúnach. Ní thacaíonn an teimpléad easpórtála ach le '%s'. Cinntigh go "
+"bhfuil an tionscadal dírithe ar '%s' nó smaoinigh ar thógálacha gradle a "
+"úsáid ina ionad."
+
+msgid ""
+"C# project targets '%s' but the export template only supports '%s'. Consider "
+"using gradle builds instead."
+msgstr ""
+"Tá '%s' mar sprioc ag tionscadal C# ach ní thacaíonn an teimpléad easpórtála "
+"ach le '%s'. Smaoinigh ar úsáid a bhaint as tógálacha gradle ina ionad."
+
+msgid "Exporting to Android when using C#/.NET is experimental."
+msgstr "Tá onnmhairiú chuig Android agus C #/.NET á úsáid turgnamhach."
+
+msgid "Custom Android source template not found."
+msgstr "Níor aimsíodh teimpléad foinse Android saincheaptha."
+
+msgid ""
+"Android build template not installed in the project. Install it from the "
+"Project menu."
+msgstr ""
+"Teimpléad tógála Android nach bhfuil suiteáilte sa tionscadal. Suiteáil é ón "
+"roghchlár Tionscadail."
 
 msgid ""
 "Either Debug Keystore, Debug User AND Debug Password settings must be "
@@ -19436,11 +19736,33 @@ msgstr "Ní féidir ordú 'java' a aimsiú le cosán Java SDK."
 msgid "Please check the Java SDK directory specified in Editor Settings."
 msgstr "Seiceáil an chomhadlann Java SDK atá sonraithe i Socruithe Eagarthóra."
 
+msgid "A valid Android SDK path is required in Editor Settings."
+msgstr "Tá cosán SDK Android bailí ag teastáil i Socruithe Eagarthóra."
+
+msgid "Invalid Android SDK path in Editor Settings."
+msgstr "Cosán SDK Android neamhbhailí i Socruithe Eagarthóra."
+
 msgid "Missing 'platform-tools' directory!"
 msgstr "Comhadlann 'platform-tools' ar iarraidh!"
 
+msgid "Unable to find Android SDK platform-tools' adb command."
+msgstr "Ní féidir ordú adb Android SDK ardán-uirlisí a aimsiú."
+
+msgid "Please check in the Android SDK directory specified in Editor Settings."
+msgstr ""
+"Seiceáil le do thoil san eolaire SDK Android atá sonraithe i Socruithe "
+"Eagarthóir."
+
 msgid "Missing 'build-tools' directory!"
 msgstr "Comhadlann 'build-tools' ar iarraidh!"
+
+msgid "Unable to find Android SDK build-tools' apksigner command."
+msgstr "Ní féidir ordú apksigner Android SDK a aimsiú."
+
+msgid "\"Use Gradle Build\" is required for transparent background on Android"
+msgstr ""
+"Tá \"Úsáid Gradle Build\" riachtanach le haghaidh cúlra trédhearcach ar "
+"Android"
 
 msgid ""
 "\"Target SDK\" %d is higher than the default version %d. This may work, but "
@@ -19449,6 +19771,13 @@ msgstr ""
 "Tá \"Sprioc SDK\" %d níos airde ná an leagan réamhshocraithe %d. D'fhéadfadh "
 "sé seo a bheith ag obair, ach níor tástáladh é agus d'fhéadfadh sé a bheith "
 "éagobhsaí."
+
+msgid ""
+"The \"%s\" renderer is designed for Desktop devices, and is not suitable for "
+"Android devices."
+msgstr ""
+"Tá an rindreálaí \"%s\" deartha le haghaidh gléasanna Deisce, agus níl sé "
+"oiriúnach do ghléasanna Android."
 
 msgid ""
 "The project name does not meet the requirement for the package name format "
@@ -19480,6 +19809,24 @@ msgstr ""
 msgid "Unable to sign apk."
 msgstr "Ní féidir an apk a shíniú."
 
+msgid ""
+"All 'apksigner' tools located in Android SDK 'build-tools' directory failed "
+"to execute. Please check that you have the correct version installed for your "
+"target sdk version. The resulting APK is unsigned."
+msgstr ""
+"Theip ar aon uirlis 'apksigner' atá suite in eolaire 'build-tools' SDK "
+"Android a fhorghníomhú. Seiceáil le do thoil go bhfuil an leagan ceart "
+"suiteáilte agat do do leagan SDK sprice. Níl an APK mar thoradh air sin "
+"sínithe."
+
+msgid ""
+"'apksigner' could not be found. Please check that the command is available in "
+"the Android SDK build-tools directory. The resulting APK is unsigned."
+msgstr ""
+"Níorbh fhéidir 'apksigner' a aimsiú. Seiceáil le do thoil go bhfuil an t-ordú "
+"ar fáil in eolaire uirlisí tógála SDK Android. Níl an APK a eascraíonn as sin "
+"sínithe."
+
 msgid "Could not start apksigner executable."
 msgstr "Níorbh fhéidir inrite apksigner a thosú."
 
@@ -19505,8 +19852,27 @@ msgstr "Theip ar fhíorú 'apksigner' ar an APK."
 msgid "Could not create temporary file!"
 msgstr "Níorbh fhéidir comhad sealadach a chruthú!"
 
+msgid "Exporting for Android"
+msgstr "Easpórtáil le haghaidh Android"
+
+msgid "Invalid filename! Android App Bundle requires the *.aab extension."
+msgstr "Ainm neamhbhailí comhaid! Éilíonn Beart App Android an síneadh *.aab."
+
+msgid "APK Expansion not compatible with Android App Bundle."
+msgstr "Leathnú APK nach bhfuil comhoiriúnach le Beart App Android."
+
+msgid "Invalid filename! Android APK requires the *.apk extension."
+msgstr "Ainm neamhbhailí comhaid! Éilíonn Android APK an síneadh *.apk."
+
 msgid "Unsupported export format!"
 msgstr "Formáid easpórtála gan tacaíocht!"
+
+msgid ""
+"Trying to build from a gradle built template, but no version info for it "
+"exists. Please reinstall from the 'Project' menu."
+msgstr ""
+"Ag iarraidh a thógáil ó teimpléad gradle tógtha, ach níl aon eolas leagan "
+"chun é ann. Athshuiteáil ón roghchlár 'Tionscadal'."
 
 msgid ""
 "Java SDK path must be configured in Editor Settings at 'export/android/"
@@ -19514,6 +19880,13 @@ msgid ""
 msgstr ""
 "Ní mór cosán Java SDK a chumrú i Socruithe Eagarthóra ag 'export / android / "
 "java_sdk_path'."
+
+msgid ""
+"Android SDK path must be configured in Editor Settings at 'export/android/"
+"android_sdk_path'."
+msgstr ""
+"Ní mór cosán SDK Android a chumrú i Socruithe Eagarthóra ag 'export / "
+"android / android_sdk_path'."
 
 msgid "Unable to overwrite res/*.xml files with project name."
 msgstr "Ní féidir comhaid res / * .xml a fhorscríobh le hainm an tionscadail."
@@ -19524,8 +19897,15 @@ msgstr "Níorbh fhéidir meiteashonraí pck gann a ghiniúint!"
 msgid "Could not write PCK directory!"
 msgstr "Níorbh fhéidir eolaire PCK a scríobh!"
 
+msgid "Could not export project files to gradle project."
+msgstr ""
+"Níorbh fhéidir comhaid tionscadail a easpórtáil go tionscadal grádaithe."
+
 msgid "Could not write expansion package file!"
 msgstr "Níorbh fhéidir comhad pacáiste leathnaithe a scríobh!"
+
+msgid "Building of Android project failed, check output for the error:"
+msgstr "Theip ar thógáil an tionscadail Android, seiceáil aschur don earráid:"
 
 msgid "Moving output"
 msgstr "Aschur á bhogadh"
@@ -19565,6 +19945,9 @@ msgstr "APK á ailíniú..."
 
 msgid "Could not unzip temporary unaligned APK."
 msgstr "Níorbh fhéidir APK sealadach gan síniú a unzip."
+
+msgid "Metal renderer require iOS 14+."
+msgstr "Éilíonn rindreálaí miotail iOS 14+."
 
 msgid "Export Icons"
 msgstr "Easpórtáil Deilbhíní"
@@ -20204,6 +20587,18 @@ msgstr ""
 "cumasaithe."
 
 msgid ""
+"Particle trails are only available when using the Forward+ or Mobile renderer."
+msgstr ""
+"Ní bhíonn rianta cáithníní ar fáil ach amháin nuair a bhíonn an rindreálaí "
+"Forward+ nó Mobile in úsáid."
+
+msgid ""
+"Particle sub-emitters are not available when using the Compatibility renderer."
+msgstr ""
+"Ní bhíonn fo-astaitheoirí cáithníní ar fáil agus an rindreálaí "
+"Comhoiriúnachta in úsáid."
+
+msgid ""
 "A texture with the shape of the light must be supplied to the \"Texture\" "
 "property."
 msgstr ""
@@ -20493,6 +20888,11 @@ msgstr ""
 "Éilíonn beochan CPUParticles3D úsáid StandardMaterial3D a bhfuil a Mód fógraí "
 "na gCáithnín socraithe do \"Clár fógraí na gCáithnín\"."
 
+msgid "Decals are only available when using the Forward+ or Mobile renderer."
+msgstr ""
+"Ní bhíonn greamáin ar fáil ach amháin nuair a úsáidtear an rindreálaí "
+"Forward+ nó Mobile."
+
 msgid ""
 "The decal has no textures loaded into any of its texture properties, and will "
 "therefore not be visible."
@@ -20597,6 +20997,13 @@ msgstr "Ní dhéanann scála solais difear do mhéid amhairc an tsolais."
 
 msgid "Projector texture only works with shadows active."
 msgstr "Ní oibríonn uigeacht teilgeora ach le scáthanna gníomhacha."
+
+msgid ""
+"Projector textures are not supported when using the Compatibility renderer "
+"yet. Support will be added in a future release."
+msgstr ""
+"Ní thacaítear le huigeachtaí teilgeora go fóill agus an rindreálaí "
+"Comhoiriúnachta in úsáid. Cuirfear tacaíocht leis in eisiúint amach anseo."
 
 msgid "A SpotLight3D with an angle wider than 90 degrees cannot cast shadows."
 msgstr ""
@@ -21025,6 +21432,13 @@ msgstr "Réimse Faid a Ghiniúint"
 msgid "Finishing Plot"
 msgstr "Breacadh Críochnaithe"
 
+msgid ""
+"VoxelGI nodes are not supported when using the Compatibility renderer yet. "
+"Support will be added in a future release."
+msgstr ""
+"Ní thacaítear le nóid VoxelGI go fóill agus an rindreálaí Comhoiriúnachta á "
+"úsáid. Cuirfear tacaíocht leis in eisiúint amach anseo."
+
 msgid "VoxelGI nodes are not supported when using the Dummy renderer."
 msgstr "Ní thacaítear le nóid VoxelGI agus an rindreálaí Dummy in úsáid."
 
@@ -21417,6 +21831,13 @@ msgstr "Foinse neamhbhailí le haghaidh shader."
 
 msgid "Invalid operator for that type."
 msgstr "Oibreoir neamhbhailí don chineál sin."
+
+msgid ""
+"`%s` precision mode is not available for `gl_compatibility` profile.\n"
+"Reverted to `None` precision."
+msgstr ""
+"Níl mód beachtais '%s' ar fáil don phróifíl 'gl_compatibility'.\n"
+"Ar ais go cruinneas 'None'."
 
 msgid "'%s' type is incompatible with '%s' source."
 msgstr "Níl an cineál '%s' comhoiriúnach leis an bhfoinse '%s'."

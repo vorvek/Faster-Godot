@@ -2019,6 +2019,21 @@ msgstr ""
 msgid "Small Deploy with Network Filesystem"
 msgstr "Deploy Reducido con el Sistema de Archivos en Red"
 
+msgid ""
+"When this option is enabled, using one-click deploy for Android will only "
+"export an executable without the project data.\n"
+"The filesystem will be provided from the project by the editor over the "
+"network.\n"
+"On Android, deploying will use the USB cable for faster performance. This "
+"option speeds up testing for projects with large assets."
+msgstr ""
+"Cuando esta opción está activada, al usar deploy en un click para Android "
+"sólo se exportará un ejecutable sin los datos del proyecto.\n"
+"El sistema de archivos será proporcionado desde el proyecto por el editor a "
+"través de la red.\n"
+"En Android, el deploy usará el cable USB para un rendimiento más rápido. Esta "
+"opción acelera el testeo de los proyectos con recursos grandes."
+
 msgid "Visible Collision Shapes"
 msgstr "Collision Shapes Visibles"
 
@@ -3564,6 +3579,9 @@ msgstr "Control de Versiones"
 msgid "Pack Project as ZIP..."
 msgstr "Empacar Proyecto como ZIP..."
 
+msgid "Install Android Build Template..."
+msgstr "Instalar Plantilla de Compilación de Android..."
+
 msgid "Open User Data Folder"
 msgstr "Abrir Carpeta de Datos del Usuario"
 
@@ -3740,6 +3758,11 @@ msgstr "Ocultar Spinner de Actualización"
 msgid "Don't Save"
 msgstr "No Guardar"
 
+msgid "Android build template is missing, please install relevant templates."
+msgstr ""
+"Falta la plantilla de compilación de Android, por favor, instala las "
+"plantillas correspondientes."
+
 msgid "Manage Templates"
 msgstr "Administrar Plantillas"
 
@@ -3835,6 +3858,9 @@ msgstr "Tipo de objeto desconocido."
 
 msgid "Storing File:"
 msgstr "Almacenando Archivo:"
+
+msgid "Could not open file to read from path \"%s\"."
+msgstr "No se pudieron exportar los archivos del proyecto a un proyecto gradle"
 
 msgid "Packing"
 msgstr "Empaquetando"
@@ -3956,6 +3982,9 @@ msgid "Official export templates aren't available for development builds."
 msgstr ""
 "Las plantillas de exportación oficiales no están disponibles para las "
 "versiones de desarrollo."
+
+msgid "Uncompressing Android Build Sources"
+msgstr "Descomprimiendo Fuentes de Compilación Android"
 
 msgid "Export Template Manager"
 msgstr "Gestor de Plantillas de Exportación"
@@ -5006,6 +5035,15 @@ msgstr "Ruta de Instalación del Proyecto:"
 
 msgid "Renderer:"
 msgstr "Renderizador:"
+
+msgid ""
+"RenderingDevice-based methods not available on this GPU:\n"
+"%s\n"
+"Please use the Compatibility renderer."
+msgstr ""
+"Métodos basados en RenderingDevice no disponibles en éste GPU:\n"
+"%s\n"
+"Por favor utiliza el renderizador de Compatibilidad."
 
 msgid "Error: Project is missing on the filesystem."
 msgstr "Error: Proyecto faltante en el sistema de archivos."
@@ -8817,6 +8855,9 @@ msgid "A NavigationMesh resource must be set or created for this node to work."
 msgstr ""
 "Se debe crear o setear un recurso NavigationMesh para que este nodo funcione."
 
+msgid "Building Android Project (gradle)"
+msgstr "Construir Proyecto Android (gradle)"
+
 msgid "Invalid public key for APK expansion."
 msgstr "Clave pública inválida para la expansión de APK."
 
@@ -8842,6 +8883,13 @@ msgid "Could not execute on device."
 msgstr "No se ha podido ejecutar en el dispositivo."
 
 msgid ""
+"Android build template not installed in the project. Install it from the "
+"Project menu."
+msgstr ""
+"La plantilla de exportación de Android no esta instalada en el proyecto. "
+"Instalala desde el menú de Proyecto."
+
+msgid ""
 "Either Debug Keystore, Debug User AND Debug Password settings must be "
 "configured OR none of them."
 msgstr ""
@@ -8864,17 +8912,52 @@ msgstr ""
 "Release keystore no está configurado correctamente en el preset de "
 "exportación."
 
+msgid "A valid Android SDK path is required in Editor Settings."
+msgstr ""
+"Se requiere una ruta válida al SDK de Android en la Configuración del Editor."
+
+msgid "Invalid Android SDK path in Editor Settings."
+msgstr "Ruta del SDK de Android inválida en la Configuración del Editor."
+
 msgid "Missing 'platform-tools' directory!"
 msgstr "¡No se encontró el directorio 'platform-tools'!"
+
+msgid "Unable to find Android SDK platform-tools' adb command."
+msgstr "No se pudo encontrar el comando adb en las Android SDK platform-tools."
+
+msgid "Please check in the Android SDK directory specified in Editor Settings."
+msgstr ""
+"Por favor, comprueba el directorio del SDK de Android especificado en la "
+"Configuración del Editor."
 
 msgid "Missing 'build-tools' directory!"
 msgstr "¡No se encontró el directorio 'build-tools'!"
 
+msgid "Unable to find Android SDK build-tools' apksigner command."
+msgstr ""
+"No se pudo encontrar el comando apksigner en las Android SDK build-tools."
+
 msgid "'apksigner' returned with error #%d"
 msgstr "'apksigner' ha retornado con error #%d"
 
+msgid "Exporting for Android"
+msgstr "Exportando para Android"
+
+msgid "Invalid filename! Android App Bundle requires the *.aab extension."
+msgstr ""
+"¡Nombre de archivo inválido! Android App Bundle requiere la extensión *.aab."
+
+msgid "APK Expansion not compatible with Android App Bundle."
+msgstr "La Expansión APK no es compatible con Android App Bundle."
+
+msgid "Invalid filename! Android APK requires the *.apk extension."
+msgstr "¡Nombre de archivo inválido! Android APK requiere la extensión *.apk."
+
 msgid "Unsupported export format!"
 msgstr "¡Formato de exportación no soportado!"
+
+msgid "Could not export project files to gradle project."
+msgstr "No se pudieron exportar los archivos del proyecto a un proyecto gradle."
 
 msgid "Could not write expansion package file!"
 msgstr "¡No se pudo escribir el archivo del paquete de expansión!"

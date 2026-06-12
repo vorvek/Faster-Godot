@@ -49,6 +49,11 @@
 #include "tts_linux.h"
 #endif
 
+#if defined(GLES3_ENABLED)
+#include "x11/gl_manager_x11.h"
+#include "x11/gl_manager_x11_egl.h"
+#endif
+
 #if defined(RD_ENABLED)
 #include "servers/rendering/rendering_device.h"
 
@@ -132,6 +137,10 @@ class DisplayServerX11 : public DisplayServer {
 	Atom requested = None;
 	int xdnd_version = 5;
 
+#if defined(GLES3_ENABLED)
+	GLManager_X11 *gl_manager = nullptr;
+	GLManagerEGL_X11 *gl_manager_egl = nullptr;
+#endif
 #if defined(RD_ENABLED)
 	RenderingContextDriver *rendering_context = nullptr;
 	RenderingDevice *rendering_device = nullptr;

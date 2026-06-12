@@ -54,13 +54,31 @@ class EditorExportPlugin : public RefCounted {
 	Vector<ExtraFile> extra_files;
 	bool skipped = false;
 
+	Vector<String> apple_embedded_platform_frameworks;
+	Vector<String> apple_embedded_platform_embedded_frameworks;
+	Vector<String> apple_embedded_platform_project_static_libs;
+	String apple_embedded_platform_plist_content;
+	String apple_embedded_platform_linker_flags;
+	Vector<String> apple_embedded_platform_bundle_files;
+	String apple_embedded_platform_cpp_code;
+
+	Vector<String> macos_plugin_files;
+
 	_FORCE_INLINE_ void _clear() {
 		shared_objects.clear();
 		extra_files.clear();
 		skipped = false;
 	}
 
-	_FORCE_INLINE_ void _export_end_clear() {}
+	_FORCE_INLINE_ void _export_end_clear() {
+		apple_embedded_platform_frameworks.clear();
+		apple_embedded_platform_embedded_frameworks.clear();
+		apple_embedded_platform_bundle_files.clear();
+		apple_embedded_platform_plist_content = "";
+		apple_embedded_platform_linker_flags = "";
+		apple_embedded_platform_cpp_code = "";
+		macos_plugin_files.clear();
+	}
 
 	// Export
 	void _export_file_script(const String &p_path, const String &p_type, const Vector<String> &p_features);
@@ -79,6 +97,15 @@ protected:
 	void add_file(const String &p_path, const Vector<uint8_t> &p_file, bool p_remap);
 	void add_shared_object(const String &p_path, const Vector<String> &tags, const String &p_target = String());
 	void _add_shared_object(const SharedObject &p_shared_object);
+
+	void add_apple_embedded_platform_framework(const String &p_path);
+	void add_apple_embedded_platform_embedded_framework(const String &p_path);
+	void add_apple_embedded_platform_project_static_lib(const String &p_path);
+	void add_apple_embedded_platform_plist_content(const String &p_plist_content);
+	void add_apple_embedded_platform_linker_flags(const String &p_flags);
+	void add_apple_embedded_platform_bundle_file(const String &p_path);
+	void add_apple_embedded_platform_cpp_code(const String &p_code);
+	void add_macos_plugin_file(const String &p_path);
 
 	void skip();
 
@@ -113,6 +140,14 @@ protected:
 
 	GDVIRTUAL1RC(bool, _supports_platform, const Ref<EditorExportPlatform> &);
 
+	GDVIRTUAL2RC(PackedStringArray, _get_android_dependencies, const Ref<EditorExportPlatform> &, bool);
+	GDVIRTUAL2RC(PackedStringArray, _get_android_dependencies_maven_repos, const Ref<EditorExportPlatform> &, bool);
+	GDVIRTUAL2RC(PackedStringArray, _get_android_libraries, const Ref<EditorExportPlatform> &, bool);
+	GDVIRTUAL2RC(String, _get_android_manifest_activity_element_contents, const Ref<EditorExportPlatform> &, bool);
+	GDVIRTUAL2RC(String, _get_android_manifest_application_element_contents, const Ref<EditorExportPlatform> &, bool);
+	GDVIRTUAL2RC(String, _get_android_manifest_element_contents, const Ref<EditorExportPlatform> &, bool);
+	GDVIRTUAL2RC(PackedByteArray, _update_android_prebuilt_manifest, const Ref<EditorExportPlatform> &, const PackedByteArray &);
+
 	virtual bool _begin_customize_resources(const Ref<EditorExportPlatform> &p_platform, const Vector<String> &p_features); // Return true if this plugin does property export customization
 	virtual Ref<Resource> _customize_resource(const Ref<Resource> &p_resource, const String &p_path); // If nothing is returned, it means do not touch (nothing changed). If something is returned (either the same or a different resource) it means changes are made.
 
@@ -137,5 +172,21 @@ public:
 	virtual bool supports_platform(const Ref<EditorExportPlatform> &p_export_platform) const;
 	PackedStringArray get_export_features(const Ref<EditorExportPlatform> &p_export_platform, bool p_debug) const;
 
+	virtual PackedStringArray get_android_dependencies(const Ref<EditorExportPlatform> &p_export_platform, bool p_debug) const;
+	virtual PackedStringArray get_android_dependencies_maven_repos(const Ref<EditorExportPlatform> &p_export_platform, bool p_debug) const;
+	virtual PackedStringArray get_android_libraries(const Ref<EditorExportPlatform> &p_export_platform, bool p_debug) const;
+	virtual String get_android_manifest_activity_element_contents(const Ref<EditorExportPlatform> &p_export_platform, bool p_debug) const;
+	virtual String get_android_manifest_application_element_contents(const Ref<EditorExportPlatform> &p_export_platform, bool p_debug) const;
+	virtual String get_android_manifest_element_contents(const Ref<EditorExportPlatform> &p_export_platform, bool p_debug) const;
+	virtual PackedByteArray update_android_prebuilt_manifest(const Ref<EditorExportPlatform> &p_export_platform, const PackedByteArray &p_manifest_data) const;
+
+	Vector<String> get_apple_embedded_platform_frameworks() const;
+	Vector<String> get_apple_embedded_platform_embedded_frameworks() const;
+	Vector<String> get_apple_embedded_platform_project_static_libs() const;
+	String get_apple_embedded_platform_plist_content() const;
+	String get_apple_embedded_platform_linker_flags() const;
+	Vector<String> get_apple_embedded_platform_bundle_files() const;
+	String get_apple_embedded_platform_cpp_code() const;
+	const Vector<String> &get_macos_plugin_files() const;
 	Variant get_option(const StringName &p_name) const;
 };

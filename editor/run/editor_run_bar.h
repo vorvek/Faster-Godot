@@ -53,6 +53,12 @@ class EditorRunBar : public MarginContainer {
 		RUN_CUSTOM,
 	};
 
+	enum RunXRModeMenuItem {
+		INVALID = -1,
+		OFF = 0,
+		ON = 1,
+	};
+
 	PanelContainer *main_panel = nullptr;
 	HBoxContainer *main_hbox = nullptr;
 	HBoxContainer *outer_hbox = nullptr;
@@ -90,15 +96,18 @@ class EditorRunBar : public MarginContainer {
 
 	void _movie_maker_item_pressed(int p_id);
 	void _write_movie_toggled(bool p_enabled);
-	void _quick_run_selected(const String &p_file_path);
+	void _quick_run_selected(const String &p_file_path, int p_menu_item = RunXRModeMenuItem::INVALID);
 
-	void _play_current_pressed();
-	void _play_custom_pressed();
+	void _play_current_pressed(int p_menu_item = RunXRModeMenuItem::INVALID);
+	void _play_custom_pressed(int p_menu_item = RunXRModeMenuItem::INVALID);
 
 	void _run_scene(const String &p_scene_path = "", const Vector<String> &p_run_args = Vector<String>());
 	void _run_native(const Ref<EditorExportPreset> &p_preset);
 
 	void _profiler_autostart_indicator_pressed();
+
+private:
+	static Vector<String> _get_xr_mode_play_args(RunXRModeMenuItem p_menu_item);
 
 protected:
 	void _notification(int p_what);

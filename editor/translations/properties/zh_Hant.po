@@ -260,8 +260,14 @@ msgstr "嵌入式子視窗"
 msgid "Frame Pacing"
 msgstr "畫面同步"
 
+msgid "Android"
+msgstr "Android"
+
 msgid "Enable Frame Pacing"
 msgstr "啟用畫面同步"
+
+msgid "Swappy Mode"
+msgstr "交換模式"
 
 msgid "Physics"
 msgstr "物理"
@@ -2901,6 +2907,9 @@ msgstr "預設動畫步階"
 msgid "Default FPS Mode"
 msgstr "預設 FPS 模式"
 
+msgid "Default FPS Compatibility"
+msgstr "FPS 相容性"
+
 msgid "Autorename Animation Tracks"
 msgstr "自動重新命名動畫軌"
 
@@ -2960,6 +2969,9 @@ msgstr "矩形自定義位置"
 
 msgid "Screen"
 msgstr "螢幕"
+
+msgid "Android Window"
+msgstr "Android 視窗"
 
 msgid "Game Embed Mode"
 msgstr "遊戲內嵌模式"
@@ -3192,6 +3204,9 @@ msgstr "回退至 D3D12"
 msgid "Fallback to OpenGL 3"
 msgstr "回退至 OpenGL 3"
 
+msgid "GL Compatibility"
+msgstr "GL 相容性"
+
 msgid "Nvidia Disable Threaded Optimization"
 msgstr "Nvidia 停用多執行緒優化"
 
@@ -3260,6 +3275,9 @@ msgstr "抑制 UI 手勢"
 
 msgid "XR"
 msgstr "XR"
+
+msgid "OpenXR"
+msgstr "OpenXR"
 
 msgid "Default Action Map"
 msgstr "預設動作對映"
@@ -4539,6 +4557,12 @@ msgstr "下一個"
 msgid "Layer Viewport"
 msgstr "圖層視埠"
 
+msgid "Use Android Surface"
+msgstr "使用 Android 表面"
+
+msgid "Android Surface Size"
+msgstr "Android 表面尺寸"
+
 msgid "Sort Order"
 msgstr "排序順序"
 
@@ -4656,6 +4680,9 @@ msgstr "IGD 我方地址"
 msgid "IGD Status"
 msgstr "IGD 狀態"
 
+msgid "WebRTC"
+msgstr "WebRTC"
+
 msgid "Max Channel in Buffer (KB)"
 msgstr "通道最大緩衝區大小（KB）"
 
@@ -4719,6 +4746,9 @@ msgstr "安裝匯出的 APK"
 msgid "Java SDK Path"
 msgstr "Java SDK 路徑"
 
+msgid "Android SDK Path"
+msgstr "Android SDK 路徑"
+
 msgid "Force System User"
 msgstr "強制系統使用者"
 
@@ -4748,6 +4778,18 @@ msgstr "自適應背景 432 X 432"
 
 msgid "Adaptive Monochrome 432 X 432"
 msgstr "自適應單色 432 X 432"
+
+msgid "Gradle Build"
+msgstr "Gradle 構建"
+
+msgid "Use Gradle Build"
+msgstr "使用 Gradle 構建"
+
+msgid "Gradle Build Directory"
+msgstr "Gradle 建置目錄"
+
+msgid "Android Source Template"
+msgstr "Android 原始碼範本"
 
 msgid "Compress Native Libraries"
 msgstr "壓縮原生程式庫"
@@ -4799,6 +4841,9 @@ msgstr "解除安裝時保留資料"
 
 msgid "Exclude From Recents"
 msgstr "從最近列表中排除"
+
+msgid "Show in Android TV"
+msgstr "顯示在 Android TV 中"
 
 msgid "Show in App Library"
 msgstr "顯示在 App 庫中"
@@ -4872,8 +4917,14 @@ msgstr "許可權"
 msgid "Custom Permissions"
 msgstr "自訂許可權"
 
+msgid "iOS Deploy"
+msgstr "iOS 部署"
+
 msgid "Targeted Device Family"
 msgstr "目標設備族"
+
+msgid "Min iOS Version"
+msgstr "最低 iOS 版本"
 
 msgid "Storyboard"
 msgstr "Storyboard"
@@ -4928,6 +4979,15 @@ msgstr "iPad 167×167"
 
 msgid "iPad 152 X 152"
 msgstr "iPad 152×152"
+
+msgid "iOS 128 X 128"
+msgstr "iOS 128 X 128"
+
+msgid "iOS 192 X 192"
+msgstr "iOS 192 X 192"
+
+msgid "iOS 136 X 136"
+msgstr "iOS 136 X 136"
 
 msgid "App Store 1024 X 1024"
 msgstr "App Store 1024×1024"
@@ -5234,6 +5294,9 @@ msgstr "圖示 180×180"
 
 msgid "Icon 512 X 512"
 msgstr "圖示 512×512"
+
+msgid "Emscripten Pool Size"
+msgstr "Emscripten 記憶體池大小"
 
 msgid "Godot Pool Size"
 msgstr "Godot 記憶體池大小"

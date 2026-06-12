@@ -325,8 +325,14 @@ msgstr "Unterfenster einbetten"
 msgid "Frame Pacing"
 msgstr "Frame-Taktung"
 
+msgid "Android"
+msgstr "Android"
+
 msgid "Enable Frame Pacing"
 msgstr "Frame Pacing aktivieren"
+
+msgid "Swappy Mode"
+msgstr "Swappy Modus"
 
 msgid "Physics"
 msgstr "Physik"
@@ -3161,6 +3167,9 @@ msgstr "Fallback auf Vulkan"
 msgid "Fallback to D3D12"
 msgstr "Fallback auf D3D12"
 
+msgid "GL Compatibility"
+msgstr "GL-Kompatibilität"
+
 msgid "Nvidia Disable Threaded Optimization"
 msgstr "Nvidia-Thread-Optimierung deaktivieren"
 
@@ -3223,6 +3232,9 @@ msgstr "UI-Geste unterdrücken"
 
 msgid "XR"
 msgstr "XR"
+
+msgid "OpenXR"
+msgstr "OpenXR"
 
 msgid "Default Action Map"
 msgstr "Default-Action-Map"
@@ -4292,6 +4304,9 @@ msgstr "IGD-Unsere-Adresse"
 msgid "IGD Status"
 msgstr "IGD-Status"
 
+msgid "WebRTC"
+msgstr "WebRTC"
+
 msgid "Max Channel in Buffer (KB)"
 msgstr "Max. Kanal im Puffer (KB)"
 
@@ -4370,6 +4385,18 @@ msgstr "Angepasster Vordergrund 432 x 432"
 msgid "Adaptive Background 432 X 432"
 msgstr "Angepasster Hintergrund 432 x 432"
 
+msgid "Gradle Build"
+msgstr "Gradle-Build"
+
+msgid "Use Gradle Build"
+msgstr "Gradle Build verwenden"
+
+msgid "Gradle Build Directory"
+msgstr "Gradle-Buildverzeichnis"
+
+msgid "Android Source Template"
+msgstr "Android Quell-Vorlage"
+
 msgid "Compress Native Libraries"
 msgstr "Native Bibliotheken komprimieren"
 
@@ -4417,6 +4444,9 @@ msgstr "Daten beibehalten nach Deinstallation"
 
 msgid "Exclude From Recents"
 msgstr "Aus Kürzliche Anwendungen ausschließen"
+
+msgid "Show in Android TV"
+msgstr "In Android TV anzeigen"
 
 msgid "Show in App Library"
 msgstr "In Appbibliothek anzeigen"
@@ -4487,8 +4517,14 @@ msgstr "Berechtigungen"
 msgid "Custom Permissions"
 msgstr "Eigene Berechtigungen"
 
+msgid "iOS Deploy"
+msgstr "iOS-Auslieferung"
+
 msgid "Targeted Device Family"
 msgstr "Zielgeräteklasse"
+
+msgid "Min iOS Version"
+msgstr "Mindest-iOS-Version"
 
 msgid "Storyboard"
 msgstr "Storyboard"

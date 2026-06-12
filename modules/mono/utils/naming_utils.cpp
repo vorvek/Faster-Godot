@@ -70,6 +70,7 @@ const HashMap<String, String> pascal_case_part_overrides = _create_hashmap_from_
 		{ "IO", "IO" }, // Input/Output
 		{ "IP", "IP" }, // Internet Protocol
 		{ "IV", "IV" }, // Initialization Vector
+		{ "MACOS", "MacOS" },
 		{ "NODEPATH", "NodePath" },
 		{ "SPIRV", "SpirV" },
 		{ "STDIN", "StdIn" },

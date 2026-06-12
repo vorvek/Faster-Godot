@@ -75,6 +75,14 @@ String EditorPaths::get_export_templates_dir() const {
 	return get_data_dir().path_join(export_templates_folder);
 }
 
+String EditorPaths::get_debug_keystore_path() const {
+#ifdef ANDROID_ENABLED
+	return "assets://keystores/debug.keystore";
+#else
+	return get_data_dir().path_join("keystores/debug.keystore");
+#endif
+}
+
 // This returns paths like "res://.godot/editor".
 String EditorPaths::get_project_settings_dir() const {
 	return get_project_data_dir().path_join("editor");

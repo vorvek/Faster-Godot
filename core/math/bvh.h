@@ -42,8 +42,8 @@
 // They are INSTANCE_TYPES (defined in visual_server.h), e.g. MESH, MULTIMESH, PARTICLES etc.
 // Thus the lights do no cull by layer mask in the BVH.
 
-// Layer masks are implemented in the renderers as a later step.
-// Layer masks are not yet implemented for directional lights.
+// Layer masks are implemented in the renderers as a later step, and light_cull_mask appears to be
+// implemented in GLES3 but not GLES2. Layer masks are not yet implemented for directional lights.
 
 // In the physics, the pairable_type is based on 1 << p_object->get_type() where:
 // TYPE_AREA,

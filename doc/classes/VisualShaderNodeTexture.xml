@@ -33,7 +33,7 @@
 			Use the texture from this shader's normal map built-in.
 		</constant>
 		<constant name="SOURCE_DEPTH" value="4" enum="Source">
-			Use the depth texture captured during the depth prepass. Only available when the depth prepass is used, such as in spatial shaders with the forward_plus renderer.
+			Use the depth texture captured during the depth prepass. Only available when the depth prepass is used (i.e. in spatial shaders and in the forward_plus or gl_compatibility renderers).
 		</constant>
 		<constant name="SOURCE_PORT" value="5" enum="Source">
 			Use the texture provided in the input port for this function.

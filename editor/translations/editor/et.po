@@ -1307,6 +1307,20 @@ msgstr "Juuruta Kaugsilumisega"
 msgid "Small Deploy with Network Filesystem"
 msgstr "Väikepaigaldus Kasutades Võrgu Failisüsteemi"
 
+msgid ""
+"When this option is enabled, using one-click deploy for Android will only "
+"export an executable without the project data.\n"
+"The filesystem will be provided from the project by the editor over the "
+"network.\n"
+"On Android, deploying will use the USB cable for faster performance. This "
+"option speeds up testing for projects with large assets."
+msgstr ""
+"Selle valiku sisselülitamisel ja \"one-click-deploy\" kasutamisel "
+"eksporditakse Androidi jaoks ainult käivitatav fail ilma projekti andmeteta\n"
+"Failisüsteemi pakutakse projektist redaktori ning võrgu kaudu.\n"
+"Androidil kasutatakse kiirema jõudluse saavutamiseks paigaldamisel USB-"
+"kaablit. See valik kiirendab testimist suurte varade projektide puhul."
+
 msgid "Visible Collision Shapes"
 msgstr "Nähtavad Kokkupõrke Kujud"
 
@@ -2698,11 +2712,17 @@ msgstr "Peida Värskendus Spinner"
 msgid "Don't Save"
 msgstr "Ära Salvesta"
 
+msgid "Android build template is missing, please install relevant templates."
+msgstr "Androidi ehitamise mall puudub, installige asjakohased mallid."
+
 msgid "Manage Templates"
 msgstr "Halda Malle"
 
 msgid "Install from file"
 msgstr "Installi failist"
+
+msgid "Select Android sources file"
+msgstr "Valige Androidi allikate fail"
 
 msgid "Import Templates From ZIP File"
 msgstr "Mallide importimine ZIP-failist"

@@ -81,6 +81,9 @@ public:
 		DISPLAY_HANDLE,
 		WINDOW_HANDLE,
 		WINDOW_VIEW,
+		OPENGL_CONTEXT,
+		EGL_DISPLAY,
+		EGL_CONFIG,
 	};
 
 	enum Context {

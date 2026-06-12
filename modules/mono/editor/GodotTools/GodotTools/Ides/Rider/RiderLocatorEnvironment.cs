@@ -14,6 +14,7 @@ public class RiderLocatorEnvironment : IRiderLocatorEnvironment
         {
             if (OS.IsWindows)
                 return JetBrains.Rider.PathLocator.OS.Windows;
+            if (OS.IsMacOS) return JetBrains.Rider.PathLocator.OS.MacOSX;
             if (OS.IsUnixLike) return JetBrains.Rider.PathLocator.OS.Linux;
             return JetBrains.Rider.PathLocator.OS.Other;
         }

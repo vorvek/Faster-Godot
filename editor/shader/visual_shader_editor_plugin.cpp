@@ -2274,7 +2274,7 @@ void VisualShaderEditor::_update_options_menu() {
 	Color unsupported_color = get_theme_color(SNAME("error_color"), EditorStringName(Editor));
 	Color supported_color = get_theme_color(SNAME("warning_color"), EditorStringName(Editor));
 
-	static bool low_driver = false;
+	static bool low_driver = GLOBAL_GET("rendering/renderer/rendering_method") == "gl_compatibility";
 
 	HashMap<String, TreeItem *> folders;
 
@@ -6948,9 +6948,9 @@ VisualShaderEditor::VisualShaderEditor() {
 	highend_label->set_focus_mode(Control::FOCUS_ACCESSIBILITY);
 	desc_hbox->add_child(highend_label);
 	highend_label->set_visible(false);
-	highend_label->set_text(TTRC("Forward+"));
+	highend_label->set_text(TTRC("Forward+/Mobile"));
 	highend_label->set_mouse_filter(Control::MOUSE_FILTER_STOP);
-	highend_label->set_tooltip_text(TTR("Only supported in the Forward+ rendering method."));
+	highend_label->set_tooltip_text(TTR("Only supported in the Forward+ and Mobile rendering methods, not Compatibility."));
 
 	node_desc = memnew(RichTextLabel);
 	members_vb->add_child(node_desc);

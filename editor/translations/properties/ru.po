@@ -420,8 +420,14 @@ msgstr "Встроить подокна"
 msgid "Frame Pacing"
 msgstr "Скорость кадров"
 
+msgid "Android"
+msgstr "Android"
+
 msgid "Enable Frame Pacing"
 msgstr "Включить покадровую синхронизацию"
+
+msgid "Swappy Mode"
+msgstr "Режим смены"
 
 msgid "Physics"
 msgstr "Физика"
@@ -3177,6 +3183,9 @@ msgstr "Интервал анимации по умолчанию"
 msgid "Default FPS Mode"
 msgstr "Режим отображения по умолчанию"
 
+msgid "Default FPS Compatibility"
+msgstr "Совместимость FPS по умолчанию"
+
 msgid "Autorename Animation Tracks"
 msgstr "Автопереименование дорожек анимации"
 
@@ -3239,6 +3248,9 @@ msgstr "Пользовательская позиция прямоугольни
 
 msgid "Screen"
 msgstr "Экран"
+
+msgid "Android Window"
+msgstr "окно Android"
 
 msgid "Game Embed Mode"
 msgstr "Режим встраивания игры"
@@ -3471,6 +3483,9 @@ msgstr "Использовать запасной вариант (D3D12)"
 msgid "Fallback to OpenGL 3"
 msgstr "Возврат к OpenGL 3"
 
+msgid "GL Compatibility"
+msgstr "GL-совместимость"
+
 msgid "Nvidia Disable Threaded Optimization"
 msgstr "Nvidia: отключение многопоточной оптимизации"
 
@@ -3540,6 +3555,9 @@ msgstr "Два смахивания для доступа к жестовому 
 msgid "XR"
 msgstr "XR"
 
+msgid "OpenXR"
+msgstr "OpenXR"
+
 msgid "Target API Version"
 msgstr "Целевая версия API"
 
@@ -3566,6 +3584,9 @@ msgstr "Динамическая настройка фовеации"
 
 msgid "Submit Depth Buffer"
 msgstr "Применить буфер глубины"
+
+msgid "Startup Alert"
+msgstr "Модальное окно в случае сбоя инициализации OpenXR при запуске"
 
 msgid "Extensions"
 msgstr "Расширения"
@@ -4887,8 +4908,14 @@ msgstr "Следующая"
 msgid "Layer Viewport"
 msgstr "Окно просмотра на слое"
 
+msgid "Use Android Surface"
+msgstr "Использовать область экрана Android"
+
 msgid "Protected Content"
 msgstr "Защищённое содержимое"
+
+msgid "Android Surface Size"
+msgstr "Размер области экрана Android"
 
 msgid "Sort Order"
 msgstr "Порядок сортировки"
@@ -5008,6 +5035,9 @@ msgstr "Наш адр. IGD"
 msgid "IGD Status"
 msgstr "Статус IGD"
 
+msgid "WebRTC"
+msgstr "WebRTС"
+
 msgid "Max Channel in Buffer (KB)"
 msgstr "Макс. размер входного буфера канала (КБ)"
 
@@ -5071,6 +5101,9 @@ msgstr "Установить экспортированный APK"
 msgid "Java SDK Path"
 msgstr "Путь к Java SDK"
 
+msgid "Android SDK Path"
+msgstr "Путь к Android SDK"
+
 msgid "scrcpy"
 msgstr "scrcpy"
 
@@ -5115,6 +5148,18 @@ msgstr "Адаптивный задний план 432 X 432"
 
 msgid "Adaptive Monochrome 432 X 432"
 msgstr "Адаптивный монохромный 432 X 432"
+
+msgid "Gradle Build"
+msgstr "Сборка Gradle"
+
+msgid "Use Gradle Build"
+msgstr "Использовать сборку Gradle"
+
+msgid "Gradle Build Directory"
+msgstr "Каталог сборки Gradle"
+
+msgid "Android Source Template"
+msgstr "Шаблон исходных данных Android"
 
 msgid "Compress Native Libraries"
 msgstr "Сжатие нативных библиотек"
@@ -5166,6 +5211,9 @@ msgstr "Сохранить данные при удалении программ
 
 msgid "Exclude From Recents"
 msgstr "Исключить из недавнего"
+
+msgid "Show in Android TV"
+msgstr "Показывать в Android TV"
 
 msgid "Show in App Library"
 msgstr "Показывать в библиотеке приложений"
@@ -5239,8 +5287,14 @@ msgstr "Разрешения"
 msgid "Custom Permissions"
 msgstr "Пользовательские разрешения"
 
+msgid "iOS Deploy"
+msgstr "Развертка на iOS"
+
 msgid "Targeted Device Family"
 msgstr "Целевое семейство устройств"
+
+msgid "Min iOS Version"
+msgstr "Мин. версия iOS"
 
 msgid "Storyboard"
 msgstr "Раскадровка"
@@ -5295,6 +5349,15 @@ msgstr "iPad 167 X 167"
 
 msgid "iPad 152 X 152"
 msgstr "iPad 152 X 152"
+
+msgid "iOS 128 X 128"
+msgstr "iOS 128 X 128"
+
+msgid "iOS 192 X 192"
+msgstr "iOS 192 X 192"
+
+msgid "iOS 136 X 136"
+msgstr "iOS 136 X 136"
 
 msgid "App Store 1024 X 1024"
 msgstr "App Store 1024 X 1024"
@@ -5607,6 +5670,9 @@ msgstr "Значок 180 X 180"
 
 msgid "Icon 512 X 512"
 msgstr "Значок 512 X 512"
+
+msgid "Emscripten Pool Size"
+msgstr "Размер пула памяти Emscripten"
 
 msgid "Godot Pool Size"
 msgstr "Размера пула памяти Godot"

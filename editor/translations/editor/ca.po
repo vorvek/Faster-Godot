@@ -2148,6 +2148,21 @@ msgstr ""
 "(habitualment amb un dispositiu mòbil).\n"
 "No cal que l'activeu per utilitzar el depurador del GDScript localment."
 
+msgid ""
+"When this option is enabled, using one-click deploy for Android will only "
+"export an executable without the project data.\n"
+"The filesystem will be provided from the project by the editor over the "
+"network.\n"
+"On Android, deploying will use the USB cable for faster performance. This "
+"option speeds up testing for projects with large assets."
+msgstr ""
+"Amb aquesta opció activada, utilitzar el desplegament en un clic d'Android "
+"només exportarà un executable sense les dades del projecte.\n"
+"L'Editor proveirà el sistema de fitxers del projecte a través de la xarxa.\n"
+"En sistemes Android, 'Desplegar' utilitzarà el cable USB per millorar-ne el "
+"rendiment. Aquesta opció ajuda a accelerar els cicles de prova i verificació "
+"en jocs de gran mida."
+
 msgid "Visible Collision Shapes"
 msgstr "Formes de Col·lisió Visibles"
 
@@ -3255,6 +3270,9 @@ msgstr "Obre Recent"
 msgid "Version Control"
 msgstr "Control de Versions"
 
+msgid "Install Android Build Template..."
+msgstr "Instal·lar Plantilla de Compilació d'Android..."
+
 msgid "Tools"
 msgstr "Eines"
 
@@ -3386,6 +3404,11 @@ msgstr "Amaga l'Indicador d'Actualització"
 
 msgid "Don't Save"
 msgstr "No Desis"
+
+msgid "Android build template is missing, please install relevant templates."
+msgstr ""
+"Falta la plantilla de construcció d'Android, si us plau instal·leu plantilles "
+"pertinents."
 
 msgid "Manage Templates"
 msgstr "Administrar Plantilles"
@@ -3522,6 +3545,9 @@ msgid "Official export templates aren't available for development builds."
 msgstr ""
 "Les plantilles oficials d'exportació no estan disponibles per a les versions "
 "de desenvolupament."
+
+msgid "Uncompressing Android Build Sources"
+msgstr "Descomprimint les Fonts de Compilació d'Android"
 
 msgid "Export Template Manager"
 msgstr "Gestor de Plantilles d'Exportació"
@@ -6134,6 +6160,9 @@ msgstr "Servidor de Navegació i funcionalitats per a 3D."
 msgid "XR (AR and VR)."
 msgstr "XR (RA i RV)."
 
+msgid "OpenXR standard implementation (requires XR to be enabled)."
+msgstr "Implementació de l'estàndard OpenXR (cal tenir XR activat)."
+
 msgid "Wayland display (Linux only)."
 msgstr "Visualització Wayland (Linux)."
 
@@ -6142,6 +6171,9 @@ msgstr "Visualització X11 (Linux)."
 
 msgid "Forward+ renderer for advanced 3D graphics."
 msgstr "Renderització Forward+ per a gràfics 3D avançats."
+
+msgid "Mobile renderer for less advanced 3D graphics."
+msgstr "Renderització Mòbil per a gràfics menys avançats."
 
 msgid "Physics Server and capabilities for 2D."
 msgstr "Servidor de Física i funcionalitats per a 2D."

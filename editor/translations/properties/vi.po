@@ -235,8 +235,14 @@ msgstr "Nhúng cửa sổ phụ"
 msgid "Frame Pacing"
 msgstr "Tuỳ chọn bổ sung:"
 
+msgid "Android"
+msgstr "Android"
+
 msgid "Enable Frame Pacing"
 msgstr "Xem Khung hình Liên tiếp"
+
+msgid "Swappy Mode"
+msgstr "Chế độ chọn"
 
 msgid "Physics"
 msgstr "Vật lí"
@@ -1882,6 +1888,9 @@ msgstr "URL điều khiển IGD"
 msgid "IGD Our Addr"
 msgstr "Địa chỉ của chúng tôi IGD"
 
+msgid "WebRTC"
+msgstr "WebRTC"
+
 msgid "Max Queued Packets"
 msgstr "Gói hàng đợi tối đa"
 
@@ -1915,6 +1924,15 @@ msgstr "Adaptive Foreground 432 X 432"
 msgid "Adaptive Background 432 X 432"
 msgstr "Adaptive Background 432 X 432"
 
+msgid "Gradle Build"
+msgstr "Gradle Build"
+
+msgid "Use Gradle Build"
+msgstr "Sử dụng Gradle Build"
+
+msgid "Android Source Template"
+msgstr "Mẫu nguồn Android"
+
 msgid "Debug Password"
 msgstr "Gỡ lỗi mật khẩu"
 
@@ -1924,6 +1942,9 @@ msgstr "Mã"
 msgid "Retain Data on Uninstall"
 msgstr "Giữ lại dữ liệu khi gỡ cài đặt"
 
+msgid "Show in Android TV"
+msgstr "Hiển thị trong Android TV"
+
 msgid "Show as Launcher App"
 msgstr "Hiển thị dưới dạng ứng dụng Launcher"
 
@@ -1932,6 +1953,9 @@ msgstr "Cho phép"
 
 msgid "Salt"
 msgstr "Salt"
+
+msgid "iOS Deploy"
+msgstr "Triển khai iOS"
 
 msgid "Targeted Device Family"
 msgstr "Họ thiết bị mục tiêu"

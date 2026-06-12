@@ -147,7 +147,7 @@ bool sc_use_area_lights() {
 }
 
 float sc_luminance_multiplier() {
-	// Not used in clustered renderer but shared shader code requires this.
+	// Not used in clustered renderer but we share some code with the mobile renderer that requires this.
 	return 1.0;
 }
 
