@@ -33,12 +33,23 @@ const SETTLE_MEAN_LUMA_REL_DELTA := 0.001
 # time has a few-frame latency, so only the last frames are representative).
 const PERF_TAIL_SAMPLES := 8
 # light_grid toggle/orbit measurement: frames per phase (the orbit steady-state
-# window and the post-toggle recovery window) and the recovery criterion (the
-# whole-image mean delta must return within this factor of the Phase-1 steady
-# mean). The recovery window length doubles as the gateable worst-case
+# window and the post-toggle recovery window). The recovery criterion is the
+# first post-toggle pair whose whole-image mean delta drops back within
+# LIGHT_GRID_RECOVERY_FACTOR times the frozen static-noise floor (the
+# light_grid_static_tail_delta measured at the end of this same Phase-2 series).
+# Anchoring on the static tail rather than the Phase-1 orbit mean is what makes
+# this a real recovery measure: the orbit mean is inflated by the camera motion,
+# so 1.5x of it sat far above the converged floor and a transient cleared it
+# almost immediately. Against the static floor a wrongly GLOBAL reset that keeps
+# the whole image churning for many frames pushes the count up instead. The
+# recovery window length doubles as the gateable worst-case
 # light_grid_toggle_recovery_frames value when the image never recovers.
 const LIGHT_GRID_PHASE_FRAMES := 32
-const LIGHT_GRID_RECOVERY_FACTOR := 1.5
+const LIGHT_GRID_RECOVERY_FACTOR := 3.0
+# Absolute floor under the static-tail-derived recovery threshold, so a scene
+# that converges to a near-zero floor cannot make the threshold so tight that
+# ordinary temporal noise never clears it.
+const LIGHT_GRID_RECOVERY_FLOOR := 0.0005
 # Pairs averaged from the end of the frozen post-toggle series for the
 # static-scene noise-floor metric. By then the toggle transient is long gone,
 # so any remaining frame-to-frame delta is pure temporal noise: a raster
@@ -3109,8 +3120,6 @@ func _measure_light_grid(final_image: Image, base_name: String) -> Dictionary:
 	var toggle_spike := 0.0
 	var local_rect_delta := 0.0
 	var far_rect_delta := 0.0
-	var recovery_threshold := maxf(orbit_delta_avg * LIGHT_GRID_RECOVERY_FACTOR, 1e-6)
-	var recovery_frames := -1
 	var tail_delta_sum := 0.0
 	for pair in range(1, LIGHT_GRID_PHASE_FRAMES + 1):
 		await _wait_render_frame()
@@ -3121,8 +3130,6 @@ func _measure_light_grid(final_image: Image, base_name: String) -> Dictionary:
 			toggle_spike = delta
 			local_rect_delta = _mean_abs_luma_delta_rect(previous, current, rects["local"])
 			far_rect_delta = _mean_abs_luma_delta_rect(previous, current, rects["far"])
-		elif recovery_frames < 0 and delta <= recovery_threshold:
-			recovery_frames = pair
 		if pair > LIGHT_GRID_PHASE_FRAMES - LIGHT_GRID_TAIL_PAIRS:
 			tail_delta_sum += delta
 		toggle_series.append({
@@ -3131,8 +3138,20 @@ func _measure_light_grid(final_image: Image, base_name: String) -> Dictionary:
 			"sparkle_per_megapixel": _per_megapixel(_count_temporal_sparkles(previous, current), sampled_pixels),
 		})
 		previous = current
-	if recovery_frames < 0:
-		recovery_frames = LIGHT_GRID_PHASE_FRAMES
+	var static_tail_delta := tail_delta_sum / float(LIGHT_GRID_TAIL_PAIRS)
+	# Recovery is measured against the frozen static-noise floor of this same
+	# Phase-2 series (known only after the loop), not the camera-inflated Phase-1
+	# orbit mean. recovery_frames is the first post-toggle pair (pair 1 is the
+	# spike itself) whose whole-image delta drops within the threshold; the full
+	# window length is the gateable worst case when the image never settles.
+	var recovery_threshold := maxf(static_tail_delta * LIGHT_GRID_RECOVERY_FACTOR, LIGHT_GRID_RECOVERY_FLOOR)
+	var recovery_frames := LIGHT_GRID_PHASE_FRAMES
+	for entry in toggle_series:
+		if int(entry["pair"]) == 1:
+			continue
+		if float(entry["mean_abs_luma_delta"]) <= recovery_threshold:
+			recovery_frames = int(entry["pair"])
+			break
 	# Restore the authored light set and absorb the restore transient here so
 	# the later generic sparkle loop does not start on the flip-back frame.
 	if _packed_scene_root != null and _packed_scene_root.has_method("set_toggle_light"):
@@ -3144,6 +3163,7 @@ func _measure_light_grid(final_image: Image, base_name: String) -> Dictionary:
 	_write_json(curve_path, {
 		"phase_frames": LIGHT_GRID_PHASE_FRAMES,
 		"recovery_threshold": recovery_threshold,
+		"static_tail_delta": static_tail_delta,
 		"local_rect": [rects["local"].position.x, rects["local"].position.y, rects["local"].size.x, rects["local"].size.y],
 		"far_rect": [rects["far"].position.x, rects["far"].position.y, rects["far"].size.x, rects["far"].size.y],
 		"orbit_series": orbit_series,
@@ -3156,7 +3176,7 @@ func _measure_light_grid(final_image: Image, base_name: String) -> Dictionary:
 		"light_grid_toggle_recovery_frames": recovery_frames,
 		"light_grid_toggle_local_rect_delta": local_rect_delta,
 		"light_grid_toggle_far_rect_delta": far_rect_delta,
-		"light_grid_static_tail_delta": tail_delta_sum / float(LIGHT_GRID_TAIL_PAIRS),
+		"light_grid_static_tail_delta": static_tail_delta,
 		"light_grid_toggle_curve_path": ProjectSettings.globalize_path(curve_path),
 	}
 
@@ -4271,6 +4291,11 @@ func _compare_metrics(metrics: Dictionary, expected: Dictionary) -> Array[String
 	_check_min_threshold(metrics, thresholds, "reflective_pool_reflection_edge_energy", failures)
 	_check_min_threshold(metrics, thresholds, "reflective_pool_surface_mean_luma", failures)
 	_check_max_threshold(metrics, thresholds, "reflective_pool_reflection_fireflies", failures)
+	_check_max_threshold(metrics, thresholds, "light_grid_orbit_delta_avg", failures)
+	_check_max_threshold(metrics, thresholds, "light_grid_orbit_sparkle_max", failures)
+	_check_max_threshold(metrics, thresholds, "light_grid_static_tail_delta", failures)
+	_check_max_threshold(metrics, thresholds, "light_grid_toggle_recovery_frames", failures)
+	_check_max_threshold(metrics, thresholds, "light_grid_toggle_far_rect_delta", failures)
 	return failures
 
 

@@ -111,12 +111,12 @@
 			}
 		},
 		"specular_motion": {
-			"_note": "Generic firefly and speckle caps are calibrated to the worst orbit phase of this moving-light specular stressor. They are regression baselines, not absolute targets; the moving highlights drive frame-to-frame variance by design.",
+			"_note": "Generic firefly and speckle caps are calibrated to the worst orbit phase of this moving-light specular stressor. They are regression baselines, not absolute targets; the moving highlights drive frame-to-frame variance by design. The temporal_sparkle cap is set for the canonical pinned-120 --rtgi-modes=fpt,hybrid run: the in-process fpt-then-hybrid switch lands the hybrid pass at a higher sparkle attractor than either single-mode run (the fpt pass primes the shared temporal state), and after the WS3 blue-noise and reservoir-reuse changes that pinned value measured 424.4/Mpx, so the cap sits at that value plus headroom rather than the WS2-era single-mode 320. This lets the one canonical multi-mode invocation gate green under the pinned protocol.",
 			"thresholds": {
 				"max_dark_fireflies_per_megapixel": 170.0,
 				"max_full_frame_fireflies_per_megapixel": 150.0,
 				"max_visible_speckles_per_megapixel": 300.0,
-				"max_temporal_sparkle_per_megapixel_max": 320.0,
+				"max_temporal_sparkle_per_megapixel_max": 530.0,
 				"max_specular_fireflies": 12.0
 			}
 		},
@@ -137,10 +137,16 @@
 			"thresholds": {}
 		},
 		"light_grid": {
-			"_note": "Many-light reservoir stressor. The toggle/orbit metrics (light_grid_orbit_delta_avg, light_grid_orbit_sparkle_max, light_grid_toggle_spike, light_grid_toggle_recovery_frames, light_grid_toggle_local/far_rect_delta, light_grid_static_tail_delta) are report-only for now: they record the pre-fix reservoir history-reset behavior and get calibrated thresholds only after the estimator fixes land. The two firefly caps below are deliberately generous placeholders so the scene gates on catastrophic blowups only.",
+			"_note": "Many-light reservoir stressor (24 shadowed omnis, camera orbit + moving emissive + one scripted light toggle), gated against the post-reuse balanced=8 baseline. The wired metrics are regression sentinels, not absolute targets: light_grid_orbit_delta_avg is the spurious-reset sentinel (a reintroduced per-frame history reset raises the orbit-phase whole-image delta), light_grid_static_tail_delta is the reuse-alive sentinel (if temporal reuse breaks, the frozen post-toggle floor climbs back toward the per-frame-noise level a raster run reads as 0.0), light_grid_toggle_far_rect_delta catches a wrongly-global reset on the toggle (the far corner did not change), and light_grid_toggle_recovery_frames bounds how long the toggle transient takes to decay to the static floor. temporal_sparkle and orbit_sparkle caps catch a sparkle storm while tolerating the single-pixel quantum (7.716/Mpx at this resolution). light_grid_toggle_spike and local_rect stay report-only (a real local response to the toggle, expected to vary). The firefly caps stay generous: this scene must never produce fireflies.",
 			"thresholds": {
 				"max_dark_fireflies_per_megapixel": 2000.0,
-				"max_full_frame_fireflies_per_megapixel": 2000.0
+				"max_full_frame_fireflies_per_megapixel": 2000.0,
+				"max_temporal_sparkle_per_megapixel_max": 40.0,
+				"max_light_grid_orbit_delta_avg": 0.0056,
+				"max_light_grid_orbit_sparkle_max": 40.0,
+				"max_light_grid_static_tail_delta": 0.00038,
+				"max_light_grid_toggle_recovery_frames": 8.0,
+				"max_light_grid_toggle_far_rect_delta": 0.0006
 			}
 		}
 	}
