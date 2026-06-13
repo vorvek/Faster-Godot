@@ -335,7 +335,7 @@ func _parse_args() -> void:
 			_convergence_frames = clampi(arg.trim_prefix("--rtgi-convergence-frames=").to_int(), 0, 128)
 		elif arg.begins_with("--rtgi-scene="):
 			var requested_scene := arg.trim_prefix("--rtgi-scene=").to_lower()
-			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability", "offscreen_bounce", "cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid"]:
+			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability", "offscreen_bounce", "cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid", "sun_penumbra_ramp"]:
 				_scene_mode = requested_scene
 			else:
 				push_warning("Unknown RTGI quality scene '%s'; using stress scene." % requested_scene)
@@ -531,7 +531,7 @@ func _build_scene() -> void:
 
 
 func _is_packed_test_scene() -> bool:
-	return _scene_mode in ["cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid"]
+	return _scene_mode in ["cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid", "sun_penumbra_ramp"]
 
 
 # Loads one of the committed static test scenes (cornell_box, specular_motion,
@@ -1243,6 +1243,8 @@ func _capture_and_measure_config(base_suffix: String) -> Array[String]:
 		metrics.merge(_measure_fog_corridor_image(final_image), true)
 	elif _scene_mode == "light_grid":
 		metrics.merge(await _measure_light_grid(final_image, base_name), true)
+	elif _scene_mode == "sun_penumbra_ramp":
+		metrics.merge(_measure_sun_penumbra_ramp(final_image, base_name), true)
 	elif _is_coexistence_scene():
 		metrics.merge(await _measure_coexistence_image(final_image, base_name), true)
 	metrics["denoise_strength"] = _denoise_strength
@@ -3187,6 +3189,54 @@ func _measure_light_grid(final_image: Image, base_name: String) -> Dictionary:
 	}
 
 
+# Penumbra-band measurement for the committed sun_penumbra_ramp scene. The ROI is a horizontal
+# strip across the soft shadow edge; columns run from fully lit to fully occluded.
+# penumbra_width_px = count of columns whose normalized luma is in the transition band [0.1,0.9];
+# a wider source spreads the edge over more columns, so the soft raster reference reads a wider
+# band than a one-sample ray-traced pass. penumbra_band_hf = mean |luma[x-1]-2*luma[x]+luma[x+1]|
+# over the strip, the second-difference high-frequency content of the column profile (the ramp
+# curvature plus any per-sample shadow noise). lit/occluded_luma are the bright and dark plateaus
+# the band is normalized against.
+func _measure_sun_penumbra_ramp(final_image: Image, base_name: String) -> Dictionary:
+	var width := final_image.get_width()
+	var height := final_image.get_height()
+	var roi_x0 := int(width * 0.30)
+	var roi_x1 := int(width * 0.62)
+	var roi_y0 := int(height * 0.40)
+	var roi_y1 := int(height * 0.60)
+	var cols := roi_x1 - roi_x0
+	var col_luma := PackedFloat32Array()
+	col_luma.resize(cols)
+	for cx in range(cols):
+		var x := roi_x0 + cx
+		var acc := 0.0
+		for y in range(roi_y0, roi_y1):
+			var c := final_image.get_pixel(x, y)
+			acc += 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+		col_luma[cx] = acc / float(roi_y1 - roi_y0)
+	var lo: float = col_luma[0]
+	var hi: float = col_luma[0]
+	for cx in range(cols):
+		lo = minf(lo, col_luma[cx])
+		hi = maxf(hi, col_luma[cx])
+	var span: float = maxf(hi - lo, 1e-6)
+	var width_px := 0
+	for cx in range(cols):
+		var n: float = (col_luma[cx] - lo) / span
+		if n > 0.1 and n < 0.9:
+			width_px += 1
+	var hf := 0.0
+	for cx in range(1, cols - 1):
+		hf += abs(col_luma[cx - 1] - 2.0 * col_luma[cx] + col_luma[cx + 1])
+	hf /= float(max(cols - 2, 1))
+	return {
+		"sun_penumbra_width_px": width_px,
+		"sun_penumbra_band_hf": hf,
+		"sun_penumbra_lit_luma": hi,
+		"sun_penumbra_occluded_luma": lo,
+	}
+
+
 # Local/far measurement rects for the light_grid toggle split. The local rect
 # is centered on the camera projection of the floor point under ToggleLight
 # (the patch whose direct light genuinely changes); the far rect fills the
@@ -4302,6 +4352,10 @@ func _compare_metrics(metrics: Dictionary, expected: Dictionary) -> Array[String
 	_check_max_threshold(metrics, thresholds, "light_grid_static_tail_delta", failures)
 	_check_max_threshold(metrics, thresholds, "light_grid_toggle_recovery_frames", failures)
 	_check_max_threshold(metrics, thresholds, "light_grid_toggle_far_rect_delta", failures)
+	_check_max_threshold(metrics, thresholds, "sun_penumbra_width_px", failures)
+	_check_max_threshold(metrics, thresholds, "sun_penumbra_band_hf", failures)
+	_check_max_threshold(metrics, thresholds, "sun_penumbra_lit_luma", failures)
+	_check_max_threshold(metrics, thresholds, "sun_penumbra_occluded_luma", failures)
 	return failures
 
 

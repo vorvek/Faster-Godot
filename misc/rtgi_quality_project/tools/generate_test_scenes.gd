@@ -20,6 +20,7 @@ extends SceneTree
 #   res://scenes/reflective_pool.tscn
 #   res://scenes/fog_corridor.tscn
 #   res://scenes/light_grid.tscn
+#   res://scenes/sun_penumbra_ramp.tscn
 
 const SCENES_DIR := "res://scenes"
 const SPECULAR_ANIM_SCRIPT := "res://scripts/specular_motion_anim.gd"
@@ -35,6 +36,7 @@ func _initialize() -> void:
 	ok = _save_scene(_build_reflective_pool_scene(), "%s/reflective_pool.tscn" % SCENES_DIR) and ok
 	ok = _save_scene(_build_fog_corridor_scene(), "%s/fog_corridor.tscn" % SCENES_DIR) and ok
 	ok = _save_scene(_build_light_grid_scene(), "%s/light_grid.tscn" % SCENES_DIR) and ok
+	ok = _save_scene(_build_sun_penumbra_ramp_scene(), "%s/sun_penumbra_ramp.tscn" % SCENES_DIR) and ok
 	if ok:
 		print("RTGI test-scene generation complete.")
 	else:
@@ -681,6 +683,106 @@ func _build_light_grid_scene() -> Node3D:
 			Vector3(0, 0.870023, -0.493013),
 			Vector3(0, 0.493013, 0.870023),
 			Vector3(0.0, 1.7, 3.0))
+	root.add_child(camera)
+	_claim(root, camera)
+
+	return root
+
+
+# --- Sun penumbra ramp ------------------------------------------------------
+# Soft contact-shadow characterization scene. A neutral 10 x 10 m ground plane,
+# a thin vertical wall-like occluder standing on it, and a single
+# DirectionalLight3D set to a deliberately large angular diameter
+# (light_angular_distance = 4 degrees, eight times the real sun) with
+# shadow_enabled and shadow_blur = 1.0 so the raster path takes its soft
+# percentage-closer path. The sun comes in from one side at a moderate
+# elevation, so the wall throws a shadow band across the plane whose edge runs
+# front-to-back; a steep camera looks down at the band so screen-x maps to world
+# x and the lit-to-shadowed transition crosses a horizontal strip through the
+# middle of the frame. The width of the penumbra band along that edge is the
+# signal the measurement reads: a larger source widens it, and the soft raster
+# reference and a one-sample ray-traced pass disagree on both its width and its
+# noise. The camera transform is authored directly (look_at() errors on a root
+# that is never inside a scene tree).
+func _build_sun_penumbra_ramp_scene() -> Node3D:
+	var root := Node3D.new()
+	root.name = "SunPenumbraRamp"
+
+	var env := _make_rtgi_environment()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.004, 0.004, 0.005)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_DISABLED
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.tonemap_exposure = 1.0
+	env.rtgi_max_bounces = 4
+	root.add_child(_make_world_environment(env))
+	_claim(root, root.get_node("RTGIWorldEnvironment"))
+
+	# Neutral mid-gray ground so the lit-to-shadowed luma ramp has a clean
+	# dynamic range and the soft edge is not crushed or clipped.
+	var gray := _make_lambert_material(Color(0.5, 0.5, 0.5))
+
+	# 40 x 40 m floor, top surface at y = 0. Oversized so its edges stay well
+	# outside the frame and the measurement strip only ever samples floor, never
+	# the black background.
+	var t := 0.1
+	_add_box(root, root, "Floor", Vector3(0.0, -t * 0.5, 0.0), Vector3(40.0, t, 40.0), gray)
+
+	# Thin vertical occluder standing on the floor: 0.2 m thin in x, 3 m tall,
+	# 4 m long in z, centered at the origin. The sun crosses it from the +x side,
+	# so it blocks light from reaching the floor on the -x side and the shadow
+	# band runs front-to-back (in z). Long in z so the band is wide enough to
+	# fill the measurement strip without the wall's own ends clipping it. With a
+	# 35-degree sun the band reaches to about x = -4.3 (where the grazing ray
+	# clears the 3 m top), and the penumbra is widest there, far from the
+	# occluder; the camera is aimed at that soft tip.
+	_add_box(root, root, "Occluder", Vector3(0.0, 1.5, 0.0), Vector3(0.2, 3.0, 4.0), gray)
+
+	# A single large-disc sun coming in from the +x side at a 35-degree
+	# elevation, so the wall shadows the -x half of the floor and the soft edge
+	# of that shadow runs in z. light_angular_distance = 4 degrees is the
+	# deliberately wide source; shadow_blur = 1.0 engages the soft raster path.
+	var sun := DirectionalLight3D.new()
+	sun.name = "Sun"
+	sun.light_energy = 2.0
+	sun.shadow_enabled = true
+	sun.light_angular_distance = 4.0
+	sun.shadow_blur = 1.0
+	# Travel direction d = (-cos 35, -sin 35, 0) = (-0.819152, -0.573576, 0):
+	# light goes toward -x and down. The light looks down its local -z, so the z
+	# column is -d. Basis computed offline (z = -d, x = normalize(up x z),
+	# y = z x x) and authored verbatim; position is irrelevant for a directional
+	# light but is kept above the +x side for clarity.
+	sun.transform = Transform3D(
+			Vector3(0, 0, -1),
+			Vector3(-0.573576, 0.819152, 0),
+			Vector3(0.819152, 0.573576, 0),
+			Vector3(5.0, 6.0, 0.0))
+	root.add_child(sun)
+	_claim(root, sun)
+
+	var camera := Camera3D.new()
+	camera.name = "Camera3D"
+	camera.current = true
+	camera.fov = 60.0
+	camera.near = 0.05
+	camera.far = 60.0
+	# High oblique looking down at the soft tip of the shadow band from
+	# (-4.3, 7, 5) toward (-4.3, 0, 0), pitched about 54 degrees below the
+	# horizon so screen-x tracks world x (the axis the shadow edge sweeps) and the
+	# horizontal mid strip crosses world z near 0. The aim point x = -4.3 puts the
+	# widest part of the penumbra (the grazing tip, farthest from the occluder) in
+	# the middle of the frame, with lit floor to its left and deep shadow to its
+	# right. Forward = normalize(target - position); the camera looks along its
+	# -z, so the z column is -forward and x stays world x. Computed offline and
+	# authored verbatim; do not replace this with look_at() (the generated root is
+	# never inside a scene tree, so look_at() errors and leaves identity
+	# rotation).
+	camera.transform = Transform3D(
+			Vector3(1, 0, 0),
+			Vector3(0, 0.581238, -0.813734),
+			Vector3(0, 0.813734, 0.581238),
+			Vector3(-4.3, 7.0, 5.0))
 	root.add_child(camera)
 	_claim(root, camera)
 

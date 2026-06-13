@@ -148,6 +148,15 @@
 				"max_light_grid_toggle_recovery_frames": 8.0,
 				"max_light_grid_toggle_far_rect_delta": 0.0006
 			}
+		},
+		"sun_penumbra_ramp": {
+			"_note": "Soft contact-shadow characterization scene (a low, large-disc sun behind a thin wall, casting a long penumbra across a neutral floor). The four sun_penumbra_* metrics are report-only here: the caps are intentionally generous so the scene records the band width, the band high-frequency noise, and the lit and occluded luma without gating yet. The width and noise differ between the soft raster reference and the one-sample ray-traced pass; the gating values come from a later calibration once the sun path is fixed.",
+			"thresholds": {
+				"max_sun_penumbra_width_px": 100000.0,
+				"max_sun_penumbra_band_hf": 100000.0,
+				"max_sun_penumbra_lit_luma": 100000.0,
+				"max_sun_penumbra_occluded_luma": 100000.0
+			}
 		}
 	}
 }
