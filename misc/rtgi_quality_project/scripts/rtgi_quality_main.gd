@@ -61,10 +61,11 @@ const LIGHT_GRID_TAIL_PAIRS := 8
 # temporal denoiser converges away: by the 120-frame mode-switch floor the
 # one-sample penumbra is fully resolved and the scatter sits at a floor (~0.054)
 # that no longer reflects per-sample shadow noise. The structural edge width
-# (sun_penumbra_width_px) is already settled at 16 frames (it reads 17 there and
-# at 120, vs an inflated 18 at 4 and 20 at 1 frame where pre-convergence
-# stippling widens the apparent band), while the band scatter is still clearly
-# elevated above the floor (~0.080 vs ~0.054). 16 is therefore the earliest
+# (sun_penumbra_width_px) is already settled at 16 frames (it matches the width
+# at 120, while lower settles inflate the apparent band as pre-convergence
+# stippling pushes noisy columns across the band edges), while the band scatter
+# is still clearly elevated above the floor (~0.080 single-sample vs the ~0.054
+# converged floor). 16 is therefore the earliest
 # settle that keeps the width gate structural yet still carries measurable
 # shadow noise for the before/after comparison. An explicit --rtgi-settle-frames
 # overrides this. The two-frame run-to-run delta is 0.0 (the scene is static and
