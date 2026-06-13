@@ -27,7 +27,7 @@ records the frame count actually used as `settle_frames_used`.
 
 Useful options:
 
-- `--rtgi-scene=stress|cornell|sponza|sdfgi|voxelgi|lightmap|lightprobe|path_traced_sdfgi_exclusive|cornell_box|specular_motion|reflective_pool|fog_corridor`
+- `--rtgi-scene=stress|cornell|sponza|sdfgi|voxelgi|lightmap|lightprobe|path_traced_sdfgi_exclusive|cornell_box|specular_motion|reflective_pool|fog_corridor|light_grid`
 - `--rtgi-denoise-strength=0.0..1.0`
 - `--rtgi-history-weight=0.0..0.98` (default `0.95` for split diffuse)
 - `--rtgi-firefly-suppression=0.0..1.0`
@@ -242,7 +242,7 @@ Sources:
 
 ## Committed Weak-Spot Scenes
 
-Four extra scenes target specific RTGI weak spots. Unlike the runtime-built
+Five extra scenes target specific RTGI weak spots. Unlike the runtime-built
 modes above, these are committed static `.tscn` files under `scenes/`, so the
 harness loads them instead of rebuilding geometry each run. An earlier scene set
 was lost because it was only built at runtime in script and never committed;
@@ -296,11 +296,43 @@ keeping real `.tscn` files avoids that.
   prints a `FOGPAR mode=<n> max_rel_err=<f> seam=<f> verdict=<PASS|FAIL>` line
   comparing per-depth floor luminance (and the opaque/alpha seam at the glass
   pane) against the reference; PASS requires `max_rel_err <= 0.10`.
+- `light_grid`: a 12 x 4 x 8 m mid-gray room with 24 shadowed `OmniLight3D`
+  nodes in a 6 x 4 ceiling grid (8 m range, `light_size` 0.15, slightly ramped
+  energies), floor blockers for overlapping penumbras, a small emissive sphere
+  orbiting the room center, and a slowly orbiting camera. At the room center
+  all 24 lights are valid, which pushes the RTGI direct-light estimator past
+  its deterministic per-light limit (12) and onto reservoir sampling with
+  fewer candidates (16) than valid lights, while corner pixels stay in the
+  deterministic regime; the orbit keeps re-sorting the light list by camera
+  distance and the emissive keeps moving. The measurement has two phases.
+  Phase 1 (orbit) reports `light_grid_orbit_delta_avg` (per-frame-pair
+  whole-image mean luma delta) and `light_grid_orbit_sparkle_max`; compare
+  them against a `--rtgi-mode=off` run of the same scene, which isolates the
+  pure camera-motion component (orbit-driven temporal resets are the bug, the
+  off delta is the floor). Phase 2 freezes the animation and hides the grid
+  light named `ToggleLight`: that is a REAL light-set change, so the history
+  reset it causes is CORRECT behavior; what gets gated is the RECOVERY.
+  It reports `light_grid_toggle_spike` (whole-image mean delta on the toggle
+  frame), `light_grid_toggle_recovery_frames` (first post-toggle pair whose
+  whole-image delta returns within 1.5x the Phase-1 mean; the 32-pair window
+  length when it never recovers), `light_grid_toggle_local_rect_delta` vs
+  `light_grid_toggle_far_rect_delta` (a rect projected under the toggled
+  light against the farthest image corner: a correct estimator localizes the
+  toggle response, a global history reset does not), and
+  `light_grid_static_tail_delta` (mean delta over the last 8 frozen pairs; a
+  raster run measures exactly 0.0 here, so any residual is pure RTGI temporal
+  noise on a static scene). All of these are recorded in the metrics JSON and
+  in `<base>_light_grid_toggle_curve.json` per run; only the generous firefly
+  caps gate this scene for now. Canonical run:
 
-The `specular_motion` and `reflective_pool` animations are driven by an integer
-frame counter (never delta-time or wall-clock), so a captured run reproduces
-frame for frame. The harness steps the animation in lock-step with the
-warmup/capture loop.
+  ```powershell
+  Invoke-Expression "$run --rtgi-scene=light_grid --rtgi-mode=fpt --rtgi-settle-frames=120 --rtgi-output-dir=<dir>\light_grid"
+  ```
+
+The `specular_motion`, `reflective_pool`, and `light_grid` animations are
+driven by an integer frame counter (never delta-time or wall-clock), so a
+captured run reproduces frame for frame. The harness steps the animation in
+lock-step with the warmup/capture loop.
 
 Generate or regenerate the `.tscn` files from the committed generator with the
 editor binary:

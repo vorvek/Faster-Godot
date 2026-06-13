@@ -32,6 +32,19 @@ const SETTLE_MEAN_LUMA_REL_DELTA := 0.001
 # Steady-state perf readings kept from the settle tail (the measured render
 # time has a few-frame latency, so only the last frames are representative).
 const PERF_TAIL_SAMPLES := 8
+# light_grid toggle/orbit measurement: frames per phase (the orbit steady-state
+# window and the post-toggle recovery window) and the recovery criterion (the
+# whole-image mean delta must return within this factor of the Phase-1 steady
+# mean). The recovery window length doubles as the gateable worst-case
+# light_grid_toggle_recovery_frames value when the image never recovers.
+const LIGHT_GRID_PHASE_FRAMES := 32
+const LIGHT_GRID_RECOVERY_FACTOR := 1.5
+# Pairs averaged from the end of the frozen post-toggle series for the
+# static-scene noise-floor metric. By then the toggle transient is long gone,
+# so any remaining frame-to-frame delta is pure temporal noise: a raster
+# (--rtgi-mode=off) run measures exactly 0.0 here, and an RTGI pipeline whose
+# history survives frames must approach it.
+const LIGHT_GRID_TAIL_PAIRS := 8
 
 var _denoise_strength := 1.0
 var _history_weight := 0.95
@@ -297,7 +310,7 @@ func _parse_args() -> void:
 			_convergence_frames = clampi(arg.trim_prefix("--rtgi-convergence-frames=").to_int(), 0, 128)
 		elif arg.begins_with("--rtgi-scene="):
 			var requested_scene := arg.trim_prefix("--rtgi-scene=").to_lower()
-			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability", "offscreen_bounce", "cornell_box", "specular_motion", "reflective_pool", "fog_corridor"]:
+			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability", "offscreen_bounce", "cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid"]:
 				_scene_mode = requested_scene
 			else:
 				push_warning("Unknown RTGI quality scene '%s'; using stress scene." % requested_scene)
@@ -491,7 +504,7 @@ func _build_scene() -> void:
 
 
 func _is_packed_test_scene() -> bool:
-	return _scene_mode in ["cornell_box", "specular_motion", "reflective_pool", "fog_corridor"]
+	return _scene_mode in ["cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid"]
 
 
 # Loads one of the committed static test scenes (cornell_box, specular_motion,
@@ -1201,6 +1214,8 @@ func _capture_and_measure_config(base_suffix: String) -> Array[String]:
 		metrics.merge(_measure_reflective_pool_image(final_image), true)
 	elif _scene_mode == "fog_corridor":
 		metrics.merge(_measure_fog_corridor_image(final_image), true)
+	elif _scene_mode == "light_grid":
+		metrics.merge(await _measure_light_grid(final_image, base_name), true)
 	elif _is_coexistence_scene():
 		metrics.merge(await _measure_coexistence_image(final_image, base_name), true)
 	metrics["denoise_strength"] = _denoise_strength
@@ -2996,6 +3011,185 @@ func _measure_fog_corridor_image(image: Image) -> Dictionary:
 		return _packed_scene_root.measure_fog_parity(image, _output_dir, _environment)
 	push_warning("fog_corridor scene root does not expose measure_fog_parity; regenerate the scene with tools/generate_test_scenes.gd.")
 	return {}
+
+
+# Toggle/orbit temporal measurement for the committed light_grid scene, in two
+# phases over live renders (the passed capture only fixes the frame size).
+#
+# Phase 1 (orbit steady state): steps the scene animation for
+# LIGHT_GRID_PHASE_FRAMES frames while the camera orbit keeps re-sorting the
+# 24-light grid by camera distance and the emissive sphere keeps moving. On a
+# healthy temporal pipeline the per-frame-pair whole-image mean luma delta
+# stays small (slow orbit, converged history); a direct-light history that
+# resets every frame shows up directly as an elevated
+# light_grid_orbit_delta_avg and orbit sparkle.
+#
+# Phase 2 (toggle recovery): freezes the animation, flips ToggleLight off (a
+# REAL light-set change; the history reset it causes is correct), and records
+# another LIGHT_GRID_PHASE_FRAMES-pair series. light_grid_toggle_spike is the
+# whole-image mean delta on the toggle frame;
+# light_grid_toggle_recovery_frames is the first post-toggle pair whose
+# whole-image mean delta returns within LIGHT_GRID_RECOVERY_FACTOR times the
+# Phase-1 steady mean (the window length when it never recovers, a valid
+# gateable worst case). The local/far rect split separates a correct LOCAL
+# response from a wrongly GLOBAL reset: the local rect is projected around the
+# floor patch under the toggled light, the far rect sits in the image corner
+# farthest from it, and on a correct estimator the toggle delta concentrates in
+# the local rect.
+#
+# All five light_grid_* metrics are emitted unconditionally on every run of
+# this scene (a threshold key whose metric is missing is itself a gate
+# failure). The per-pair series of both phases goes to
+# <base>_light_grid_toggle_curve.json next to the other per-frame curves.
+func _measure_light_grid(final_image: Image, base_name: String) -> Dictionary:
+	_apply_debug_view("beauty")
+	var width := final_image.get_width()
+	var height := final_image.get_height()
+	var sampled_pixels := maxi((width / 2) * (height / 2), 1)
+
+	# Phase 1: orbit steady state.
+	_animate_specular_objects(_scene_frame)
+	await _wait_render_frame()
+	_scene_frame += 1
+	var previous := get_viewport().get_texture().get_image()
+	previous.convert(Image.FORMAT_RGBA8)
+	var orbit_series := []
+	var orbit_delta_sum := 0.0
+	var orbit_sparkle_max := 0
+	for pair in range(1, LIGHT_GRID_PHASE_FRAMES):
+		_animate_specular_objects(_scene_frame)
+		await _wait_render_frame()
+		_scene_frame += 1
+		var current := get_viewport().get_texture().get_image()
+		current.convert(Image.FORMAT_RGBA8)
+		var delta := _mean_abs_luma_delta(previous, current)
+		var sparkles := _count_temporal_sparkles(previous, current)
+		orbit_delta_sum += delta
+		orbit_sparkle_max = maxi(orbit_sparkle_max, sparkles)
+		orbit_series.append({
+			"pair": pair,
+			"mean_abs_luma_delta": delta,
+			"sparkle_per_megapixel": _per_megapixel(sparkles, sampled_pixels),
+		})
+		previous = current
+	var orbit_delta_avg := orbit_delta_sum / maxf(float(LIGHT_GRID_PHASE_FRAMES - 1), 1.0)
+
+	# Phase 2: freeze the orbit, flip one real light off, watch the recovery.
+	# The rects are projected with the camera frozen at its toggle-time pose,
+	# so they track the actual orbit phase instead of assuming frame-0 framing.
+	var rects := _light_grid_toggle_rects(width, height)
+	if _packed_scene_root != null and _packed_scene_root.has_method("set_toggle_light"):
+		_packed_scene_root.set_toggle_light(false)
+	else:
+		push_warning("light_grid scene root does not expose set_toggle_light; regenerate the scene with tools/generate_test_scenes.gd.")
+	var toggle_series := []
+	var toggle_spike := 0.0
+	var local_rect_delta := 0.0
+	var far_rect_delta := 0.0
+	var recovery_threshold := maxf(orbit_delta_avg * LIGHT_GRID_RECOVERY_FACTOR, 1e-6)
+	var recovery_frames := -1
+	var tail_delta_sum := 0.0
+	for pair in range(1, LIGHT_GRID_PHASE_FRAMES + 1):
+		await _wait_render_frame()
+		var current := get_viewport().get_texture().get_image()
+		current.convert(Image.FORMAT_RGBA8)
+		var delta := _mean_abs_luma_delta(previous, current)
+		if pair == 1:
+			toggle_spike = delta
+			local_rect_delta = _mean_abs_luma_delta_rect(previous, current, rects["local"])
+			far_rect_delta = _mean_abs_luma_delta_rect(previous, current, rects["far"])
+		elif recovery_frames < 0 and delta <= recovery_threshold:
+			recovery_frames = pair
+		if pair > LIGHT_GRID_PHASE_FRAMES - LIGHT_GRID_TAIL_PAIRS:
+			tail_delta_sum += delta
+		toggle_series.append({
+			"pair": pair,
+			"mean_abs_luma_delta": delta,
+			"sparkle_per_megapixel": _per_megapixel(_count_temporal_sparkles(previous, current), sampled_pixels),
+		})
+		previous = current
+	if recovery_frames < 0:
+		recovery_frames = LIGHT_GRID_PHASE_FRAMES
+	# Restore the authored light set and absorb the restore transient here so
+	# the later generic sparkle loop does not start on the flip-back frame.
+	if _packed_scene_root != null and _packed_scene_root.has_method("set_toggle_light"):
+		_packed_scene_root.set_toggle_light(true)
+		await _wait_render_frame()
+		await _wait_render_frame()
+
+	var curve_path := "%s/%s_light_grid_toggle_curve.json" % [_output_dir, base_name]
+	_write_json(curve_path, {
+		"phase_frames": LIGHT_GRID_PHASE_FRAMES,
+		"recovery_threshold": recovery_threshold,
+		"local_rect": [rects["local"].position.x, rects["local"].position.y, rects["local"].size.x, rects["local"].size.y],
+		"far_rect": [rects["far"].position.x, rects["far"].position.y, rects["far"].size.x, rects["far"].size.y],
+		"orbit_series": orbit_series,
+		"toggle_series": toggle_series,
+	})
+	return {
+		"light_grid_orbit_delta_avg": orbit_delta_avg,
+		"light_grid_orbit_sparkle_max": _per_megapixel(orbit_sparkle_max, sampled_pixels),
+		"light_grid_toggle_spike": toggle_spike,
+		"light_grid_toggle_recovery_frames": recovery_frames,
+		"light_grid_toggle_local_rect_delta": local_rect_delta,
+		"light_grid_toggle_far_rect_delta": far_rect_delta,
+		"light_grid_static_tail_delta": tail_delta_sum / float(LIGHT_GRID_TAIL_PAIRS),
+		"light_grid_toggle_curve_path": ProjectSettings.globalize_path(curve_path),
+	}
+
+
+# Local/far measurement rects for the light_grid toggle split. The local rect
+# is centered on the camera projection of the floor point under ToggleLight
+# (the patch whose direct light genuinely changes); the far rect fills the
+# image corner farthest from that center (geometry whose light set did not
+# change, so on a correct estimator its toggle-frame delta stays near the
+# steady-state level). Falls back to an image-center local rect when the scene
+# root or camera cannot provide the projection.
+func _light_grid_toggle_rects(width: int, height: int) -> Dictionary:
+	var local_center := Vector2(float(width) * 0.5, float(height) * 0.5)
+	if _camera != null and _packed_scene_root != null and _packed_scene_root.has_method("get_toggle_light_floor_point"):
+		var floor_point: Vector3 = _packed_scene_root.get_toggle_light_floor_point()
+		if not _camera.is_position_behind(floor_point):
+			var projected := _camera.unproject_position(floor_point)
+			local_center = Vector2(
+					clampf(projected.x, float(width) * 0.12, float(width) * 0.88),
+					clampf(projected.y, float(height) * 0.12, float(height) * 0.88))
+	var local_size := Vector2i(int(width * 0.18), int(height * 0.18))
+	var local_pos := Vector2i(
+			clampi(int(local_center.x) - local_size.x / 2, 0, width - local_size.x),
+			clampi(int(local_center.y) - local_size.y / 2, 0, height - local_size.y))
+	var local_rect := Rect2i(local_pos, local_size)
+	var far_size := Vector2i(int(width * 0.20), int(height * 0.20))
+	var far_x := 0 if local_center.x > float(width) * 0.5 else width - far_size.x
+	var far_y := 0 if local_center.y > float(height) * 0.5 else height - far_size.y
+	var far_rect := Rect2i(Vector2i(far_x, far_y), far_size)
+	return { "local": local_rect, "far": far_rect }
+
+
+# Whole-image mean absolute luma delta between two frames, on the same stride-2
+# grid the sparkle counter samples.
+func _mean_abs_luma_delta(previous: Image, current: Image) -> float:
+	var width := mini(previous.get_width(), current.get_width())
+	var height := mini(previous.get_height(), current.get_height())
+	var sum := 0.0
+	var count := 0
+	for y in range(0, height, 2):
+		for x in range(0, width, 2):
+			sum += absf(_luma(current.get_pixel(x, y)) - _luma(previous.get_pixel(x, y)))
+			count += 1
+	return sum / maxf(float(count), 1.0)
+
+
+func _mean_abs_luma_delta_rect(previous: Image, current: Image, rect: Rect2i) -> float:
+	var x1 := mini(rect.end.x, mini(previous.get_width(), current.get_width()))
+	var y1 := mini(rect.end.y, mini(previous.get_height(), current.get_height()))
+	var sum := 0.0
+	var count := 0
+	for y in range(maxi(rect.position.y, 0), y1):
+		for x in range(maxi(rect.position.x, 0), x1):
+			sum += absf(_luma(current.get_pixel(x, y)) - _luma(previous.get_pixel(x, y)))
+			count += 1
+	return sum / maxf(float(count), 1.0)
 
 
 func _measure_black_fraction(image: Image, x0: int, y0: int, x1: int, y1: int, threshold: float) -> float:

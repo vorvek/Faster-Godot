@@ -19,11 +19,13 @@ extends SceneTree
 #   res://scenes/specular_motion.tscn
 #   res://scenes/reflective_pool.tscn
 #   res://scenes/fog_corridor.tscn
+#   res://scenes/light_grid.tscn
 
 const SCENES_DIR := "res://scenes"
 const SPECULAR_ANIM_SCRIPT := "res://scripts/specular_motion_anim.gd"
 const REFLECTIVE_ANIM_SCRIPT := "res://scripts/reflective_pool_anim.gd"
 const FOG_METRIC_SCRIPT := "res://scripts/fog_corridor_metric.gd"
+const LIGHT_GRID_ANIM_SCRIPT := "res://scripts/light_grid_anim.gd"
 
 
 func _initialize() -> void:
@@ -32,6 +34,7 @@ func _initialize() -> void:
 	ok = _save_scene(_build_specular_motion_scene(), "%s/specular_motion.tscn" % SCENES_DIR) and ok
 	ok = _save_scene(_build_reflective_pool_scene(), "%s/reflective_pool.tscn" % SCENES_DIR) and ok
 	ok = _save_scene(_build_fog_corridor_scene(), "%s/fog_corridor.tscn" % SCENES_DIR) and ok
+	ok = _save_scene(_build_light_grid_scene(), "%s/light_grid.tscn" % SCENES_DIR) and ok
 	if ok:
 		print("RTGI test-scene generation complete.")
 	else:
@@ -565,5 +568,120 @@ func _build_fog_corridor_scene() -> Node3D:
 	# scene tree, which is also why the older scenes carry hand-tuned camera
 	# transforms.
 	camera.look_at_from_position(camera.position, Vector3(0.0, 0.0, -14.0), Vector3.UP)
+
+	return root
+
+
+# --- Light grid -------------------------------------------------------------
+# Many-light reservoir stressor: a widened 12 x 4 x 8 m mid-gray room with 24
+# shadowed OmniLight3D nodes in a 6 x 4 ceiling grid. With 2 m grid spacing and
+# an 8 m omni range, central floor pixels see all 24 positional lights as
+# valid, which pushes the RTGI direct-light estimator off the deterministic
+# per-light path (limit 12) and onto reservoir (RIS) sampling with genuinely
+# fewer candidates (16) than valid lights, so the selection is actually
+# stochastic; corner pixels see about 10, so both regimes are in frame at
+# once. Per-light energy
+# varies slightly so a camera-distance re-sort genuinely reorders the light
+# list. A small emissive sphere orbits the room center (emissive-candidate
+# signature stressor), the camera orbits slowly (re-sort stressor), and one
+# grid light is named ToggleLight so the harness can flip it mid-measurement (a
+# real light-set change whose recovery is gated). Floor blockers give the grid
+# visible overlapping penumbras. Animation and the toggle hook live in
+# light_grid_anim.gd on the root.
+func _build_light_grid_scene() -> Node3D:
+	var root := Node3D.new()
+	root.name = "LightGrid"
+	root.set_script(load(LIGHT_GRID_ANIM_SCRIPT))
+
+	var env := _make_rtgi_environment()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.004, 0.004, 0.005)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_DISABLED
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.tonemap_exposure = 1.0
+	env.rtgi_max_bounces = 4
+	root.add_child(_make_world_environment(env))
+	_claim(root, root.get_node("RTGIWorldEnvironment"))
+
+	# Mid-gray lambert shell so the floor reads mid-exposed under the grid and
+	# the overlapping penumbras stay visible (a dark shell would crush them, a
+	# bright one would clip the many-light sum).
+	var gray := _make_lambert_material(Color(0.48, 0.48, 0.48))
+	var blocker_material := _make_lambert_material(Color(0.40, 0.40, 0.42))
+
+	# Room interior: x in [-6, 6], floor at y = 0, ceiling at y = 4,
+	# z in [-4, 4].
+	var t := 0.1
+	_add_box(root, root, "Floor", Vector3(0.0, -t * 0.5, 0.0), Vector3(12.0, t, 8.0), gray)
+	_add_box(root, root, "Ceiling", Vector3(0.0, 4.0 + t * 0.5, 0.0), Vector3(12.0, t, 8.0), gray)
+	_add_box(root, root, "BackWall", Vector3(0.0, 2.0, -4.0 - t * 0.5), Vector3(12.0, 4.0 + t * 2.0, t), gray)
+	_add_box(root, root, "FrontWall", Vector3(0.0, 2.0, 4.0 + t * 0.5), Vector3(12.0, 4.0 + t * 2.0, t), gray)
+	_add_box(root, root, "LeftWall", Vector3(-6.0 - t * 0.5, 2.0, 0.0), Vector3(t, 4.0 + t * 2.0, 8.0 + t * 2.0), gray)
+	_add_box(root, root, "RightWall", Vector3(6.0 + t * 0.5, 2.0, 0.0), Vector3(t, 4.0 + t * 2.0, 8.0 + t * 2.0), gray)
+
+	# 24 shadowed omnis in a 6 x 4 ceiling grid (x = -5..5 step 2,
+	# z = -3..3 step 2) just under the ceiling. light_size 0.15 keeps the RT
+	# light radius above the 0.01 cutoff, so every shadow sample draws a 2D
+	# random (the penumbra-noise path under test). The 8 m range makes every
+	# grid light valid at the room center (the reservoir regime needs more
+	# valid lights than its 16 candidate slots to be truly stochastic). Energy
+	# ramps with the grid index so no two lights tie when the engine re-sorts
+	# them by camera distance during the orbit.
+	var lights_root := Node3D.new()
+	lights_root.name = "GridLights"
+	root.add_child(lights_root)
+	_claim(root, lights_root)
+	for j in range(4):
+		for i in range(6):
+			var idx := j * 6 + i
+			var light := OmniLight3D.new()
+			# The light at (1, -1) sits near the room center; its floor patch
+			# stays in frame across the slow orbit, so it is the toggle target.
+			light.name = "ToggleLight" if idx == 9 else "GridLight_%02d" % idx
+			light.position = Vector3(-5.0 + 2.0 * float(i), 3.7, -3.0 + 2.0 * float(j))
+			light.light_energy = 0.38 + 0.018 * float(idx)
+			light.light_size = 0.15
+			light.omni_range = 8.0
+			light.shadow_enabled = true
+			lights_root.add_child(light)
+			_claim(root, light)
+
+	# Emissive orbiter: a small bright sphere circling the room center at
+	# y = 1.2 (driven by light_grid_anim.gd). Its frame-0 pose must match the
+	# anim script's advance_to_frame(0).
+	var orbiter_material := _make_emissive_material(Color(1.0, 0.62, 0.30), 4.0)
+	var orbiter := _add_sphere(root, root, "EmissiveOrbiter", Vector3(0.0, 1.2, 2.0), 0.15, orbiter_material)
+	orbiter.gi_mode = GeometryInstance3D.GI_MODE_DYNAMIC
+
+	# Floor blockers (tops at or below 1.3 m, under the 1.7 m camera orbit) so
+	# the grid casts visible overlapping penumbras across the floor.
+	_add_box(root, root, "Blocker_00", Vector3(-2.5, 0.5, -1.5), Vector3(1.2, 1.0, 1.0), blocker_material)
+	_add_box(root, root, "Blocker_01", Vector3(2.0, 0.4, 0.5), Vector3(0.9, 0.8, 0.9), blocker_material)
+	_add_box(root, root, "Blocker_02", Vector3(0.5, 0.6, -2.5), Vector3(1.0, 1.2, 1.0), blocker_material)
+	_add_box(root, root, "Blocker_03", Vector3(-1.0, 0.35, 1.0), Vector3(0.7, 0.7, 0.7), blocker_material)
+	_add_box(root, root, "Blocker_04", Vector3(4.2, 0.45, -0.8), Vector3(1.0, 0.9, 0.8), blocker_material)
+
+	var camera := Camera3D.new()
+	# Named plainly so both light_grid_anim.gd ("Camera3D") and the harness's
+	# find_children("*", "Camera3D") resolve it.
+	camera.name = "Camera3D"
+	camera.current = true
+	camera.fov = 65.0
+	camera.near = 0.05
+	camera.far = 60.0
+	# Frame-0 pose of the orbit in light_grid_anim.gd: position on the orbit
+	# circle (radius 3.0, height 1.7, angle 0 -> (0, 1.7, 3.0)) looking back
+	# through the room center (Basis.looking_at(-pos.normalized(), UP)),
+	# computed offline and authored verbatim. Do not replace this with
+	# look_at(): the generated root is never inside a scene tree, so look_at()
+	# errors and leaves identity rotation. This constructor takes basis
+	# columns.
+	camera.transform = Transform3D(
+			Vector3(1, 0, 0),
+			Vector3(0, 0.870023, -0.493013),
+			Vector3(0, 0.493013, 0.870023),
+			Vector3(0.0, 1.7, 3.0))
+	root.add_child(camera)
+	_claim(root, camera)
 
 	return root

@@ -135,6 +135,13 @@
 		"fog_corridor": {
 			"_note": "Fog parity is gated by the FOGPAR verdict line the scene's metric script prints (PASS needs max_rel_err <= 0.10 against the --rtgi-mode=off raster reference). No JSON thresholds: the comparison spans multiple runs sharing one output dir, so a single-run threshold gate cannot express it.",
 			"thresholds": {}
+		},
+		"light_grid": {
+			"_note": "Many-light reservoir stressor. The toggle/orbit metrics (light_grid_orbit_delta_avg, light_grid_orbit_sparkle_max, light_grid_toggle_spike, light_grid_toggle_recovery_frames, light_grid_toggle_local/far_rect_delta, light_grid_static_tail_delta) are report-only for now: they record the pre-fix reservoir history-reset behavior and get calibrated thresholds only after the estimator fixes land. The two firefly caps below are deliberately generous placeholders so the scene gates on catastrophic blowups only.",
+			"thresholds": {
+				"max_dark_fireflies_per_megapixel": 2000.0,
+				"max_full_frame_fireflies_per_megapixel": 2000.0
+			}
 		}
 	}
 }

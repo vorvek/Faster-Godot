@@ -1,0 +1,346 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/light_grid_anim.gd" id="1_w1mba"]
+
+[sub_resource type="Environment" id="Environment_q33mq"]
+background_mode = 1
+background_color = Color(0.004, 0.004, 0.005, 1)
+ambient_light_source = 1
+tonemap_mode = 2
+rtgi_enabled = true
+rtgi_quality_preset = 0
+rtgi_disable_in_editor = false
+
+[sub_resource type="BoxMesh" id="BoxMesh_5mf0q"]
+size = Vector3(12, 0.1, 8)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_3it7b"]
+cull_mode = 2
+diffuse_mode = 1
+specular_mode = 2
+albedo_color = Color(0.48, 0.48, 0.48, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_kgup1"]
+size = Vector3(12, 0.1, 8)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="BoxMesh" id="BoxMesh_sp8pb"]
+size = Vector3(12, 4.2, 0.1)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="BoxMesh" id="BoxMesh_sx2qw"]
+size = Vector3(12, 4.2, 0.1)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="BoxMesh" id="BoxMesh_drls7"]
+size = Vector3(0.1, 4.2, 8.2)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="BoxMesh" id="BoxMesh_sbqo4"]
+size = Vector3(0.1, 4.2, 8.2)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="SphereMesh" id="SphereMesh_pfqvg"]
+radius = 0.15
+height = 0.3
+radial_segments = 48
+rings = 24
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_8j2j0"]
+albedo_color = Color(1, 0.62, 0.3, 1)
+roughness = 0.35
+emission_enabled = true
+emission = Color(1, 0.62, 0.3, 1)
+emission_energy_multiplier = 4.0
+
+[sub_resource type="BoxMesh" id="BoxMesh_h5v1l"]
+size = Vector3(1.2, 1, 1)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_0863f"]
+cull_mode = 2
+diffuse_mode = 1
+specular_mode = 2
+albedo_color = Color(0.4, 0.4, 0.42, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_0vtwh"]
+size = Vector3(0.9, 0.8, 0.9)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="BoxMesh" id="BoxMesh_p78p3"]
+size = Vector3(1, 1.2, 1)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="BoxMesh" id="BoxMesh_s5x73"]
+size = Vector3(0.7, 0.7, 0.7)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="BoxMesh" id="BoxMesh_i63g2"]
+size = Vector3(1, 0.9, 0.8)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[node name="LightGrid" type="Node3D" unique_id=903205182]
+script = ExtResource("1_w1mba")
+
+[node name="RTGIWorldEnvironment" type="WorldEnvironment" parent="." unique_id=1556218864]
+environment = SubResource("Environment_q33mq")
+
+[node name="Floor" type="MeshInstance3D" parent="." unique_id=949947684]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+mesh = SubResource("BoxMesh_5mf0q")
+surface_material_override/0 = SubResource("StandardMaterial3D_3it7b")
+
+[node name="Ceiling" type="MeshInstance3D" parent="." unique_id=1025338864]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.05, 0)
+mesh = SubResource("BoxMesh_kgup1")
+surface_material_override/0 = SubResource("StandardMaterial3D_3it7b")
+
+[node name="BackWall" type="MeshInstance3D" parent="." unique_id=2010341158]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -4.05)
+mesh = SubResource("BoxMesh_sp8pb")
+surface_material_override/0 = SubResource("StandardMaterial3D_3it7b")
+
+[node name="FrontWall" type="MeshInstance3D" parent="." unique_id=20247765]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 4.05)
+mesh = SubResource("BoxMesh_sx2qw")
+surface_material_override/0 = SubResource("StandardMaterial3D_3it7b")
+
+[node name="LeftWall" type="MeshInstance3D" parent="." unique_id=1912091038]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.05, 2, 0)
+mesh = SubResource("BoxMesh_drls7")
+surface_material_override/0 = SubResource("StandardMaterial3D_3it7b")
+
+[node name="RightWall" type="MeshInstance3D" parent="." unique_id=483391258]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.05, 2, 0)
+mesh = SubResource("BoxMesh_sbqo4")
+surface_material_override/0 = SubResource("StandardMaterial3D_3it7b")
+
+[node name="GridLights" type="Node3D" parent="." unique_id=2061816721]
+
+[node name="GridLight_00" type="OmniLight3D" parent="GridLights" unique_id=1979977467]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 3.7, -3)
+light_energy = 0.38
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_01" type="OmniLight3D" parent="GridLights" unique_id=1716648353]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 3.7, -3)
+light_energy = 0.398
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_02" type="OmniLight3D" parent="GridLights" unique_id=435842443]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 3.7, -3)
+light_energy = 0.416
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_03" type="OmniLight3D" parent="GridLights" unique_id=1089880827]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 3.7, -3)
+light_energy = 0.434
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_04" type="OmniLight3D" parent="GridLights" unique_id=1466699207]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 3.7, -3)
+light_energy = 0.452
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_05" type="OmniLight3D" parent="GridLights" unique_id=1228396560]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 3.7, -3)
+light_energy = 0.47
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_06" type="OmniLight3D" parent="GridLights" unique_id=688012295]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 3.7, -1)
+light_energy = 0.488
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_07" type="OmniLight3D" parent="GridLights" unique_id=1720516376]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 3.7, -1)
+light_energy = 0.506
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_08" type="OmniLight3D" parent="GridLights" unique_id=1377532606]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 3.7, -1)
+light_energy = 0.524
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="ToggleLight" type="OmniLight3D" parent="GridLights" unique_id=506148660]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 3.7, -1)
+light_energy = 0.542
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_10" type="OmniLight3D" parent="GridLights" unique_id=666375187]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 3.7, -1)
+light_energy = 0.56
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_11" type="OmniLight3D" parent="GridLights" unique_id=1917883870]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 3.7, -1)
+light_energy = 0.578
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_12" type="OmniLight3D" parent="GridLights" unique_id=537041669]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 3.7, 1)
+light_energy = 0.596
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_13" type="OmniLight3D" parent="GridLights" unique_id=903251071]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 3.7, 1)
+light_energy = 0.614
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_14" type="OmniLight3D" parent="GridLights" unique_id=112135230]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 3.7, 1)
+light_energy = 0.632
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_15" type="OmniLight3D" parent="GridLights" unique_id=1773330327]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 3.7, 1)
+light_energy = 0.65
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_16" type="OmniLight3D" parent="GridLights" unique_id=847133313]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 3.7, 1)
+light_energy = 0.668
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_17" type="OmniLight3D" parent="GridLights" unique_id=1910400194]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 3.7, 1)
+light_energy = 0.686
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_18" type="OmniLight3D" parent="GridLights" unique_id=730830685]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 3.7, 3)
+light_energy = 0.704
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_19" type="OmniLight3D" parent="GridLights" unique_id=1225042669]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 3.7, 3)
+light_energy = 0.722
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_20" type="OmniLight3D" parent="GridLights" unique_id=1812574593]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 3.7, 3)
+light_energy = 0.74
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_21" type="OmniLight3D" parent="GridLights" unique_id=1893660846]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 3.7, 3)
+light_energy = 0.758
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_22" type="OmniLight3D" parent="GridLights" unique_id=619591056]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 3.7, 3)
+light_energy = 0.776
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="GridLight_23" type="OmniLight3D" parent="GridLights" unique_id=1860051931]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 3.7, 3)
+light_energy = 0.794
+light_size = 0.15
+shadow_enabled = true
+omni_range = 8.0
+
+[node name="EmissiveOrbiter" type="MeshInstance3D" parent="." unique_id=895510241]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 2)
+gi_mode = 2
+mesh = SubResource("SphereMesh_pfqvg")
+surface_material_override/0 = SubResource("StandardMaterial3D_8j2j0")
+
+[node name="Blocker_00" type="MeshInstance3D" parent="." unique_id=1328849790]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5, 0.5, -1.5)
+mesh = SubResource("BoxMesh_h5v1l")
+surface_material_override/0 = SubResource("StandardMaterial3D_0863f")
+
+[node name="Blocker_01" type="MeshInstance3D" parent="." unique_id=1222747935]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0.4, 0.5)
+mesh = SubResource("BoxMesh_0vtwh")
+surface_material_override/0 = SubResource("StandardMaterial3D_0863f")
+
+[node name="Blocker_02" type="MeshInstance3D" parent="." unique_id=1174251270]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.6, -2.5)
+mesh = SubResource("BoxMesh_p78p3")
+surface_material_override/0 = SubResource("StandardMaterial3D_0863f")
+
+[node name="Blocker_03" type="MeshInstance3D" parent="." unique_id=1821005091]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0.35, 1)
+mesh = SubResource("BoxMesh_s5x73")
+surface_material_override/0 = SubResource("StandardMaterial3D_0863f")
+
+[node name="Blocker_04" type="MeshInstance3D" parent="." unique_id=2093496330]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 0.45, -0.8)
+mesh = SubResource("BoxMesh_i63g2")
+surface_material_override/0 = SubResource("StandardMaterial3D_0863f")
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=68200438]
+transform = Transform3D(1, 0, 0, 0, 0.870023, 0.493013, 0, -0.493013, 0.870023, 0, 1.7, 3)
+current = true
+fov = 65.0
+far = 60.0
