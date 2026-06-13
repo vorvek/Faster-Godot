@@ -502,6 +502,11 @@ struct RTViewportState {
 	// reads it). Default 16 reproduces the prior hardcoded reservoir cap.
 	uint32_t direct_ris_candidates = 16u;
 
+	// Per-preset multi-sample shadow budget, resolved from rendering/rtgi/direct_light/<tier>/
+	// shadow_samples and written into RT_PARAM_DIRECT_SHADOW_SAMPLES every frame. The shader
+	// scales it down by the light's solid angle; default 1 reproduces single-sample shadows.
+	uint32_t direct_shadow_samples = 1u;
+
 	uint64_t radiance_history_signature = 0;
 	bool radiance_history_signature_valid = false;
 	bool radiance_history_invalidated = false;

@@ -3963,6 +3963,14 @@ void RenderingServer::init() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/direct_light/balanced/ris_candidates", PROPERTY_HINT_RANGE, "2,16,1"), 8);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/direct_light/production/ris_candidates", PROPERTY_HINT_RANGE, "2,16,1"), 16);
 
+	// Per-preset directional/area multi-sample shadow budget (the FPT screen-primary shadow
+	// sample count for high-solid-angle lights). Scaled down by the light's solid angle in the
+	// shader; small lights stay at 1 sample. Picked by the same Environment.rtgi_quality_preset
+	// selector as ris_candidates, resolved live by _resolve_direct_light_params.
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/direct_light/performance/shadow_samples", PROPERTY_HINT_RANGE, "1,8,1"), 1);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/direct_light/balanced/shadow_samples", PROPERTY_HINT_RANGE, "1,8,1"), 2);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/direct_light/production/shadow_samples", PROPERTY_HINT_RANGE, "1,8,1"), 4);
+
 	// FPT reference oracle TAA: the oracle is a very noisy full path trace used as an A/B reference, so it runs
 	// its own heavy-denoise TAA history weight and overrides the viewport TAA when active.
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/fpt_reference_taa/history_weight", PROPERTY_HINT_RANGE, "0.0,0.99,0.001"), 0.95);

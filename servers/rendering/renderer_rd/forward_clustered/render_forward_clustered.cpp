@@ -266,7 +266,7 @@ static RendererRD::RTGIGIResolve::GiResolveParams _resolve_gi_resolve_params(uin
 // (the compile-time RT_LIGHT_RESERVOIR_SIZE = 16 is the ceiling), mirroring
 // _resolve_gi_resolve_params's GLOBAL_GET + CLAMP pattern (same tier source: the
 // Environment's rtgi_quality_preset carried on the params as p_preset).
-static void _resolve_direct_light_params(uint32_t p_preset, uint32_t *r_ris_candidates) {
+static void _resolve_direct_light_params(uint32_t p_preset, uint32_t *r_ris_candidates, uint32_t *r_shadow_samples) {
 	const char *prefix;
 	switch (p_preset) {
 		case 1: prefix = "rendering/rtgi/direct_light/performance/"; break;
@@ -277,6 +277,9 @@ static void _resolve_direct_light_params(uint32_t p_preset, uint32_t *r_ris_cand
 	const String base = String(prefix);
 	if (r_ris_candidates) {
 		*r_ris_candidates = (uint32_t)CLAMP(int32_t(GLOBAL_GET(base + "ris_candidates")), 2, 16);
+	}
+	if (r_shadow_samples) {
+		*r_shadow_samples = (uint32_t)CLAMP(int32_t(GLOBAL_GET(base + "shadow_samples")), 1, 8);
 	}
 }
 
@@ -2987,7 +2990,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// UBO (channeled via the viewport state below, then written unconditionally in
 	// update_uniform_set). At the default 16 it reproduces the prior hardcoded reservoir cap.
 	uint32_t rtgi_ris_candidates = 16u;
-	_resolve_direct_light_params(rtgi_quality_preset_sel, &rtgi_ris_candidates);
+	uint32_t rtgi_shadow_samples = 1u;
+	_resolve_direct_light_params(rtgi_quality_preset_sel, &rtgi_ris_candidates, &rtgi_shadow_samples);
 	if (rt_gi_active) {
 		if (rtgi_wrc != nullptr && rb.is_valid()) {
 			rtgi_wrc->ensure_resources(rb, wrc_params, (int)rb->get_view_count());
@@ -3433,6 +3437,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// flavor this frame (the FPT screen-primary estimator is the sole reader).
 		if (rt_state) {
 			rt_state->direct_ris_candidates = rtgi_ris_candidates;
+			rt_state->direct_shadow_samples = rtgi_shadow_samples;
 		}
 		if (rt_backend_context.radiance_history_invalidated) {
 			reject_rt_previous_history();

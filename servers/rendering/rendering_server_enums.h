@@ -864,7 +864,10 @@ enum PathtracingParamIndex {
 	// Environment params (pathtracing_params_to_shader_floats leaves it 0); the renderer writes
 	// the per-preset-resolved value into the params UBO every frame in update_uniform_set.
 	PT_PARAM_DIRECT_RIS_CANDIDATES = 36,
-	// 37 free: removed dead, never-wired STRC static/dynamic visual-layer param.
+	// Slot 37 (was free): the per-preset direct-light multi-sample shadow budget. Renderer
+	// writes the per-preset-resolved value every frame in update_uniform_set; not filled from
+	// the Environment params. Read via the RT_PARAM_DIRECT_SHADOW_SAMPLES define at the same index.
+	PT_PARAM_DIRECT_SHADOW_SAMPLES = 37,
 	PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES = 38,
 	PT_PARAM_MAX = 39,
 };

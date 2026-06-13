@@ -142,6 +142,7 @@ public:
 	// via a dispatch-flavor override: it holds the same resolved per-preset constant on every
 	// flavor, so the once-per-frame radiance signature cannot see it change between flavors.
 	static constexpr int RT_PARAM_DIRECT_RIS_CANDIDATES = RSE::PT_PARAM_DIRECT_RIS_CANDIDATES;
+	static constexpr int RT_PARAM_DIRECT_SHADOW_SAMPLES = RSE::PT_PARAM_DIRECT_SHADOW_SAMPLES;
 	static constexpr int RT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES = RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES;
 	// Screen Probe Gather (SPG) params. These are renderer-internal RT-param slots
 	// (not part of RSE::PathtracingParamIndex / PT_PARAM_MAX): the SPG gather dispatch
