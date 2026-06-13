@@ -755,12 +755,17 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		uint direct_slot_temporal_reject = RT_SOURCE_REJECT_PREV_UV;
 		uint direct_slot_spatial_reject = RT_SOURCE_REJECT_PREV_UV;
 		uint direct_slot_visibility_failures = 0u;
+		// Closest-hit (deep path / probe / oracle) keeps white-noise PCG for the shadow draw:
+		// 1D probe dispatches have no screen-space coherence and the deep path is multi-bounce,
+		// so blue noise (which buys screen-space sample-point distribution) does not apply here.
+		// Passing false keeps these paths bit-identical to before Task 10.
 		RTDirectLighting direct_light = lights_evaluate_direct_lighting_split(
 				h.hit_pos, h.geometry_normal, N, V, brdf_mat, ps.rng_state, is_indirect, receiver_layer_mask, rt_light_count,
 				direct_source_key, direct_slot_source_key, direct_slot_pdf, direct_slot_light, direct_slot_stochastic,
 				direct_slot_reservoir_m, direct_slot_reservoir_weight_sum, direct_slot_target,
 				direct_slot_temporal_accepted, direct_slot_spatial_accepted, direct_slot_temporal_reject,
-				direct_slot_spatial_reject, direct_slot_visibility_failures);
+				direct_slot_spatial_reject, direct_slot_visibility_failures,
+				/*p_use_blue_noise_u=*/false, /*p_blue_noise_u=*/vec2(0.0));
 		vec3 raw_direct_diffuse = ps.throughput * direct_light.diffuse;
 		vec3 raw_direct_specular = ps.throughput * direct_light.specular;
 		vec3 direct_diffuse = rt_clamp_path_contribution(raw_direct_diffuse, material_roughness, m.metalness, is_indirect, false);

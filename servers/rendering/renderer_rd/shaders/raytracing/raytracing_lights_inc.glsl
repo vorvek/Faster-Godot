@@ -1009,8 +1009,26 @@ RTDirectLighting lights_evaluate_single_direct_light_split(
 		vec3 V,
 		MaterialProperties material,
 		inout uint rng_state,
-		bool is_indirect_bounce) {
-	vec2 u = rand2(rng_state);
+		bool is_indirect_bounce,
+		bool p_use_blue_noise_u,
+		vec2 p_blue_noise_u) {
+	// The 2D sample for the cone/sphere (and area-light) shadow draw. On the FPT screen
+	// primary's sample 0 it is a blue-noise point (better screen-space distribution -> less
+	// 1-spp shadow sparkle); everywhere else it stays white-noise PCG, so those paths are
+	// bit-identical. A per-light golden offset decorrelates the lights within a pixel while
+	// keeping the base point blue-noise distributed across the screen. The offset index is
+	// source_id REDUCED mod 256: source_id is a 28-bit hash (up to ~2.7e8), and multiplying a
+	// golden constant by a value that large overflows float32 precision (epsilon >> 1), so
+	// fract() would return quantized garbage and destroy the distribution. Mod 256 keeps the
+	// product small enough for clean fract() while staying stable per light.
+	// (A radius<=0.01 point light draws no u; the offset is harmless there.)
+	vec2 u;
+	if (p_use_blue_noise_u) {
+		float light_offset = float(light.source_id & 0xFFu);
+		u = fract(p_blue_noise_u + vec2(0.7548776662, 0.5698402909) * light_offset);
+	} else {
+		u = rand2(rng_state);
+	}
 
 	// === AREA LIGHT PATH (spherical-rectangle NEE) ===
 	if (light.type == RT_LIGHT_TYPE_AREA) {
@@ -1218,7 +1236,9 @@ void lights_merge_previous_direct_reservoir(
 		MaterialProperties material,
 		uint receiver_layer_mask,
 		uint light_count,
-		inout uint rng_state) {
+		inout uint rng_state,
+		bool p_use_blue_noise_u,
+		vec2 p_blue_noise_u) {
 	uint reject_reason = RT_SOURCE_REJECT_SOURCE_ID;
 	uint previous_source_id = previous_key & 0x0FFFFFFFu;
 	uint selected_idx = 0u;
@@ -1231,7 +1251,7 @@ void lights_merge_previous_direct_reservoir(
 		float current_pdf = selected_weight / max(found_total_weight, 1e-10);
 		uint current_key = rt_source_make_key(RT_SOURCE_CLASS_DIRECT, rt_lights[selected_idx].source_id);
 		if (rt_source_direct_history_accept(pixel, previous_pixel, previous_reservoir, current_key, previous_key, current_pdf, previous_reservoir.w, reject_reason)) {
-			RTDirectLighting current_lighting = lights_evaluate_single_direct_light_split(rt_lights[selected_idx], current_pdf, hit_pos, geometry_normal, N, V, material, rng_state, false);
+			RTDirectLighting current_lighting = lights_evaluate_single_direct_light_split(rt_lights[selected_idx], current_pdf, hit_pos, geometry_normal, N, V, material, rng_state, false, p_use_blue_noise_u, p_blue_noise_u);
 			float current_target = rt_direct_reservoir_target(current_lighting);
 			float previous_target = max(previous_lighting.a, 1e-6);
 			// M-capped ReSTIR: when previous_m is clamped to the cap, the carried weight_sum
@@ -1289,7 +1309,9 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		out bool out_direct_source_spatial_accepted,
 		out uint out_direct_source_temporal_reject,
 		out uint out_direct_source_spatial_reject,
-		out uint out_direct_source_visibility_failures) {
+		out uint out_direct_source_visibility_failures,
+		bool p_use_blue_noise_u,
+		vec2 p_blue_noise_u) {
 	out_source_key = 0u;
 	out_direct_source_key = 0u;
 	out_direct_source_pdf = 0.0;
@@ -1333,7 +1355,7 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		if (lights_selection_weight(hit_pos, N, dir_light, is_indirect_bounce) <= 0.0) {
 			continue;
 		}
-		RTDirectLighting dir_result = lights_evaluate_single_direct_light_split(dir_light, 1.0, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce);
+		RTDirectLighting dir_result = lights_evaluate_single_direct_light_split(dir_light, 1.0, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce, p_use_blue_noise_u, p_blue_noise_u);
 		directional_sum.diffuse += dir_result.diffuse;
 		directional_sum.specular += dir_result.specular;
 	}
@@ -1363,7 +1385,7 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 				continue;
 			}
 			RTLightData test_light = rt_lights[idx];
-			RTDirectLighting light_result = lights_evaluate_single_direct_light_split(test_light, 1.0, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce);
+			RTDirectLighting light_result = lights_evaluate_single_direct_light_split(test_light, 1.0, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce, p_use_blue_noise_u, p_blue_noise_u);
 			deterministic_sum.diffuse += light_result.diffuse;
 			deterministic_sum.specular += light_result.specular;
 			float light_luma = rt_luminance(rt_direct_lighting_sum(light_result));
@@ -1418,7 +1440,7 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		}
 
 		float light_select_pdf = selected_weight / max(total_weight, 1e-10);
-		RTDirectLighting light_result = lights_evaluate_single_direct_light_split(rt_lights[selected_idx], light_select_pdf, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce);
+		RTDirectLighting light_result = lights_evaluate_single_direct_light_split(rt_lights[selected_idx], light_select_pdf, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce, p_use_blue_noise_u, p_blue_noise_u);
 		uint source_key = rt_source_make_key(RT_SOURCE_CLASS_DIRECT, rt_lights[selected_idx].source_id);
 		float light_target = rt_direct_reservoir_target(light_result);
 		rt_direct_reservoir_update(reservoir, source_key, light_result, light_select_pdf, light_target, light_target, 1.0, 1.0, rng_state);
@@ -1439,7 +1461,7 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		uint reject_reason = RT_SOURCE_REJECT_NONE;
 		bool has_reprojected_previous = rt_source_load_reprojected_previous_direct(pixel, previous_pixel, previous_reservoir, previous_lighting, previous_key, reject_reason);
 		if (has_reprojected_previous) {
-			lights_merge_previous_direct_reservoir(reservoir, pixel, previous_pixel, previous_reservoir, previous_lighting, previous_key, false, hit_pos, geometry_normal, N, V, material, receiver_layer_mask, light_count, rng_state);
+			lights_merge_previous_direct_reservoir(reservoir, pixel, previous_pixel, previous_reservoir, previous_lighting, previous_key, false, hit_pos, geometry_normal, N, V, material, receiver_layer_mask, light_count, rng_state, p_use_blue_noise_u, p_blue_noise_u);
 		} else {
 			reservoir.temporal_reject = reject_reason;
 		}
@@ -1458,7 +1480,7 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 					continue;
 				}
 
-				lights_merge_previous_direct_reservoir(reservoir, pixel, spatial_pixel, spatial_reservoir, spatial_lighting, spatial_key, true, hit_pos, geometry_normal, N, V, material, receiver_layer_mask, light_count, rng_state);
+				lights_merge_previous_direct_reservoir(reservoir, pixel, spatial_pixel, spatial_reservoir, spatial_lighting, spatial_key, true, hit_pos, geometry_normal, N, V, material, receiver_layer_mask, light_count, rng_state, p_use_blue_noise_u, p_blue_noise_u);
 			}
 		}
 	}
@@ -1529,5 +1551,6 @@ vec3 lights_evaluate_direct_lighting(
 			source_key, direct_source_key, direct_source_pdf, direct_source_lighting, direct_source_stochastic,
 			direct_source_reservoir_m, direct_source_reservoir_weight_sum, direct_source_target,
 			direct_source_temporal_accepted, direct_source_spatial_accepted, direct_source_temporal_reject,
-			direct_source_spatial_reject, direct_source_visibility_failures));
+			direct_source_spatial_reject, direct_source_visibility_failures,
+			/*p_use_blue_noise_u=*/false, /*p_blue_noise_u=*/vec2(0.0)));
 }

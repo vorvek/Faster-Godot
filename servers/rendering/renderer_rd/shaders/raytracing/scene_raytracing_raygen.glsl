@@ -185,6 +185,21 @@ uint init_blue_noise_rng(uvec2 pixel, uint frame_index, uint sample_idx) {
 	return pcg_hash(init_rng(pixel, frame_index, sample_idx) ^ rng_mix(blue_seed ^ (sample_idx * 0x9E3779B9u)));
 }
 
+// A raw 2D blue-noise sample for the shadow cone/sphere draw. Unlike init_blue_noise_rng
+// (which folds blue noise into the PCG SEED to decorrelate the white-noise stream), this
+// returns the blue-noise value DIRECTLY, so the cone/sphere sample point inherits the
+// texture's screen-space distribution. Better-distributed sample points lower the 1-spp
+// shadow sparkle. The 128x128 tile is scrolled per frame by a golden-ratio Cranley-Patterson
+// rotation: consecutive frames shift the whole pattern, keeping each pixel's sequence well
+// distributed over time without per-pixel storage (an irrational rotation, so frame stride
+// is harmless). Threaded as a vec2 parameter into the estimator (the blue-noise binding is
+// only visible in this stage), so lights_inc stays binding-agnostic.
+vec2 rt_blue_noise_2d(uvec2 pixel, uint frame) {
+	vec2 scroll = fract(vec2(float(frame) * 0.7548776662, float(frame) * 0.5698402909));
+	vec2 uv = (vec2(pixel & uvec2(127u)) + 0.5) / 128.0 + scroll;
+	return texture(sampler2D(rt_blue_noise_texture, rt_blue_noise_sampler), uv).rg;
+}
+
 vec3 rtgi_safe_albedo(vec3 albedo) {
 	return max(albedo, vec3(0.08));
 }
@@ -877,12 +892,22 @@ void main() {
 				// geom_N (the relief-FREE geometric normal) as the geometry_normal arg, N_bent (the relief
 				// normal bent toward geom_N in grazing-lit crevices) as the shading-normal arg. The shared
 				// evaluator is otherwise UNCHANGED. The bent N also flows into the area-light branch -- intended.
+				// Blue-noise shadow sample, FPT screen primary, sample 0 ONLY: a blue-noise 2D
+				// point drives the cone/sphere (and area-light) shadow draw, so the sample points
+				// inherit the texture's good screen-space distribution and 1-spp shadow sparkle
+				// drops. Samples 1+ (a multi-sample run) keep white-noise PCG so they decorrelate
+				// from sample 0; every other path (indirect, probe, deep, oracle) keeps PCG too.
+				// rt_blue_noise_2d uses the rng_pixel (the visible-pixel coordinate this dispatch
+				// already shades) so the screen-space pattern lines up with the image.
+				bool pd_use_blue_noise_u = (pd_sample == 0u);
+				vec2 pd_blue_noise_u = pd_use_blue_noise_u ? rt_blue_noise_2d(rng_pixel, pd_frame_index) : vec2(0.0);
 				RTDirectLighting direct_light = lights_evaluate_direct_lighting_split(
 						rworld_pos, geom_N, N_bent, V, brdf_mat, rng, /*is_indirect=*/false, /*receiver_layer_mask=*/0xFFFFFFFFu, pd_light_count,
 						d_source_key, d_slot_source_key, d_slot_pdf, d_slot_light, d_slot_stochastic,
 						d_slot_reservoir_m, d_slot_reservoir_weight_sum, d_slot_target,
 						d_slot_temporal_accepted, d_slot_spatial_accepted, d_slot_temporal_reject,
-						d_slot_spatial_reject, d_slot_visibility_failures);
+						d_slot_spatial_reject, d_slot_visibility_failures,
+						pd_use_blue_noise_u, pd_blue_noise_u);
 				vec3 direct_diffuse = rt_clamp_path_contribution(direct_light.diffuse, pd_roughness, pd_metalness, false, false);
 				vec3 direct_specular = rt_clamp_path_contribution(direct_light.specular, pd_roughness, pd_metalness, false, false);
 				pd_total_sum += direct_diffuse + direct_specular;
