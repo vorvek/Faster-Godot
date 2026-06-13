@@ -379,9 +379,51 @@ cut-out texels with the same alpha chain the any-hit shader uses, so the
 explicit and BSDF sampling strategies integrate the same emission domain.
 
 Full Path Tracing shades the directly visible surface with a next-event-estimation
-direct term whose soft-shadow and area-light samples are reseeded every frame, so
-its primary color changes from frame to frame even when the camera is still. When no
-temporal upscaler is active, a dedicated pass accumulates that primary color
+direct term. The shadow and area-light samples redraw each frame, but the direct
+lighting is no longer an independent one-sample estimate: a screen-space reservoir
+(ReSTIR) reuses the surface's accepted light samples from previous frames and from
+neighboring pixels, so a still surface keeps a converged direct term instead of
+re-rolling its soft shadow from scratch. After the primary dispatch the renderer
+copies the reservoir and history textures the reuse reads into their previous-frame
+slots, and the temporal combine scales the carried reservoir weight by the same cap
+ratio it applies to the accumulated sample count. Without that scaling the carried
+weight grows while the sample count is held at its cap, which over-brightens the
+result frame over frame; with it the reuse reduces noise while the average energy
+stays put. The reuse is keyed on stable light ids and a once-per-frame history
+signature, so a slowly orbiting camera that re-sorts the light list, or a smoothly
+moving emissive mesh, no longer counts as a light-set change and clears the history.
+A real light-set change (a light switched on or off, or one moving past the per-light
+delta thresholds) still resets the affected history, as it should. Reuse runs in Full
+Path Tracing only; Hybrid traces no screen rays, and the probe rays that feed the
+world and screen-probe caches are kept out of the screen reservoir entirely.
+
+Directional lights (the sun) are evaluated deterministically, with their own shadow
+ray, outside the reservoir. A directional's importance weight has no visibility term,
+so a bright but fully occluded sun used to win nearly every reservoir candidate draw
+and starve the local lights that actually reach the surface, leaving the shadowed
+interior noisy. Pulling the sun out of the candidate set fixes that: the reservoir
+samples only the positional lights, and the sun contributes its own deterministic
+term every frame. The screen primary's soft-shadow cone samples are drawn from the
+blue-noise texture with a per-frame golden-ratio rotation rather than white noise,
+which gives a better screen-space sample distribution and lowers single-sample shadow
+sparkle (Cornell temporal sparkle per megapixel fell from 128.9 to 101.7 at 1080p on
+an RTX 4080 SUPER, with the average energy unchanged).
+
+The number of reservoir candidates the screen primary samples each frame is the
+direct-light shadow-ray budget. It is a hidden per-preset project setting,
+`rendering/rtgi/direct_light/{performance,balanced,production}/ris_candidates`, that
+follows the active RTGI quality preset (Custom maps to balanced, like the other
+RTGI tier settings). The shipped defaults are 4 for performance, 8 for balanced, and
+16 for production; on the 24-light reservoir stress scene balanced is about 15 percent
+and performance about 22 percent faster per GPU frame than the full 16 count, while
+production keeps the full sample count. The deterministic regime (a surface that sees at
+most twelve positional lights evaluates them all directly) and indirect bounces are not
+budgeted by this setting. A `PathtracingDebugMode` view, Direct Light Regime, colors
+each pixel by which regime it is in (a green ramp for the deterministic per-light
+evaluation, a red-to-yellow ramp for reservoir sampling) with brightness tracking the
+reuse depth, so the over-twelve-light seam and dead reuse are both visible.
+
+When no temporal upscaler is active, a dedicated pass accumulates that primary color
 before the composite. It reprojects the previous accumulated value with the RT velocity
 guide, accepts it only on a same-surface depth and normal test read from the current
 guides, clamps fireflies against the local neighborhood, and blends with a
@@ -989,8 +1031,11 @@ The standalone `misc/rtgi_quality_project` harness procedurally builds a small
 dark RTGI room with textured brick/stone surfaces, a small warm light, a dark
 firefly-detection region, and a detail-retention region. It can capture final
 and RTGI debug views, then writes JSON metrics for isolated hot pixels, dark
-region luminance, and high-frequency texture detail. Use it for Phase 2 baseline
-captures before enabling experimental direct-light reuse.
+region luminance, and high-frequency texture detail. A committed many-light scene
+(24 shadowed omnis with a moving emissive and a scripted light toggle) measures the
+direct-light reservoir reuse: an orbit-phase whole-image delta that rises if history
+starts resetting per frame again, a frozen-frame floor that climbs if reuse breaks,
+and a toggle-recovery count.
 
 The harness and Euphorica capture script also consume the `source_candidate`,
 `source_history`, `source_temporal_delta`, `source_rejection`,
@@ -1002,10 +1047,10 @@ confidence, candidate weight percentiles, contribution percentiles, temporal
 eligible fraction, class agreement, exact source-key reuse, direct dominant-key
 accepted/rejected history rates, and contribution-delta percentiles so
 many-light instability can be separated from diffuse-cache and denoiser
-behavior. Direct lighting attribution still stores one dominant analytic source
-key alongside the aggregate direct contribution, so temporal deltas are
-diagnostics for dominant-source stability rather than proof of source-specific
-radiance reuse safety.
+behavior. Direct lighting attribution stores one dominant analytic source key
+alongside the aggregate direct contribution; with reservoir reuse live, the
+per-frame reuse is keyed on the full reservoir state and stable light ids, while
+this dominant-key record stays a coarse diagnostic for dominant-source stability.
 The `rtgi_secondary_cache_*` metrics report accepted ray-side cache source
 coverage, selected source fractions, accepted weight, and whether accepted reuse
 came from a direct secondary-hit query or the current-screen trace shortcut.

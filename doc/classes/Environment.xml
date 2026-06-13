@@ -223,7 +223,7 @@
 			Selects the RTGI denoiser. [constant RTGI_DENOISER_ASVFG_EXPERIMENTAL] uses the built-in GPU denoiser, and [constant RTGI_DENOISER_NONE] bypasses the temporal stabilizer and the spatial denoise polish so the accumulated GI signal can be inspected.
 		</member>
 		<member name="rtgi_debug_mode" type="int" setter="set_rtgi_debug_mode" getter="get_rtgi_debug_mode" default="0">
-			Selects the RTGI debug visualization. Use it to inspect sampled buffers, material guides, rejection data, and reflection diagnostics.
+			Selects the RTGI debug visualization. Use it to inspect sampled buffers, material guides, rejection data, reflection diagnostics, and the direct-lighting regime. These are developer diagnostics, not display modes; the inspector dropdown for this property is the authoritative list of the available [enum PathtracingDebugMode] values. [code]0[/code] is the normal beauty output.
 		</member>
 		<member name="rtgi_ray_firefly_suppression" type="float" setter="set_rtgi_ray_firefly_suppression" getter="get_rtgi_ray_firefly_suppression" default="0.85">
 			Applies a pre-denoiser clamp to extreme ray or path contributions. Higher values suppress fireflies before they enter temporal history, but can dim tiny highlights.
