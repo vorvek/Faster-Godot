@@ -333,9 +333,19 @@ bool lights_trace_shadow_ray(vec3 origin, vec3 direction, float max_dist, uint s
 // Next Event Estimation (NEE) - Direct Light Sampling
 // ============================================================================
 
+// A light's indirect_energy multiplier applies on indirect bounces AND on the WRC/SPG
+// probe-gather feeds (whose first hit caches the indirect lighting the camera sees), matching
+// stock Godot's "indirect_energy scales the light's GI contribution" meaning. The path-traced
+// camera-direct view (not a probe dispatch, is_indirect_bounce false) stays unscaled. The
+// sampling BUDGET (deterministic limit, RIS candidate count) stays keyed on is_indirect_bounce
+// alone; only the energy multiplier moves.
+bool lights_apply_indirect_energy(bool is_indirect_bounce) {
+	return is_indirect_bounce || rt_probe_dispatch_mode();
+}
+
 float lights_selection_weight(vec3 hit_pos, vec3 N, RTLightData light, bool is_indirect_bounce) {
 	float energy = max(luminance(max(light.emission, vec3(0.0))), 0.0);
-	energy *= is_indirect_bounce ? max(light.indirect_energy, 0.0) : 1.0;
+	energy *= lights_apply_indirect_energy(is_indirect_bounce) ? max(light.indirect_energy, 0.0) : 1.0;
 	if (energy <= 0.0) {
 		return 0.0;
 	}
@@ -1107,7 +1117,7 @@ RTDirectLighting lights_evaluate_single_direct_light_split(
 		vec3 brdf_diffuse, brdf_specular;
 		evalCombinedBRDFSeparate(N, L, V, material, brdf_diffuse, brdf_specular);
 		float spec_mul = lights_get_specular_multiplier(light.specular_amount, material.roughness);
-		float indirect_mul = is_indirect_bounce ? light.indirect_energy : 1.0;
+		float indirect_mul = lights_apply_indirect_energy(is_indirect_bounce) ? light.indirect_energy : 1.0;
 		// Solid-angle pdf = 1/S, so contribution = brdf * Le * S * (1/light_select_pdf).
 		float solid_angle = sq.S;
 		float inv_pdf = solid_angle / max(light_select_pdf, 1e-10);
@@ -1185,7 +1195,7 @@ RTDirectLighting lights_evaluate_single_direct_light_split(
 
 		float spec_mul = lights_get_specular_multiplier(light.specular_amount, material.roughness);
 
-		float indirect_mul = is_indirect_bounce ? light.indirect_energy : 1.0;
+		float indirect_mul = lights_apply_indirect_energy(is_indirect_bounce) ? light.indirect_energy : 1.0;
 
 		// NdotL is already included in brdf_value (evalLambertian/evalMicrofacet bake it in).
 		RTDirectLighting result;
@@ -1221,7 +1231,7 @@ RTDirectLighting lights_evaluate_single_direct_light_split(
 
 		float spec_mul = lights_get_specular_multiplier(light.specular_amount, material.roughness);
 
-		float indirect_mul = is_indirect_bounce ? light.indirect_energy : 1.0;
+		float indirect_mul = lights_apply_indirect_energy(is_indirect_bounce) ? light.indirect_energy : 1.0;
 
 		RTDirectLighting result;
 		float inv_pdf = 1.0 / max(light_select_pdf, 1e-10);
