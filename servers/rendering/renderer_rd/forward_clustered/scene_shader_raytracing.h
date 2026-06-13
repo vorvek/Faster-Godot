@@ -137,6 +137,10 @@ public:
 	static constexpr int RT_PARAM_RTGI_STRC_RAYS_PER_FRAME = RSE::PT_PARAM_RTGI_STRC_RAYS_PER_FRAME;
 	static constexpr int RT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT = RSE::PT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT;
 	static constexpr int RT_PARAM_RTGI_BACKEND = RSE::PT_PARAM_RTGI_BACKEND;
+	// The per-preset RIS candidate budget. Unlike the SPG/WRC slots below, this is written into
+	// the UBO for EVERY dispatch flavor (prepare, WRC probe-update, SPG gather, FPT primary), not
+	// via a dispatch-flavor override: it holds the same resolved per-preset constant on every
+	// flavor, so the once-per-frame radiance signature cannot see it change between flavors.
 	static constexpr int RT_PARAM_DIRECT_RIS_CANDIDATES = RSE::PT_PARAM_DIRECT_RIS_CANDIDATES;
 	static constexpr int RT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES = RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES;
 	// Screen Probe Gather (SPG) params. These are renderer-internal RT-param slots

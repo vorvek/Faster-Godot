@@ -536,6 +536,29 @@ bool lights_direct_source_weight(
 	return light_weight > 0.0;
 }
 
+// Directional-only validity gate, factored out of the directional_sum loop so that loop does
+// not restate the cull-mask + positive-selection-weight check by hand. This is the SAME pair of
+// conditions lights_direct_source_weight applies to a positional light (receiver layer-mask cull
+// and lights_selection_weight > 0); it omits only the positional max-range test, which never
+// applied to a directional. It is a separate helper rather than a call into
+// lights_direct_source_weight because that predicate returns false for directionals by design
+// (Edit A, so directionals stay out of valid_count / the CDF / the reservoir), so it cannot be
+// reused to validate one. Behaviour-identical to the previous inline gate by construction.
+bool lights_is_directional_valid(
+		RTLightData dir_light,
+		uint receiver_layer_mask,
+		vec3 hit_pos,
+		vec3 N,
+		bool is_indirect_bounce) {
+	if (dir_light.type != RT_LIGHT_TYPE_DIRECTIONAL) {
+		return false;
+	}
+	if ((dir_light.cull_mask & receiver_layer_mask) == 0u) {
+		return false;
+	}
+	return lights_selection_weight(hit_pos, N, dir_light, is_indirect_bounce) > 0.0;
+}
+
 bool lights_find_direct_source_by_id(
 		uint source_id,
 		uint light_count,
@@ -555,11 +578,12 @@ bool lights_find_direct_source_by_id(
 
 	for (uint idx = 0u; idx < light_count; idx++) {
 		float light_weight = 0.0;
-		// lights_direct_source_weight returns false for directionals, so a directional source_id
-		// can never be re-matched here. A prev reservoir that recorded a directional before this
-		// change (or on the upgrade frame) therefore fails to pair and dies in one frame, which
-		// is the intended one-frame history discontinuity at the upgrade. Directionals are not
-		// reservoir-eligible.
+		// lights_direct_source_weight returns false for a directional (Edit A), so the continue
+		// below skips a directional slot BEFORE the source_id comparison further down ever runs:
+		// a directional source_id can never be re-matched here. A prev reservoir that recorded a
+		// directional before this change (or on the upgrade frame) therefore fails to pair and
+		// dies in one frame, the intended one-frame history discontinuity at the upgrade.
+		// Directionals are not reservoir-eligible.
 		if (!lights_direct_source_weight(idx, light_count, receiver_layer_mask, is_indirect_bounce, hit_pos, N, light_weight)) {
 			continue;
 		}
@@ -1347,19 +1371,19 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 	// every return path below. The evaluator call uses pdf = 1.0 and the same is_indirect_bounce,
 	// matching exactly the form the deterministic-sum loop used to evaluate a directional with,
 	// so a deterministic-regime directional is bit-identical to before this change.
+	//
+	// This is the first of three walks over rt_lights[0..light_count) in this function (here, the
+	// positional count pass below, and the deterministic-sum loop). Three linear passes is fine at
+	// the light_count <= RT_LIGHTS_MAX (64) cap: the per-light work here is a few comparisons, and
+	// the cost of this estimator is dominated by the shadow rays each evaluated light casts, not by
+	// the array traversal.
 	RTDirectLighting directional_sum = rt_direct_lighting_zero();
 	for (uint idx = 0u; idx < light_count; idx++) {
 		RTLightData dir_light = rt_lights[idx];
-		if (dir_light.type != RT_LIGHT_TYPE_DIRECTIONAL) {
-			continue;
-		}
-		// Same validity gate the regime predicate applied to a directional before Edit A:
-		// receiver layer-mask cull + a positive selection weight (energy > 0). No range test
-		// applies to a directional (the positional max-range gate never ran for it).
-		if ((dir_light.cull_mask & receiver_layer_mask) == 0u) {
-			continue;
-		}
-		if (lights_selection_weight(hit_pos, N, dir_light, is_indirect_bounce) <= 0.0) {
+		// Same validity the regime predicate applied to a directional before Edit A (cull + a
+		// positive selection weight; no range test, which never ran for a directional), factored
+		// into lights_is_directional_valid so the gate is not restated by hand.
+		if (!lights_is_directional_valid(dir_light, receiver_layer_mask, hit_pos, N, is_indirect_bounce)) {
 			continue;
 		}
 		RTDirectLighting dir_result = lights_evaluate_single_direct_light_split(dir_light, 1.0, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce, p_use_blue_noise_u, p_blue_noise_u);

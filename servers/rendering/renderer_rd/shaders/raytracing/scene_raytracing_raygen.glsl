@@ -972,10 +972,17 @@ void main() {
 		// top of main()). At vis_mode 0 (the default) the branch is skipped, so the non-debug
 		// path is byte-identical.
 		if (int(get_rt_param(RT_PARAM_VIS_MODE)) == RT_VIS_MODE_DIRECT_LIGHT_REGIME) {
+			// 24.0 = 2 * RTGI_DETERMINISTIC_DIRECT_LIGHT_LIMIT (12), so the deterministic half of
+			// the ramp (counts 0..12) and the RIS half (counts 12..24) each span half the gradient:
+			// the green ramp fills as a deterministic pixel approaches the limit and the red/yellow
+			// ramp fills as a RIS pixel climbs to twice it.
 			float count_ramp = clamp(float(pd_dbg_valid_light_count) / 24.0, 0.0, 1.0);
 			vec3 c = (pd_dbg_valid_light_count <= RTGI_DETERMINISTIC_DIRECT_LIGHT_LIMIT)
 					? vec3(0.0, 0.25 + 0.75 * count_ramp, 0.0)
 					: vec3(0.5 + 0.5 * count_ramp, 0.5 * count_ramp, 0.0);
+			// 32.0 = the reservoir M-cap (the clamp ceiling in lights_merge_previous_direct_reservoir),
+			// so brightness reads full when temporal reuse is at maximum depth and dark when reuse is
+			// dead (M near 0).
 			float m_norm = clamp(pd_dbg_reservoir_m / 32.0, 0.0, 1.0);
 			radiance = c * (0.35 + 0.65 * m_norm);
 			specular = vec3(0.0);
