@@ -451,10 +451,21 @@ struct RTViewportState {
 	RID light_buffer;
 	RID params_buffer;
 
-	RID uniform_set;
-	uint64_t uniform_set_signature = 0;
-	RID uniform_set_shader;
-	bool uniform_set_signature_valid = false;
+	// One cached RT uniform set per dispatch flavor. update_uniform_set is called
+	// 3-4x per frame with different RT flags (prepare base, then |WRC_PROBE_UPDATE,
+	// |SPG_GATHER, |PRIMARY_DIRECT); the signature folds p_rt_flags and the per-flags
+	// pipeline shader, so the flavors alternate and a single slot could never hit
+	// across them (it freed and recreated the set 3-4x every frame). Keying the cache
+	// on rt_flags lets each flavor keep its own set.
+	struct UniformSetCacheEntry {
+		uint32_t rt_flags = 0;
+		RID uniform_set;
+		uint64_t signature = 0;
+		RID shader;
+		bool valid = false;
+	};
+	// Six slots: today's four flavors plus slack.
+	UniformSetCacheEntry uniform_set_cache[6];
 	uint64_t light_buffer_signature = 0;
 	bool light_buffer_signature_valid = false;
 

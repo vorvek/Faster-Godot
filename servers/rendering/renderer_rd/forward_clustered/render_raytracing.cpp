@@ -1241,7 +1241,8 @@ static uint64_t _rt_radiance_signature(uint32_t p_rt_flags, RID p_environment, R
 			// Continuous world-space-area selection weight; it ticks every frame a
 			// smoothly moving emissive mesh animates. Discrete emissive set/material
 			// changes already churn the emissive candidate signature, which is mixed
-			// into the radiance signature by the caller.
+			// into the radiance signature by the caller (update_uniform_set, where
+			// emissive_candidate_signature is mixed in).
 			continue;
 		}
 		signature = _rt_history_mix_float(signature, p_rt_params[i]);
@@ -5868,7 +5869,10 @@ void RenderRaytracing::_free_viewport_state_internal(RTViewportState *p_state) {
 	if (!p_state) {
 		return;
 	}
-	_rt_free_uniform_set_if_alive(p_state->uniform_set);
+	for (uint32_t i = 0; i < (uint32_t)(sizeof(p_state->uniform_set_cache) / sizeof(p_state->uniform_set_cache[0])); i++) {
+		_rt_free_uniform_set_if_alive(p_state->uniform_set_cache[i].uniform_set);
+		p_state->uniform_set_cache[i].valid = false;
+	}
 	if (p_state->tlas.is_valid()) {
 		_rt_free_acceleration_structure_if_alive(p_state->tlas);
 	}
@@ -9579,19 +9583,19 @@ uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, cons
 			}
 			return false;
 		};
-		// positional_lights is sorted by descending score, so evicted incumbents are
+		// positional_lights is sorted by descending score, so dropped incumbents are
 		// visited strongest first. Each swap removes the weakest remaining newcomer
 		// (the next weakest scores higher) while later incumbents score lower, so a
 		// single pass terminates with no further swap applicable.
 		for (uint32_t i = 0; i < positional_lights.size(); i++) {
-			const LightScore &evicted = positional_lights[i];
-			if (selected_positional_set.has(evicted.light_instance)) {
+			const LightScore &dropped_incumbent = positional_lights[i];
+			if (selected_positional_set.has(dropped_incumbent.light_instance)) {
 				continue;
 			}
-			if (!was_previously_selected(evicted.source_id)) {
+			if (!was_previously_selected(dropped_incumbent.source_id)) {
 				continue;
 			}
-			// Weakest pass-2 selection that was NOT selected last frame.
+			// Find the weakest score-fill newcomer (skip retained incumbents and coverage picks).
 			int64_t weakest_newcomer = -1;
 			for (uint32_t s = coverage_selected_count; s < selected_positional_lights.size(); s++) {
 				if (was_previously_selected(selected_positional_lights[s].source_id)) {
@@ -9604,12 +9608,12 @@ uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, cons
 			if (weakest_newcomer < 0) {
 				break; // No newcomers left to displace.
 			}
-			if (evicted.score < 0.5f * selected_positional_lights[weakest_newcomer].score) {
+			if (dropped_incumbent.score < 0.5f * selected_positional_lights[weakest_newcomer].score) {
 				break; // The newcomer wins decisively; weaker incumbents lose too.
 			}
 			selected_positional_set.erase(selected_positional_lights[weakest_newcomer].light_instance);
-			selected_positional_set.insert(evicted.light_instance);
-			selected_positional_lights[weakest_newcomer] = evicted;
+			selected_positional_set.insert(dropped_incumbent.light_instance);
+			selected_positional_lights[weakest_newcomer] = dropped_incumbent;
 		}
 	}
 
@@ -10645,27 +10649,54 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 	RID shader_rd = shader ? shader->get_pipeline_shader_rd(p_rt_flags) : RID();
 	signature_add(shader_rd);
 
-	if (shader_rd.is_valid() && p_state->uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(p_state->uniform_set) && p_state->uniform_set_signature_valid && p_state->uniform_set_signature == uniform_signature && p_state->uniform_set_shader == shader_rd) {
+	// Select this flavor's cache slot. Prefer the entry already keyed to p_rt_flags;
+	// otherwise take the first free (!valid) slot. If all six are valid with other
+	// flags, evict slot 0 (cannot happen with today's four flavors, but keeps the
+	// cache bounded if a fifth flavor is ever added).
+	const uint32_t cache_size = (uint32_t)(sizeof(p_state->uniform_set_cache) / sizeof(p_state->uniform_set_cache[0]));
+	uint32_t slot = 0;
+	bool slot_found = false;
+	for (uint32_t i = 0; i < cache_size; i++) {
+		if (p_state->uniform_set_cache[i].valid && p_state->uniform_set_cache[i].rt_flags == p_rt_flags) {
+			slot = i;
+			slot_found = true;
+			break;
+		}
+	}
+	if (!slot_found) {
+		for (uint32_t i = 0; i < cache_size; i++) {
+			if (!p_state->uniform_set_cache[i].valid) {
+				slot = i;
+				slot_found = true;
+				break;
+			}
+		}
+	}
+	// All slots valid with other flags: evict slot 0.
+	RTViewportState::UniformSetCacheEntry &entry = p_state->uniform_set_cache[slot];
+
+	if (shader_rd.is_valid() && entry.uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(entry.uniform_set) && entry.valid && entry.signature == uniform_signature && entry.shader == shader_rd) {
 		if (bindless_block && bindless_block->is_initialized()) {
 			bindless_block->finalize(shader_rd, 1);
 			bindless_uniform_set = bindless_block->get_uniform_set();
 		}
-		return p_state->uniform_set;
+		return entry.uniform_set;
 	}
 
-	_rt_free_uniform_set_if_alive(p_state->uniform_set);
-	p_state->uniform_set = RID();
-	p_state->uniform_set_signature_valid = false;
+	_rt_free_uniform_set_if_alive(entry.uniform_set);
+	entry.uniform_set = RID();
+	entry.valid = false;
 
 	if (shader_rd.is_valid()) {
-		p_state->uniform_set = RD::get_singleton()->uniform_set_create(
+		entry.uniform_set = RD::get_singleton()->uniform_set_create(
 				uniforms,
 				shader_rd,
 				RenderForwardClustered::SCENE_UNIFORM_SET);
-		RD::get_singleton()->set_resource_name(p_state->uniform_set, "RT Uniform Set");
-		p_state->uniform_set_signature = uniform_signature;
-		p_state->uniform_set_shader = shader_rd;
-		p_state->uniform_set_signature_valid = p_state->uniform_set.is_valid();
+		RD::get_singleton()->set_resource_name(entry.uniform_set, "RT Uniform Set");
+		entry.rt_flags = p_rt_flags;
+		entry.signature = uniform_signature;
+		entry.shader = shader_rd;
+		entry.valid = entry.uniform_set.is_valid();
 
 		// === SET 1: Bindless textures ===
 		if (bindless_block && bindless_block->is_initialized()) {
@@ -10674,7 +10705,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		}
 	}
 
-	return p_state->uniform_set;
+	return entry.uniform_set;
 }
 
 // ---------------------------------------------------------------------------
