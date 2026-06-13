@@ -195,6 +195,7 @@ uint init_blue_noise_rng(uvec2 pixel, uint frame_index, uint sample_idx) {
 // is harmless). Threaded as a vec2 parameter into the estimator (the blue-noise binding is
 // only visible in this stage), so lights_inc stays binding-agnostic.
 vec2 rt_blue_noise_2d(uvec2 pixel, uint frame) {
+	// R2 low-discrepancy constants; reused in raytracing_lights_inc.glsl for the per-light offset, but the two roles are independent (per-frame tile scroll here vs per-light decorrelation there).
 	vec2 scroll = fract(vec2(float(frame) * 0.7548776662, float(frame) * 0.5698402909));
 	vec2 uv = (vec2(pixel & uvec2(127u)) + 0.5) / 128.0 + scroll;
 	return texture(sampler2D(rt_blue_noise_texture, rt_blue_noise_sampler), uv).rg;

@@ -758,7 +758,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		// Closest-hit (deep path / probe / oracle) keeps white-noise PCG for the shadow draw:
 		// 1D probe dispatches have no screen-space coherence and the deep path is multi-bounce,
 		// so blue noise (which buys screen-space sample-point distribution) does not apply here.
-		// Passing false keeps these paths bit-identical to before Task 10.
+		// Passing false keeps the deep-path, probe, and oracle shading on the white-noise PCG sample, unchanged from the screen-primary blue-noise path.
 		RTDirectLighting direct_light = lights_evaluate_direct_lighting_split(
 				h.hit_pos, h.geometry_normal, N, V, brdf_mat, ps.rng_state, is_indirect, receiver_layer_mask, rt_light_count,
 				direct_source_key, direct_slot_source_key, direct_slot_pdf, direct_slot_light, direct_slot_stochastic,

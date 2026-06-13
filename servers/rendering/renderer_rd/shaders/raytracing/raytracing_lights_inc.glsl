@@ -1025,6 +1025,7 @@ RTDirectLighting lights_evaluate_single_direct_light_split(
 	vec2 u;
 	if (p_use_blue_noise_u) {
 		float light_offset = float(light.source_id & 0xFFu);
+		// Same R2 constants as rt_blue_noise_2d's frame scroll, independent role: per-light offset within the pixel, not a per-frame shift.
 		u = fract(p_blue_noise_u + vec2(0.7548776662, 0.5698402909) * light_offset);
 	} else {
 		u = rand2(rng_state);
