@@ -937,232 +937,150 @@ void main() {
 	vec3 total_specular_radiance = vec3(0.0);
 
 	// Reached only when NOT primary-direct: the rt_primary_direct_mode() FPT-fast path returns
-	// above (guide-surface NEE), so this is the HYBRID branch or the deep-path/oracle else-branch
-	// (REFLECTIONS / FULL_PATH_TRACING reference), both of which want the full bounce budget.
+	// above (guide-surface NEE), so this is the deep-path/oracle body (REFLECTIONS /
+	// FULL_PATH_TRACING reference), which wants the full bounce budget.
 	const uint max_bounces = RT_GET_MAX_BOUNCES();
 	uint rt_mode = uint(get_rt_param(RT_PARAM_MODE));
 
 	// TODO: when we have a spp > 0 the first raycast is always identical,
 	// we should move it out of the loop
 
-	if (rt_mode == RT_MODE_HYBRID) {
-		float raster_depth;
-		vec3 raster_view_pos;
-		vec3 raster_world_pos;
-		vec3 raster_world_normal;
-		float raster_roughness;
-		vec3 raster_albedo_proxy;
-		bool raster_hit_valid = pixel_in_visible && rtgi_load_raster_surface(visible_pixel_i, inv_view, raster_depth, raster_view_pos, raster_world_pos, raster_world_normal, raster_roughness, raster_albedo_proxy);
+	// Hybrid issues no full-screen raygen dispatch; its screen-pixel GI comes from the
+	// probe composite (see render_forward_clustered.cpp, the radiance-probes dispatch block).
+	vec3 sample0_hit_pos = vec3(0.0);
+	vec3 sample0_geometry_normal = vec3(0.0);
+	vec3 sample0_ray_dir = vec3(0.0);
+	bool sample0_has_hit = false;
 
-		if (!raster_hit_valid) {
-			rtgi_store_empty_raster_guides(pixel_i);
-			return;
+	[[dont_unroll]] for (uint sample_idx = 0u; sample_idx < samples_per_pixel; sample_idx++) {
+		PathState ps;
+		ps.radiance = vec3(0.0);
+		ps.specular_radiance = vec3(0.0);
+		ps.throughput = vec3(1.0);
+		ps.packed_bounces_flags = (sample_idx == 0u) ? set_sample_zero(0u) : 0u;
+		ps.rng_state = init_blue_noise_rng(rng_pixel, frame_index, sample_idx);
+		ps.pdf_bsdf = 0.0;
+
+		// Jitter primary rays in final-pixel units for scaled Full Path Tracing.
+		// Reconstruction treats each scaled RT sample as a stable source sample;
+		// letting it wander over the whole low-resolution footprint produces
+		// visible crawl that the full-resolution resolve cannot locate. Keep
+		// this primary-visibility jitter screen-stable for scaled tracing while
+		// leaving the path/BRDF random sequence frame-varying.
+		bool scaled_path_traced = rt_mode == RT_MODE_PATH_TRACED && get_rt_param(RT_PARAM_RTGI_RESOLUTION_SCALE) < 0.999;
+		uint primary_jitter_state = scaled_path_traced ? init_blue_noise_rng(rng_pixel, 0u, sample_idx) : ps.rng_state;
+		vec2 jitter_denominator = scaled_path_traced ? max(scene_data_block.data.viewport_size, vec2(1.0)) : rt_visible_size();
+		vec2 jitter = (rand2(primary_jitter_state) - vec2(0.5)) / jitter_denominator;
+		if (!scaled_path_traced) {
+			ps.rng_state = primary_jitter_state;
 		}
+		vec2 jittered_d = d + jitter * 2.0;
+		vec4 target_j = scene_data_block.data.inv_projection_matrix * vec4(jittered_d.x, jittered_d.y, 1.0, 1.0);
 
-		rtgi_store_raster_guides(pixel_i, in_uv, raster_depth, raster_view_pos, raster_world_pos, raster_world_normal, raster_roughness, raster_albedo_proxy);
+		vec3 ray_origin = origin.xyz;
+		vec3 ray_dir = (inv_view * vec4(normalize(target_j.xyz), 0.0)).xyz;
 
-		vec3 view_dir = normalize(rt_camera_world_origin() - raster_world_pos);
-		float specular_probability = clamp(mix(0.08, 0.82, smoothstep(0.10, 0.90, 1.0 - raster_roughness)), 0.05, 0.90);
-		vec3 specular_weight = mix(vec3(0.04), raster_albedo_proxy, 0.0) * mix(1.0, 0.35, raster_roughness);
-
-		[[dont_unroll]] for (uint sample_idx = 0u; sample_idx < samples_per_pixel; sample_idx++) {
-			PathState ps;
-			ps.radiance = vec3(0.0);
-			ps.specular_radiance = vec3(0.0);
-			ps.throughput = vec3(1.0);
-			ps.packed_bounces_flags = set_primary_raster_gi_owner((sample_idx == 0u) ? set_sample_zero(0u) : 0u);
-			ps.rng_state = init_blue_noise_rng(rng_pixel, frame_index, sample_idx);
-			ps.hit_t = 65504.0;
-			ps.offset_normal = raster_world_normal;
-			ps.next_ray_dir = raster_world_normal;
-			ps.pdf_bsdf = 0.0;
-
-			bool trace_specular = rand(ps.rng_state) < specular_probability;
-			vec2 u = rand2(ps.rng_state);
-			vec3 ray_origin = offset_ray_origin(raster_world_pos, raster_world_normal);
-			vec3 ray_dir;
-			if (trace_specular) {
-				ps.throughput = specular_weight / max(specular_probability, 1e-4);
-				ps.packed_bounces_flags = inc_total_bounce(ps.packed_bounces_flags);
-				ray_dir = rtgi_sample_rough_specular(u, raster_world_normal, view_dir, raster_roughness);
-			} else {
-				ps.throughput = raster_albedo_proxy / max(1.0 - specular_probability, 1e-4);
-				ps.packed_bounces_flags = inc_diffuse_bounce(ps.packed_bounces_flags);
-				ray_dir = rtgi_sample_cosine_hemisphere(u, raster_world_normal);
-			}
-
-			[[dont_unroll]] for (uint bounce = 1u; bounce <= max_bounces; bounce++) {
-				path_pack(payload, ps);
+		[[dont_unroll]] for (uint bounce = 0u; bounce <= max_bounces; bounce++) {
+			path_pack(payload, ps);
 
 #ifdef USE_SER
-				hitObjectNV hitObject;
-				hitObjectTraceRayNV(hitObject, tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
+			hitObjectNV hitObject;
+			hitObjectTraceRayNV(hitObject, tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
 
-				uint hint = 0;
-				if (hitObjectIsHitNV(hitObject)) {
-					hint = hitObjectGetInstanceIdNV(hitObject);
-				}
-				reorderThreadNV(hitObject, hint, 8);
+			// Reorder with a coherence hint that has 8 bits
+			uint hint = 0;
+			if (hitObjectIsHitNV(hitObject)) {
+				// TODO: This hint barely does anything. There is a lot of untapped potential here.
+				hint = hitObjectGetInstanceIdNV(hitObject);
+			}
+			reorderThreadNV(hitObject, hint, 8);
 
-				hitObjectExecuteShaderNV(hitObject, 0);
+			hitObjectExecuteShaderNV(hitObject, 0);
 #else
-				traceRayEXT(tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
+			traceRayEXT(tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
 #endif
 
-				ps = path_unpack(payload);
-				if (is_path_terminated(ps.packed_bounces_flags)) {
-					break;
-				}
-				vec3 hit_pos = ray_origin + ray_dir * ps.hit_t;
-				ray_origin = offset_ray_origin(hit_pos, ps.offset_normal);
-				ray_dir = ps.next_ray_dir;
+			ps = path_unpack(payload);
+			if (sample_idx == 0u && bounce == 0u && !is_path_terminated(ps.packed_bounces_flags)) {
+				sample0_hit_pos = ray_origin + ray_dir * ps.hit_t;
+				sample0_geometry_normal = ps.offset_normal;
+				sample0_ray_dir = ray_dir;
+				sample0_has_hit = true;
 			}
-
-			if (get_rt_param(RT_PARAM_VIS_MODE) == 0.0) {
-				vec3 sample_radiance = sanitize_payload_vec3(ps.radiance);
-				vec3 sample_specular = min(sanitize_payload_vec3(ps.specular_radiance), sample_radiance);
-				total_radiance += sample_radiance;
-				total_specular_radiance += sample_specular;
-			} else {
-				total_radiance += ps.radiance;
+			if (is_path_terminated(ps.packed_bounces_flags)) {
+				break;
 			}
+			// Reconstruct the next ray origin from the current ray + hit distance, apply bias
+			vec3 hit_pos = ray_origin + ray_dir * ps.hit_t;
+			ray_origin = offset_ray_origin(hit_pos, ps.offset_normal);
+			ray_dir = ps.next_ray_dir;
 		}
-	} else {
-		vec3 sample0_hit_pos = vec3(0.0);
-		vec3 sample0_geometry_normal = vec3(0.0);
-		vec3 sample0_ray_dir = vec3(0.0);
-		bool sample0_has_hit = false;
 
-		[[dont_unroll]] for (uint sample_idx = 0u; sample_idx < samples_per_pixel; sample_idx++) {
-			PathState ps;
-			ps.radiance = vec3(0.0);
-			ps.specular_radiance = vec3(0.0);
-			ps.throughput = vec3(1.0);
-			ps.packed_bounces_flags = (sample_idx == 0u) ? set_sample_zero(0u) : 0u;
-			ps.rng_state = init_blue_noise_rng(rng_pixel, frame_index, sample_idx);
-			ps.pdf_bsdf = 0.0;
-
-			// Jitter primary rays in final-pixel units for scaled Full Path Tracing.
-			// Reconstruction treats each scaled RT sample as a stable source sample;
-			// letting it wander over the whole low-resolution footprint produces
-			// visible crawl that the full-resolution resolve cannot locate. Keep
-			// this primary-visibility jitter screen-stable for scaled tracing while
-			// leaving the path/BRDF random sequence frame-varying.
-			bool scaled_path_traced = rt_mode == RT_MODE_PATH_TRACED && get_rt_param(RT_PARAM_RTGI_RESOLUTION_SCALE) < 0.999;
-			uint primary_jitter_state = scaled_path_traced ? init_blue_noise_rng(rng_pixel, 0u, sample_idx) : ps.rng_state;
-			vec2 jitter_denominator = scaled_path_traced ? max(scene_data_block.data.viewport_size, vec2(1.0)) : rt_visible_size();
-			vec2 jitter = (rand2(primary_jitter_state) - vec2(0.5)) / jitter_denominator;
-			if (!scaled_path_traced) {
-				ps.rng_state = primary_jitter_state;
+		if (get_rt_param(RT_PARAM_VIS_MODE) == 0.0) {
+			vec3 sample_radiance = sanitize_payload_vec3(ps.radiance);
+			vec3 sample_specular = min(sanitize_payload_vec3(ps.specular_radiance), sample_radiance);
+			if (rt_mode == RT_MODE_REFLECTIONS_RT_ONLY && has_primary_raster_gi_owner(ps.packed_bounces_flags)) {
+				sample_radiance = sample_specular;
 			}
-			vec2 jittered_d = d + jitter * 2.0;
-			vec4 target_j = scene_data_block.data.inv_projection_matrix * vec4(jittered_d.x, jittered_d.y, 1.0, 1.0);
+			total_radiance += sample_radiance;
+			total_specular_radiance += sample_specular;
+		} else {
+			total_radiance += ps.radiance;
+		}
+	}
 
-			vec3 ray_origin = origin.xyz;
-			vec3 ray_dir = (inv_view * vec4(normalize(target_j.xyz), 0.0)).xyz;
+	if (sample0_has_hit) {
+		// This block is now ONLY the deep-path oracle / REFLECTIONS path: FPT-fast
+		// primary visibility is handled by the rt_primary_direct_mode() block above (raster
+		// surface + the matching rt_depth_image guide store). The sample-0 depth write that
+		// previously lived here is removed -- it only existed to make the PT primary's depth
+		// mask consistent with rt_color, which the guide-surface primary now does by construction.
+		vec4 normal_roughness = imageLoad(rt_normal_roughness_image, pixel_i);
+		vec3 normal = normalize(normal_roughness.xyz * 2.0 - 1.0);
+		float guide_roughness = normal_roughness.w;
 
-			[[dont_unroll]] for (uint bounce = 0u; bounce <= max_bounces; bounce++) {
-				path_pack(payload, ps);
+		vec4 albedo_metalness = imageLoad(rt_albedo_metalness_image, pixel_i);
+		float metalness = albedo_metalness.w;
 
-#ifdef USE_SER
-				hitObjectNV hitObject;
-				hitObjectTraceRayNV(hitObject, tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
+		float specular_risk = max(1.0 - guide_roughness, metalness);
+		bool needs_reflected_guide = specular_risk > 0.55 && guide_roughness <= 0.35;
 
-				// Reorder with a coherence hint that has 8 bits
-				uint hint = 0;
-				if (hitObjectIsHitNV(hitObject)) {
-					// TODO: This hint barely does anything. There is a lot of untapped potential here.
-					hint = hitObjectGetInstanceIdNV(hitObject);
+		if (needs_reflected_guide) {
+			float reflected_hit_distance = RT_FP16_MAX;
+			vec3 reflected_hit_normal = vec3(0.0);
+			vec3 reflection_dir = vec3(0.0);
+			vec3 view_dir = normalize(-sample0_ray_dir);
+			bool reflected_hit_valid = rtgi_trace_specular_reflected_hit_raygen(sample0_hit_pos, sample0_geometry_normal, normal, view_dir, reflected_hit_distance, reflected_hit_normal, reflection_dir);
+			
+			float guide_hit_distance = reflected_hit_valid ? reflected_hit_distance : max(imageLoad(rt_viewz_hitdist_image, pixel_i).y, 0.0);
+			imageStore(rt_specular_guide_image, pixel_i, vec4(guide_roughness, guide_hit_distance, specular_risk, 1.0));
+			
+			vec4 specular_reprojection = vec4(0.0);
+			if (reflected_hit_valid) {
+				vec3 virtual_pos = sample0_hit_pos + reflection_dir * reflected_hit_distance;
+				vec2 curr_virtual_uv;
+				vec2 prev_virtual_uv;
+				if (project_uv_checked(virtual_pos, curr_vp_unjittered, curr_virtual_uv) &&
+						project_uv_checked(virtual_pos, prev_vp_unjittered, prev_virtual_uv)) {
+					vec2 curr_virtual_texture_uv = rt_visible_to_texture_uv(curr_virtual_uv, rt_current_origin());
+					vec2 prev_virtual_texture_uv = rt_visible_to_texture_uv(prev_virtual_uv, rt_previous_origin());
+					specular_reprojection = vec4(prev_virtual_texture_uv - curr_virtual_texture_uv, clamp(reflected_hit_distance / 128.0, 0.0, 1.0), 1.0);
 				}
-				reorderThreadNV(hitObject, hint, 8);
-
-				hitObjectExecuteShaderNV(hitObject, 0);
-#else
-				traceRayEXT(tlas, RT_RAY_FLAGS, RT_INSTANCE_MASK_VISIBLE, 0, 0, 0, ray_origin, 0.001, ray_dir, 10000.0, 0);
-#endif
-
-				ps = path_unpack(payload);
-				if (sample_idx == 0u && bounce == 0u && !is_path_terminated(ps.packed_bounces_flags)) {
-					sample0_hit_pos = ray_origin + ray_dir * ps.hit_t;
-					sample0_geometry_normal = ps.offset_normal;
-					sample0_ray_dir = ray_dir;
-					sample0_has_hit = true;
-				}
-				if (is_path_terminated(ps.packed_bounces_flags)) {
-					break;
-				}
-				// Reconstruct the next ray origin from the current ray + hit distance, apply bias
-				vec3 hit_pos = ray_origin + ray_dir * ps.hit_t;
-				ray_origin = offset_ray_origin(hit_pos, ps.offset_normal);
-				ray_dir = ps.next_ray_dir;
 			}
+			imageStore(rt_specular_reprojection_image, pixel_i, specular_reprojection);
 
-			if (get_rt_param(RT_PARAM_VIS_MODE) == 0.0) {
-				vec3 sample_radiance = sanitize_payload_vec3(ps.radiance);
-				vec3 sample_specular = min(sanitize_payload_vec3(ps.specular_radiance), sample_radiance);
-				if (rt_mode == RT_MODE_REFLECTIONS_RT_ONLY && has_primary_raster_gi_owner(ps.packed_bounces_flags)) {
-					sample_radiance = sample_specular;
-				}
-				total_radiance += sample_radiance;
-				total_specular_radiance += sample_specular;
-			} else {
-				total_radiance += ps.radiance;
+			int vis_mode = int(get_rt_param(RT_PARAM_VIS_MODE));
+			if (vis_mode == RT_VIS_MODE_SPECULAR_REFLECTION_DIRECTION) {
+				vec3 diagnostic_reflection_dir = normalize(reflect(-view_dir, normal));
+				imageStore(rt_specular_reflection_direction_image, pixel_i, vec4(diagnostic_reflection_dir * 0.5 + 0.5, specular_risk));
+			} else if (vis_mode == RT_VIS_MODE_SPECULAR_REFLECTED_HIT_DISTANCE) {
+				float encoded_reflected_hit_distance = reflected_hit_valid ? max(reflected_hit_distance, 0.0) + 1.0 : 0.0;
+				imageStore(rt_specular_reflection_direction_image, pixel_i, vec4(encoded_reflected_hit_distance, 0.0, 0.0, reflected_hit_valid ? specular_risk : 0.0));
+			} else if (vis_mode == RT_VIS_MODE_SPECULAR_REFLECTED_HIT_NORMAL) {
+				imageStore(rt_specular_reflection_direction_image, pixel_i, vec4(reflected_hit_valid ? reflected_hit_normal * 0.5 + 0.5 : vec3(0.0), specular_risk));
 			}
 		}
 
-		if (sample0_has_hit) {
-			// This (else) branch is now ONLY the deep-path oracle / REFLECTIONS path: FPT-fast
-			// primary visibility is handled by the rt_primary_direct_mode() block above (raster
-			// surface + the matching rt_depth_image guide store). The sample-0 depth write that
-			// previously lived here is removed -- it only existed to make the PT primary's depth
-			// mask consistent with rt_color, which the guide-surface primary now does by construction.
-			vec4 normal_roughness = imageLoad(rt_normal_roughness_image, pixel_i);
-			vec3 normal = normalize(normal_roughness.xyz * 2.0 - 1.0);
-			float guide_roughness = normal_roughness.w;
-
-			vec4 albedo_metalness = imageLoad(rt_albedo_metalness_image, pixel_i);
-			float metalness = albedo_metalness.w;
-
-			float specular_risk = max(1.0 - guide_roughness, metalness);
-			bool needs_reflected_guide = specular_risk > 0.55 && guide_roughness <= 0.35;
-
-			if (needs_reflected_guide) {
-				float reflected_hit_distance = RT_FP16_MAX;
-				vec3 reflected_hit_normal = vec3(0.0);
-				vec3 reflection_dir = vec3(0.0);
-				vec3 view_dir = normalize(-sample0_ray_dir);
-				bool reflected_hit_valid = rtgi_trace_specular_reflected_hit_raygen(sample0_hit_pos, sample0_geometry_normal, normal, view_dir, reflected_hit_distance, reflected_hit_normal, reflection_dir);
-				
-				float guide_hit_distance = reflected_hit_valid ? reflected_hit_distance : max(imageLoad(rt_viewz_hitdist_image, pixel_i).y, 0.0);
-				imageStore(rt_specular_guide_image, pixel_i, vec4(guide_roughness, guide_hit_distance, specular_risk, 1.0));
-				
-				vec4 specular_reprojection = vec4(0.0);
-				if (reflected_hit_valid) {
-					vec3 virtual_pos = sample0_hit_pos + reflection_dir * reflected_hit_distance;
-					vec2 curr_virtual_uv;
-					vec2 prev_virtual_uv;
-					if (project_uv_checked(virtual_pos, curr_vp_unjittered, curr_virtual_uv) &&
-							project_uv_checked(virtual_pos, prev_vp_unjittered, prev_virtual_uv)) {
-						vec2 curr_virtual_texture_uv = rt_visible_to_texture_uv(curr_virtual_uv, rt_current_origin());
-						vec2 prev_virtual_texture_uv = rt_visible_to_texture_uv(prev_virtual_uv, rt_previous_origin());
-						specular_reprojection = vec4(prev_virtual_texture_uv - curr_virtual_texture_uv, clamp(reflected_hit_distance / 128.0, 0.0, 1.0), 1.0);
-					}
-				}
-				imageStore(rt_specular_reprojection_image, pixel_i, specular_reprojection);
-
-				int vis_mode = int(get_rt_param(RT_PARAM_VIS_MODE));
-				if (vis_mode == RT_VIS_MODE_SPECULAR_REFLECTION_DIRECTION) {
-					vec3 diagnostic_reflection_dir = normalize(reflect(-view_dir, normal));
-					imageStore(rt_specular_reflection_direction_image, pixel_i, vec4(diagnostic_reflection_dir * 0.5 + 0.5, specular_risk));
-				} else if (vis_mode == RT_VIS_MODE_SPECULAR_REFLECTED_HIT_DISTANCE) {
-					float encoded_reflected_hit_distance = reflected_hit_valid ? max(reflected_hit_distance, 0.0) + 1.0 : 0.0;
-					imageStore(rt_specular_reflection_direction_image, pixel_i, vec4(encoded_reflected_hit_distance, 0.0, 0.0, reflected_hit_valid ? specular_risk : 0.0));
-				} else if (vis_mode == RT_VIS_MODE_SPECULAR_REFLECTED_HIT_NORMAL) {
-					imageStore(rt_specular_reflection_direction_image, pixel_i, vec4(reflected_hit_valid ? reflected_hit_normal * 0.5 + 0.5 : vec3(0.0), specular_risk));
-				}
-			}
-
-		}
 	}
 
 	vec3 final_radiance = total_radiance / float(samples_per_pixel);
