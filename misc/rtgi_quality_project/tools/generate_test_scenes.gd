@@ -163,8 +163,8 @@ func _add_sphere(root: Node3D, parent: Node, node_name: String, position: Vector
 
 # --- Cornell box ----------------------------------------------------------
 # Classic Cornell box: red left wall, green right wall, neutral white/gray
-# back/floor/ceiling, a ceiling area light, and the two canonical interior
-# blocks (one tall, one short). The WorldEnvironment uses a linear tonemapper
+# back/floor/ceiling, a ceiling omni key light with an emissive panel, and the
+# two canonical interior blocks (one tall, one short). The WorldEnvironment uses a linear tonemapper
 # and ambient light OFF so the red-onto-white and green-onto-white color bleed
 # is the ground-truth RTGI signal. RTGI is enabled in Hybrid mode; the harness
 # overrides the mode per run.
