@@ -404,6 +404,12 @@ float lights_selection_weight(vec3 hit_pos, vec3 N, RTLightData light, bool is_i
 
 const uint RTGI_DETERMINISTIC_DIRECT_LIGHT_LIMIT = 12u;
 
+// The subtended solid angle (steradians) at which a directional gets the full per-preset shadow
+// sample budget; the count scales linearly from 1 sample at omega 0 to the preset budget at this
+// value. ~0.015 sr corresponds to a 4 degree full-diameter sun. Calibrated against the
+// penumbra-band noise metric.
+const float RT_DIRECT_SAMPLE_SOLID_ANGLE_REF = 0.015;
+
 struct RTDirectLighting {
 	vec3 diffuse;
 	vec3 specular;
@@ -1396,9 +1402,33 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		if (!lights_is_directional_valid(dir_light, receiver_layer_mask, hit_pos, N, is_indirect_bounce)) {
 			continue;
 		}
-		RTDirectLighting dir_result = lights_evaluate_single_direct_light_split(dir_light, 1.0, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce, p_use_blue_noise_u, p_blue_noise_u);
-		directional_sum.diffuse += dir_result.diffuse;
-		directional_sum.specular += dir_result.specular;
+		// Multi-sample the sun cone on the FPT screen primary only (the blue-noise sample-0 path);
+		// the count scales with the cone's subtended solid angle, bounded by the per-preset budget.
+		// Probe / deep / PCG paths keep one sample (p_use_blue_noise_u false), so they are
+		// bit-identical. A point-size sun (omega ~ 0) also stays at one sample.
+		uint dir_samples = 1u;
+		if (p_use_blue_noise_u) {
+			uint preset_max = max(uint(get_rt_param(RT_PARAM_DIRECT_SHADOW_SAMPLES)), 1u);
+			float cos_theta_max = min(cos(dir_light.radius), 0.999999);
+			float omega = 2.0 * PI * (1.0 - cos_theta_max);
+			float t = clamp(omega / RT_DIRECT_SAMPLE_SOLID_ANGLE_REF, 0.0, 1.0);
+			dir_samples = clamp(uint(round(float(preset_max) * t)), 1u, preset_max);
+		}
+		RTDirectLighting dir_accum = rt_direct_lighting_zero();
+		for (uint s = 0u; s < dir_samples; s++) {
+			// Stratify the blue-noise shadow point per sample with the same R2 constants used for
+			// the per-light offset. For s == 0 the offset is 0 so strat_u == p_blue_noise_u, which
+			// makes dir_samples == 1 bit-identical to the single-sample path.
+			vec2 strat_u = (dir_samples > 1u)
+					? fract(p_blue_noise_u + vec2(0.7548776662, 0.5698402909) * (float(s) / float(dir_samples)))
+					: p_blue_noise_u;
+			RTDirectLighting dir_result = lights_evaluate_single_direct_light_split(dir_light, 1.0, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce, p_use_blue_noise_u, strat_u);
+			dir_accum.diffuse += dir_result.diffuse;
+			dir_accum.specular += dir_result.specular;
+		}
+		float inv_n = 1.0 / float(dir_samples);
+		directional_sum.diffuse += dir_accum.diffuse * inv_n;
+		directional_sum.specular += dir_accum.specular * inv_n;
 	}
 
 	for (uint idx = 0u; idx < light_count; idx++) {

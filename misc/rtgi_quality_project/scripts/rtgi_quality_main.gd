@@ -3220,7 +3220,7 @@ func _measure_light_grid(final_image: Image, base_name: String) -> Dictionary:
 # penumbra) without the ramp slope leaking in. This scatter is only visible before the temporal
 # denoiser converges, so this scene captures it at a low settle (see SUN_PENUMBRA_SETTLE_FRAMES).
 # lit/occluded_luma are the bright and dark plateaus the band is normalized against.
-func _measure_sun_penumbra_ramp(final_image: Image, base_name: String) -> Dictionary:
+func _measure_sun_penumbra_ramp(final_image: Image, _base_name: String) -> Dictionary:
 	var width := final_image.get_width()
 	var height := final_image.get_height()
 	var roi_x0 := int(width * 0.30)

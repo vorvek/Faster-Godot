@@ -150,10 +150,10 @@
 			}
 		},
 		"sun_penumbra_ramp": {
-			"_note": "Soft contact-shadow characterization scene (a low, large-disc sun behind a thin wall, casting a long penumbra across a neutral floor). It pins its own short canonical settle of 16 frames: the structural edge width (sun_penumbra_width_px) is already settled there (raster reads 29 columns, the one-sample ray-traced pass reads 17), while sun_penumbra_band_hf (the mean per-column vertical scatter of the soft shadow edge, the within-column per-sample shadow noise) is still clearly above its converged floor. All four sun_penumbra_* metrics are report-only here: the caps are intentionally generous so the scene records the band width, the band noise, and the lit and occluded luma without gating yet. The width gate is calibrated once the sun half-angle convention is fixed. sun_penumbra_band_hf stays report-only because a single static frame cannot gate a noise level against an absolute cap; its real use is the before/after drop on the branch (the ray-traced before baseline at this settle is about 0.080 band_hf, vs the raster reference about 0.065), calibrated by the multi-sample shadow change.",
+			"_note": "Soft contact-shadow characterization scene (a low, large-disc sun behind a thin wall, casting a long penumbra across a neutral floor). It pins its own short canonical settle of 16 frames: the structural edge width (sun_penumbra_width_px) is settled there (raster reads 29 columns, the ray-traced pass reads about 38), while sun_penumbra_band_hf (the mean per-column vertical scatter of the soft shadow edge, the within-column per-sample shadow noise) captures the residual shadow noise at that settle. width_px and band_hf now gate: max_sun_penumbra_width_px 40 admits both the raster 29 and the ray-traced edge with headroom, and max_sun_penumbra_band_hf 0.072 sits above the raster reference band noise (about 0.065, the same cap applies to the off mode) and well below the one-sample ray-traced baseline (about 0.080), so the gate admits the raster path and the multi-sampled ray-traced path while still catching a regression back to a single shadow sample. The solid-angle-scaled multi-sample shadow drops the ray-traced band_hf from about 0.080 (one sample) to about 0.047 (balanced preset, two samples). lit_luma and occluded_luma stay report-only (generous caps) since their absolute level is not a quality gate.",
 			"thresholds": {
-				"max_sun_penumbra_width_px": 100000.0,
-				"max_sun_penumbra_band_hf": 100000.0,
+				"max_sun_penumbra_width_px": 40.0,
+				"max_sun_penumbra_band_hf": 0.072,
 				"max_sun_penumbra_lit_luma": 100000.0,
 				"max_sun_penumbra_occluded_luma": 100000.0
 			}
