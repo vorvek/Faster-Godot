@@ -9987,24 +9987,31 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_EMISSIVE_CANDIDATE_COUNT] = float(MIN((uint32_t)emissive_candidates.size(), RTGI_MAX_EMISSIVE_CANDIDATES));
 		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_EMISSIVE_CANDIDATE_TOTAL_WEIGHT] = emissive_candidate_total_weight;
 
-		uint64_t radiance_signature = _rt_radiance_signature(p_rt_flags, p_render_data ? p_render_data->environment : RID(), p_render_data ? p_render_data->camera_attributes : RID(), rt_ubo.params, background_color, background_uses_sky, rt_light_data, rt_light_count);
-		radiance_signature = _rt_history_mix(radiance_signature, p_state->emissive_candidate_signature);
-		if (!p_state->radiance_history_signature_valid) {
-			p_state->radiance_history_signature = radiance_signature;
-			p_state->radiance_history_signature_valid = true;
-		} else if (p_state->radiance_history_signature != radiance_signature) {
-			p_state->radiance_history_signature = radiance_signature;
-			p_state->radiance_history_invalidated = true;
-		}
+		// The radiance signature must be computed exactly once per frame, from
+		// dispatch-invariant inputs. The WRC/SPG/primary-direct flavors of this call
+		// alternate flags and override param slots; hashing those made the stored
+		// signature flip-flop across flavors and reset temporal history every frame.
+		const bool dispatch_flavor_call = (p_rt_flags & (SceneShaderRaytracing::RT_FLAG_WRC_PROBE_UPDATE | SceneShaderRaytracing::RT_FLAG_SPG_GATHER | SceneShaderRaytracing::RT_FLAG_PRIMARY_DIRECT)) != 0;
+		if (!dispatch_flavor_call) {
+			uint64_t radiance_signature = _rt_radiance_signature(p_rt_flags, p_render_data ? p_render_data->environment : RID(), p_render_data ? p_render_data->camera_attributes : RID(), rt_ubo.params, background_color, background_uses_sky, rt_light_data, rt_light_count);
+			radiance_signature = _rt_history_mix(radiance_signature, p_state->emissive_candidate_signature);
+			if (!p_state->radiance_history_signature_valid) {
+				p_state->radiance_history_signature = radiance_signature;
+				p_state->radiance_history_signature_valid = true;
+			} else if (p_state->radiance_history_signature != radiance_signature) {
+				p_state->radiance_history_signature = radiance_signature;
+				p_state->radiance_history_invalidated = true;
+			}
 
-		if (_rt_light_change_requires_history_reset(p_state, rt_light_data, rt_light_count)) {
-			p_state->radiance_history_invalidated = true;
+			if (_rt_light_change_requires_history_reset(p_state, rt_light_data, rt_light_count)) {
+				p_state->radiance_history_invalidated = true;
+			}
+			if (rt_light_count > 0) {
+				memcpy(p_state->previous_light_data, rt_light_data, rt_light_count * sizeof(RT_LightData));
+			}
+			p_state->previous_light_count = rt_light_count;
+			p_state->previous_light_data_valid = true;
 		}
-		if (rt_light_count > 0) {
-			memcpy(p_state->previous_light_data, rt_light_data, rt_light_count * sizeof(RT_LightData));
-		}
-		p_state->previous_light_count = rt_light_count;
-		p_state->previous_light_data_valid = true;
 
 		// Upload light buffer.
 		{
