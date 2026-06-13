@@ -63,7 +63,8 @@ bool rt_spg_gather_mode() {
 bool rt_probe_dispatch_mode() {
 	// WRC-update and SPG-gather launches are 1D probe feeds; their hits must never
 	// run the screen-pixel primary writers or the reservoir machinery, exactly like
-	// the hybrid_primary exclusion for raster-owned camera primaries.
+	// the hybrid_primary local flag in shade_and_bounce excludes raster-owned camera
+	// primaries.
 	return rt_wrc_probe_update_mode() || rt_spg_gather_mode();
 }
 

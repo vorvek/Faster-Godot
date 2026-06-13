@@ -4154,6 +4154,49 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				const uint32_t pd_flags = rt_flags | (rt_fpt_reference ? 0u : SceneShaderRaytracing::RT_FLAG_PRIMARY_DIRECT);
 				raytracing->dispatch_primary_direct_backend(rt_backend_context, pd_flags);
 				rt_state = rt_backend_context.viewport_state;
+
+				// Publish this frame's screen-space ReSTIR state into the PREV slots so NEXT
+				// frame's temporal merge (lights_merge_previous_direct_reservoir) and 4-tap
+				// spatial reuse have real data to reproject. The PREV set was allocated, bound,
+				// and read since the reservoir landed but never written: no shader wrote it and
+				// no CPU copy refreshed it, so previous_key stayed 0 and every history tap
+				// rejected (reuse was dead). FPT-only: this gates on the same condition as the
+				// dispatch above, and Hybrid traces no screen rays so it produces no reservoir
+				// and needs no copies. Each texture is a per-view 2D array (rt_size, layer per
+				// view; see rt_ensure_textures), so copy layer-by-layer like the TAA history
+				// copy does. texture_copy inserts its own barriers; it reads the same current
+				// textures the resolve consumes, so its ordering against the resolve above does
+				// not matter (both read, none mutate the current set).
+				//
+				// The merge's reprojection-accept gate (rt_source_direct_history_accept) reads two
+				// further previous-frame inputs: the per-pixel history validity and history id PREV
+				// textures (bindings 51/52). On the RTGI path nothing else publishes them: the TAA
+				// effect is fed RID() for the RT history on every RTGI path (see the taa->process
+				// call below) and the harness runs FPT with TAA off, so without these two copies the
+				// accept gate rejects on rt_prev_history_validity < 0.5 for every pixel and the five
+				// reservoir/guide copies above are inert. The current history validity/id are written
+				// by write_primary_hit_history_validity in the FPT dispatch, so publishing them here
+				// (same extent + view loop) completes the seven-input chain the accept gate needs.
+				// These are the RT-history pair (29/30 -> 51/52) that the reservoir accept gate reads,
+				// distinct from the viewport/hybrid TAA history (rt_get_taa_prev_* / rt_get_hybrid_taa_prev_*)
+				// that TAA owns; we do not touch those.
+				const Size2i restir_rt_size = rb_data->rt_get_size();
+				const uint32_t restir_view_count = p_render_data->scene_data->view_count;
+				auto copy_to_prev = [&](RID p_src, RID p_dst) {
+					if (p_src.is_valid() && p_dst.is_valid()) {
+						for (uint32_t v = 0; v < restir_view_count; v++) {
+							RD::get_singleton()->texture_copy(p_src, p_dst, Vector3(), Vector3(), Vector3(restir_rt_size.x, restir_rt_size.y, 1), 0, 0, v, v);
+						}
+					}
+				};
+				copy_to_prev(rb_data->rt_get_source_direct_reservoir(), rb_data->rt_get_source_direct_reservoir_prev());
+				copy_to_prev(rb_data->rt_get_source_direct_reservoir_lighting(), rb_data->rt_get_source_direct_reservoir_lighting_prev());
+				copy_to_prev(rb_data->rt_get_source_direct_candidate_key(), rb_data->rt_get_source_direct_candidate_key_prev());
+				copy_to_prev(rb_data->rt_get_normal_roughness(), rb_data->rt_get_source_normal_roughness_prev());
+				copy_to_prev(rb_data->rt_get_viewz_hitdist(), rb_data->rt_get_source_viewz_hitdist_prev());
+				copy_to_prev(rb_data->rt_get_history_validity(), rb_data->rt_get_prev_history_validity());
+				copy_to_prev(rb_data->rt_get_history_id(), rb_data->rt_get_prev_history_id());
+
 				RD::get_singleton()->draw_command_end_label();
 			}
 

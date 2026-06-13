@@ -1208,6 +1208,7 @@ void lights_merge_previous_direct_reservoir(
 	uint selected_idx = 0u;
 	float selected_weight = 0.0;
 	float found_total_weight = 0.0;
+	float previous_m_uncapped = max(previous_reservoir.z, 1.0);
 	float previous_m = clamp(previous_reservoir.z, 1.0, 32.0);
 
 	if (lights_find_direct_source_by_id(previous_source_id, light_count, receiver_layer_mask, false, hit_pos, N, selected_idx, selected_weight, found_total_weight)) {
@@ -1217,7 +1218,11 @@ void lights_merge_previous_direct_reservoir(
 			RTDirectLighting current_lighting = lights_evaluate_single_direct_light_split(rt_lights[selected_idx], current_pdf, hit_pos, geometry_normal, N, V, material, rng_state, false);
 			float current_target = rt_direct_reservoir_target(current_lighting);
 			float previous_target = max(previous_lighting.a, 1e-6);
-			float previous_weight_sum = max(previous_reservoir.y, 0.0);
+			// M-capped ReSTIR: when previous_m is clamped to the cap, the carried weight_sum
+			// must be scaled by the same ratio, or weight_sum/M (the resolve's contribution
+			// weight) inflates every frame and the image blows out. previous_m/previous_m_uncapped
+			// is 1.0 until history exceeds the cap, then damps the carried weight to the cap.
+			float previous_weight_sum = max(previous_reservoir.y, 0.0) * (previous_m / previous_m_uncapped);
 			float candidate_weight = current_target * previous_weight_sum / previous_target;
 			if (current_target > 0.0 && candidate_weight > 0.0) {
 				rt_direct_reservoir_update(reservoir, current_key, current_lighting, current_pdf, current_target, candidate_weight, previous_m, previous_reservoir.w, rng_state);
@@ -1370,10 +1375,11 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 	}
 
 	// Probe-feed dispatches (WRC update / SPG gather) keep ONLY the local single-frame
-	// reservoir they just built above plus the resolve below; the temporal/spatial reuse
+	// reservoir they just built above plus the resolve below; the cross-frame reuse below
+	// (the temporal merge AND the 4-tap spatial reuse loop, both nested in this block)
 	// reads and merges screen-pixel reservoir state (reprojected from the camera buffers at
 	// (ray_index, 0)), which has nothing to do with the world point a probe ray sampled.
-	// Gate the merge so probe radiance stays self-contained; the resolve still runs.
+	// Gate both so probe radiance stays self-contained; the resolve still runs.
 	if (!is_indirect_bounce && !rt_probe_dispatch_mode()) {
 		ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
 		ivec2 previous_pixel = ivec2(0);

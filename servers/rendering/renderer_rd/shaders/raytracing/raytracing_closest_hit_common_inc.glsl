@@ -822,6 +822,15 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		vec3 emissive_diffuse = rt_clamp_path_contribution(raw_emissive_diffuse, material_roughness, m.metalness, is_indirect, true);
 		vec3 emissive_specular = rt_clamp_path_contribution(raw_emissive_specular, material_roughness, m.metalness, is_indirect, true);
 		vec3 explicit_emissive_total = reflections_only ? emissive_specular : emissive_diffuse + emissive_specular;
+		// Recorded at ALL bounces (no !is_indirect gate, unlike the direct path above) on
+		// purpose: rt_source_candidate_record keeps the per-pixel MAX-luminance emissive
+		// reaching this pixel (including via a bounce), which feeds the unified candidate /
+		// debug texture, not the direct-light reservoir. The emissive key is
+		// RT_SOURCE_CLASS_EMISSIVE; the direct reservoir, its candidate-key match, and the
+		// temporal/spatial merge are all hard-gated to RT_SOURCE_CLASS_DIRECT (and to an exact
+		// key match), so an indirect emissive hit can never enter or corrupt the direct
+		// reservoir's source-key history. The direct path IS !is_indirect gated precisely
+		// because it writes that screen-pixel-primary reservoir.
 		if (!rt_probe_dispatch_mode()) {
 			rt_source_candidate_record(ivec2(gl_LaunchIDEXT.xy), 0.50, emissive_distribution_debug, clamp(emissive_pdf * 64.0, 0.0, 1.0), explicit_emissive_total, 0.0, emissive_source_key);
 		}
