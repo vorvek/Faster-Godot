@@ -1410,7 +1410,11 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		return deterministic_sum;
 	}
 
-	uint candidate_count = min(valid_count, is_indirect_bounce ? 2u : RT_LIGHT_RESERVOIR_SIZE);
+	// The screen primary's RIS candidate budget is a per-preset hidden setting (the
+	// shadow-ray budget knob), carried in RT_PARAM_DIRECT_RIS_CANDIDATES and clamped to the
+	// compile-time reservoir array bound. Indirect bounces keep their cheap fixed 2u budget.
+	uint ris_budget = uint(get_rt_param(RT_PARAM_DIRECT_RIS_CANDIDATES));
+	uint candidate_count = min(valid_count, is_indirect_bounce ? 2u : clamp(ris_budget, 2u, uint(RT_LIGHT_RESERVOIR_SIZE)));
 	RTDirectLightReservoir reservoir = rt_direct_light_reservoir_empty();
 	for (uint candidate = 0u; candidate < RT_LIGHT_RESERVOIR_SIZE; candidate++) {
 		if (candidate >= candidate_count) {

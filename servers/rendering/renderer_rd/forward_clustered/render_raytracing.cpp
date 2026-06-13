@@ -9924,6 +9924,14 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			}
 		}
 		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_BACKEND] = float(active_backend);
+		// Per-preset direct-light RIS candidate budget (the shadow-ray budget knob). Written
+		// for ALL dispatch flavors (the env fill above leaves slot 36 at 0.0; the only reader
+		// is the FPT screen-primary stochastic estimator's RIS candidate loop). Default 16
+		// reproduces the prior hardcoded reservoir cap, so the value is bit-identical to today
+		// at the default; a non-default value is a real config change. It is folded into the
+		// radiance signature with the other params, which is correct: it is consistent every
+		// frame, so it never triggers a perpetual history reset.
+		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_DIRECT_RIS_CANDIDATES] = float(p_state->direct_ris_candidates);
 		// WRC probe-update needs the WRC's own clipmap values (which the WRC atlas was
 		// sized from) for probe-addressing. These were moved off the borrowed STRC slots
 		// onto the WRC producer-owned RT_PARAM_RTGI_WRC_* slots, so the STRC slots are no

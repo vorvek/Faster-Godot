@@ -137,6 +137,7 @@ public:
 	static constexpr int RT_PARAM_RTGI_STRC_RAYS_PER_FRAME = RSE::PT_PARAM_RTGI_STRC_RAYS_PER_FRAME;
 	static constexpr int RT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT = RSE::PT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT;
 	static constexpr int RT_PARAM_RTGI_BACKEND = RSE::PT_PARAM_RTGI_BACKEND;
+	static constexpr int RT_PARAM_DIRECT_RIS_CANDIDATES = RSE::PT_PARAM_DIRECT_RIS_CANDIDATES;
 	static constexpr int RT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES = RSE::PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES;
 	// Screen Probe Gather (SPG) params. These are renderer-internal RT-param slots
 	// (not part of RSE::PathtracingParamIndex / PT_PARAM_MAX): the SPG gather dispatch

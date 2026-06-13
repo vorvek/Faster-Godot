@@ -110,6 +110,12 @@ var _rtgi_resolution_scale_override := NAN
 var _rtgi_energy_override := NAN
 # 0 means "absent"; requested values are clamped to 1..16.
 var _rtgi_samples_per_pixel_override := 0
+# Per-preset direct-light RIS candidate budget override (the shadow-ray budget knob).
+# 0 means "absent"; a requested value is clamped to 2..16 and written to all three
+# rendering/rtgi/direct_light/<tier>/ris_candidates Project Settings BEFORE scene build,
+# so whatever preset the scene authors picks it up (the renderer reads it live via
+# GLOBAL_GET, no restart). The effective read-back value is recorded in the metrics JSON.
+var _rtgi_ris_candidates_override := 0
 var _upscaler_override := ""
 var _scale_3d_override := NAN
 var _camera: Camera3D
@@ -126,6 +132,14 @@ var _normal_flip_cache := {}
 
 func _ready() -> void:
 	_parse_args()
+	if _rtgi_ris_candidates_override > 0:
+		# Write the requested RIS candidate budget to all three per-preset tier settings
+		# BEFORE the scene (and its Environment) is built, so whichever preset the scene
+		# authors resolves to picks it up. The renderer reads these live via GLOBAL_GET each
+		# frame, so no restart is needed. Setting all three covers performance/balanced/
+		# production uniformly for the ladder sweep.
+		for _tier in ["performance", "balanced", "production"]:
+			ProjectSettings.set_setting("rendering/rtgi/direct_light/%s/ris_candidates" % _tier, _rtgi_ris_candidates_override)
 	if DisplayServer.get_name().to_lower() != "headless":
 		# Measurement runs must not be paced by the display: with vsync on, the
 		# settle loop and every capture frame serialize on vblank.
@@ -385,6 +399,8 @@ func _parse_args() -> void:
 				push_warning("Invalid --rtgi-energy value '%s'; ignoring the flag." % energy_text)
 		elif arg.begins_with("--rtgi-samples-per-pixel="):
 			_rtgi_samples_per_pixel_override = clampi(arg.trim_prefix("--rtgi-samples-per-pixel=").to_int(), 1, 16)
+		elif arg.begins_with("--rtgi-ris-candidates="):
+			_rtgi_ris_candidates_override = clampi(arg.trim_prefix("--rtgi-ris-candidates=").to_int(), 2, 16)
 		elif arg.begins_with("--rtgi-upscaler="):
 			var upscaler := arg.trim_prefix("--rtgi-upscaler=").to_lower()
 			if upscaler in ["none", "taa", "fsr2"]:
@@ -1459,6 +1475,11 @@ func _collect_applied_override_metrics() -> Dictionary:
 	applied["override_rtgi_resolution_scale"] = _rtgi_resolution_scale_override if not is_nan(_rtgi_resolution_scale_override) else null
 	applied["override_rtgi_energy"] = _rtgi_energy_override if not is_nan(_rtgi_energy_override) else null
 	applied["override_rtgi_samples_per_pixel"] = _rtgi_samples_per_pixel_override if _rtgi_samples_per_pixel_override > 0 else null
+	applied["override_rtgi_ris_candidates"] = _rtgi_ris_candidates_override if _rtgi_ris_candidates_override > 0 else null
+	# Effective read-back: the renderer resolves the active tier live, so echo what the
+	# Project Setting now holds (all three tiers were set identically by the override). At
+	# the default (no flag) this is the registered tier default (16 at landing).
+	applied["applied_rtgi_ris_candidates"] = int(ProjectSettings.get_setting("rendering/rtgi/direct_light/balanced/ris_candidates", 16))
 	applied["override_upscaler"] = _upscaler_override
 	applied["override_scale_3d"] = _scale_3d_override if not is_nan(_scale_3d_override) else null
 	return applied

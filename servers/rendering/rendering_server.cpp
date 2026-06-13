@@ -3949,6 +3949,20 @@ void RenderingServer::init() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/gi_resolve/balanced/cold_start_fade_time", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 0.5);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/gi_resolve/production/cold_start_fade_time", PROPERTY_HINT_RANGE, "0.0,1.0,0.01"), 0.5);
 
+	// RTGI direct-light RIS candidate budget (the per-frame shadow-ray budget). The
+	// stochastic direct-lighting estimator draws this many light candidates per pixel
+	// into the reservoir before resolving (one shadow ray each). Fewer candidates is
+	// cheaper; with the temporal+spatial reservoir reuse live, fewer candidates can hold
+	// quality at lower cost. The compile-time reservoir array stays 16 (the hint ceiling);
+	// only the runtime candidate count varies per preset. The same per-scene
+	// Environment.rtgi_quality_preset selector that picks the SPG/GI-resolve tiers picks one
+	// of these, resolved live (no restart) by _resolve_direct_light_params. The
+	// deterministic-light regime and indirect bounces are unaffected (they never enter the
+	// RIS candidate loop). Tuned per tier from light_grid measurement (WS3).
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/direct_light/performance/ris_candidates", PROPERTY_HINT_RANGE, "2,16,1"), 4);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/direct_light/balanced/ris_candidates", PROPERTY_HINT_RANGE, "2,16,1"), 8);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/direct_light/production/ris_candidates", PROPERTY_HINT_RANGE, "2,16,1"), 16);
+
 	// FPT reference oracle TAA: the oracle is a very noisy full path trace used as an A/B reference, so it runs
 	// its own heavy-denoise TAA history weight and overrides the viewport TAA when active.
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/rtgi/fpt_reference_taa/history_weight", PROPERTY_HINT_RANGE, "0.0,0.99,0.001"), 0.95);

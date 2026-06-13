@@ -495,6 +495,13 @@ struct RTViewportState {
 	uint32_t spg_wrc_oct_res = 0;
 	float spg_fallback_conf = 0.0f;
 
+	// Per-preset direct-light RIS candidate budget (the shadow-ray budget knob), resolved
+	// from the rendering/rtgi/direct_light/<tier> Project Settings and channeled to
+	// update_uniform_set, which writes it into RT_PARAM_DIRECT_RIS_CANDIDATES every frame
+	// (unconditionally, all dispatch flavors: only the screen primary's stochastic estimator
+	// reads it). Default 16 reproduces the prior hardcoded reservoir cap.
+	uint32_t direct_ris_candidates = 16u;
+
 	uint64_t radiance_history_signature = 0;
 	bool radiance_history_signature_valid = false;
 	bool radiance_history_invalidated = false;

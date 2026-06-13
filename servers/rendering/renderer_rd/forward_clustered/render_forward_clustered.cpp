@@ -259,6 +259,27 @@ static RendererRD::RTGIGIResolve::GiResolveParams _resolve_gi_resolve_params(uin
 	return params;
 }
 
+// Resolves the active direct-light RIS candidate budget (the per-frame shadow-ray budget)
+// from the per-preset Project Settings.
+// preset: 1=Performance, 2=Balanced, 3=Production; anything else (incl. 0=Custom) -> Balanced.
+// CLAMPed to the same [2,16] range the GLOBAL_DEF hint specifies and the shader re-clamps
+// (the compile-time RT_LIGHT_RESERVOIR_SIZE = 16 is the ceiling), mirroring
+// _resolve_gi_resolve_params's GLOBAL_GET + CLAMP pattern (same tier source: the
+// Environment's rtgi_quality_preset carried on the params as p_preset).
+static void _resolve_direct_light_params(uint32_t p_preset, uint32_t *r_ris_candidates) {
+	const char *prefix;
+	switch (p_preset) {
+		case 1: prefix = "rendering/rtgi/direct_light/performance/"; break;
+		case 3: prefix = "rendering/rtgi/direct_light/production/"; break;
+		case 2:
+		default: prefix = "rendering/rtgi/direct_light/balanced/"; break;
+	}
+	const String base = String(prefix);
+	if (r_ris_candidates) {
+		*r_ris_candidates = (uint32_t)CLAMP(int32_t(GLOBAL_GET(base + "ris_candidates")), 2, 16);
+	}
+}
+
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_specular() {
 	ERR_FAIL_NULL(render_buffers);
 
@@ -2961,6 +2982,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// GI-Resolve params. Hoisted alongside spg_params for the resolve dispatch site
 	// below; spatial_iterations is overridden below once the denoiser is known.
 	RendererRD::RTGIGIResolve::GiResolveParams resolve_params = _resolve_gi_resolve_params(rtgi_quality_preset_sel);
+	// Direct-light RIS candidate budget (the shadow-ray budget knob). Resolved from the same
+	// per-preset tier selector; carried to the FPT screen-primary estimator through the params
+	// UBO (channeled via the viewport state below, then written unconditionally in
+	// update_uniform_set). At the default 16 it reproduces the prior hardcoded reservoir cap.
+	uint32_t rtgi_ris_candidates = 16u;
+	_resolve_direct_light_params(rtgi_quality_preset_sel, &rtgi_ris_candidates);
 	if (rt_gi_active) {
 		if (rtgi_wrc != nullptr && rb.is_valid()) {
 			rtgi_wrc->ensure_resources(rb, wrc_params, (int)rb->get_view_count());
@@ -3401,6 +3428,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		rt_state = rt_backend_context.viewport_state;
 		rt_uniform_set = rt_backend_context.uniform_set;
 		rt_pipeline = rt_backend_context.pipeline;
+		// Channel the per-preset RIS candidate budget into the viewport state so
+		// update_uniform_set writes it into RT_PARAM_DIRECT_RIS_CANDIDATES for every dispatch
+		// flavor this frame (the FPT screen-primary estimator is the sole reader).
+		if (rt_state) {
+			rt_state->direct_ris_candidates = rtgi_ris_candidates;
+		}
 		if (rt_backend_context.radiance_history_invalidated) {
 			reject_rt_previous_history();
 			if (rt_state) {

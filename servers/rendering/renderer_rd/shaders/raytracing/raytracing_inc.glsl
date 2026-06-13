@@ -52,7 +52,8 @@
 #define RT_PARAM_RTGI_STRC_RAYS_PER_FRAME 33 // rt_params[8].y - Probe update ray budget
 #define RT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT 34 // rt_params[8].z - Probe temporal accumulation weight
 #define RT_PARAM_RTGI_BACKEND 35 // rt_params[8].w - RTGI backend
-// rt_params[9].x / [9].y (indices 36, 37): free (removed dead, never-wired STRC static / dynamic visual-layer masks).
+#define RT_PARAM_DIRECT_RIS_CANDIDATES 36 // rt_params[9].x - Per-preset direct-light RIS candidate budget (shadow-ray budget). Must match RSE::PT_PARAM_DIRECT_RIS_CANDIDATES.
+// rt_params[9].y (index 37): free (removed dead, never-wired STRC visual-layer mask).
 #define RT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES 38 // rt_params[9].z - Screen-space diffuse cache entry budget
 // Screen Probe Gather (SPG) params (indices 39..44). Renderer-internal RT-param slots
 // filled by update_uniform_set's RT_FLAG_SPG_GATHER override (the gather dispatch), not

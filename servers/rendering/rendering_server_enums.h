@@ -858,7 +858,13 @@ enum PathtracingParamIndex {
 	PT_PARAM_RTGI_STRC_RAYS_PER_FRAME = 33,
 	PT_PARAM_RTGI_STRC_TEMPORAL_WEIGHT = 34,
 	PT_PARAM_RTGI_BACKEND = 35,
-	// 36, 37 free: removed dead, never-wired STRC static/dynamic visual-layer params.
+	// Slot 36 (was free after the dead STRC visual-layer params): the per-preset direct-light
+	// RIS candidate budget (the shadow-ray budget knob). The estimator reads it via the shader
+	// RT_PARAM_DIRECT_RIS_CANDIDATES define at the SAME index. It is NOT filled from the
+	// Environment params (pathtracing_params_to_shader_floats leaves it 0); the renderer writes
+	// the per-preset-resolved value into the params UBO every frame in update_uniform_set.
+	PT_PARAM_DIRECT_RIS_CANDIDATES = 36,
+	// 37 free: removed dead, never-wired STRC static/dynamic visual-layer param.
 	PT_PARAM_RTGI_DIFFUSE_CACHE_MAX_ENTRIES = 38,
 	PT_PARAM_MAX = 39,
 };
