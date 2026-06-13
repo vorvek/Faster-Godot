@@ -8626,13 +8626,11 @@ RTViewportState *RenderRaytracing::build_tlas(const RenderDataRD *p_render_data,
 		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, p_mat.emission_color[1]);
 		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, p_mat.emission_color[2]);
 		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, p_mat.emission_strength);
-		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, weight);
 		current_emissive_candidate_signature = _rt_history_mix(current_emissive_candidate_signature, candidate.flags);
 		current_emissive_candidate_signature = _rt_history_mix(current_emissive_candidate_signature, candidate.primitive_count);
-		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, candidate.primitive_weight_sum);
-		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, p_transform.origin.x);
-		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, p_transform.origin.y);
-		current_emissive_candidate_signature = _rt_history_mix_float(current_emissive_candidate_signature, p_transform.origin.z);
+		// Smooth transform motion is reprojection's job; hashing origin or the world-space
+		// area terms reset temporal history every frame for any moving or scaling emissive.
+		// Set/topology/material changes still churn the signature through the fields above.
 	};
 
 	const PagedArray<RenderGeometryInstance *> &rt_instances = *p_render_data->rt_instances;
