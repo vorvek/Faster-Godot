@@ -885,7 +885,7 @@ public:
 	RTViewportState *build_tlas(const RenderDataRD *p_render_data, uint32_t p_rt_flags);
 	void populate_backend_scene_resources(RTViewportState *p_state, RTGIBackendSceneResources &r_resources) const;
 	void populate_backend_scene_snapshot(RTViewportState *p_state, RTGIBackendSceneSnapshot &r_snapshot) const;
-	uint32_t gather_lights(const RenderDataRD *p_render_data, RT_LightData *r_light_data, uint32_t p_max_lights);
+	uint32_t gather_lights(const RenderDataRD *p_render_data, const RTViewportState *p_state, RT_LightData *r_light_data, uint32_t p_max_lights);
 	RID update_uniform_set(RTViewportState *p_state, const RenderDataRD *p_render_data, uint32_t p_rt_flags);
 	bool prepare_backend_frame(const RenderDataRD *p_render_data, uint32_t p_rt_flags, RTGIBackendFrameContext &r_context);
 	RTGIBackendDispatchResult dispatch_path_trace_backend(RTGIBackendFrameContext &r_context);

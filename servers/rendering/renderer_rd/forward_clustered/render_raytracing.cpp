@@ -1237,21 +1237,35 @@ static uint64_t _rt_radiance_signature(uint32_t p_rt_flags, RID p_environment, R
 		if (i == SceneShaderRaytracing::RT_PARAM_FRAME_INDEX) {
 			continue;
 		}
+		if (i == SceneShaderRaytracing::RT_PARAM_EMISSIVE_CANDIDATE_TOTAL_WEIGHT) {
+			// Continuous world-space-area selection weight; it ticks every frame a
+			// smoothly moving emissive mesh animates. Discrete emissive set/material
+			// changes already churn the emissive candidate signature, which is mixed
+			// into the radiance signature by the caller.
+			continue;
+		}
 		signature = _rt_history_mix_float(signature, p_rt_params[i]);
 	}
 	signature = _rt_history_mix(signature, p_background_uses_sky ? 1u : 0u);
 	signature = _rt_history_mix_color(signature, p_background_color);
 	signature = _rt_history_mix(signature, p_light_count);
+	// Order-independent fold: camera-driven re-sorting must not change the signature.
+	// Each light hashes into its own inner chain (seeded with its stable source_id so
+	// distinct lights with identical fields cannot cancel), then XOR combines them.
+	uint64_t light_fold = 0;
 	for (uint32_t i = 0; i < p_light_count; i++) {
 		const RT_LightData &ld = p_light_data[i];
-		signature = _rt_history_mix(signature, ld.type);
+		uint64_t light_hash = _rt_history_mix(0x6c69676874ULL, ld.source_id);
+		light_hash = _rt_history_mix(light_hash, ld.type);
 		// Keep smooth animated light changes temporal. Resetting on every
 		// carried-lantern energy/position tick prevents the denoiser from ever
 		// converging on characters lit by that lantern.
-		signature = _rt_history_mix(signature, ld.flags);
-		signature = _rt_history_mix(signature, ld.cull_mask);
-		signature = _rt_history_mix(signature, ld.shadow_caster_mask);
+		light_hash = _rt_history_mix(light_hash, ld.flags);
+		light_hash = _rt_history_mix(light_hash, ld.cull_mask);
+		light_hash = _rt_history_mix(light_hash, ld.shadow_caster_mask);
+		light_fold ^= light_hash; // XOR commutes; the inner hash keeps fields coupled.
 	}
+	signature = _rt_history_mix(signature, light_fold);
 	return signature;
 }
 
@@ -1284,17 +1298,31 @@ static bool _rt_light_relative_delta_exceeds(float p_previous, float p_current, 
 	return delta > p_absolute_threshold && delta / scale > p_relative_threshold;
 }
 
-static bool _rt_light_change_requires_history_reset(RTViewportState *p_state, const RT_LightData *p_light_data, uint32_t p_light_count) {
+static bool _rt_light_change_requires_history_reset(const RTViewportState *p_state, const RT_LightData *p_light_data, uint32_t p_light_count) {
 	if (!p_state->previous_light_data_valid) {
 		return false;
 	}
 	if (p_state->previous_light_count != p_light_count) {
-		return true;
+		return true; // Set membership changed (a light appeared or disappeared).
 	}
 
+	// Match lights across frames by their stable source_id; the array order is the
+	// camera-distance score order and re-sorts whenever the camera moves. With equal
+	// counts, every new id finding a previous match implies set equality (source_ids
+	// are unique per light instance).
 	for (uint32_t i = 0; i < p_light_count; i++) {
-		const RT_LightData &previous = p_state->previous_light_data[i];
 		const RT_LightData &current = p_light_data[i];
+		const RT_LightData *previous_match = nullptr;
+		for (uint32_t j = 0; j < p_state->previous_light_count; j++) {
+			if (p_state->previous_light_data[j].source_id == current.source_id) {
+				previous_match = &p_state->previous_light_data[j];
+				break;
+			}
+		}
+		if (previous_match == nullptr) {
+			return true; // New light in the set.
+		}
+		const RT_LightData &previous = *previous_match;
 
 		if (previous.type != current.type || previous.flags != current.flags || previous.cull_mask != current.cull_mask || previous.shadow_caster_mask != current.shadow_caster_mask) {
 			return true;
@@ -9315,7 +9343,7 @@ void RenderRaytracing::populate_backend_scene_snapshot(RTViewportState *p_state,
 // Light gathering
 // ---------------------------------------------------------------------------
 
-uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, RT_LightData *r_light_data, uint32_t p_max_lights) {
+uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, const RTViewportState *p_state, RT_LightData *r_light_data, uint32_t p_max_lights) {
 	uint32_t rt_light_count = 0;
 
 	if (!p_render_data || !p_render_data->lights) {
@@ -9389,6 +9417,7 @@ uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, RT_L
 		RID light_instance;
 		float score;
 		uint32_t cull_mask;
+		uint32_t source_id; // Stable per-light id, for cross-frame retention at the cap.
 	};
 
 	LocalVector<LightScore> positional_lights;
@@ -9441,6 +9470,7 @@ uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, RT_L
 		ls_entry.light_instance = light_instance;
 		ls_entry.score = score;
 		ls_entry.cull_mask = cull_mask;
+		ls_entry.source_id = _rt_light_source_id(light_instance, ls->light_get_type(base));
 		positional_lights.push_back(ls_entry);
 		positional_lights_seen.insert(light_instance);
 	};
@@ -9530,8 +9560,57 @@ uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, RT_L
 			select_positional_light(positional_lights[i]);
 		}
 	}
+	const uint32_t coverage_selected_count = selected_positional_lights.size();
 	for (uint32_t i = 0; i < positional_lights.size() && selected_positional_lights.size() < positional_budget; i++) {
 		select_positional_light(positional_lights[i]);
+	}
+
+	// Sticky selection at the cap: a light selected last frame keeps its slot unless a
+	// newcomer beats it decisively, so score flutter at the budget boundary cannot flap
+	// set membership (every flap is a full temporal-history reset). Only pass-2
+	// (score-fill) selections are swappable; pass-1 coverage picks are never displaced,
+	// preserving the cull-mask receiver coverage guarantee.
+	if (positional_lights.size() > positional_budget && p_state && p_state->previous_light_data_valid) {
+		auto was_previously_selected = [&](uint32_t p_source_id) {
+			for (uint32_t j = 0; j < p_state->previous_light_count; j++) {
+				if (p_state->previous_light_data[j].source_id == p_source_id) {
+					return true;
+				}
+			}
+			return false;
+		};
+		// positional_lights is sorted by descending score, so evicted incumbents are
+		// visited strongest first. Each swap removes the weakest remaining newcomer
+		// (the next weakest scores higher) while later incumbents score lower, so a
+		// single pass terminates with no further swap applicable.
+		for (uint32_t i = 0; i < positional_lights.size(); i++) {
+			const LightScore &evicted = positional_lights[i];
+			if (selected_positional_set.has(evicted.light_instance)) {
+				continue;
+			}
+			if (!was_previously_selected(evicted.source_id)) {
+				continue;
+			}
+			// Weakest pass-2 selection that was NOT selected last frame.
+			int64_t weakest_newcomer = -1;
+			for (uint32_t s = coverage_selected_count; s < selected_positional_lights.size(); s++) {
+				if (was_previously_selected(selected_positional_lights[s].source_id)) {
+					continue;
+				}
+				if (weakest_newcomer < 0 || selected_positional_lights[s].score < selected_positional_lights[weakest_newcomer].score) {
+					weakest_newcomer = (int64_t)s;
+				}
+			}
+			if (weakest_newcomer < 0) {
+				break; // No newcomers left to displace.
+			}
+			if (evicted.score < 0.5f * selected_positional_lights[weakest_newcomer].score) {
+				break; // The newcomer wins decisively; weaker incumbents lose too.
+			}
+			selected_positional_set.erase(selected_positional_lights[weakest_newcomer].light_instance);
+			selected_positional_set.insert(evicted.light_instance);
+			selected_positional_lights[weakest_newcomer] = evicted;
+		}
 	}
 
 	// Fill remaining slots with selected positional lights.
@@ -9979,7 +10058,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		uint32_t rt_light_count = 0;
 		RT_LightData rt_light_data[RT_LIGHTS_MAX] = {};
 
-		rt_light_count = gather_lights(p_render_data, rt_light_data, RT_LIGHTS_MAX);
+		rt_light_count = gather_lights(p_render_data, p_state, rt_light_data, RT_LIGHTS_MAX);
 
 		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_LIGHT_COUNT] = float(rt_light_count);
 		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_EMISSIVE_CANDIDATE_COUNT] = float(MIN((uint32_t)emissive_candidates.size(), RTGI_MAX_EMISSIVE_CANDIDATES));
