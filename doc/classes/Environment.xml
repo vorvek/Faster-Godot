@@ -549,5 +549,8 @@
 		<constant name="RTGI_DENOISER_REACTIVE" value="11" enum="RTGIDenoiser">
 			GI-aware reactive denoise. Derives a reactive mask from the RTGI resolve's per-pixel temporal confidence and feeds it to the FSR2 reactive channel and the XeSS responsive-pixel mask, so the temporal upscaler trusts the current frame where GI just disoccluded or is low-confidence.
 		</constant>
+		<constant name="RT_DEBUG_DIRECT_LIGHT_REGIME" value="27" enum="PathtracingDebugMode">
+			Visualizes the direct lighting estimator: green encodes the per-pixel valid positional light count, the hue shifts when the pixel crosses from per-light evaluation into reservoir (RIS) sampling, and brightness shows the temporal reuse depth.
+		</constant>
 	</constants>
 </class>

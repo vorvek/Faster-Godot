@@ -1311,6 +1311,7 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		out uint out_direct_source_temporal_reject,
 		out uint out_direct_source_spatial_reject,
 		out uint out_direct_source_visibility_failures,
+		out uint out_valid_light_count,
 		bool p_use_blue_noise_u,
 		vec2 p_blue_noise_u) {
 	out_source_key = 0u;
@@ -1326,6 +1327,11 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 	out_direct_source_temporal_reject = RT_SOURCE_REJECT_PREV_UV;
 	out_direct_source_spatial_reject = RT_SOURCE_REJECT_PREV_UV;
 	out_direct_source_visibility_failures = 0u;
+	// Positional valid-light count for the direct-light regime debug view (Channel A). Set from
+	// `valid_count` (the positional count below) once it is known; stays 0 on the empty-set early
+	// returns. NOT derived from ris_budget/candidate_count -- those are the per-frame shadow-ray
+	// budget, not the regime classifier.
+	out_valid_light_count = 0u;
 	if (light_count == 0u) {
 		return rt_direct_lighting_zero();
 	}
@@ -1370,6 +1376,11 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		valid_count++;
 		total_weight += light_weight;
 	}
+
+	// Publish the positional valid count for the regime debug view. This is the classifier the
+	// deterministic/RIS branch keys on (valid_count <= deterministic_light_limit), distinct from
+	// the candidate_count/ris_budget shadow-ray budget computed later in the RIS branch.
+	out_valid_light_count = valid_count;
 
 	if (valid_count == 0u) {
 		// A directional can still be valid when no positional light is, so its deterministic
@@ -1551,11 +1562,12 @@ vec3 lights_evaluate_direct_lighting(
 	uint direct_source_temporal_reject;
 	uint direct_source_spatial_reject;
 	uint direct_source_visibility_failures;
+	uint direct_valid_light_count;
 	return rt_direct_lighting_sum(lights_evaluate_direct_lighting_split(
 			hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce, receiver_layer_mask, light_count,
 			source_key, direct_source_key, direct_source_pdf, direct_source_lighting, direct_source_stochastic,
 			direct_source_reservoir_m, direct_source_reservoir_weight_sum, direct_source_target,
 			direct_source_temporal_accepted, direct_source_spatial_accepted, direct_source_temporal_reject,
-			direct_source_spatial_reject, direct_source_visibility_failures,
+			direct_source_spatial_reject, direct_source_visibility_failures, direct_valid_light_count,
 			/*p_use_blue_noise_u=*/false, /*p_blue_noise_u=*/vec2(0.0)));
 }

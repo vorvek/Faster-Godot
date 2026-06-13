@@ -853,6 +853,12 @@ void main() {
 		// primary call at raytracing_closest_hit_common_inc.glsl:739-771. Shadow visibility is
 		// the RT shadow ray traced inside lights_evaluate_direct_lighting_split via the payload.
 		uint pd_light_count = uint(get_rt_param(RT_PARAM_LIGHT_COUNT));
+#ifdef RT_DEBUG_ENABLED
+		// Direct-light regime debug view state, captured from sample 0 of the NEE loop below.
+		// Default 0/0 (no positional light hit -> the deterministic-regime green ramp at its floor).
+		uint pd_dbg_valid_light_count = 0u;
+		float pd_dbg_reservoir_m = 0.0;
+#endif // RT_DEBUG_ENABLED
 		if (pd_light_count > 0u && (rtgi_sampling_controls & RTGI_SAMPLING_ANALYTIC_LIGHTS_BIT) != 0u) {
 			// rtgi_samples_per_pixel at the FPT-fast primary: average RT_GET_SAMPLE_COUNT()
 			// INDEPENDENT runs of the same single-sample NEE estimator. Only the stochastic
@@ -881,6 +887,7 @@ void main() {
 				uint d_slot_temporal_reject = RT_SOURCE_REJECT_PREV_UV;
 				uint d_slot_spatial_reject = RT_SOURCE_REJECT_PREV_UV;
 				uint d_slot_visibility_failures = 0u;
+				uint d_slot_valid_light_count = 0u;
 				// receiver_layer_mask = all-layers: the raster-surface primary carries no geometry index
 				// (unlike the closest-hit's geometries[h.geometry_idx].layer_mask), so no per-layer shadow
 				// culling is applied at the FPT primary -- conservative (all lights shadow all surfaces).
@@ -907,8 +914,17 @@ void main() {
 						d_source_key, d_slot_source_key, d_slot_pdf, d_slot_light, d_slot_stochastic,
 						d_slot_reservoir_m, d_slot_reservoir_weight_sum, d_slot_target,
 						d_slot_temporal_accepted, d_slot_spatial_accepted, d_slot_temporal_reject,
-						d_slot_spatial_reject, d_slot_visibility_failures,
+						d_slot_spatial_reject, d_slot_visibility_failures, d_slot_valid_light_count,
 						pd_use_blue_noise_u, pd_blue_noise_u);
+#ifdef RT_DEBUG_ENABLED
+				// Direct-light regime debug view (Channel A): capture the regime classifier state from
+				// the FIRST sample only (the blue-noise/reference sample), so the readout is independent
+				// of the spp loop count. Cheap scalar copies; image override happens after the loop.
+				if (pd_sample == 0u) {
+					pd_dbg_valid_light_count = d_slot_valid_light_count;
+					pd_dbg_reservoir_m = d_slot_reservoir_m;
+				}
+#endif // RT_DEBUG_ENABLED
 				vec3 direct_diffuse = rt_clamp_path_contribution(direct_light.diffuse, pd_roughness, pd_metalness, false, false);
 				vec3 direct_specular = rt_clamp_path_contribution(direct_light.specular, pd_roughness, pd_metalness, false, false);
 				pd_total_sum += direct_diffuse + direct_specular;
@@ -948,6 +964,23 @@ void main() {
 
 		radiance = sanitize_payload_vec3(radiance);
 		specular = min(sanitize_payload_vec3(specular), radiance);
+#ifdef RT_DEBUG_ENABLED
+		// Direct-light regime view: deterministic regime = green ramp by positional valid
+		// count; RIS regime = red-to-yellow ramp by count above the limit; brightness adds
+		// the temporal reservoir M (reuse depth) so dead reuse reads dark. Screen-primary
+		// only (this whole block is the FPT screen primary; probe dispatches returned at the
+		// top of main()). At vis_mode 0 (the default) the branch is skipped, so the non-debug
+		// path is byte-identical.
+		if (int(get_rt_param(RT_PARAM_VIS_MODE)) == RT_VIS_MODE_DIRECT_LIGHT_REGIME) {
+			float count_ramp = clamp(float(pd_dbg_valid_light_count) / 24.0, 0.0, 1.0);
+			vec3 c = (pd_dbg_valid_light_count <= RTGI_DETERMINISTIC_DIRECT_LIGHT_LIMIT)
+					? vec3(0.0, 0.25 + 0.75 * count_ramp, 0.0)
+					: vec3(0.5 + 0.5 * count_ramp, 0.5 * count_ramp, 0.0);
+			float m_norm = clamp(pd_dbg_reservoir_m / 32.0, 0.0, 1.0);
+			radiance = c * (0.35 + 0.65 * m_norm);
+			specular = vec3(0.0);
+		}
+#endif // RT_DEBUG_ENABLED
 		imageStore(image, pixel_i, vec4(radiance, 1.0));
 		imageStore(rt_diffuse_radiance_image, pixel_i, vec4(max(radiance - specular, vec3(0.0)), 1.0));
 		imageStore(rt_specular_radiance_image, pixel_i, vec4(specular, 1.0));

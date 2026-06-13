@@ -1393,7 +1393,7 @@ func _advance_packed_scene_animation(frame: int) -> void:
 
 
 func _capture_debug_views(base_name: String) -> void:
-	var views := ["beauty", "noisy", "raw_radiance", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "secondary_cache_source", "secondary_cache_rejection", "secondary_cache_surface", "surface_feedback", "surface_key", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "strc_visibility", "strc_age", "strc_variance", "strc_rejection", "variance", "history_length", "rejection", "final", "denoised_radiance", "reconstructed_radiance", "reconstruction_reactivity", "reconstruction_signal_confidence", "reconstruction_guide_mismatch", "reconstruction_fill_source"]
+	var views := ["beauty", "noisy", "raw_radiance", "diffuse_noisy", "specular_noisy", "diffuse_final", "specular_final", "specular_guide", "specular_reflection_direction", "specular_reflected_hit_distance", "specular_reflected_hit_normal", "direct_light_regime", "specular_roughness_bucket", "specular_history_length", "specular_rejection", "normal_roughness", "normal_deviation", "viewz_hitdist", "motion_vectors", "signal_direct", "signal_emissive", "signal_indirect", "signal_sky", "signal_confidence", "source_candidate", "source_history", "source_temporal_delta", "source_rejection", "secondary_cache_source", "secondary_cache_rejection", "secondary_cache_surface", "surface_feedback", "surface_key", "cache_raw_diffuse", "cache_filtered_diffuse", "cache_hit_confidence", "cache_age", "cache_rejection", "strc_radiance", "strc_confidence", "strc_updates", "strc_visibility", "strc_age", "strc_variance", "strc_rejection", "variance", "history_length", "rejection", "final", "denoised_radiance", "reconstructed_radiance", "reconstruction_reactivity", "reconstruction_signal_confidence", "reconstruction_guide_mismatch", "reconstruction_fill_source"]
 	for view in views:
 		if view.begins_with("cache_") and not _cache_debug_available():
 			continue
@@ -2638,6 +2638,8 @@ func _apply_debug_view(view: String) -> void:
 			_environment.rtgi_debug_mode = Environment.RT_DEBUG_SPECULAR_REFLECTED_HIT_DISTANCE
 		elif view == "specular_reflected_hit_normal":
 			_environment.rtgi_debug_mode = Environment.RT_DEBUG_SPECULAR_REFLECTED_HIT_NORMAL
+		elif view == "direct_light_regime":
+			_environment.rtgi_debug_mode = Environment.RT_DEBUG_DIRECT_LIGHT_REGIME
 		else:
 			_environment.rtgi_debug_mode = Environment.RT_DEBUG_DISABLED
 	RenderingServer.viewport_set_debug_draw(get_viewport().get_viewport_rid(), _debug_draw_value(view))

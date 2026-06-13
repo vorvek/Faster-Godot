@@ -1890,7 +1890,7 @@ void Environment::_bind_methods() {
 	// current frame exactly where the GI is noisiest), so it is kept out of the inspector; setting
 	// it from script still arms the reactive-mask path in the renderer.
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "ASVFG:8,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_debug_mode", PROPERTY_HINT_ENUM, "Disabled,Mirror Reflection,Geometry Normals,Final Normals,Normal Map,Tangent,Bitangent,UV,Albedo,ORM,Diffuse Albedo,Specular Albedo,Normal+Roughness,Specular Hit Dist,Metalness,Roughness,View Normals,Diffuse+Specular,Fresnel F0,Front/Back Face,Depth,Emissive,BRDF Rejection,Normal Deviation,Specular Reflection Direction,Specular Reflected Hit Distance,Specular Reflected Hit Normal"), "set_rtgi_debug_mode", "get_rtgi_debug_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_debug_mode", PROPERTY_HINT_ENUM, "Disabled,Mirror Reflection,Geometry Normals,Final Normals,Normal Map,Tangent,Bitangent,UV,Albedo,ORM,Diffuse Albedo,Specular Albedo,Normal+Roughness,Specular Hit Dist,Metalness,Roughness,View Normals,Diffuse+Specular,Fresnel F0,Front/Back Face,Depth,Emissive,BRDF Rejection,Normal Deviation,Specular Reflection Direction,Specular Reflected Hit Distance,Specular Reflected Hit Normal,Direct Light Regime"), "set_rtgi_debug_mode", "get_rtgi_debug_mode");
 
 	// Glow
 
@@ -2134,6 +2134,7 @@ void Environment::_bind_methods() {
 	BIND_ENUM_CONSTANT(RT_DEBUG_SPECULAR_REFLECTION_DIRECTION);
 	BIND_ENUM_CONSTANT(RT_DEBUG_SPECULAR_REFLECTED_HIT_DISTANCE);
 	BIND_ENUM_CONSTANT(RT_DEBUG_SPECULAR_REFLECTED_HIT_NORMAL);
+	BIND_ENUM_CONSTANT(RT_DEBUG_DIRECT_LIGHT_REGIME);
 
 	BIND_ENUM_CONSTANT(FOG_MODE_EXPONENTIAL);
 	BIND_ENUM_CONSTANT(FOG_MODE_DEPTH);
