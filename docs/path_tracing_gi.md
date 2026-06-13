@@ -409,6 +409,26 @@ which gives a better screen-space sample distribution and lowers single-sample s
 sparkle (Cornell temporal sparkle per megapixel fell from 128.9 to 101.7 at 1080p on
 an RTX 4080 SUPER, with the average energy unchanged).
 
+The sun's angular size follows the rasterizer convention. A directional light's angular
+distance is its full angular diameter, and the rasterizer builds its soft-shadow penumbra
+from that whole value. The path tracer used half of it, so its sun shadows came out about
+half as soft; the cone half-angle now uses the full diameter, so the path-traced penumbra
+matches the rasterizer's width. A large sun spreads its penumbra across many pixels, where one
+shadow sample per frame leaves the band noisy, so the screen primary takes several stratified
+cone samples for it. The count scales with the sun's solid angle and is bounded by a per-preset
+budget, `rendering/rtgi/direct_light/{performance,balanced,production}/shadow_samples` (1, 2,
+and 4), and a small sun stays at one sample. On a directional penumbra-ramp scene the balanced
+two-sample setting cut the soft-edge noise about 40 percent with the penumbra width unchanged.
+The extra samples are taken only on the path-traced screen primary; the probe and deep paths
+keep a single sample.
+
+A light's indirect energy multiplier scales its contribution to the path-traced global
+illumination. The probe gather that fills the world and screen-probe caches treats the light
+it hits as indirect, the same way the multiplier already works for VoxelGI and SDFGI, so
+setting a light's indirect energy below or above one dims or lifts its bounced contribution
+without changing the directly visible shading. The camera's direct view of a surface is never
+scaled by it.
+
 The number of reservoir candidates the screen primary samples each frame is the
 direct-light shadow-ray budget. It is a hidden per-preset project setting,
 `rendering/rtgi/direct_light/{performance,balanced,production}/ris_candidates`, that

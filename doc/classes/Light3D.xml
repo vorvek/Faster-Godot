@@ -73,7 +73,7 @@
 			The light's strength multiplier (this is not a physical unit). For [OmniLight3D] and [SpotLight3D], changing this value will only change the light color's intensity, not the light's radius.
 		</member>
 		<member name="light_indirect_energy" type="float" setter="set_param" getter="get_param" default="1.0">
-			Secondary multiplier used with indirect light (light bounces). Used with [VoxelGI] and SDFGI (see [member Environment.sdfgi_enabled]).
+			Secondary multiplier used with indirect light (light bounces). Used with [VoxelGI] and SDFGI (see [member Environment.sdfgi_enabled]). Under hardware RTGI and Full Scene Path-Traced GI it likewise scales the light's contribution to the probe-gathered indirect lighting, while the directly visible shading stays unscaled.
 			[b]Note:[/b] This property is ignored if [member light_energy] is equal to [code]0.0[/code], as the light won't be present at all in the GI shader.
 		</member>
 		<member name="light_intensity_lumens" type="float" setter="set_param" getter="get_param">
