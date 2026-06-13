@@ -9514,7 +9514,12 @@ uint32_t RenderRaytracing::gather_lights(const RenderDataRD *p_render_data, cons
 		ld.emission[0] = linear_col.r * energy;
 		ld.emission[1] = linear_col.g * energy;
 		ld.emission[2] = linear_col.b * energy;
-		ld.radius = Math::deg_to_rad(ls->light_get_param(base, RSE::LIGHT_PARAM_SIZE) * 0.5f); // Half-angle in radians.
+		// Cone half-angle in radians. LIGHT_PARAM_SIZE is the directional's full angular
+		// diameter; the rasterizer uses the full diameter for both the soft-shadow penumbra
+		// (light_storage.cpp tan(deg_to_rad(angular_diameter))) and the lit-cone cosine
+		// (1 - cos(deg_to_rad(size))), so the cone matches the raster penumbra by using the
+		// full diameter here rather than half of it.
+		ld.radius = Math::deg_to_rad(ls->light_get_param(base, RSE::LIGHT_PARAM_SIZE));
 		ld.attenuation = 0.0f; // No distance attenuation.
 		ld.inv_max_range = -1.0f; // Infinite range.
 		ld.max_range_squared = 0.0f;
