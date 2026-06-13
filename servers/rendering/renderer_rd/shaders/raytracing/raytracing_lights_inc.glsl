@@ -510,6 +510,17 @@ bool lights_direct_source_weight(
 	}
 
 	RTLightData test_light = rt_lights[light_index];
+	// Directionals are evaluated deterministically OUTSIDE the reservoir machinery (one
+	// shadow ray each, every frame, in both regimes). They never enter the regime predicate,
+	// so they cannot drive valid_count / total_weight, never enter the stratified CDF, and are
+	// never recorded into a reservoir. This kills the occluded-sun candidate monopoly (a bright
+	// occluded sun has no visibility term in its selection weight, so it would otherwise win
+	// every RIS CDF draw and starve the positional lights that actually reach the pixel).
+	// Skipping here keeps the count pass, the CDF candidate walk, and lights_find_direct_source_by_id
+	// on one shared positional-only valid-set definition (the stratified draw depends on it).
+	if (test_light.type == RT_LIGHT_TYPE_DIRECTIONAL) {
+		return false;
+	}
 	bool is_valid = (test_light.cull_mask & receiver_layer_mask) != 0u;
 	bool is_positional = (test_light.type == RT_LIGHT_TYPE_OMNI || test_light.type == RT_LIGHT_TYPE_SPOT);
 	if (is_valid && is_positional) {
@@ -544,6 +555,11 @@ bool lights_find_direct_source_by_id(
 
 	for (uint idx = 0u; idx < light_count; idx++) {
 		float light_weight = 0.0;
+		// lights_direct_source_weight returns false for directionals, so a directional source_id
+		// can never be re-matched here. A prev reservoir that recorded a directional before this
+		// change (or on the upgrade frame) therefore fails to pair and dies in one frame, which
+		// is the intended one-frame history discontinuity at the upgrade. Directionals are not
+		// reservoir-eligible.
 		if (!lights_direct_source_weight(idx, light_count, receiver_layer_mask, is_indirect_bounce, hit_pos, N, light_weight)) {
 			continue;
 		}
@@ -1295,6 +1311,33 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 	uint valid_count = 0u;
 	float total_weight = 0.0;
 
+	// Directional lights are evaluated deterministically here, outside the regime machinery
+	// below: one shadow ray each, every frame, in BOTH the deterministic and the RIS regime.
+	// They no longer enter lights_direct_source_weight (Edit A), so valid_count / total_weight /
+	// the stratified CDF / the reservoir are all positional-only. directional_sum is added to
+	// every return path below. The evaluator call uses pdf = 1.0 and the same is_indirect_bounce,
+	// matching exactly the form the deterministic-sum loop used to evaluate a directional with,
+	// so a deterministic-regime directional is bit-identical to before this change.
+	RTDirectLighting directional_sum = rt_direct_lighting_zero();
+	for (uint idx = 0u; idx < light_count; idx++) {
+		RTLightData dir_light = rt_lights[idx];
+		if (dir_light.type != RT_LIGHT_TYPE_DIRECTIONAL) {
+			continue;
+		}
+		// Same validity gate the regime predicate applied to a directional before Edit A:
+		// receiver layer-mask cull + a positive selection weight (energy > 0). No range test
+		// applies to a directional (the positional max-range gate never ran for it).
+		if ((dir_light.cull_mask & receiver_layer_mask) == 0u) {
+			continue;
+		}
+		if (lights_selection_weight(hit_pos, N, dir_light, is_indirect_bounce) <= 0.0) {
+			continue;
+		}
+		RTDirectLighting dir_result = lights_evaluate_single_direct_light_split(dir_light, 1.0, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce);
+		directional_sum.diffuse += dir_result.diffuse;
+		directional_sum.specular += dir_result.specular;
+	}
+
 	for (uint idx = 0u; idx < light_count; idx++) {
 		float light_weight = 0.0;
 		if (!lights_direct_source_weight(idx, light_count, receiver_layer_mask, is_indirect_bounce, hit_pos, N, light_weight)) {
@@ -1306,7 +1349,9 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 	}
 
 	if (valid_count == 0u) {
-		return rt_direct_lighting_zero();
+		// A directional can still be valid when no positional light is, so its deterministic
+		// contribution must be returned even with an empty positional set.
+		return directional_sum;
 	}
 
 	if (valid_count <= deterministic_light_limit) {
@@ -1334,6 +1379,11 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 				out_direct_source_target = light_luma;
 			}
 		}
+		// Directionals were evaluated separately (Edit A excludes them from the loop above);
+		// fold their deterministic contribution back in. For a positional-only deterministic
+		// scene directional_sum is zero, so the result is bit-identical to before.
+		deterministic_sum.diffuse += directional_sum.diffuse;
+		deterministic_sum.specular += directional_sum.specular;
 		return deterministic_sum;
 	}
 
@@ -1413,12 +1463,21 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		}
 	}
 
+	// resolved_lighting is the positional-only reservoir result. It alone drives the out_*
+	// direct-source bookkeeping and the reservoir record below: the directional is NOT a
+	// reservoir source, so the recorded radiance/target (re-read next frame by the temporal
+	// merge as previous_lighting.a) must stay positional-only or it would bias the history
+	// reweight with a sun contribution keyed to a positional source. The directional is added
+	// only to returned_lighting, on BOTH return paths.
 	RTDirectLighting resolved_lighting = rt_direct_reservoir_resolve(reservoir);
+	RTDirectLighting returned_lighting = resolved_lighting;
+	returned_lighting.diffuse += directional_sum.diffuse;
+	returned_lighting.specular += directional_sum.specular;
 	if (!reservoir.valid) {
 		if (!is_indirect_bounce && !rt_probe_dispatch_mode()) {
 			rt_source_direct_reservoir_record(ivec2(gl_LaunchIDEXT.xy), 0u, 0.0, 0.0, reservoir.M, 0.0, vec3(0.0), 0.0);
 		}
-		return resolved_lighting;
+		return returned_lighting;
 	}
 
 	out_source_key = reservoir.selected_key;
@@ -1439,7 +1498,7 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		rt_source_direct_reservoir_record(ivec2(gl_LaunchIDEXT.xy), reservoir.selected_key, reservoir.selected_pdf, reservoir.weight_sum, reservoir.M, reservoir.confidence, rt_direct_lighting_sum(resolved_lighting), reservoir.selected_target);
 	}
 
-	return resolved_lighting;
+	return returned_lighting;
 }
 
 vec3 lights_evaluate_direct_lighting(
