@@ -56,6 +56,20 @@ const LIGHT_GRID_RECOVERY_FLOOR := 0.0005
 # (--rtgi-mode=off) run measures exactly 0.0 here, and an RTGI pipeline whose
 # history survives frames must approach it.
 const LIGHT_GRID_TAIL_PAIRS := 8
+# Canonical settle for the sun_penumbra_ramp scene. Its sun_penumbra_band_hf
+# metric is the per-column vertical scatter of the soft shadow edge, which the
+# temporal denoiser converges away: by the 120-frame mode-switch floor the
+# one-sample penumbra is fully resolved and the scatter sits at a floor (~0.054)
+# that no longer reflects per-sample shadow noise. The structural edge width
+# (sun_penumbra_width_px) is already settled at 16 frames (it reads 17 there and
+# at 120, vs an inflated 18 at 4 and 20 at 1 frame where pre-convergence
+# stippling widens the apparent band), while the band scatter is still clearly
+# elevated above the floor (~0.080 vs ~0.054). 16 is therefore the earliest
+# settle that keeps the width gate structural yet still carries measurable
+# shadow noise for the before/after comparison. An explicit --rtgi-settle-frames
+# overrides this. The two-frame run-to-run delta is 0.0 (the scene is static and
+# the pass is deterministic), so this settle gates cleanly.
+const SUN_PENUMBRA_SETTLE_FRAMES := 16
 
 var _denoise_strength := 1.0
 var _history_weight := 0.95
@@ -1089,6 +1103,10 @@ func _run_capture() -> void:
 	# when it is smaller, e.g. under --rtgi-fast).
 	if _settle_frames_override > 0:
 		_settle_frames_used = await _settle_until_converged(_settle_frames_override, _settle_frames_override)
+	elif _scene_mode == "sun_penumbra_ramp":
+		# This scene measures pre-convergence shadow noise, so it pins its own
+		# short canonical settle instead of settling to steady state.
+		_settle_frames_used = await _settle_until_converged(SUN_PENUMBRA_SETTLE_FRAMES, SUN_PENUMBRA_SETTLE_FRAMES)
 	else:
 		_settle_frames_used = await _settle_until_converged(SETTLE_LOAD_FLOOR_FRAMES, _warmup_frames)
 
@@ -3193,10 +3211,15 @@ func _measure_light_grid(final_image: Image, base_name: String) -> Dictionary:
 # strip across the soft shadow edge; columns run from fully lit to fully occluded.
 # penumbra_width_px = count of columns whose normalized luma is in the transition band [0.1,0.9];
 # a wider source spreads the edge over more columns, so the soft raster reference reads a wider
-# band than a one-sample ray-traced pass. penumbra_band_hf = mean |luma[x-1]-2*luma[x]+luma[x+1]|
-# over the strip, the second-difference high-frequency content of the column profile (the ramp
-# curvature plus any per-sample shadow noise). lit/occluded_luma are the bright and dark plateaus
-# the band is normalized against.
+# band than a one-sample ray-traced pass.
+# penumbra_band_hf = the mean per-column vertical scatter inside the penumbra band: for every band
+# column we take the standard deviation of the raw per-pixel luma running down that column (the
+# spread around that one column's own mean), then average those stddevs over the band columns. The
+# horizontal lit-to-occluded ramp varies between columns, not within a column, so detrending by
+# column isolates within-column per-sample shadow noise (stippling from the one-sample ray-traced
+# penumbra) without the ramp slope leaking in. This scatter is only visible before the temporal
+# denoiser converges, so this scene captures it at a low settle (see SUN_PENUMBRA_SETTLE_FRAMES).
+# lit/occluded_luma are the bright and dark plateaus the band is normalized against.
 func _measure_sun_penumbra_ramp(final_image: Image, base_name: String) -> Dictionary:
 	var width := final_image.get_width()
 	var height := final_image.get_height()
@@ -3220,18 +3243,33 @@ func _measure_sun_penumbra_ramp(final_image: Image, base_name: String) -> Dictio
 		lo = minf(lo, col_luma[cx])
 		hi = maxf(hi, col_luma[cx])
 	var span: float = maxf(hi - lo, 1e-6)
+	var rows := roi_y1 - roi_y0
 	var width_px := 0
+	var scatter_sum := 0.0
+	var band_cols := 0
 	for cx in range(cols):
 		var n: float = (col_luma[cx] - lo) / span
 		if n > 0.1 and n < 0.9:
 			width_px += 1
-	var hf := 0.0
-	for cx in range(1, cols - 1):
-		hf += abs(col_luma[cx - 1] - 2.0 * col_luma[cx] + col_luma[cx + 1])
-	hf /= float(max(cols - 2, 1))
+			# Per-column vertical scatter: stddev of the raw per-pixel luma down this
+			# one column, around the column's own mean (col_luma[cx]). This detrends the
+			# horizontal ramp so only within-column per-sample noise remains.
+			var x := roi_x0 + cx
+			var col_mean: float = col_luma[cx]
+			var var_acc := 0.0
+			for y in range(roi_y0, roi_y1):
+				var c := final_image.get_pixel(x, y)
+				var pix_luma: float = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+				var d: float = pix_luma - col_mean
+				var_acc += d * d
+			scatter_sum += sqrt(var_acc / float(maxi(rows, 1)))
+			band_cols += 1
+	var band_hf := 0.0
+	if band_cols > 0:
+		band_hf = scatter_sum / float(band_cols)
 	return {
 		"sun_penumbra_width_px": width_px,
-		"sun_penumbra_band_hf": hf,
+		"sun_penumbra_band_hf": band_hf,
 		"sun_penumbra_lit_luma": hi,
 		"sun_penumbra_occluded_luma": lo,
 	}
