@@ -121,6 +121,9 @@ vec3 apply_normal_map(HitData h, vec3 tangent_space_normal, float normal_map_dep
 
 /// Write NDC depth for primary ray hits (bounce 0, sample 0 only).
 void write_primary_hit_depth(vec3 hit_pos) {
+	if (rt_probe_dispatch_mode()) {
+		return;
+	}
 	if (get_total_bounces(payload.packed_bounces_flags) == 0u && is_sample_zero(payload.packed_bounces_flags)) {
 		mat4 view_mat = transpose(mat4(scene_data_block.data.view_matrix[0],
 				scene_data_block.data.view_matrix[1],
@@ -157,6 +160,9 @@ uint mix_history_id(uint id, uint value) {
 }
 
 void write_primary_hit_history_validity() {
+	if (rt_probe_dispatch_mode()) {
+		return;
+	}
 	if (get_total_bounces(payload.packed_bounces_flags) != 0u || !is_sample_zero(payload.packed_bounces_flags)) {
 		return;
 	}
@@ -201,6 +207,9 @@ mat4 decode_prev_object_to_world(int motion_idx) {
 /// Write motion vectors for primary ray hits (bounce 0, sample 0 only).
 /// Uses unjittered VP matrices matching the raster motion_vectors_store convention.
 void write_primary_hit_velocity(vec3 hit_pos) {
+	if (rt_probe_dispatch_mode()) {
+		return;
+	}
 	if (get_total_bounces(payload.packed_bounces_flags) != 0u || !is_sample_zero(payload.packed_bounces_flags)) {
 		return;
 	}
@@ -267,6 +276,9 @@ void write_primary_hit_velocity(vec3 hit_pos) {
 // rtgi_trace_specular_reflected_hit removed (deferred to raygen)
 
 void write_primary_hit_guides(HitData h, MaterialResult m) {
+	if (rt_probe_dispatch_mode()) {
+		return;
+	}
 	if (get_total_bounces(payload.packed_bounces_flags) != 0u || !is_sample_zero(payload.packed_bounces_flags)) {
 		return;
 	}
@@ -759,7 +771,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		vec3 direct_slot_diffuse = reflections_only ? vec3(0.0) : rt_clamp_path_contribution(raw_direct_slot_diffuse, material_roughness, m.metalness, is_indirect, false);
 		vec3 direct_slot_specular = rt_clamp_path_contribution(raw_direct_slot_specular, material_roughness, m.metalness, is_indirect, false);
 		vec3 direct_slot_total = direct_slot_diffuse + direct_slot_specular;
-		if (!is_indirect) {
+		if (!is_indirect && !rt_probe_dispatch_mode()) {
 			float direct_record_confidence = direct_slot_stochastic ? 1.0 : 0.5;
 			rt_source_candidate_record(ivec2(gl_LaunchIDEXT.xy), 0.25, direct_record_confidence, direct_slot_pdf, direct_slot_total, 0.0, direct_slot_source_key);
 			rt_source_direct_candidate_record(ivec2(gl_LaunchIDEXT.xy), direct_slot_source_key, direct_record_confidence, direct_slot_pdf, direct_slot_total, direct_slot_stochastic,
@@ -810,7 +822,9 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		vec3 emissive_diffuse = rt_clamp_path_contribution(raw_emissive_diffuse, material_roughness, m.metalness, is_indirect, true);
 		vec3 emissive_specular = rt_clamp_path_contribution(raw_emissive_specular, material_roughness, m.metalness, is_indirect, true);
 		vec3 explicit_emissive_total = reflections_only ? emissive_specular : emissive_diffuse + emissive_specular;
-		rt_source_candidate_record(ivec2(gl_LaunchIDEXT.xy), 0.50, emissive_distribution_debug, clamp(emissive_pdf * 64.0, 0.0, 1.0), explicit_emissive_total, 0.0, emissive_source_key);
+		if (!rt_probe_dispatch_mode()) {
+			rt_source_candidate_record(ivec2(gl_LaunchIDEXT.xy), 0.50, emissive_distribution_debug, clamp(emissive_pdf * 64.0, 0.0, 1.0), explicit_emissive_total, 0.0, emissive_source_key);
+		}
 		if (total_bounces == 0u) {
 			ps.specular_radiance += emissive_specular;
 		} else if (get_diffuse_bounces(ps.packed_bounces_flags) == 0u) {

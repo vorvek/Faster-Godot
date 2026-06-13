@@ -1369,7 +1369,12 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		rt_direct_reservoir_update(reservoir, source_key, light_result, light_select_pdf, light_target, light_target, 1.0, 1.0, rng_state);
 	}
 
-	if (!is_indirect_bounce) {
+	// Probe-feed dispatches (WRC update / SPG gather) keep ONLY the local single-frame
+	// reservoir they just built above plus the resolve below; the temporal/spatial reuse
+	// reads and merges screen-pixel reservoir state (reprojected from the camera buffers at
+	// (ray_index, 0)), which has nothing to do with the world point a probe ray sampled.
+	// Gate the merge so probe radiance stays self-contained; the resolve still runs.
+	if (!is_indirect_bounce && !rt_probe_dispatch_mode()) {
 		ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
 		ivec2 previous_pixel = ivec2(0);
 		vec4 previous_reservoir = vec4(0.0);
@@ -1404,7 +1409,7 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 
 	RTDirectLighting resolved_lighting = rt_direct_reservoir_resolve(reservoir);
 	if (!reservoir.valid) {
-		if (!is_indirect_bounce) {
+		if (!is_indirect_bounce && !rt_probe_dispatch_mode()) {
 			rt_source_direct_reservoir_record(ivec2(gl_LaunchIDEXT.xy), 0u, 0.0, 0.0, reservoir.M, 0.0, vec3(0.0), 0.0);
 		}
 		return resolved_lighting;
@@ -1424,7 +1429,7 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 	out_direct_source_spatial_reject = reservoir.spatial_reject;
 	out_direct_source_visibility_failures = reservoir.visibility_failures;
 
-	if (!is_indirect_bounce) {
+	if (!is_indirect_bounce && !rt_probe_dispatch_mode()) {
 		rt_source_direct_reservoir_record(ivec2(gl_LaunchIDEXT.xy), reservoir.selected_key, reservoir.selected_pdf, reservoir.weight_sum, reservoir.M, reservoir.confidence, rt_direct_lighting_sum(resolved_lighting), reservoir.selected_target);
 	}
 

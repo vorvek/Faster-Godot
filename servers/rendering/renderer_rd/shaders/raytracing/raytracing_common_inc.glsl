@@ -60,6 +60,13 @@ bool rt_spg_gather_mode() {
 	return (RT_FLAGS & RT_FLAG_SPG_GATHER) != 0u;
 }
 
+bool rt_probe_dispatch_mode() {
+	// WRC-update and SPG-gather launches are 1D probe feeds; their hits must never
+	// run the screen-pixel primary writers or the reservoir machinery, exactly like
+	// the hybrid_primary exclusion for raster-owned camera primaries.
+	return rt_wrc_probe_update_mode() || rt_spg_gather_mode();
+}
+
 // The full-screen FPT primary-direct dispatch (FULL_PATH_TRACING only). Indirect
 // bounces are capped to 0 so the camera ray does primary hit (NEE direct + emissive)
 // + sky-on-miss only; the resolved probe indirect is added at the composite.
