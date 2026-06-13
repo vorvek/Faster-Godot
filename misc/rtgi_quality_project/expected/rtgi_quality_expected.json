@@ -111,7 +111,7 @@
 			}
 		},
 		"specular_motion": {
-			"_note": "Generic firefly and speckle caps are calibrated to the worst orbit phase of this moving-light specular stressor. They are regression baselines, not absolute targets; the moving highlights drive frame-to-frame variance by design. The temporal_sparkle cap is set for the canonical pinned-120 --rtgi-modes=fpt,hybrid run: the in-process fpt-then-hybrid switch lands the hybrid pass at a higher sparkle attractor than either single-mode run (the fpt pass primes the shared temporal state), and after the WS3 blue-noise and reservoir-reuse changes that pinned value measured 424.4/Mpx, so the cap sits at that value plus headroom rather than the WS2-era single-mode 320. This lets the one canonical multi-mode invocation gate green under the pinned protocol.",
+			"_note": "Generic firefly and speckle caps are calibrated to the worst orbit phase of this moving-light specular stressor. They are regression baselines, not absolute targets; the moving highlights drive frame-to-frame variance by design. The temporal_sparkle cap is set for the canonical pinned-120 --rtgi-modes=fpt,hybrid run: the in-process fpt-then-hybrid switch lands the hybrid pass at a higher sparkle attractor than either single-mode run (the fpt pass primes the shared temporal state), and after the blue-noise and reservoir-reuse changes that pinned value measured 424.4/Mpx, so the cap sits at that value plus headroom rather than the earlier single-mode 320. This lets the one canonical multi-mode invocation gate green under the pinned protocol.",
 			"thresholds": {
 				"max_dark_fireflies_per_megapixel": 170.0,
 				"max_full_frame_fireflies_per_megapixel": 150.0,

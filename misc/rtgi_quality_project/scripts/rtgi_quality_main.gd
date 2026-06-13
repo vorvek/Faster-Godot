@@ -3063,9 +3063,15 @@ func _measure_fog_corridor_image(image: Image) -> Dictionary:
 # another LIGHT_GRID_PHASE_FRAMES-pair series. light_grid_toggle_spike is the
 # whole-image mean delta on the toggle frame;
 # light_grid_toggle_recovery_frames is the first post-toggle pair whose
-# whole-image mean delta returns within LIGHT_GRID_RECOVERY_FACTOR times the
-# Phase-1 steady mean (the window length when it never recovers, a valid
-# gateable worst case). The local/far rect split separates a correct LOCAL
+# whole-image mean delta drops within LIGHT_GRID_RECOVERY_FACTOR times the
+# frozen static-noise floor of the Phase-2 series (light_grid_static_tail_delta,
+# measured at the tail of the same toggle run). Anchoring on the static floor
+# rather than the Phase-1 orbit mean is what makes the factor (3.0) meaningful:
+# the orbit mean is inflated by camera motion, so a threshold derived from it
+# cleared almost immediately, whereas a wrongly global reset that keeps the whole
+# image churning pushes the frame count up against the static floor. The window
+# length when the image never settles is the gateable worst case. The local/far
+# rect split separates a correct LOCAL
 # response from a wrongly GLOBAL reset: the local rect is projected around the
 # floor patch under the toggled light, the far rect sits in the image corner
 # farthest from it, and on a correct estimator the toggle delta concentrates in
