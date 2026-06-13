@@ -9989,10 +9989,13 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 
 		// The radiance signature must be computed exactly once per frame, from
 		// dispatch-invariant inputs. The WRC/SPG/primary-direct flavors of this call
-		// alternate flags and override param slots; hashing those made the stored
-		// signature flip-flop across flavors and reset temporal history every frame.
-		const bool dispatch_flavor_call = (p_rt_flags & (SceneShaderRaytracing::RT_FLAG_WRC_PROBE_UPDATE | SceneShaderRaytracing::RT_FLAG_SPG_GATHER | SceneShaderRaytracing::RT_FLAG_PRIMARY_DIRECT)) != 0;
-		if (!dispatch_flavor_call) {
+		// alternate flags and override param slots; this block must run exactly once
+		// per frame, on the call that carries no dispatch-flavor bits; the inputs it
+		// hashes differ across the other flavors.
+		// IMPORTANT: any new dispatch-flavor flag bit must be added to this mask, or the
+		// signature will hash flavor-variant inputs again.
+		const bool is_prepare_call = (p_rt_flags & (SceneShaderRaytracing::RT_FLAG_WRC_PROBE_UPDATE | SceneShaderRaytracing::RT_FLAG_SPG_GATHER | SceneShaderRaytracing::RT_FLAG_PRIMARY_DIRECT)) == 0;
+		if (is_prepare_call) {
 			uint64_t radiance_signature = _rt_radiance_signature(p_rt_flags, p_render_data ? p_render_data->environment : RID(), p_render_data ? p_render_data->camera_attributes : RID(), rt_ubo.params, background_color, background_uses_sky, rt_light_data, rt_light_count);
 			radiance_signature = _rt_history_mix(radiance_signature, p_state->emissive_candidate_signature);
 			if (!p_state->radiance_history_signature_valid) {
