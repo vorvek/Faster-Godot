@@ -205,9 +205,8 @@ func _build_cornell_box_scene() -> Node3D:
 	# Ceiling light approximated the way the proven runtime cornell mode does it:
 	# a bright OmniLight3D tucked just under the ceiling for the analytic key plus
 	# an emissive panel so the source reads in the image and feeds the RTGI
-	# emissive sampler. AreaLight3D faces down here, but a small area panel over a
-	# 2.78 m box does not push enough energy to the floor on its own, so the omni
-	# key carries the direct term and the panel carries the indirect bounce.
+	# emissive sampler. The omni key carries the direct term and the emissive panel
+	# carries the indirect bounce.
 	var light := OmniLight3D.new()
 	light.name = "CeilingKeyLight"
 	light.position = Vector3(0.0, ceiling_y - 0.12, 0.0)
@@ -218,18 +217,6 @@ func _build_cornell_box_scene() -> Node3D:
 	light.shadow_enabled = true
 	root.add_child(light)
 	_claim(root, light)
-
-	var area := AreaLight3D.new()
-	area.name = "CeilingAreaLight"
-	area.position = Vector3(0.0, ceiling_y - 0.02, 0.0)
-	area.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
-	area.area_size = Vector2(0.65, 0.52)
-	area.light_color = Color(1.0, 0.84, 0.58)
-	area.light_energy = 4.0
-	area.area_range = 8.0
-	area.shadow_enabled = true
-	root.add_child(area)
-	_claim(root, area)
 
 	_add_box(root, root, "CeilingEmitter", Vector3(0.0, ceiling_y - 0.03, 0.0), Vector3(0.65, 0.035, 0.52), light_material)
 
