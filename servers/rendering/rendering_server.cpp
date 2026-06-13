@@ -3958,7 +3958,7 @@ void RenderingServer::init() {
 	// Environment.rtgi_quality_preset selector that picks the SPG/GI-resolve tiers picks one
 	// of these, resolved live (no restart) by _resolve_direct_light_params. The
 	// deterministic-light regime and indirect bounces are unaffected (they never enter the
-	// RIS candidate loop). Tuned per tier from light_grid measurement (WS3).
+	// RIS candidate loop). Tuned per tier from light_grid measurement (performance 4 / balanced 8 / production 16; lower trades shadow-sample variance for GPU time).
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/direct_light/performance/ris_candidates", PROPERTY_HINT_RANGE, "2,16,1"), 4);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/direct_light/balanced/ris_candidates", PROPERTY_HINT_RANGE, "2,16,1"), 8);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/rtgi/direct_light/production/ris_candidates", PROPERTY_HINT_RANGE, "2,16,1"), 16);
