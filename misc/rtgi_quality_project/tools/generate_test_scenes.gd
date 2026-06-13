@@ -21,6 +21,8 @@ extends SceneTree
 #   res://scenes/fog_corridor.tscn
 #   res://scenes/light_grid.tscn
 #   res://scenes/sun_penumbra_ramp.tscn
+#   res://scenes/area_light_wall.tscn
+#   res://scenes/textured_area.tscn
 
 const SCENES_DIR := "res://scenes"
 const SPECULAR_ANIM_SCRIPT := "res://scripts/specular_motion_anim.gd"
@@ -37,6 +39,8 @@ func _initialize() -> void:
 	ok = _save_scene(_build_fog_corridor_scene(), "%s/fog_corridor.tscn" % SCENES_DIR) and ok
 	ok = _save_scene(_build_light_grid_scene(), "%s/light_grid.tscn" % SCENES_DIR) and ok
 	ok = _save_scene(_build_sun_penumbra_ramp_scene(), "%s/sun_penumbra_ramp.tscn" % SCENES_DIR) and ok
+	ok = _save_scene(build_area_light_wall(), "%s/area_light_wall.tscn" % SCENES_DIR) and ok
+	ok = _save_scene(build_textured_area(), "%s/textured_area.tscn" % SCENES_DIR) and ok
 	if ok:
 		print("RTGI test-scene generation complete.")
 	else:
@@ -770,6 +774,180 @@ func _build_sun_penumbra_ramp_scene() -> Node3D:
 			Vector3(0, 0.581238, -0.813734),
 			Vector3(0, 0.813734, 0.581238),
 			Vector3(-4.3, 7.0, 5.0))
+	root.add_child(camera)
+	_claim(root, camera)
+
+	return root
+
+
+# --- Area-light wall --------------------------------------------------------
+# Solid-color area-light isolation scene. A 12 x 12 m neutral Lambert ground
+# (albedo ~0.5, Lambert BRDF), black sky and ambient, and a single AreaLight3D
+# (2 x 2 m, white, energy 18, shadow enabled) mounted 3 m above the plane
+# facing straight down. A thin vertical occluder (0.2 x 1.5 x 0.2 m) sits
+# between the light and the +Z side so a soft contact shadow falls on the
+# floor, visible from the oblique camera. light_range = 5 m so the lit pool's
+# falloff edge is visible within the 12 m plane (the attenuation-edge metric
+# reads that transition). Camera: eye at (0, 9, 7), looking toward (0, 0, 0)
+# at about 52 degrees below horizontal so the pool, shadow, and range edge are
+# all framed. Transform computed offline, authored verbatim (no look_at).
+func build_area_light_wall() -> Node3D:
+	var root := Node3D.new()
+	root.name = "AreaLightWall"
+
+	var env := _make_rtgi_environment()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color.BLACK
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_DISABLED
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.tonemap_exposure = 1.0
+	env.rtgi_max_bounces = 4
+	root.add_child(_make_world_environment(env))
+	_claim(root, root.get_node("RTGIWorldEnvironment"))
+
+	# Neutral mid-gray Lambert ground so the lit pool reads mid-exposed and the
+	# falloff gradient is not crushed or clipped.
+	var gray := _make_lambert_material(Color(0.5, 0.5, 0.5))
+	var t := 0.1
+	_add_box(root, root, "Floor", Vector3(0.0, -t * 0.5, 0.0), Vector3(12.0, t, 12.0), gray)
+
+	# Thin occluder standing on the floor between the light and the +Z side,
+	# casting a soft contact shadow toward +Z. 0.2 m wide in X, 1.5 m tall,
+	# 0.2 m deep in Z, placed at (0, 0.75, 1.5).
+	var occluder_mat := _make_lambert_material(Color(0.3, 0.3, 0.3))
+	_add_box(root, root, "Occluder", Vector3(0.0, 0.75, 1.5), Vector3(0.2, 1.5, 0.2), occluder_mat)
+
+	# Single solid-color AreaLight3D. Faces down (rotation_degrees.x = -90 so
+	# local -Z = world -Y). Energy 18 gives mid-range floor luma (~0.45) at the
+	# center of the pool with a 2 x 2 m panel 3 m up. area_range 5 keeps the
+	# falloff edge inside the 12 m plane.
+	var area := AreaLight3D.new()
+	area.name = "AreaLight"
+	area.position = Vector3(0.0, 3.0, -1.0)
+	area.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+	area.light_color = Color(1.0, 1.0, 1.0)
+	area.light_energy = 18.0
+	area.shadow_enabled = true
+	area.area_size = Vector2(2.0, 2.0)
+	area.area_range = 5.0
+	root.add_child(area)
+	_claim(root, area)
+
+	# Camera: eye at (0, 9, 7), target (0, 0, 0). Forward = normalize((0,0,0) -
+	# (0,9,7)) = normalize(0,-9,-7) = (0, -0.789352, -0.613941). Camera -Z =
+	# forward, so z column = -forward = (0, 0.789352, 0.613941). x column stays
+	# world X = (1,0,0). y = cross(z,x)... wait, y = cross(x,z) for a
+	# right-handed basis: y = cross((1,0,0),(0,0.789352,0.613941)) =
+	# (0*0.613941-0*0.789352, 0*0-1*0.613941, 1*0.789352-0*0) =
+	# (0, -0.613941, 0.789352). This constructor takes columns (x, y, z, origin).
+	var camera := Camera3D.new()
+	camera.name = "AreaLightWallCamera"
+	camera.current = true
+	camera.fov = 60.0
+	camera.near = 0.05
+	camera.far = 80.0
+	camera.transform = Transform3D(
+			Vector3(1.0, 0.0, 0.0),
+			Vector3(0.0, 0.613941, -0.789352),
+			Vector3(0.0, 0.789352, 0.613941),
+			Vector3(0.0, 9.0, 7.0))
+	root.add_child(camera)
+	_claim(root, camera)
+
+	return root
+
+
+# --- Textured area -----------------------------------------------------------
+# Textured area-light mip-accuracy scene. Same neutral Lambert ground (12 x 12
+# m) and black env. Two AreaLight3D nodes share the same procedural 256x256
+# checkerboard ImageTexture (black/white 16-px tiles). The NEAR light (2 x 2 m,
+# 2 m above the floor) subtends a large solid angle and should show tile
+# structure in the projected illumination; the FAR light (2 x 2 m, 10 m up and
+# 5 m back at a grazing angle) subtends a small footprint. Camera frames both
+# lit regions. The area_textured_structure_stddev metric captures whether the
+# projected pattern retains luma variance (raster path: high stddev) or is
+# flattened to a uniform average (always-coarsest-mip path: near-zero stddev).
+func build_textured_area() -> Node3D:
+	var root := Node3D.new()
+	root.name = "TexturedArea"
+
+	var env := _make_rtgi_environment()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color.BLACK
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_DISABLED
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.tonemap_exposure = 1.0
+	env.rtgi_max_bounces = 4
+	root.add_child(_make_world_environment(env))
+	_claim(root, root.get_node("RTGIWorldEnvironment"))
+
+	var gray := _make_lambert_material(Color(0.5, 0.5, 0.5))
+	var t := 0.1
+	_add_box(root, root, "Floor", Vector3(0.0, -t * 0.5, 0.0), Vector3(12.0, t, 12.0), gray)
+
+	# Procedural 256x256 checkerboard texture: 16-pixel black/white tiles.
+	# Generated at build time; ImageTexture.create_from_image wraps it.
+	var img := Image.create(256, 256, false, Image.FORMAT_RGB8)
+	var tile := 16
+	for py in range(256):
+		for px in range(256):
+			var even_col := (px / tile) % 2 == 0
+			var even_row := (py / tile) % 2 == 0
+			var bright := even_col != even_row
+			var val := 1.0 if bright else 0.0
+			img.set_pixel(px, py, Color(val, val, val))
+	var checker_tex := ImageTexture.create_from_image(img)
+
+	# NEAR light: 2 x 2 m, 2 m above the floor center, facing straight down.
+	# Subtends a large solid angle; the projected tile structure should survive
+	# as visible luma variation on the floor.
+	var near_area := AreaLight3D.new()
+	near_area.name = "NearAreaLight"
+	near_area.position = Vector3(0.0, 2.0, 0.0)
+	near_area.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+	near_area.light_color = Color(1.0, 1.0, 1.0)
+	near_area.light_energy = 12.0
+	near_area.shadow_enabled = false
+	near_area.area_size = Vector2(2.0, 2.0)
+	near_area.area_range = 8.0
+	near_area.area_texture = checker_tex
+	root.add_child(near_area)
+	_claim(root, near_area)
+
+	# FAR light: same panel, 10 m up and 5 m toward -Z, tilted to project onto
+	# the floor at a grazing angle. Subtends a small footprint (the far/grazing
+	# region where the adaptive mip would choose a coarser level even correctly).
+	var far_area := AreaLight3D.new()
+	far_area.name = "FarAreaLight"
+	far_area.position = Vector3(0.0, 10.0, -5.0)
+	# Rotate -70 degrees around X so the panel faces mostly downward with a
+	# forward tilt, projecting onto the floor in front of it.
+	far_area.rotation_degrees = Vector3(-70.0, 0.0, 0.0)
+	far_area.light_color = Color(1.0, 1.0, 1.0)
+	far_area.light_energy = 20.0
+	far_area.shadow_enabled = false
+	far_area.area_size = Vector2(2.0, 2.0)
+	far_area.area_range = 14.0
+	far_area.area_texture = checker_tex
+	root.add_child(far_area)
+	_claim(root, far_area)
+
+	# Camera: eye at (0, 7, 8), target (0, 0, 0). Forward = normalize((0,0,0) -
+	# (0,7,8)) = normalize(0,-7,-8), len = sqrt(49+64) = sqrt(113) ~= 10.630.
+	# forward = (0, -0.659, -0.753). z_col = -forward = (0, 0.659, 0.753).
+	# x_col = world X = (1,0,0). y_col = cross(x_col, z_col) =
+	# (0*0.753-0*0.659, 0*0-1*0.753, 1*0.659-0*0) = (0, -0.753, 0.659).
+	var camera := Camera3D.new()
+	camera.name = "TexturedAreaCamera"
+	camera.current = true
+	camera.fov = 65.0
+	camera.near = 0.05
+	camera.far = 80.0
+	camera.transform = Transform3D(
+			Vector3(1.0, 0.0, 0.0),
+			Vector3(0.0, 0.659380, -0.751828),
+			Vector3(0.0, 0.751828, 0.659380),
+			Vector3(0.0, 7.0, 8.0))
 	root.add_child(camera)
 	_claim(root, camera)
 

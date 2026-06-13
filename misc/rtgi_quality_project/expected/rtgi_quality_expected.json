@@ -157,6 +157,20 @@
 				"max_sun_penumbra_lit_luma": 100000.0,
 				"max_sun_penumbra_occluded_luma": 100000.0
 			}
+		},
+		"area_light_wall": {
+			"_note": "Solid-color area-light isolation scene. Thresholds are report-only (generous caps) until the LTC analytic pass is implemented and calibrated. area_wall_pool_mean_luma is the D1 double-count sentinel: a 2x jump versus the raster reference indicates the area light is being summed both in the deterministic area pass and through the RIS reservoir. area_wall_atten_edge_hf gates the attenuation-window smoothness: a hard cutoff spikes the second-difference metric, a smooth window keeps it low.",
+			"thresholds": {
+				"max_area_wall_pool_mean_luma": 100000.0,
+				"max_area_wall_atten_edge_hf": 100000.0
+			}
+		},
+		"textured_area": {
+			"_note": "Textured area-light mip-accuracy scene. Thresholds are report-only until the LTC adaptive-mip pass is implemented. area_textured_mean_luma is the energy-parity key. area_textured_structure_stddev measures projected-texture structure retention: the always-coarsest-mip path collapses it to near zero, the adaptive-mip path restores it toward the raster reference.",
+			"thresholds": {
+				"max_area_textured_mean_luma": 100000.0,
+				"max_area_textured_structure_stddev": 100000.0
+			}
 		}
 	}
 }

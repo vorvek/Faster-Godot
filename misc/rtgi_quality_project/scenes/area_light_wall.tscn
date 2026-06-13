@@ -1,0 +1,60 @@
+[gd_scene format=3]
+
+[sub_resource type="Environment" id="Environment_r180f"]
+background_mode = 1
+ambient_light_source = 1
+tonemap_mode = 2
+rtgi_enabled = true
+rtgi_quality_preset = 0
+rtgi_disable_in_editor = false
+
+[sub_resource type="BoxMesh" id="BoxMesh_7157g"]
+size = Vector3(12, 0.1, 12)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_k1gxf"]
+cull_mode = 2
+diffuse_mode = 1
+specular_mode = 2
+albedo_color = Color(0.5, 0.5, 0.5, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_byhhf"]
+size = Vector3(0.2, 1.5, 0.2)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_6y34d"]
+cull_mode = 2
+diffuse_mode = 1
+specular_mode = 2
+albedo_color = Color(0.3, 0.3, 0.3, 1)
+
+[node name="AreaLightWall" type="Node3D" unique_id=854236907]
+
+[node name="RTGIWorldEnvironment" type="WorldEnvironment" parent="." unique_id=718443989]
+environment = SubResource("Environment_r180f")
+
+[node name="Floor" type="MeshInstance3D" parent="." unique_id=436786473]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+mesh = SubResource("BoxMesh_7157g")
+surface_material_override/0 = SubResource("StandardMaterial3D_k1gxf")
+
+[node name="Occluder" type="MeshInstance3D" parent="." unique_id=644512730]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 1.5)
+mesh = SubResource("BoxMesh_byhhf")
+surface_material_override/0 = SubResource("StandardMaterial3D_6y34d")
+
+[node name="AreaLight" type="AreaLight3D" parent="." unique_id=930182498]
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 3, -1)
+light_energy = 18.0
+shadow_enabled = true
+area_size = Vector2(2, 2)
+
+[node name="AreaLightWallCamera" type="Camera3D" parent="." unique_id=215859482]
+transform = Transform3D(1, 0, 0, 0, 0.613941, 0.789352, 0, -0.789352, 0.613941, 0, 9, 7)
+current = true
+fov = 60.0
+far = 80.0

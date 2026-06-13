@@ -350,7 +350,7 @@ func _parse_args() -> void:
 			_convergence_frames = clampi(arg.trim_prefix("--rtgi-convergence-frames=").to_int(), 0, 128)
 		elif arg.begins_with("--rtgi-scene="):
 			var requested_scene := arg.trim_prefix("--rtgi-scene=").to_lower()
-			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability", "offscreen_bounce", "cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid", "sun_penumbra_ramp"]:
+			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability", "offscreen_bounce", "cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid", "sun_penumbra_ramp", "area_light_wall", "textured_area"]:
 				_scene_mode = requested_scene
 			else:
 				push_warning("Unknown RTGI quality scene '%s'; using stress scene." % requested_scene)
@@ -546,7 +546,7 @@ func _build_scene() -> void:
 
 
 func _is_packed_test_scene() -> bool:
-	return _scene_mode in ["cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid", "sun_penumbra_ramp"]
+	return _scene_mode in ["cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid", "sun_penumbra_ramp", "area_light_wall", "textured_area"]
 
 
 # Loads one of the committed static test scenes (cornell_box, specular_motion,
@@ -1264,6 +1264,10 @@ func _capture_and_measure_config(base_suffix: String) -> Array[String]:
 		metrics.merge(await _measure_light_grid(final_image, base_name), true)
 	elif _scene_mode == "sun_penumbra_ramp":
 		metrics.merge(_measure_sun_penumbra_ramp(final_image, base_name), true)
+	elif _scene_mode == "area_light_wall":
+		metrics.merge(await _measure_area_light_wall(final_image, base_name), true)
+	elif _scene_mode == "textured_area":
+		metrics.merge(await _measure_textured_area(final_image, base_name), true)
 	elif _is_coexistence_scene():
 		metrics.merge(await _measure_coexistence_image(final_image, base_name), true)
 	metrics["denoise_strength"] = _denoise_strength
@@ -3276,6 +3280,85 @@ func _measure_sun_penumbra_ramp(final_image: Image, _base_name: String) -> Dicti
 	}
 
 
+# Solid-color area-light wall metrics. area_wall_pool_mean_luma = mean luma over the directly-lit
+# floor pool (the D1 double-bright sentinel: if area lights are summed both in the deterministic
+# area pass AND through the RIS reservoir, this roughly doubles versus the raster reference).
+# area_wall_atten_edge_hf = mean |luma[x-1]-2*luma[x]+luma[x+1]| across the range-falloff band; a
+# hard cutoff spikes it, a smooth window keeps it low.
+func _measure_area_light_wall(final_image: Image, _base_name: String) -> Dictionary:
+	var width := final_image.get_width()
+	var height := final_image.get_height()
+	# Lit-pool ROI (center of frame where the area light's pool lands; tune in the LTC task).
+	var px0 := int(width * 0.35)
+	var px1 := int(width * 0.65)
+	var py0 := int(height * 0.45)
+	var py1 := int(height * 0.65)
+	var pool_acc := 0.0
+	var pool_n := 0
+	for y in range(py0, py1):
+		for x in range(px0, px1):
+			var c := final_image.get_pixel(x, y)
+			pool_acc += 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+			pool_n += 1
+	var pool_mean := pool_acc / float(max(pool_n, 1))
+	# Range-edge band: a horizontal strip crossing the falloff from lit to dark.
+	var ex0 := int(width * 0.10)
+	var ex1 := int(width * 0.90)
+	var ey0 := int(height * 0.70)
+	var ey1 := int(height * 0.78)
+	var cols := ex1 - ex0
+	var col_luma := PackedFloat32Array()
+	col_luma.resize(cols)
+	for cx in range(cols):
+		var x := ex0 + cx
+		var acc := 0.0
+		for y in range(ey0, ey1):
+			var c := final_image.get_pixel(x, y)
+			acc += 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+		col_luma[cx] = acc / float(max(ey1 - ey0, 1))
+	var hf := 0.0
+	for cx in range(1, cols - 1):
+		hf += abs(col_luma[cx - 1] - 2.0 * col_luma[cx] + col_luma[cx + 1])
+	hf /= float(max(cols - 2, 1))
+	return {
+		"area_wall_pool_mean_luma": pool_mean,
+		"area_wall_atten_edge_hf": hf,
+	}
+
+
+# Textured area-light metrics. area_textured_mean_luma = mean luma over the lit region (Item 6
+# energy parity). area_textured_structure_stddev = luma standard deviation over the same region;
+# the always-coarsest-mip path collapses the projected texture to a flat average (stddev ~0), the
+# adaptive-mip path restores texture structure toward the raster reference.
+func _measure_textured_area(final_image: Image, _base_name: String) -> Dictionary:
+	var width := final_image.get_width()
+	var height := final_image.get_height()
+	var rx0 := int(width * 0.25)
+	var rx1 := int(width * 0.75)
+	var ry0 := int(height * 0.40)
+	var ry1 := int(height * 0.75)
+	var n := 0
+	var acc := 0.0
+	var lumas := PackedFloat32Array()
+	for y in range(ry0, ry1):
+		for x in range(rx0, rx1):
+			var c := final_image.get_pixel(x, y)
+			var l := 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+			acc += l
+			lumas.push_back(l)
+			n += 1
+	var mean := acc / float(max(n, 1))
+	var var_acc := 0.0
+	for l in lumas:
+		var d := l - mean
+		var_acc += d * d
+	var stddev := sqrt(var_acc / float(max(n, 1)))
+	return {
+		"area_textured_mean_luma": mean,
+		"area_textured_structure_stddev": stddev,
+	}
+
+
 # Local/far measurement rects for the light_grid toggle split. The local rect
 # is centered on the camera projection of the floor point under ToggleLight
 # (the patch whose direct light genuinely changes); the far rect fills the
@@ -4395,6 +4478,10 @@ func _compare_metrics(metrics: Dictionary, expected: Dictionary) -> Array[String
 	_check_max_threshold(metrics, thresholds, "sun_penumbra_band_hf", failures)
 	_check_max_threshold(metrics, thresholds, "sun_penumbra_lit_luma", failures)
 	_check_max_threshold(metrics, thresholds, "sun_penumbra_occluded_luma", failures)
+	_check_max_threshold(metrics, thresholds, "area_wall_pool_mean_luma", failures)
+	_check_max_threshold(metrics, thresholds, "area_wall_atten_edge_hf", failures)
+	_check_max_threshold(metrics, thresholds, "area_textured_mean_luma", failures)
+	_check_max_threshold(metrics, thresholds, "area_textured_structure_stddev", failures)
 	return failures
 
 
