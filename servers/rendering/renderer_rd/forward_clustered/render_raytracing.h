@@ -464,8 +464,8 @@ struct RTViewportState {
 		RID shader;
 		bool valid = false;
 	};
-	// Six slots: today's four flavors plus slack.
-	UniformSetCacheEntry uniform_set_cache[6];
+	static constexpr uint32_t RT_UNIFORM_SET_CACHE_SIZE = 6; // Four dispatch flavors (prepare / WRC / SPG / primary-direct) plus slack.
+	UniformSetCacheEntry uniform_set_cache[RT_UNIFORM_SET_CACHE_SIZE];
 	uint64_t light_buffer_signature = 0;
 	bool light_buffer_signature_valid = false;
 

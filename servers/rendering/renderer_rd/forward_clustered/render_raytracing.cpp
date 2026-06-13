@@ -5869,9 +5869,13 @@ void RenderRaytracing::_free_viewport_state_internal(RTViewportState *p_state) {
 	if (!p_state) {
 		return;
 	}
-	for (uint32_t i = 0; i < (uint32_t)(sizeof(p_state->uniform_set_cache) / sizeof(p_state->uniform_set_cache[0])); i++) {
+	for (uint32_t i = 0; i < RTViewportState::RT_UNIFORM_SET_CACHE_SIZE; i++) {
 		_rt_free_uniform_set_if_alive(p_state->uniform_set_cache[i].uniform_set);
+		// rt_flags is only meaningful while valid; reset on free so a stale flavor can't be misread.
 		p_state->uniform_set_cache[i].valid = false;
+		p_state->uniform_set_cache[i].rt_flags = 0;
+		p_state->uniform_set_cache[i].signature = 0;
+		p_state->uniform_set_cache[i].shader = RID();
 	}
 	if (p_state->tlas.is_valid()) {
 		_rt_free_acceleration_structure_if_alive(p_state->tlas);
@@ -10653,7 +10657,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 	// otherwise take the first free (!valid) slot. If all six are valid with other
 	// flags, evict slot 0 (cannot happen with today's four flavors, but keeps the
 	// cache bounded if a fifth flavor is ever added).
-	const uint32_t cache_size = (uint32_t)(sizeof(p_state->uniform_set_cache) / sizeof(p_state->uniform_set_cache[0]));
+	const uint32_t cache_size = RTViewportState::RT_UNIFORM_SET_CACHE_SIZE;
 	uint32_t slot = 0;
 	bool slot_found = false;
 	for (uint32_t i = 0; i < cache_size; i++) {
