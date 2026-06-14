@@ -357,6 +357,13 @@ layout(set = 0, binding = 115) uniform sampler2D rt_guide_emission_tex;
 // pre-fix behavior and never crashes.
 layout(set = 0, binding = 116) uniform sampler2D rt_guide_normal_tex;
 
+// 117/118: LTC lookup tables for analytic area-light evaluation (specular only; diffuse is
+// LUT-free). LUT1 = the M^-1 reconstruction matrix terms, LUT2 = the GGX amplitude + Fresnel
+// terms. Populated unconditionally by update_uniform_set with a default-black fallback. Both
+// raygen and closest-hit include this file, so the bindings are visible to every RT stage.
+layout(set = 0, binding = 117) uniform sampler2D ltc_lut1;
+layout(set = 0, binding = 118) uniform sampler2D ltc_lut2;
+
 mat4 rt_camera_inv_view_matrix() {
 	mat4 inv_view = transpose(mat4(scene_data_block.data.inv_view_matrix[0],
 			scene_data_block.data.inv_view_matrix[1],

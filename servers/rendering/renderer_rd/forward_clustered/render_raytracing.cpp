@@ -10439,6 +10439,14 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		RID default_white = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
 		RID guide_normal = rt_guides_ready ? rb_data->rt_get_guide_normal() : default_white;
 		add_combined(116, nearest_sampler, guide_normal);
+
+		// 117/118: LTC lookup tables for analytic area-light evaluation. Fetched from the
+		// forward-clustered owner (created lazily by the raster pass that precedes the RT pass).
+		// A default-black fallback covers the cold first frame before the raster pass has run.
+		RID ltc1 = owner->get_ltc_lut1_rd_texture();
+		RID ltc2 = owner->get_ltc_lut2_rd_texture();
+		add_combined(117, linear_sampler, ltc1.is_valid() ? ltc1 : default_black);
+		add_combined(118, linear_sampler, ltc2.is_valid() ? ltc2 : default_black);
 	}
 
 	// Binding 60: RTGI specular reflection-direction diagnostic output.

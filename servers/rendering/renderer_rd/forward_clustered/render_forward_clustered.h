@@ -992,6 +992,11 @@ public:
 	ClusterBuilderSharedDataRD *get_cluster_builder_shared() { return &cluster_builder_shared; }
 	RendererRD::SSEffects *get_ss_effects() { return ss_effects; }
 
+	// LTC lookup table RD textures, used by the ray-tracing path (bound at set-0 bindings 117/118).
+	// Returns an invalid RID if the tables have not yet been created by the raster update pass.
+	RID get_ltc_lut1_rd_texture() const;
+	RID get_ltc_lut2_rd_texture() const;
+
 	/* callback from updating our lighting UBOs, used to populate cluster builder */
 	virtual void setup_added_reflection_probe(const Transform3D &p_transform, const Vector3 &p_half_size) override;
 	virtual void setup_added_light(const RSE::LightType p_type, const Transform3D &p_transform, float p_radius, float p_spot_aperture, const Vector2 &p_area_size) override;

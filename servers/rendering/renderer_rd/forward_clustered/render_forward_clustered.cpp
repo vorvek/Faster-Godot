@@ -7844,3 +7844,11 @@ RenderForwardClustered::~RenderForwardClustered() {
 		sdfgi_framebuffer_size_cache.remove(sdfgi_framebuffer_size_cache.begin());
 	}
 }
+
+RID RenderForwardClustered::get_ltc_lut1_rd_texture() const {
+	return ltc.lut1_texture.is_valid() ? RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut1_texture) : RID();
+}
+
+RID RenderForwardClustered::get_ltc_lut2_rd_texture() const {
+	return ltc.lut2_texture.is_valid() ? RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut2_texture) : RID();
+}
