@@ -159,11 +159,11 @@
 			}
 		},
 		"area_light_wall": {
-			"_note": "Solid-color area-light isolation scene. area_wall_pool_mean_luma is the energy-parity and double-count sentinel, gated as a band around the raster reference (off about 0.769, ray-traced LTC about 0.777, plus or minus ten percent): the min catches a too-dim regression (the earlier single-sample estimate read about 0.61) and the max catches a double-count (an area light summed both in the deterministic area pass and through the reservoir roughly doubles it). area_wall_atten_edge_hf stays report-only (generous cap): the single shadow ray still adds band noise across the attenuation falloff until the shared-sample shadow ratio lands.",
+			"_note": "Solid-color area-light isolation scene. area_wall_pool_mean_luma is the energy-parity and double-count sentinel, gated as a band around the raster reference (off about 0.769, ray-traced LTC about 0.777, plus or minus ten percent): the min catches a too-dim regression (the earlier single-sample estimate read about 0.61) and the max catches a double-count (an area light summed both in the deterministic area pass and through the reservoir roughly doubles it). area_wall_atten_edge_hf is now gated: the shared-sample shadow ratio (warm fpt 0.000427) replaces the single shadow ray (was 0.000546, a 22 percent noise increase); gate is warm value times 1.25 = 0.000534, catching any regression back toward single-ray noise levels.",
 			"thresholds": {
 				"max_area_wall_pool_mean_luma": 0.8462,
 				"min_area_wall_pool_mean_luma": 0.6923,
-				"max_area_wall_atten_edge_hf": 100000.0
+				"max_area_wall_atten_edge_hf": 0.000534
 			}
 		},
 		"textured_area": {

@@ -436,6 +436,12 @@ const uint RTGI_DETERMINISTIC_DIRECT_LIGHT_LIMIT = 12u;
 // penumbra-band noise metric.
 const float RT_DIRECT_SAMPLE_SOLID_ANGLE_REF = 0.015;
 
+// The subtended solid angle (steradians) at which an area light gets the full per-preset shadow
+// sample budget for the visibility ratio; the count scales linearly from 1 sample at omega 0 to
+// the preset budget at this value. Room-scale rectangles subtend a much larger solid angle than a
+// sun, so this reference is correspondingly larger. Calibrated against the area-wall band noise.
+const float RT_AREA_SAMPLE_SOLID_ANGLE_REF = 0.5;
+
 struct RTDirectLighting {
 	vec3 diffuse;
 	vec3 specular;
@@ -1104,9 +1110,9 @@ float lights_area_omni_attenuation(float distance, float inv_range, float decay)
 
 // Analytic transformed-cosine area-light shading, mirroring the rasterizer light_process_area: a
 // closed-form diffuse + specular cosine integral over the rectangle, the closest-point attenuation
-// window, the textured form factor with a solid-angle-adaptive mip, and a single shadow ray for
-// visibility (a shared-sample ratio replaces the single ray in a later change). Evaluated in the
-// deterministic area_sum loop, outside the reservoir.
+// window, the textured form factor with a solid-angle-adaptive mip, and a Heitz shared-sample
+// visibility ratio (K stratified shadow rays). Evaluated in the deterministic area_sum loop,
+// outside the reservoir.
 RTDirectLighting lights_evaluate_area_light_ltc(
 		RTLightData light,
 		vec3 hit_pos,
@@ -1174,23 +1180,58 @@ RTDirectLighting lights_evaluate_area_light_ltc(
 	vec3 emission = light.emission;
 	float indirect_mul = lights_apply_indirect_energy(is_indirect_bounce) ? light.indirect_energy : 1.0;
 
-	// Single shadow ray toward the rect center direction for visibility (replaced by the K-ray
-	// ratio in the next change). Sample the rect with one Urena sample so the ray points at a
-	// representative surface point, not just the center.
+	// Heitz 2018 shared-sample shadow ratio: K stratified Urena samples accumulate a cosine-weighted
+	// TOTAL sum (den) and VISIBLE sum (num = the samples whose shadow ray reports unoccluded);
+	// R = clamp(num/den, 0, 1) (den-guarded) is the integrand-weighted visibility fraction.
+	// IMPORTANT: lights_trace_shadow_ray returns TRUE when the point is VISIBLE (unoccluded), so num
+	// accumulates on the true branch. (The single-sample branches elsewhere gate on !trace because
+	// they DARKEN on occlusion; here we COUNT visibility, so the sense is inverted. Do not "fix" the
+	// condition.) Multiplying the analytic radiance by R gives a low-variance shadowed estimate. The
+	// SAME samples feed num and den, so the light radiance / pdf cancels and only cosine + visibility
+	// remain.
 	float visibility = 1.0;
 	if ((light.flags & RT_LIGHT_FLAG_SHADOW) != 0u) {
 		vec3 corner = center - ex - ey;
 		SphQuad sq = sph_quad_init(corner, ex * 2.0, ey * 2.0, hit_pos);
 		if (sq.S > 1e-5) {
-			vec2 su = p_use_blue_noise_u ? p_blue_noise_u : rand2(rng_state);
-			vec3 sp = sph_quad_sample(sq, su.x, su.y);
-			vec3 to_sample = sp - hit_pos;
-			float sdist = length(to_sample);
-			vec3 L = to_sample / max(sdist, 1e-6);
-			vec3 shadow_origin = offset_ray_origin(hit_pos, dot(geometry_normal, L) >= 0.0 ? geometry_normal : -geometry_normal);
-			if (!lights_trace_shadow_ray(shadow_origin, L, max(sdist - 0.002, 0.001), light.shadow_caster_mask, rng_state)) {
-				visibility = 1.0 - clamp(light.shadow_opacity, 0.0, 1.0);
+			// K on the screen primary scales with the rect solid angle, bounded by the per-preset
+			// shadow budget. Probe and deep paths keep 1 sample here; the probe knob governs that.
+			uint K = 1u;
+			if (p_use_blue_noise_u && !rt_probe_dispatch_mode()) {
+				uint preset_max = max(uint(get_rt_param(RT_PARAM_DIRECT_SHADOW_SAMPLES)), 1u);
+				float t = clamp(sq.S / RT_AREA_SAMPLE_SOLID_ANGLE_REF, 0.0, 1.0);
+				K = clamp(uint(round(float(preset_max) * t)), 1u, preset_max);
 			}
+			float num = 0.0;
+			float den = 0.0;
+			for (uint s = 0u; s < K; s++) {
+				// Stratify the blue-noise point per sample (screen primary); white-noise PCG elsewhere.
+				vec2 su;
+				if (p_use_blue_noise_u) {
+					su = (K > 1u)
+							? fract(p_blue_noise_u + vec2(0.7548776662, 0.5698402909) * (float(s) / float(K)))
+							: p_blue_noise_u;
+				} else {
+					su = rand2(rng_state);
+				}
+				vec3 sp = sph_quad_sample(sq, su.x, su.y);
+				vec3 to_sample = sp - hit_pos;
+				float sdist = length(to_sample);
+				vec3 L = to_sample / max(sdist, 1e-6);
+				float w = max(dot(N, L), 0.0); // cosine integrand weight, shared by num and den
+				if (w <= 0.0) {
+					continue;
+				}
+				den += w;
+				vec3 shadow_origin = offset_ray_origin(hit_pos, dot(geometry_normal, L) >= 0.0 ? geometry_normal : -geometry_normal);
+				if (lights_trace_shadow_ray(shadow_origin, L, max(sdist - 0.002, 0.001), light.shadow_caster_mask, rng_state)) {
+					num += w; // shadow ray reports VISIBLE (unoccluded) -> counts toward the visible sum
+				}
+			}
+			float ratio = (den > 1e-6) ? clamp(num / den, 0.0, 1.0) : 1.0;
+			// shadow_opacity attenuates the shadow strength, matching the single-ray semantics.
+			float opacity = clamp(light.shadow_opacity, 0.0, 1.0);
+			visibility = mix(1.0, ratio, opacity);
 		}
 	}
 
@@ -1538,12 +1579,11 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		directional_sum.specular += dir_accum.specular * inv_n;
 	}
 
-	// Area lights are evaluated deterministically here too, outside the reservoir (Step 1 excludes
-	// them). One evaluation each, every frame, folded into all three return paths below. The
-	// shading uses the analytic LTC path with a single shadow ray (lights_evaluate_area_light_ltc);
-	// the K-ray shadow ratio that replaces the single shadow ray is deferred to a later change.
-	// A scene with no area light leaves area_sum zero, so this is a strict no-op
-	// for the positional/directional paths.
+	// Area lights are evaluated deterministically here too, outside the reservoir (they are excluded
+	// from lights_direct_source_weight). One evaluation each, every frame, folded into all three
+	// return paths below. The shading is the analytic LTC path with a Heitz K-ray shared-sample
+	// shadow ratio (lights_evaluate_area_light_ltc). A scene with no area light leaves area_sum zero,
+	// so this is a strict no-op for the positional/directional paths.
 	RTDirectLighting area_sum = rt_direct_lighting_zero();
 	for (uint idx = 0u; idx < light_count; idx++) {
 		RTLightData area_light = rt_lights[idx];
