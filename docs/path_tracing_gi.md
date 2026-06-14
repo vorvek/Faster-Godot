@@ -92,6 +92,15 @@ class reference.
     usually trace lighting below final display resolution and rely on guided
     reconstruction. Raise it toward `1.0` for sharper GI and lower it toward
     `0.25` for cheaper tracing with more denoiser/reconstruction pressure.
+- `rtgi_area_light_gi_quality`
+  - Controls how a rectangular `AreaLight3D` shadow is sampled when the light is
+    gathered into the GI probes. `Fast`, the default, traces a single shadow ray
+    per probe sample and leans on the probe cache's temporal accumulation;
+    `High` traces the full solid-angle-scaled shared-sample ratio on the probe
+    gather for cleaner area-light shadows in still captures, at extra GPU cost.
+    The camera-visible (screen primary) area-light shading always uses the full
+    ratio and is unaffected by this control. The path-traced area-light model is
+    described in [arealight3d.md](arealight3d.md).
 - `rtgi_disable_in_editor`
   - Disables RTGI only for editor viewport previews. This lets authored scenes
     keep RTGI enabled for the running project and exported builds without

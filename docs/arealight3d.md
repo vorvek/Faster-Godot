@@ -16,8 +16,9 @@ The north-star is **pixel-parity with 4.7 for `AreaLight3D` in Forward+**: the
 exact class name, property names, defaults, and energy/LTC normalization match
 upstream, so a 4.7 `.tscn`/`.scn`/glTF/FBX area light deserializes and renders
 identically. When the fork's RTGI (`radiance_probes`) is the active GI, the
-path tracer evaluates area lights directly through next-event estimation with
-matched energy rather than the raster LTC code (see *Path-traced area lights*).
+path tracer shades area lights with the same analytic LTC model as the
+rasterizer (matched energy, with a shared-sample ratio for the soft shadow)
+rather than the raster LTC code path (see *Path-traced area lights*).
 
 The port targets the **Forward+ / Vulkan (RenderingDevice) path only**. The
 fork is Vulkan-only/Forward+, so the GLES3 Compatibility and Forward Mobile
@@ -151,34 +152,71 @@ activated/filled; everything else is new in this port.
 When the fork's `radiance_probes` RTGI is active, lighting is evaluated by the
 path tracer instead of the raster LTC code. The path tracer originally had no
 area-light primitive, so an enabled `AreaLight3D` was treated as a point light
-at the rectangle's center. Its shape was discarded, so the soft shadow was the
-wrong size and in the wrong place, the boundary was noisy at one sample per
-pixel, and the brightness did not match the raster. In the deep-path reference
-mode the misclassified light was resampled at every bounce for no useful result.
+at the rectangle's center: its shape was discarded, the soft shadow was the
+wrong size and in the wrong place, and the brightness did not match the raster.
 
-The path tracer now samples `AreaLight3D` as a real rectangle in next-event
-estimation, using the area-preserving spherical-rectangle parameterization from
-Urena, Fajardo and King (2013). A shading point importance-samples the solid
-angle the rectangle subtends, traces one shadow ray toward the sampled point,
-and runs the same BRDF, specular, and reservoir code the other light types use.
+Area lights are now shaded with the same analytic model the rasterizer uses. The
+path tracer evaluates the rectangle's diffuse and specular contribution with the
+Linearly Transformed Cosines closed form, reading the same LTC lookup tables and
+the same area-texture atlas as the Forward+ light. The shading itself draws no
+per-pixel light samples, so the lit surface is noise-free and matches the
+rasterizer term for term. The light is evaluated once per shading point, outside
+the path tracer's reservoir, so it never competes with the other lights for
+samples and cannot be double counted.
+
+Emission and falloff match the raster path, so a light reads the same whether
+RTGI is on or off. The rectangle radiance reuses the same energy, the same
+`area_normalize_energy` division by surface area, and the same physical-units
+normalization. `area_texture` is read from the area-light atlas with a
+solid-angle-adaptive mip, so a textured light keeps its detail up close and
+settles toward its average color at a distance. Distance attenuation is measured to
+the closest point on the rectangle rather than its center, matching the raster
+window, so the lit pool stretches with a long thin light the way the
+rasterizer's does. At the default settle the path-traced pool matches the
+rasterizer to about one percent (mean luma 0.777 against 0.769).
+
+Soft shadows use a shared-sample visibility ratio (Heitz 2018). A handful of
+stratified points on the rectangle, drawn with the area-preserving
+spherical-rectangle parameterization of Urena, Fajardo and King (2013), each
+trace one shadow ray; the cosine-weighted fraction that reach the surface
+unoccluded scales the analytic radiance. Because the same samples drive both the
+visible and the total sum, the light's radiance cancels and only the visibility
+fraction remains, which is far quieter than shading each sample stochastically.
+The sample count scales with the solid angle the rectangle subtends, bounded by
+the active quality preset's shadow budget. Replacing the single shadow ray with
+the ratio drops the contact-shadow band noise by about a fifth (a high-frequency
+band-energy metric, 0.000546 to 0.000427, at two samples) at the same cost, and
+the lit pool's energy is unchanged.
+
 Because primary shading, probe gathers, indirect bounces, and reflections all
 run through that one path, area lights work in every RTGI mode: full path
-tracing, reflections-only, and hybrid.
+tracing, reflections-only, and hybrid. Emission is one-sided toward the light's
+local -Z.
 
-Emission matches the raster LTC path, so a light reads the same whether RTGI is
-on or off. The rectangle radiance reuses the same energy, the same
-`area_normalize_energy` division by surface area, and the same physical-units
-normalization. `area_texture` works by sampling the area-light atlas at the
-sampled point and modulating the emitted radiance with premultiplied alpha, as
-the raster does. Emission is one-sided toward the light's local -Z.
+### Area-light GI quality
+
+`Environment.rtgi_area_light_gi_quality` sets how the shadow ratio is sampled
+when an area light is gathered into the GI probes. The camera-visible shading
+(the screen primary) always uses the full solid-angle-scaled ratio; only the
+probe gather is governed by this setting, because the probe cache already
+accumulates over time and is cheaper to keep clean.
+
+- **Fast** (default): one shadow ray per probe sample. The probe cache smooths
+  the result across frames, so a single ray holds up for moving cameras and
+  gameplay.
+- **High**: the full solid-angle-scaled ratio on the probe gather as well, for
+  cleaner area-light shadows in still captures, at extra GPU cost.
+
+The shipped quality presets default to Fast; High is opt-in for photo mode and
+architectural stills.
 
 Cost depends on how the path tracer is configured. In the production path
 (screen and world probes plus the temporal stabilizer) a room-sized
 shadow-casting area light adds roughly 1.5 ms of GPU time at 1080p with a 0.75
-render scale on an RTX 4080 Super, which is the cost of one more shadow-casting
-light. The deep-path reference mode (`rtgi_fpt_reference`) resamples every light
-at every bounce by design, so an area light is proportionally heavier there;
-that mode is a quality reference, not the shipping configuration.
+render scale on an RTX 4080 SUPER, the cost of one more shadow-casting light.
+The deep-path reference mode (`rtgi_fpt_reference`) resamples every light at
+every bounce by design, so an area light is proportionally heavier there; that
+mode is a quality reference, not the shipping configuration.
 
 ## Pros
 
