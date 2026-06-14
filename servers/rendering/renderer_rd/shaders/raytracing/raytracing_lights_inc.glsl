@@ -534,7 +534,11 @@ bool lights_direct_source_weight(
 	// every RIS CDF draw and starve the positional lights that actually reach the pixel).
 	// Skipping here keeps the count pass, the CDF candidate walk, and lights_find_direct_source_by_id
 	// on one shared positional-only valid-set definition (the stratified draw depends on it).
-	if (test_light.type == RT_LIGHT_TYPE_DIRECTIONAL) {
+	// Directionals AND area lights are evaluated deterministically OUTSIDE the reservoir machinery
+	// (their own per-frame sums below), so they must not enter valid_count / total_weight / the
+	// stratified CDF / the reservoir. Without the area exclusion an area light would be summed in
+	// area_sum AND selected/shaded through the reservoir, doubling its contribution.
+	if (test_light.type == RT_LIGHT_TYPE_DIRECTIONAL || test_light.type == RT_LIGHT_TYPE_AREA) {
 		return false;
 	}
 	bool is_valid = (test_light.cull_mask & receiver_layer_mask) != 0u;
@@ -573,6 +577,27 @@ bool lights_is_directional_valid(
 		return false;
 	}
 	return lights_selection_weight(hit_pos, N, dir_light, is_indirect_bounce) > 0.0;
+}
+
+// Area-light validity gate, mirroring lights_is_directional_valid, for the deterministic area_sum
+// loop. Same cull-mask + positive-selection-weight pair lights_direct_source_weight applies to a
+// positional light; lights_selection_weight's area branch (the one-sided test + the approximate
+// solid-angle weight) carries the range/orientation cull. A separate helper because
+// lights_direct_source_weight returns false for area lights by design (the exclusion above), so it
+// cannot be reused to validate one.
+bool lights_is_area_valid(
+		RTLightData area_light,
+		uint receiver_layer_mask,
+		vec3 hit_pos,
+		vec3 N,
+		bool is_indirect_bounce) {
+	if (area_light.type != RT_LIGHT_TYPE_AREA) {
+		return false;
+	}
+	if ((area_light.cull_mask & receiver_layer_mask) == 0u) {
+		return false;
+	}
+	return lights_selection_weight(hit_pos, N, area_light, is_indirect_bounce) > 0.0;
 }
 
 bool lights_find_direct_source_by_id(
@@ -1431,6 +1456,22 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		directional_sum.specular += dir_accum.specular * inv_n;
 	}
 
+	// Area lights are evaluated deterministically here too, outside the reservoir (Step 1 excludes
+	// them). One evaluation each, every frame, folded into all three return paths below. The
+	// shading is still the single-sample spherical-rect NEE; the analytic LTC + ratio replaces it
+	// in a later change. A scene with no area light leaves area_sum zero, so this is a strict no-op
+	// for the positional/directional paths.
+	RTDirectLighting area_sum = rt_direct_lighting_zero();
+	for (uint idx = 0u; idx < light_count; idx++) {
+		RTLightData area_light = rt_lights[idx];
+		if (!lights_is_area_valid(area_light, receiver_layer_mask, hit_pos, N, is_indirect_bounce)) {
+			continue;
+		}
+		RTDirectLighting area_result = lights_evaluate_single_direct_light_split(area_light, 1.0, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce, p_use_blue_noise_u, p_blue_noise_u);
+		area_sum.diffuse += area_result.diffuse;
+		area_sum.specular += area_result.specular;
+	}
+
 	for (uint idx = 0u; idx < light_count; idx++) {
 		float light_weight = 0.0;
 		if (!lights_direct_source_weight(idx, light_count, receiver_layer_mask, is_indirect_bounce, hit_pos, N, light_weight)) {
@@ -1447,9 +1488,12 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 	out_valid_light_count = valid_count;
 
 	if (valid_count == 0u) {
-		// A directional can still be valid when no positional light is, so its deterministic
-		// contribution must be returned even with an empty positional set.
-		return directional_sum;
+		// A directional or area light can still be valid when no positional light is, so their
+		// deterministic contributions must be returned even with an empty positional set.
+		RTDirectLighting nonpositional_sum = directional_sum;
+		nonpositional_sum.diffuse += area_sum.diffuse;
+		nonpositional_sum.specular += area_sum.specular;
+		return nonpositional_sum;
 	}
 
 	if (valid_count <= deterministic_light_limit) {
@@ -1482,6 +1526,8 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		// scene directional_sum is zero, so the result is bit-identical to before.
 		deterministic_sum.diffuse += directional_sum.diffuse;
 		deterministic_sum.specular += directional_sum.specular;
+		deterministic_sum.diffuse += area_sum.diffuse;
+		deterministic_sum.specular += area_sum.specular;
 		return deterministic_sum;
 	}
 
@@ -1575,6 +1621,8 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 	RTDirectLighting returned_lighting = resolved_lighting;
 	returned_lighting.diffuse += directional_sum.diffuse;
 	returned_lighting.specular += directional_sum.specular;
+	returned_lighting.diffuse += area_sum.diffuse;
+	returned_lighting.specular += area_sum.specular;
 	if (!reservoir.valid) {
 		if (!is_indirect_bounce && !rt_probe_dispatch_mode()) {
 			rt_source_direct_reservoir_record(ivec2(gl_LaunchIDEXT.xy), 0u, 0.0, 0.0, reservoir.M, 0.0, vec3(0.0), 0.0);
