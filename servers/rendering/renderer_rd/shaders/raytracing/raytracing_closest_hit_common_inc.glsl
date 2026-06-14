@@ -542,7 +542,10 @@ void debug_visualize(
 		float d = clamp(gl_HitTEXT / depth_range, 0.0, 1.0);
 		ps.radiance = vec3(d);
 	} else if (vis_mode == 21) {
-		ps.radiance = emissive;
+		// Emissive is a real radiance channel: apply the deterministic absolute cap so the debug
+		// readout is stable (not exposure-dependent), a fixed oracle independent of scene exposure.
+		float hard_cap = get_rt_param(RT_PARAM_RAY_MAX_RADIANCE);
+		ps.radiance = (hard_cap > 0.0) ? rt_clamp_luminance(emissive, hard_cap) : emissive;
 	} else if (vis_mode == 22) {
 		// BRDF below-hemisphere fallback visualization. Reflects the two-layer
 		// recovery applied in shade_and_bounce:

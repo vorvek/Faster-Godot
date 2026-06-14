@@ -1091,7 +1091,12 @@ void main() {
 			total_radiance += sample_radiance;
 			total_specular_radiance += sample_specular;
 		} else {
-			total_radiance += ps.radiance;
+			// VIS_MODE 21 (emissive) is a radiance channel: apply the deterministic absolute cap so
+			// the debug readout is stable. This also covers the sky-miss case (ps.radiance = sky_color
+			// in the miss shader) for the emissive view. Other debug modes are bounded in [0,1] already.
+			float hard_cap = get_rt_param(RT_PARAM_RAY_MAX_RADIANCE);
+			bool is_radiance_debug = (int(get_rt_param(RT_PARAM_VIS_MODE)) == 21) && (hard_cap > 0.0);
+			total_radiance += is_radiance_debug ? rt_clamp_luminance(ps.radiance, hard_cap) : ps.radiance;
 		}
 	}
 
