@@ -61,6 +61,21 @@ vec3 rt_light_area_ex(RTLightData l) { return l.spot_direction; }
 vec3 rt_light_area_ey(RTLightData l) { return vec3(l.radius, l.inv_spot_attenuation, l.cos_spot_angle); }
 vec3 rt_light_area_normal(RTLightData l) { return normalize(cross(rt_light_area_ex(l), rt_light_area_ey(l))); }
 
+// Distance from a shading point to the CLOSEST point on the rectangular area light (clamped local
+// coords), matching the raster light_process_area at scene_forward_lights_inc.glsl:991-994. Both the
+// area range cull and the attenuation window key on this distance, NOT the distance to the rectangle
+// center: a wide rectangle lights the floor along its long axis, which a center-distance radial cull
+// would wrongly clip into a fixed disc regardless of the rectangle's shape.
+float rt_light_area_closest_dist(RTLightData l, vec3 hit_pos) {
+	vec3 ex = rt_light_area_ex(l);
+	vec3 ey = rt_light_area_ey(l);
+	vec3 nrm = normalize(cross(ex, ey));
+	vec3 lv = hit_pos - l.position;
+	vec3 pos_local = vec3(dot(lv, normalize(ex)), dot(lv, normalize(ey)), dot(lv, -nrm));
+	vec3 closest_local = vec3(clamp(pos_local.x, -length(ex), length(ex)), clamp(pos_local.y, -length(ey), length(ey)), 0.0);
+	return length(closest_local - pos_local);
+}
+
 // Directional-light accessors for fog_process (raytracing_fog_inc.glsl). Lifted here from
 // the closest-hit include so every stage that iterates rt_lights (closest hit AND the
 // FPT primary-direct raygen) shares one definition. The direction is returned in VIEW
@@ -386,7 +401,12 @@ float lights_selection_weight(vec3 hit_pos, vec3 N, RTLightData light, bool is_i
 		vec3 center = light.position;
 		vec3 to_light = center - hit_pos;
 		float dist_sq = dot(to_light, to_light);
-		if (light.max_range_squared != 0.0 && dist_sq > light.max_range_squared) {
+		// Range cull on the CLOSEST point of the rectangle, not the center: a wide rect lights the
+		// floor along its long axis (matching the raster window). A center-distance cull would clip
+		// it to a fixed radial disc regardless of the rect shape, so the area_sum gate this feeds
+		// (lights_is_area_valid) would never evaluate the analytic shading outside that disc.
+		float d_closest = rt_light_area_closest_dist(light, hit_pos);
+		if (light.max_range_squared != 0.0 && d_closest * d_closest > light.max_range_squared) {
 			return 0.0;
 		}
 		vec3 nrm = rt_light_area_normal(light);
@@ -1112,14 +1132,7 @@ RTDirectLighting lights_evaluate_area_light_ltc(
 	// coords), matching raster_lights:991-998. get_omni_attenuation is the (1-(d/range)^4)^2 *
 	// pow(d,-decay) family; the extra * d*d cancels the decay's inverse square because the LTC form
 	// factor already carries 1/r^2. For the default decay==2 this reduces to the window alone.
-	vec3 a_dir = normalize(ex);
-	vec3 b_dir = normalize(ey);
-	float a_half = length(ex);
-	float b_half = length(ey);
-	vec3 lv = hit_pos - center;
-	vec3 pos_local = vec3(dot(lv, a_dir), dot(lv, b_dir), dot(lv, -nrm));
-	vec3 closest_local = vec3(clamp(pos_local.x, -a_half, a_half), clamp(pos_local.y, -b_half, b_half), 0.0);
-	float d_closest = length(closest_local - pos_local);
+	float d_closest = rt_light_area_closest_dist(light, hit_pos);
 	float atten_raw = lights_area_omni_attenuation(d_closest, light.inv_max_range, light.attenuation);
 	if (atten_raw <= 0.0) {
 		return rt_direct_lighting_zero();
