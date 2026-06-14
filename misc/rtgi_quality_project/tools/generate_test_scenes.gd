@@ -835,11 +835,11 @@ func build_area_light_wall() -> Node3D:
 
 	# Camera: eye at (0, 9, 7), target (0, 0, 0). Forward = normalize((0,0,0) -
 	# (0,9,7)) = normalize(0,-9,-7) = (0, -0.789352, -0.613941). Camera -Z =
-	# forward, so z column = -forward = (0, 0.789352, 0.613941). x column stays
-	# world X = (1,0,0). y = cross(z,x)... wait, y = cross(x,z) for a
-	# right-handed basis: y = cross((1,0,0),(0,0.789352,0.613941)) =
-	# (0*0.613941-0*0.789352, 0*0-1*0.613941, 1*0.789352-0*0) =
-	# (0, -0.613941, 0.789352). This constructor takes columns (x, y, z, origin).
+	# forward, so z_col = -forward = (0, 0.789352, 0.613941). x_col = world X =
+	# (1,0,0). y_col = cross(z_col, x_col) =
+	# cross((0,0.789352,0.613941),(1,0,0)) =
+	# (0.789352*0-0.613941*0, 0.613941*1-0*0, 0*0-0.789352*1) =
+	# (0, 0.613941, -0.789352). This constructor takes columns (x, y, z, origin).
 	var camera := Camera3D.new()
 	camera.name = "AreaLightWallCamera"
 	camera.current = true
@@ -861,12 +861,14 @@ func build_area_light_wall() -> Node3D:
 # Textured area-light mip-accuracy scene. Same neutral Lambert ground (12 x 12
 # m) and black env. Two AreaLight3D nodes share the same procedural 256x256
 # checkerboard ImageTexture (black/white 16-px tiles). The NEAR light (2 x 2 m,
-# 2 m above the floor) subtends a large solid angle and should show tile
-# structure in the projected illumination; the FAR light (2 x 2 m, 10 m up and
-# 5 m back at a grazing angle) subtends a small footprint. Camera frames both
-# lit regions. The area_textured_structure_stddev metric captures whether the
-# projected pattern retains luma variance (raster path: high stddev) or is
-# flattened to a uniform average (always-coarsest-mip path: near-zero stddev).
+# 2 m above the floor center at world origin) subtends a large solid angle. The
+# FAR light (1.2 x 1.2 m, 7 m up at (3, 7, -3), straight down) subtends roughly
+# 25x less solid angle; its textured footprint lands at floor (3, 0, -3), visible
+# in the upper-right of the camera frame. area_textured_mean_luma measures the
+# near footprint energy (Item 6 parity). area_textured_structure_stddev measures
+# luma variance in the far footprint ROI: the always-coarsest-mip path collapses
+# the projected texture to a flat average (stddev near zero), while the
+# adaptive-mip path retains tile structure (non-zero stddev at distance).
 func build_textured_area() -> Node3D:
 	var root := Node3D.new()
 	root.name = "TexturedArea"
@@ -914,29 +916,32 @@ func build_textured_area() -> Node3D:
 	root.add_child(near_area)
 	_claim(root, near_area)
 
-	# FAR light: same panel, 10 m up and 5 m toward -Z, tilted to project onto
-	# the floor at a grazing angle. Subtends a small footprint (the far/grazing
-	# region where the adaptive mip would choose a coarser level even correctly).
+	# FAR light: smaller 1.2 x 1.2 m panel, 7 m above the floor at (3, 7, -3),
+	# facing straight down. This places its textured footprint at floor (3, 0, -3),
+	# visible in the upper-right of the camera frame. At 7 m height it subtends
+	# roughly 25x less solid angle than the near light, exercising the far/small
+	# solid-angle case where an adaptive mip level differs from always-coarsest.
+	# Energy is raised to keep the footprint measurable despite the extra distance.
 	var far_area := AreaLight3D.new()
 	far_area.name = "FarAreaLight"
-	far_area.position = Vector3(0.0, 10.0, -5.0)
-	# Rotate -70 degrees around X so the panel faces mostly downward with a
-	# forward tilt, projecting onto the floor in front of it.
-	far_area.rotation_degrees = Vector3(-70.0, 0.0, 0.0)
+	far_area.position = Vector3(3.0, 7.0, -3.0)
+	far_area.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
 	far_area.light_color = Color(1.0, 1.0, 1.0)
-	far_area.light_energy = 20.0
+	far_area.light_energy = 35.0
 	far_area.shadow_enabled = false
-	far_area.area_size = Vector2(2.0, 2.0)
-	far_area.area_range = 14.0
+	far_area.area_size = Vector2(1.2, 1.2)
+	far_area.area_range = 12.0
 	far_area.area_texture = checker_tex
 	root.add_child(far_area)
 	_claim(root, far_area)
 
 	# Camera: eye at (0, 7, 8), target (0, 0, 0). Forward = normalize((0,0,0) -
 	# (0,7,8)) = normalize(0,-7,-8), len = sqrt(49+64) = sqrt(113) ~= 10.630.
-	# forward = (0, -0.659, -0.753). z_col = -forward = (0, 0.659, 0.753).
-	# x_col = world X = (1,0,0). y_col = cross(x_col, z_col) =
-	# (0*0.753-0*0.659, 0*0-1*0.753, 1*0.659-0*0) = (0, -0.753, 0.659).
+	# forward = (0, -0.659, -0.753). z_col = -forward = (0, 0.751828, 0.659380).
+	# x_col = world X = (1,0,0). y_col = cross(z_col, x_col) =
+	# cross((0,0.751828,0.659380),(1,0,0)) =
+	# (0.751828*0-0.659380*0, 0.659380*1-0*0, 0*0-0.751828*1) =
+	# (0, 0.659380, -0.751828).
 	var camera := Camera3D.new()
 	camera.name = "TexturedAreaCamera"
 	camera.current = true

@@ -32,31 +32,31 @@ data = {
 [sub_resource type="ImageTexture" id="ImageTexture_152sx"]
 image = SubResource("Image_as8wy")
 
-[node name="TexturedArea" type="Node3D" unique_id=1023836815]
+[node name="TexturedArea" type="Node3D" unique_id=797830398]
 
-[node name="RTGIWorldEnvironment" type="WorldEnvironment" parent="." unique_id=667879241]
+[node name="RTGIWorldEnvironment" type="WorldEnvironment" parent="." unique_id=763779035]
 environment = SubResource("Environment_db7gh")
 
-[node name="Floor" type="MeshInstance3D" parent="." unique_id=485295588]
+[node name="Floor" type="MeshInstance3D" parent="." unique_id=1812780234]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
 mesh = SubResource("BoxMesh_t33qn")
 surface_material_override/0 = SubResource("StandardMaterial3D_s8n8v")
 
-[node name="NearAreaLight" type="AreaLight3D" parent="." unique_id=2077335307]
+[node name="NearAreaLight" type="AreaLight3D" parent="." unique_id=1472774436]
 transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 2, 0)
 light_energy = 12.0
 area_range = 8.0
 area_size = Vector2(2, 2)
 area_texture = SubResource("ImageTexture_152sx")
 
-[node name="FarAreaLight" type="AreaLight3D" parent="." unique_id=1934266002]
-transform = Transform3D(1, 0, 0, 0, 0.34202015, 0.9396926, 0, -0.9396926, 0.34202015, 0, 10, -5)
-light_energy = 20.0
-area_range = 14.0
-area_size = Vector2(2, 2)
+[node name="FarAreaLight" type="AreaLight3D" parent="." unique_id=1807297756]
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 3, 7, -3)
+light_energy = 35.0
+area_range = 12.0
+area_size = Vector2(1.2, 1.2)
 area_texture = SubResource("ImageTexture_152sx")
 
-[node name="TexturedAreaCamera" type="Camera3D" parent="." unique_id=1620595895]
+[node name="TexturedAreaCamera" type="Camera3D" parent="." unique_id=817026853]
 transform = Transform3D(1, 0, 0, 0, 0.65938, 0.751828, 0, -0.751828, 0.65938, 0, 7, 8)
 current = true
 fov = 65.0

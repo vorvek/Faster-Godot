@@ -1265,9 +1265,9 @@ func _capture_and_measure_config(base_suffix: String) -> Array[String]:
 	elif _scene_mode == "sun_penumbra_ramp":
 		metrics.merge(_measure_sun_penumbra_ramp(final_image, base_name), true)
 	elif _scene_mode == "area_light_wall":
-		metrics.merge(await _measure_area_light_wall(final_image, base_name), true)
+		metrics.merge(_measure_area_light_wall(final_image, base_name), true)
 	elif _scene_mode == "textured_area":
-		metrics.merge(await _measure_textured_area(final_image, base_name), true)
+		metrics.merge(_measure_textured_area(final_image, base_name), true)
 	elif _is_coexistence_scene():
 		metrics.merge(await _measure_coexistence_image(final_image, base_name), true)
 	metrics["denoise_strength"] = _denoise_strength
@@ -3288,11 +3288,15 @@ func _measure_sun_penumbra_ramp(final_image: Image, _base_name: String) -> Dicti
 func _measure_area_light_wall(final_image: Image, _base_name: String) -> Dictionary:
 	var width := final_image.get_width()
 	var height := final_image.get_height()
-	# Lit-pool ROI (center of frame where the area light's pool lands; tune in the LTC task).
+	# Lit-pool ROI: center of the frame where the area light pool lands. The bottom
+	# edge (py1) is kept at 0.55 rather than 0.65 so the ROI sits above the
+	# occluder contact shadow (which runs floor z ~1.5-4.0, mapping to the lower
+	# portion of the frame). The shadow must remain present and measurable
+	# elsewhere in the frame for later noise tasks.
 	var px0 := int(width * 0.35)
 	var px1 := int(width * 0.65)
 	var py0 := int(height * 0.45)
-	var py1 := int(height * 0.65)
+	var py1 := int(height * 0.55)
 	var pool_acc := 0.0
 	var pool_n := 0
 	for y in range(py0, py1):
@@ -3326,33 +3330,52 @@ func _measure_area_light_wall(final_image: Image, _base_name: String) -> Diction
 	}
 
 
-# Textured area-light metrics. area_textured_mean_luma = mean luma over the lit region (Item 6
-# energy parity). area_textured_structure_stddev = luma standard deviation over the same region;
-# the always-coarsest-mip path collapses the projected texture to a flat average (stddev ~0), the
-# adaptive-mip path restores texture structure toward the raster reference.
+# Textured area-light metrics.
+# area_textured_mean_luma = mean luma over the NEAR light footprint (center of
+# frame, floor at world origin): Item 6 energy-parity gate.
+# area_textured_structure_stddev = luma stddev over the FAR light footprint
+# (upper-right of frame, floor at world (3, 0, -3)): the always-coarsest-mip
+# path collapses the projected checker to a flat average (stddev near zero),
+# while the adaptive-mip path retains tile structure at distance (non-zero
+# stddev). The two ROIs are separate so the structure gate is insensitive to
+# the large-solid-angle near case.
 func _measure_textured_area(final_image: Image, _base_name: String) -> Dictionary:
 	var width := final_image.get_width()
 	var height := final_image.get_height()
-	var rx0 := int(width * 0.25)
-	var rx1 := int(width * 0.75)
-	var ry0 := int(height * 0.40)
-	var ry1 := int(height * 0.75)
-	var n := 0
-	var acc := 0.0
-	var lumas := PackedFloat32Array()
-	for y in range(ry0, ry1):
-		for x in range(rx0, rx1):
+	# Near footprint ROI: center-lower, where the 2x2m panel at 2m height projects.
+	var nx0 := int(width * 0.35)
+	var nx1 := int(width * 0.65)
+	var ny0 := int(height * 0.50)
+	var ny1 := int(height * 0.75)
+	var near_n := 0
+	var near_acc := 0.0
+	for y in range(ny0, ny1):
+		for x in range(nx0, nx1):
+			var c := final_image.get_pixel(x, y)
+			near_acc += 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+			near_n += 1
+	var mean := near_acc / float(max(near_n, 1))
+	# Far footprint ROI: upper-right, where the 1.2x1.2m panel at (3,7,-3) projects.
+	var fx0 := int(width * 0.55)
+	var fx1 := int(width * 0.85)
+	var fy0 := int(height * 0.20)
+	var fy1 := int(height * 0.50)
+	var far_n := 0
+	var far_acc := 0.0
+	var far_lumas := PackedFloat32Array()
+	for y in range(fy0, fy1):
+		for x in range(fx0, fx1):
 			var c := final_image.get_pixel(x, y)
 			var l := 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
-			acc += l
-			lumas.push_back(l)
-			n += 1
-	var mean := acc / float(max(n, 1))
+			far_acc += l
+			far_lumas.push_back(l)
+			far_n += 1
+	var far_mean := far_acc / float(max(far_n, 1))
 	var var_acc := 0.0
-	for l in lumas:
-		var d := l - mean
+	for l in far_lumas:
+		var d := l - far_mean
 		var_acc += d * d
-	var stddev := sqrt(var_acc / float(max(n, 1)))
+	var stddev := sqrt(var_acc / float(max(far_n, 1)))
 	return {
 		"area_textured_mean_luma": mean,
 		"area_textured_structure_stddev": stddev,

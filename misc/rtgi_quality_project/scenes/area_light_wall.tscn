@@ -32,28 +32,28 @@ diffuse_mode = 1
 specular_mode = 2
 albedo_color = Color(0.3, 0.3, 0.3, 1)
 
-[node name="AreaLightWall" type="Node3D" unique_id=854236907]
+[node name="AreaLightWall" type="Node3D" unique_id=1742190374]
 
-[node name="RTGIWorldEnvironment" type="WorldEnvironment" parent="." unique_id=718443989]
+[node name="RTGIWorldEnvironment" type="WorldEnvironment" parent="." unique_id=258511153]
 environment = SubResource("Environment_r180f")
 
-[node name="Floor" type="MeshInstance3D" parent="." unique_id=436786473]
+[node name="Floor" type="MeshInstance3D" parent="." unique_id=798896715]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
 mesh = SubResource("BoxMesh_7157g")
 surface_material_override/0 = SubResource("StandardMaterial3D_k1gxf")
 
-[node name="Occluder" type="MeshInstance3D" parent="." unique_id=644512730]
+[node name="Occluder" type="MeshInstance3D" parent="." unique_id=215395174]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 1.5)
 mesh = SubResource("BoxMesh_byhhf")
 surface_material_override/0 = SubResource("StandardMaterial3D_6y34d")
 
-[node name="AreaLight" type="AreaLight3D" parent="." unique_id=930182498]
+[node name="AreaLight" type="AreaLight3D" parent="." unique_id=1253145555]
 transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 3, -1)
 light_energy = 18.0
 shadow_enabled = true
 area_size = Vector2(2, 2)
 
-[node name="AreaLightWallCamera" type="Camera3D" parent="." unique_id=215859482]
+[node name="AreaLightWallCamera" type="Camera3D" parent="." unique_id=1615411920]
 transform = Transform3D(1, 0, 0, 0, 0.613941, 0.789352, 0, -0.789352, 0.613941, 0, 9, 7)
 current = true
 fov = 60.0
