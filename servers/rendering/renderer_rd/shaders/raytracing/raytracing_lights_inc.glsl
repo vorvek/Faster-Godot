@@ -80,6 +80,12 @@ vec3 fog_get_directional_direction(uint index) {
 
 #include "area_light_sample_inc.glsl"
 
+// Analytic transformed-cosine area-light stack (RT port of area_lights_inc.glsl). Placed here so it
+// is textually after the stage's bindless atlas / sampler / LUT declarations (every stage TU that
+// includes this file includes those first, the same scoping that lets the area branch below sample
+// bindless_textures), giving the ported fetches their atlas and the specular path its set-0 LUTs.
+#include "raytracing_area_ltc_inc.glsl"
+
 // ============================================================================
 // Unified Cone Sampling (for sphere, directional, spot lights)
 // ============================================================================
@@ -1065,6 +1071,124 @@ RTDirectLighting lights_evaluate_explicit_emissive_candidate_split(
 	return result;
 }
 
+// Port of the rasterizer get_omni_attenuation (1-(d/range)^4)^2 * pow(d,-decay) used by the area
+// attenuation window. Distinct from lights_get_attenuation, which takes squared distance.
+float lights_area_omni_attenuation(float distance, float inv_range, float decay) {
+	float nd = distance * inv_range;
+	nd *= nd;
+	nd *= nd;
+	nd = max(1.0 - nd, 0.0);
+	nd *= nd;
+	return nd * pow(max(distance, 0.0001), -decay);
+}
+
+// Analytic transformed-cosine area-light shading, mirroring the rasterizer light_process_area: a
+// closed-form diffuse + specular cosine integral over the rectangle, the closest-point attenuation
+// window, the textured form factor with a solid-angle-adaptive mip, and a single shadow ray for
+// visibility (a shared-sample ratio replaces the single ray in a later change). Evaluated in the
+// deterministic area_sum loop, outside the reservoir.
+RTDirectLighting lights_evaluate_area_light_ltc(
+		RTLightData light,
+		vec3 hit_pos,
+		vec3 geometry_normal,
+		vec3 N,
+		vec3 V,
+		MaterialProperties material,
+		inout uint rng_state,
+		bool is_indirect_bounce,
+		bool p_use_blue_noise_u,
+		vec2 p_blue_noise_u) {
+	vec3 center = light.position;
+	vec3 ex = rt_light_area_ex(light); // half-edge
+	vec3 ey = rt_light_area_ey(light); // half-edge
+	vec3 nrm = normalize(cross(ex, ey));
+	vec3 to_center = center - hit_pos;
+	// One-sided: the light emits toward its local -Z (= -nrm); reject the back side.
+	if (dot(to_center, nrm) < 0.0) {
+		return rt_direct_lighting_zero();
+	}
+
+	// Item 3 attenuation window: distance to the CLOSEST point on the rectangle (clamped local
+	// coords), matching raster_lights:991-998. get_omni_attenuation is the (1-(d/range)^4)^2 *
+	// pow(d,-decay) family; the extra * d*d cancels the decay's inverse square because the LTC form
+	// factor already carries 1/r^2. For the default decay==2 this reduces to the window alone.
+	vec3 a_dir = normalize(ex);
+	vec3 b_dir = normalize(ey);
+	float a_half = length(ex);
+	float b_half = length(ey);
+	vec3 lv = hit_pos - center;
+	vec3 pos_local = vec3(dot(lv, a_dir), dot(lv, b_dir), dot(lv, -nrm));
+	vec3 closest_local = vec3(clamp(pos_local.x, -a_half, a_half), clamp(pos_local.y, -b_half, b_half), 0.0);
+	float d_closest = length(closest_local - pos_local);
+	float atten_raw = lights_area_omni_attenuation(d_closest, light.inv_max_range, light.attenuation);
+	if (atten_raw <= 0.0) {
+		return rt_direct_lighting_zero();
+	}
+	float atten_ltc = atten_raw * d_closest * d_closest;
+
+	// Rectangle corners relative to the shading point, in the raster winding (raster_lights:1126-1129).
+	vec3 points[4];
+	points[0] = center - ex - ey - hit_pos;
+	points[1] = center + ex - ey - hit_pos;
+	points[2] = center + ex + ey - hit_pos;
+	points[3] = center - ex + ey - hit_pos;
+
+	// Textured form-factor color uses the atlas rect (Item 4 adaptive mip is internal to the fetch).
+	vec4 tex_rect = (light.area_atlas_idx != 0u) ? light.area_atlas_rect : vec4(0.0);
+	float max_mip = light.area_max_mip;
+	uint atlas_idx = light.area_atlas_idx;
+
+	// Analytic LTC diffuse (identity M_inv, view-independent) and specular (reads the LUTs). V is the
+	// view->fragment-back-to-eye direction (normalize(camera - hit) on the primary, -ray_dir on a
+	// bounce), which matches the raster ltc_evaluate eye_vec convention; the specular highlight lines
+	// up with the rasterizer with no sign flip needed.
+	float ltc_diffuse;
+	vec3 ltc_diffuse_tex_color;
+	rt_ltc_evaluate(N, V, mat3(1.0), points, tex_rect, max_mip, atlas_idx, ltc_diffuse, ltc_diffuse_tex_color);
+
+	float ltc_specular;
+	vec2 ltc_fresnel;
+	vec3 ltc_specular_tex_color;
+	rt_ltc_evaluate_specular(N, V, material.roughness, points, tex_rect, max_mip, atlas_idx, ltc_specular, ltc_fresnel, ltc_specular_tex_color);
+
+	// Material terms (raster applies albedo at the end; the RT convention bakes diffuseReflectance
+	// into the returned diffuse, matching the omni/spot/directional branches).
+	vec3 diffuse_refl = baseColorToDiffuseReflectance(material.baseColor, material.metalness);
+	vec3 f0 = baseColorToSpecularF0(material.baseColor, material.metalness, material.dielectricF0);
+	float f90 = clamp(dot(f0, vec3(50.0 * 0.33)), material.metalness, 1.0);
+	vec3 fresnel_color = f0 * max(ltc_fresnel.x, 0.0) + (f90 - f0) * max(ltc_fresnel.y, 0.0);
+
+	vec3 emission = light.emission;
+	float indirect_mul = lights_apply_indirect_energy(is_indirect_bounce) ? light.indirect_energy : 1.0;
+
+	// Single shadow ray toward the rect center direction for visibility (replaced by the K-ray
+	// ratio in the next change). Sample the rect with one Urena sample so the ray points at a
+	// representative surface point, not just the center.
+	float visibility = 1.0;
+	if ((light.flags & RT_LIGHT_FLAG_SHADOW) != 0u) {
+		vec3 corner = center - ex - ey;
+		SphQuad sq = sph_quad_init(corner, ex * 2.0, ey * 2.0, hit_pos);
+		if (sq.S > 1e-5) {
+			vec2 su = p_use_blue_noise_u ? p_blue_noise_u : rand2(rng_state);
+			vec3 sp = sph_quad_sample(sq, su.x, su.y);
+			vec3 to_sample = sp - hit_pos;
+			float sdist = length(to_sample);
+			vec3 L = to_sample / max(sdist, 1e-6);
+			vec3 shadow_origin = offset_ray_origin(hit_pos, dot(geometry_normal, L) >= 0.0 ? geometry_normal : -geometry_normal);
+			if (!lights_trace_shadow_ray(shadow_origin, L, max(sdist - 0.002, 0.001), light.shadow_caster_mask, rng_state)) {
+				visibility = 1.0 - clamp(light.shadow_opacity, 0.0, 1.0);
+			}
+		}
+	}
+
+	RTDirectLighting result = rt_direct_lighting_zero();
+	float common_scale = atten_ltc * indirect_mul * visibility;
+	result.diffuse = diffuse_refl * ltc_diffuse * ltc_diffuse_tex_color * emission * common_scale;
+	// specular_amount mirrors the raster area specular factor (scene_forward_lights_inc.glsl:1301).
+	result.specular = ltc_specular * ltc_specular_tex_color * fresnel_color * emission * common_scale * light.specular_amount;
+	return result;
+}
+
 RTDirectLighting lights_evaluate_single_direct_light_split(
 		RTLightData light,
 		float light_select_pdf,
@@ -1096,66 +1220,11 @@ RTDirectLighting lights_evaluate_single_direct_light_split(
 		u = rand2(rng_state);
 	}
 
-	// === AREA LIGHT PATH (spherical-rectangle NEE) ===
+	// Area lights are shaded by the analytic LTC + shadow-ratio path, evaluated in the deterministic
+	// area_sum loop. This evaluator is no longer reached with an area light (they are excluded from
+	// the reservoir), but delegate defensively to keep a single shading implementation.
 	if (light.type == RT_LIGHT_TYPE_AREA) {
-		vec3 center = light.position;
-		vec3 ex = rt_light_area_ex(light);
-		vec3 ey = rt_light_area_ey(light);
-		vec3 nrm = normalize(cross(ex, ey));
-		vec3 to_center = center - hit_pos;
-		// One-sided: the light emits toward its local -Z (= -nrm); reject the back side.
-		if (dot(to_center, nrm) < 0.0) {
-			return rt_direct_lighting_zero();
-		}
-		if (light.max_range_squared != 0.0 && dot(to_center, to_center) > light.max_range_squared) {
-			return rt_direct_lighting_zero();
-		}
-		// Corner + full edges for the spherical-rectangle sampler.
-		vec3 corner = center - ex - ey;
-		SphQuad sq = sph_quad_init(corner, ex * 2.0, ey * 2.0, hit_pos);
-		if (sq.S <= 1e-5) {
-			return rt_direct_lighting_zero(); // degenerate (edge-on / tiny solid angle)
-		}
-		vec3 sample_pos = sph_quad_sample(sq, u.x, u.y);
-		vec3 to_sample = sample_pos - hit_pos;
-		float sample_dist = length(to_sample);
-		vec3 L = to_sample / max(sample_dist, 1e-6);
-		float NdotL = dot(N, L);
-		if (NdotL <= 0.0) {
-			return rt_direct_lighting_zero();
-		}
-		vec3 emission = light.emission;
-		if (light.area_atlas_idx != 0u) {
-			// Local rect UV in [0,1] from the sampled point.
-			vec3 rel = sample_pos - corner;
-			float exl2 = dot(ex * 2.0, ex * 2.0);
-			float eyl2 = dot(ey * 2.0, ey * 2.0);
-			vec2 luv = vec2(dot(rel, ex * 2.0) / max(exl2, 1e-8), dot(rel, ey * 2.0) / max(eyl2, 1e-8));
-			vec2 auv = light.area_atlas_rect.xy + clamp(luv, 0.0, 1.0) * light.area_atlas_rect.zw;
-			vec4 tex = textureLod(sampler2D(bindless_textures[nonuniformEXT(light.area_atlas_idx)], SAMPLER_LINEAR_WITH_MIPMAPS_CLAMP), auv, light.area_max_mip);
-			emission *= tex.rgb * tex.a; // premultiplied alpha, matching the raster
-		}
-		if ((light.flags & RT_LIGHT_FLAG_SHADOW) != 0u) {
-			vec3 shadow_origin = offset_ray_origin(hit_pos, dot(geometry_normal, L) >= 0.0 ? geometry_normal : -geometry_normal);
-			if (!lights_trace_shadow_ray(shadow_origin, L, max(sample_dist - 0.002, 0.001), light.shadow_caster_mask, rng_state)) {
-				float shadow_visibility = 1.0 - clamp(light.shadow_opacity, 0.0, 1.0);
-				if (shadow_visibility <= 0.001) {
-					return rt_direct_lighting_zero();
-				}
-				emission *= shadow_visibility;
-			}
-		}
-		vec3 brdf_diffuse, brdf_specular;
-		evalCombinedBRDFSeparate(N, L, V, material, brdf_diffuse, brdf_specular);
-		float spec_mul = lights_get_specular_multiplier(light.specular_amount, material.roughness);
-		float indirect_mul = lights_apply_indirect_energy(is_indirect_bounce) ? light.indirect_energy : 1.0;
-		// Solid-angle pdf = 1/S, so contribution = brdf * Le * S * (1/light_select_pdf).
-		float solid_angle = sq.S;
-		float inv_pdf = solid_angle / max(light_select_pdf, 1e-10);
-		RTDirectLighting result;
-		result.diffuse = brdf_diffuse * emission * indirect_mul * inv_pdf;
-		result.specular = brdf_specular * spec_mul * emission * indirect_mul * inv_pdf;
-		return result;
+		return lights_evaluate_area_light_ltc(light, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce, p_use_blue_noise_u, p_blue_noise_u);
 	}
 
 	// === POSITIONAL LIGHT PATH (omni + spot) ===
@@ -1458,8 +1527,9 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 
 	// Area lights are evaluated deterministically here too, outside the reservoir (Step 1 excludes
 	// them). One evaluation each, every frame, folded into all three return paths below. The
-	// shading is still the single-sample spherical-rect NEE; the analytic LTC + ratio replaces it
-	// in a later change. A scene with no area light leaves area_sum zero, so this is a strict no-op
+	// shading uses the analytic LTC path with a single shadow ray (lights_evaluate_area_light_ltc);
+	// the K-ray shadow ratio that replaces the single shadow ray is deferred to a later change.
+	// A scene with no area light leaves area_sum zero, so this is a strict no-op
 	// for the positional/directional paths.
 	RTDirectLighting area_sum = rt_direct_lighting_zero();
 	for (uint idx = 0u; idx < light_count; idx++) {
@@ -1467,7 +1537,7 @@ RTDirectLighting lights_evaluate_direct_lighting_split(
 		if (!lights_is_area_valid(area_light, receiver_layer_mask, hit_pos, N, is_indirect_bounce)) {
 			continue;
 		}
-		RTDirectLighting area_result = lights_evaluate_single_direct_light_split(area_light, 1.0, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce, p_use_blue_noise_u, p_blue_noise_u);
+		RTDirectLighting area_result = lights_evaluate_area_light_ltc(area_light, hit_pos, geometry_normal, N, V, material, rng_state, is_indirect_bounce, p_use_blue_noise_u, p_blue_noise_u);
 		area_sum.diffuse += area_result.diffuse;
 		area_sum.specular += area_result.specular;
 	}

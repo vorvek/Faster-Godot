@@ -159,16 +159,19 @@
 			}
 		},
 		"area_light_wall": {
-			"_note": "Solid-color area-light isolation scene. Thresholds are report-only (generous caps) until the LTC analytic pass is implemented and calibrated. area_wall_pool_mean_luma is the D1 double-count sentinel: a 2x jump versus the raster reference indicates the area light is being summed both in the deterministic area pass and through the RIS reservoir. area_wall_atten_edge_hf gates the attenuation-window smoothness: a hard cutoff spikes the second-difference metric, a smooth window keeps it low.",
+			"_note": "Solid-color area-light isolation scene. area_wall_pool_mean_luma is the energy-parity and double-count sentinel, gated as a band around the raster reference (off about 0.769, ray-traced LTC about 0.777, plus or minus ten percent): the min catches a too-dim regression (the earlier single-sample estimate read about 0.61) and the max catches a double-count (an area light summed both in the deterministic area pass and through the reservoir roughly doubles it). area_wall_atten_edge_hf stays report-only (generous cap): the single shadow ray still adds band noise across the attenuation falloff until the shared-sample shadow ratio lands.",
 			"thresholds": {
-				"max_area_wall_pool_mean_luma": 100000.0,
+				"max_area_wall_pool_mean_luma": 0.8462,
+				"min_area_wall_pool_mean_luma": 0.6923,
 				"max_area_wall_atten_edge_hf": 100000.0
 			}
 		},
 		"textured_area": {
-			"_note": "Textured area-light mip-accuracy scene. Thresholds are report-only until the LTC adaptive-mip pass is implemented. area_textured_mean_luma is the energy-parity key. area_textured_structure_stddev measures projected-texture structure retention: the always-coarsest-mip path collapses it to near zero, the adaptive-mip path restores it toward the raster reference.",
+			"_note": "Textured area-light mip-accuracy scene. area_textured_mean_luma is the energy-parity key, gated as a band around the raster reference (off about 0.298, ray-traced LTC about 0.303), plus or minus ten percent. area_textured_structure_stddev measures projected-texture structure retention: the always-coarsest-mip path collapses it toward zero (the earlier path read about 0.12), the solid-angle-adaptive mip restores it toward the raster reference (off about 0.265, ray-traced about 0.270); the min gate proves structure is present, the max stays generous. Read structure only after energy parity holds: the stddev is brightness-confounded, but at matched mean the coefficient of variation (stddev over mean) of the ray-traced pass tracks the raster within a fraction of a percent.",
 			"thresholds": {
-				"max_area_textured_mean_luma": 100000.0,
+				"max_area_textured_mean_luma": 0.3275,
+				"min_area_textured_mean_luma": 0.2679,
+				"min_area_textured_structure_stddev": 0.2000,
 				"max_area_textured_structure_stddev": 100000.0
 			}
 		}

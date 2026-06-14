@@ -4502,9 +4502,11 @@ func _compare_metrics(metrics: Dictionary, expected: Dictionary) -> Array[String
 	_check_max_threshold(metrics, thresholds, "sun_penumbra_lit_luma", failures)
 	_check_max_threshold(metrics, thresholds, "sun_penumbra_occluded_luma", failures)
 	_check_max_threshold(metrics, thresholds, "area_wall_pool_mean_luma", failures)
+	_check_min_threshold(metrics, thresholds, "area_wall_pool_mean_luma", failures)
 	_check_max_threshold(metrics, thresholds, "area_wall_atten_edge_hf", failures)
 	_check_max_threshold(metrics, thresholds, "area_textured_mean_luma", failures)
-	_check_max_threshold(metrics, thresholds, "area_textured_structure_stddev", failures)
+	_check_min_threshold(metrics, thresholds, "area_textured_mean_luma", failures)
+	_check_min_threshold(metrics, thresholds, "area_textured_structure_stddev", failures)
 	return failures
 
 
