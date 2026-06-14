@@ -242,11 +242,38 @@ void wrc_accumulate_main() {
 	// the cell for a frame; this tames it while the 1/n blend converges. Only the incoming
 	// sample is clamped, never the stored radiance; a small floor still lets a dark texel
 	// brighten when a light genuinely turns on.
+	//
+	// Confidence-relaxed cap (dark->bright convergence): the flat 8x cap throttles a
+	// real dark->bright transition (a light switching on over a dark cell) to ~8x per
+	// frame, so it climbs for many frames. When a WELL-CONVERGED cell (high conf_old)
+	// sees a sustained, large disagreement (the SAME rel_change the n-collapse below
+	// reads, gated by the SAME smoothstep), the transition is trustworthy, not a stray
+	// firefly, so we lift the cap proportionally to confidence and let the bright value
+	// in over 1-2 frames. The relax is the product of two trust factors:
+	//   * conf_old  -- a freshly revealed / unstable cell (conf_old near 1/n_cap) gets
+	//                  essentially no relax, so a single noisy sample is still pinned to
+	//                  the flat 8x cap and cannot flash. Only a converged cell admits the
+	//                  magnitude.
+	//   * smoothstep(0.3, 0.6, rel_change) -- identical gate to the n-collapse, so below
+	//                  0.3 (a steady, converged cell with only noise-level disagreement)
+	//                  the relax is exactly 0 and lum_max is bit-identically the flat
+	//                  8x cap. This keeps the accumulate inert on static / converged
+	//                  scenes (no boil, no steady-state drift).
+	// Composition with the n-collapse: the n-collapse raises the BLEND WEIGHT on the same
+	// rel_change while this relaxes the MAGNITUDE cap. They compound only on a high-conf,
+	// high-disagreement cell, which is exactly the trusted transition we want to admit
+	// fast; on a low-conf cell the magnitude cap stays at flat 8x (relax ~ 0), so the
+	// per-frame jump is bounded by the baseline 8x growth even when the n-collapse opens
+	// the blend, and a transient cannot flash before the cell earns its confidence.
+	const float WRC_CAP_RELAX_GAIN = 24.0;
 	if (conf_old > 0.0) {
 		const vec3 luma_w = vec3(0.2126, 0.7152, 0.0722);
 		float lum_old = max(dot(radiance_old, luma_w), 0.0);
 		float lum_new = max(dot(radiance_new, luma_w), 0.0);
-		float lum_max = lum_old * 8.0 + 0.05;
+		float rel_change_raw = abs(lum_new - lum_old) / (lum_new + lum_old + 1e-4);
+		float transition = smoothstep(0.3, 0.6, rel_change_raw);
+		float cap_relax = 1.0 + WRC_CAP_RELAX_GAIN * conf_old * transition;
+		float lum_max = (lum_old * 8.0 + 0.05) * cap_relax;
 		if (lum_new > lum_max) {
 			radiance_new *= lum_max / max(lum_new, 1e-6);
 		}
