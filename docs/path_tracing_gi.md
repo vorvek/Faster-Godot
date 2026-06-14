@@ -543,6 +543,16 @@ setting cold_start_fade_time, with an RTGI_GI_FADE_TIME environment override;
 zero disables it. It is a read-time display gate only, so it never feeds back
 into the stored history.
 
+The cache's per-cell firefly growth clamp, which caps how far a stored cell can
+brighten in a single frame to suppress one-sample spikes, used to throttle a
+genuine dark-to-bright change at that same rate, so a cell that should jump to a
+much brighter value climbed toward it over many frames. It now relaxes the cap in
+proportion to the cell's accumulated confidence: a well-converged cell that sees a
+large, sustained brightening admits it in a frame or two, while a freshly revealed
+or unstable cell keeps the strict cap so a one-frame spike still cannot flash.
+Steady-state cells are untouched, because the relaxed cap equals the strict one
+when nothing is changing.
+
 One reprojection detail matters on cuts. Static geometry writes no motion
 vectors, so the resolve reprojects it through the previous frame's camera, and a
 surface that lands behind that camera has no history at all and is treated as a
