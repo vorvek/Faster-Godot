@@ -83,6 +83,23 @@ static void rect_quadrature(real_t &out_S, real_t &out_E) {
 	}
 }
 
+// CPU port of quad_solid_angle from area_lights_inc.glsl (Urena et al. 2013). The
+// LTC shading path uses this on the four corner directions; it MUST agree with the
+// sph_quad_init solid angle the importance sampler relies on. L need not be normalized
+// and is given in winding order (corner, corner+ex, corner+ex+ey, corner+ey).
+static real_t quad_solid_angle(const Vector3 L[4]) {
+	Vector3 n0 = L[0].cross(L[1]).normalized();
+	Vector3 n1 = L[1].cross(L[2]).normalized();
+	Vector3 n2 = L[2].cross(L[3]).normalized();
+	Vector3 n3 = L[3].cross(L[0]).normalized();
+	real_t g0 = Math::acos(CLAMP(-n0.dot(n1), -1.0, 1.0));
+	real_t g1 = Math::acos(CLAMP(-n1.dot(n2), -1.0, 1.0));
+	real_t g2 = Math::acos(CLAMP(-n2.dot(n3), -1.0, 1.0));
+	real_t g3 = Math::acos(CLAMP(-n3.dot(n0), -1.0, 1.0));
+	real_t angle_sum = g0 + g1 + g2 + g3;
+	return CLAMP(angle_sum - 2.0 * Math::PI, 0.0, 2.0 * Math::PI);
+}
+
 TEST_CASE("[SphericalRectangle] analytic solid angle matches dense quadrature") {
 	// 1x1 rect (corner at s, full edges ex/ey) centered over the origin at height 1.
 	Vector3 s(-0.5, -0.5, 1.0), ex(1, 0, 0), ey(0, 1, 0), o(0, 0, 0);
@@ -124,6 +141,33 @@ TEST_CASE("[SphericalRectangle] Monte Carlo irradiance matches dense quadrature"
 	}
 	double E_mc = (acc / M) * sq.S;
 	CHECK(E_mc == doctest::Approx((double)E_quad).epsilon(0.03));
+}
+
+TEST_CASE("[LTC] quad_solid_angle matches the Urena spherical-rectangle solid angle") {
+	// The LTC shading path computes the area-light form factor with quad_solid_angle
+	// over the four corner directions, while the importance sampler uses sph_quad_init's
+	// analytic S. Both are the same Urena 2013 solid angle and must agree for any
+	// rectangle aspect (Godot AreaLight3D rects are not square in general).
+	struct Rect {
+		Vector3 s, ex, ey, o;
+	};
+	const Rect rects[] = {
+		{ Vector3(-0.5, -0.5, 1.0), Vector3(1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, 0) }, // unit square overhead
+		{ Vector3(-1.5, -0.25, 2.0), Vector3(3, 0, 0), Vector3(0, 0.5, 0), Vector3(0, 0, 0) }, // wide thin rect (6:1)
+		{ Vector3(-0.25, -1.5, 2.0), Vector3(0.5, 0, 0), Vector3(0, 3, 0), Vector3(0, 0, 0) }, // tall thin rect (1:6)
+		{ Vector3(0.2, 0.1, 1.5), Vector3(0.8, 0.1, 0), Vector3(-0.1, 0.8, 0.3), Vector3(0, 0, 0) }, // off-axis, tilted (ex.ey == 0, a true rect)
+	};
+	for (const Rect &r : rects) {
+		SphQuad sq = sph_quad_init(r.s, r.ex, r.ey, r.o);
+		Vector3 L[4] = {
+			r.s - r.o,
+			r.s + r.ex - r.o,
+			r.s + r.ex + r.ey - r.o,
+			r.s + r.ey - r.o,
+		};
+		real_t sa = quad_solid_angle(L);
+		CHECK(sa == doctest::Approx((double)sq.S).epsilon(0.01));
+	}
 }
 
 } // namespace TestSphericalRectangle
