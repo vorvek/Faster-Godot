@@ -2943,10 +2943,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// Active WRC quality-preset selector (default Production when no Environment
 	// params are present); resolved into the per-preset clipmap settings below.
 	uint32_t rtgi_quality_preset_sel = 3u;
+	// Area-light GI quality (0 Fast, 1 High), carried on the same params struct; written to the
+	// viewport state below and pushed to RT_PARAM_AREA_LTC_QUALITY in update_uniform_set.
+	uint32_t rtgi_area_ltc_quality = 0u;
 	if (scene_features.rt && p_render_data->environment.is_valid()) {
 		const RSE::PathtracingParams *rtgi_preset_params = RendererEnvironmentStorage::get_singleton()->environment_get_pathtracing_params_ptr(p_render_data->environment);
 		if (rtgi_preset_params != nullptr) {
 			rtgi_quality_preset_sel = rtgi_preset_params->rtgi_quality_preset;
+			rtgi_area_ltc_quality = rtgi_preset_params->rtgi_area_light_gi_quality;
 		}
 	}
 	// Radiance-probes (World Radiance Cache) is the one unconditional RT-GI pipeline.
@@ -3438,6 +3442,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		if (rt_state) {
 			rt_state->direct_ris_candidates = rtgi_ris_candidates;
 			rt_state->direct_shadow_samples = rtgi_shadow_samples;
+			rt_state->area_ltc_quality = rtgi_area_ltc_quality;
 		}
 		if (rt_backend_context.radiance_history_invalidated) {
 			reject_rt_previous_history();

@@ -100,6 +100,11 @@ public:
 		RTGI_QUALITY_PRESET_PRODUCTION,
 	};
 
+	enum RTGIAreaLightGIQuality {
+		RTGI_AREA_LIGHT_GI_QUALITY_FAST,
+		RTGI_AREA_LIGHT_GI_QUALITY_HIGH,
+	};
+
 	enum RTGIDenoiser {
 		// User-facing serialized values. Keep independent from RSE::PathtracingDenoiser.
 		RTGI_DENOISER_ASVFG_EXPERIMENTAL = 8,
@@ -256,6 +261,7 @@ private:
 	bool rtgi_analytic_light_sampling_enabled = true;
 	bool rtgi_explicit_emissive_sampling_enabled = true;
 	RTGIDenoiser rtgi_denoiser = RTGI_DENOISER_ASVFG_EXPERIMENTAL;
+	RTGIAreaLightGIQuality rtgi_area_light_gi_quality = RTGI_AREA_LIGHT_GI_QUALITY_FAST;
 	bool rtgi_applying_quality_preset = false;
 	void _apply_rtgi_quality_preset(RTGIQualityPreset p_preset);
 	void _mark_rtgi_quality_preset_custom();
@@ -494,6 +500,8 @@ public:
 	bool is_rtgi_explicit_emissive_sampling_enabled() const;
 	void set_rtgi_denoiser(RTGIDenoiser p_denoiser);
 	RTGIDenoiser get_rtgi_denoiser() const;
+	void set_rtgi_area_light_gi_quality(RTGIAreaLightGIQuality p_quality);
+	RTGIAreaLightGIQuality get_rtgi_area_light_gi_quality() const;
 	void set_rtgi_debug_mode(PathtracingDebugMode p_mode);
 	PathtracingDebugMode get_rtgi_debug_mode() const;
 
@@ -609,6 +617,7 @@ VARIANT_ENUM_CAST(Environment::SDFGIYScale)
 VARIANT_ENUM_CAST(Environment::RTGIBackend)
 VARIANT_ENUM_CAST(Environment::RTGIMode)
 VARIANT_ENUM_CAST(Environment::RTGIQualityPreset)
+VARIANT_ENUM_CAST(Environment::RTGIAreaLightGIQuality)
 VARIANT_ENUM_CAST(Environment::RTGIDenoiser)
 VARIANT_ENUM_CAST(Environment::GlowBlendMode)
 VARIANT_ENUM_CAST(Environment::PathtracingDebugMode)

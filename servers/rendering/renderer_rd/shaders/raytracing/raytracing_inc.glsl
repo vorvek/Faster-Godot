@@ -75,6 +75,7 @@
 #define RT_PARAM_RTGI_WRC_CASCADE_COUNT 46 // rt_params[11].z - Active WRC cascades.
 #define RT_PARAM_RTGI_WRC_BASE_SPACING 47 // rt_params[11].w - Cascade 0 spacing in world units.
 #define RT_PARAM_RTGI_WRC_RAYS 48 // rt_params[12].x - WRC probe-update ray budget per frame.
+#define RT_PARAM_AREA_LTC_QUALITY 49 // rt_params[12].y - Area-light GI quality (0 Fast, 1 High). Renderer-internal, written every frame; not from PathtracingParams floats.
 
 #define RTGI_SAMPLING_ANALYTIC_LIGHTS_BIT 1u
 #define RTGI_SAMPLING_EXPLICIT_EMISSIVE_BIT 2u

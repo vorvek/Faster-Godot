@@ -9938,6 +9938,10 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		// frame, so it never triggers a perpetual history reset.
 		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_DIRECT_RIS_CANDIDATES] = float(p_state->direct_ris_candidates);
 		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_DIRECT_SHADOW_SAMPLES] = float(p_state->direct_shadow_samples);
+		// Area-light GI quality (0 Fast, 1 High); the probe gather reads it to pick the shadow-ratio
+		// sample count. Consistent every frame, so it folds into the radiance signature without
+		// triggering a history reset, exactly like the budgets above.
+		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_AREA_LTC_QUALITY] = float(p_state->area_ltc_quality);
 		// WRC probe-update needs the WRC's own clipmap values (which the WRC atlas was
 		// sized from) for probe-addressing. These were moved off the borrowed STRC slots
 		// onto the WRC producer-owned RT_PARAM_RTGI_WRC_* slots, so the STRC slots are no

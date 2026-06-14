@@ -507,6 +507,12 @@ struct RTViewportState {
 	// scales it down by the light's solid angle; default 1 reproduces single-sample shadows.
 	uint32_t direct_shadow_samples = 1u;
 
+	// Area-light GI quality, resolved from Environment.rtgi_area_light_gi_quality and written into
+	// RT_PARAM_AREA_LTC_QUALITY every frame. 0 = Fast (one shadow ray on the probe gather), 1 = High
+	// (the full solid-angle-scaled shadow ratio on the probe gather). The screen primary always uses
+	// the full ratio regardless of this value.
+	uint32_t area_ltc_quality = 0u;
+
 	uint64_t radiance_history_signature = 0;
 	bool radiance_history_signature_valid = false;
 	bool radiance_history_invalidated = false;

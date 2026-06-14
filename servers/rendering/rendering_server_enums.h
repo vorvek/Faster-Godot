@@ -892,6 +892,10 @@ struct PathtracingParams {
 	// struct on the CPU (the renderer resolves the matching per-preset Project
 	// Settings) and is NOT packed into the shader float params.
 	uint32_t rtgi_quality_preset = 3;
+	// CPU-side area-light GI quality selector (mirrors Environment::RTGIAreaLightGIQuality:
+	// 0=Fast, 1=High). Read off the struct on the CPU and pushed to a renderer-internal RT
+	// param slot every frame; it is NOT packed into the shader float params here.
+	uint32_t rtgi_area_light_gi_quality = 0;
 	float ray_firefly_suppression = 0.85f;
 	float ray_max_radiance = 48.0f;
 	bool analytic_light_sampling = true;

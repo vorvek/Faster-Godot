@@ -189,6 +189,9 @@
 		<member name="reflected_light_source" type="int" setter="set_reflection_source" getter="get_reflection_source" enum="Environment.ReflectionSource" default="0">
 			The reflected (specular) light source.
 		</member>
+		<member name="rtgi_area_light_gi_quality" type="int" setter="set_rtgi_area_light_gi_quality" getter="get_rtgi_area_light_gi_quality" enum="Environment.RTGIAreaLightGIQuality" default="0">
+			Sets how rectangular [AreaLight3D] shadows are sampled when an area light is gathered into the GI probes. [constant RTGI_AREA_LIGHT_GI_QUALITY_FAST] traces a single shadow ray per probe sample, since the probe cache is already accumulated over time. [constant RTGI_AREA_LIGHT_GI_QUALITY_HIGH] traces the full solid-angle-scaled shadow ratio on the probe gather for cleaner area-light shadows in still captures, at additional GPU cost. The camera-visible (screen primary) area-light shading always uses the full ratio and is unaffected by this property.
+		</member>
 		<member name="rtgi_backend" type="int" setter="set_rtgi_backend" getter="get_rtgi_backend" enum="Environment.RTGIBackend" default="0">
 			Selects the RTGI backend. [constant RTGI_BACKEND_VULKAN_GENERIC] is the built-in Vulkan ray tracing path and the only exposed backend.
 		</member>
@@ -533,6 +536,12 @@
 		</constant>
 		<constant name="RTGI_QUALITY_PRESET_PRODUCTION" value="3" enum="RTGIQualityPreset">
 			Production RTGI quality bundle with stronger cache budgets while keeping full-resolution reconstruction active.
+		</constant>
+		<constant name="RTGI_AREA_LIGHT_GI_QUALITY_FAST" value="0" enum="RTGIAreaLightGIQuality">
+			Traces a single shadow ray per area-light probe sample. The default. The probe cache accumulates the result over time, so one ray per sample stays clean while keeping the probe gather cheap.
+		</constant>
+		<constant name="RTGI_AREA_LIGHT_GI_QUALITY_HIGH" value="1" enum="RTGIAreaLightGIQuality">
+			Traces the full solid-angle-scaled shadow ratio on the area-light probe gather. Cleaner area-light shadows in still captures, at additional GPU cost on area-lit pixels.
 		</constant>
 		<constant name="RTGI_DENOISER_ASVFG_EXPERIMENTAL" value="8" enum="RTGIDenoiser">
 			Use the built-in experimental ASVFG RTGI denoiser.

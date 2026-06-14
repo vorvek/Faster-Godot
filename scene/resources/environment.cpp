@@ -953,6 +953,15 @@ Environment::RTGIDenoiser Environment::get_rtgi_denoiser() const {
 	return rtgi_denoiser;
 }
 
+void Environment::set_rtgi_area_light_gi_quality(RTGIAreaLightGIQuality p_quality) {
+	rtgi_area_light_gi_quality = p_quality;
+	_update_pathtracing();
+}
+
+Environment::RTGIAreaLightGIQuality Environment::get_rtgi_area_light_gi_quality() const {
+	return rtgi_area_light_gi_quality;
+}
+
 void Environment::set_rtgi_debug_mode(PathtracingDebugMode p_mode) {
 	set_pathtracing_debug_mode(p_mode);
 }
@@ -987,6 +996,7 @@ void Environment::_update_pathtracing() {
 	params.mode = (uint32_t)((rtgi_mode == RTGI_MODE_FULL_PATH_TRACING_REFERENCE) ? RTGI_MODE_FULL_PATH_TRACING : rtgi_mode);
 	params.fpt_reference = rtgi_fpt_reference;
 	params.rtgi_quality_preset = (uint32_t)rtgi_quality_preset;
+	params.rtgi_area_light_gi_quality = (uint32_t)rtgi_area_light_gi_quality;
 	params.backend = (RSE::PathtracingBackend)rtgi_backend;
 	params.ray_firefly_suppression = rtgi_ray_firefly_suppression;
 	params.ray_max_radiance = rtgi_ray_max_radiance;
@@ -1857,6 +1867,8 @@ void Environment::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_rtgi_explicit_emissive_sampling_enabled"), &Environment::is_rtgi_explicit_emissive_sampling_enabled);
 	ClassDB::bind_method(D_METHOD("set_rtgi_denoiser", "denoiser"), &Environment::set_rtgi_denoiser);
 	ClassDB::bind_method(D_METHOD("get_rtgi_denoiser"), &Environment::get_rtgi_denoiser);
+	ClassDB::bind_method(D_METHOD("set_rtgi_area_light_gi_quality", "quality"), &Environment::set_rtgi_area_light_gi_quality);
+	ClassDB::bind_method(D_METHOD("get_rtgi_area_light_gi_quality"), &Environment::get_rtgi_area_light_gi_quality);
 	ClassDB::bind_method(D_METHOD("set_rtgi_debug_mode", "mode"), &Environment::set_rtgi_debug_mode);
 	ClassDB::bind_method(D_METHOD("get_rtgi_debug_mode"), &Environment::get_rtgi_debug_mode);
 
@@ -1890,6 +1902,7 @@ void Environment::_bind_methods() {
 	// current frame exactly where the GI is noisiest), so it is kept out of the inspector; setting
 	// it from script still arms the reactive-mask path in the renderer.
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_denoiser", PROPERTY_HINT_ENUM, "ASVFG:8,None:9"), "set_rtgi_denoiser", "get_rtgi_denoiser");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_area_light_gi_quality", PROPERTY_HINT_ENUM, "Fast,High"), "set_rtgi_area_light_gi_quality", "get_rtgi_area_light_gi_quality");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_debug_mode", PROPERTY_HINT_ENUM, "Disabled,Mirror Reflection,Geometry Normals,Final Normals,Normal Map,Tangent,Bitangent,UV,Albedo,ORM,Diffuse Albedo,Specular Albedo,Normal+Roughness,Specular Hit Dist,Metalness,Roughness,View Normals,Diffuse+Specular,Fresnel F0,Front/Back Face,Depth,Emissive,BRDF Rejection,Normal Deviation,Specular Reflection Direction,Specular Reflected Hit Distance,Specular Reflected Hit Normal,Direct Light Regime"), "set_rtgi_debug_mode", "get_rtgi_debug_mode");
 
 	// Glow
@@ -2100,6 +2113,9 @@ void Environment::_bind_methods() {
 	BIND_ENUM_CONSTANT(RTGI_QUALITY_PRESET_PERFORMANCE);
 	BIND_ENUM_CONSTANT(RTGI_QUALITY_PRESET_BALANCED);
 	BIND_ENUM_CONSTANT(RTGI_QUALITY_PRESET_PRODUCTION);
+
+	BIND_ENUM_CONSTANT(RTGI_AREA_LIGHT_GI_QUALITY_FAST);
+	BIND_ENUM_CONSTANT(RTGI_AREA_LIGHT_GI_QUALITY_HIGH);
 
 	BIND_ENUM_CONSTANT(RTGI_DENOISER_ASVFG_EXPERIMENTAL);
 	BIND_ENUM_CONSTANT(RTGI_DENOISER_SVGF);

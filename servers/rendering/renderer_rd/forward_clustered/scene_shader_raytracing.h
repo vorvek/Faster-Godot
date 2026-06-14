@@ -170,6 +170,11 @@ public:
 	static constexpr int RT_PARAM_RTGI_WRC_CASCADE_COUNT = 46; // Active WRC cascades.
 	static constexpr int RT_PARAM_RTGI_WRC_BASE_SPACING = 47; // Cascade 0 spacing in world units.
 	static constexpr int RT_PARAM_RTGI_WRC_RAYS = 48; // WRC probe-update ray budget per frame.
+	// Area-light GI quality (0 Fast, 1 High). Renderer-internal RT-param slot (>= PT_PARAM_MAX),
+	// written every frame from RTViewportState; the probe gather reads it to pick the shadow-ratio
+	// sample count. Not part of RSE::PathtracingParamIndex, so the Environment float fill never
+	// touches it.
+	static constexpr int RT_PARAM_AREA_LTC_QUALITY = 49;
 	// Backing UBO float count. GROWN from 48 to 52 (12 -> 13 vec4s) to make room for the
 	// WRC producer-owned params above (highest index 48); the prior growth 40 -> 48
 	// (10 -> 12 vec4s) added the SPG params (indices 39..44). Must stay a multiple of 4

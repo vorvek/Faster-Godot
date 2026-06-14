@@ -1194,10 +1194,20 @@ RTDirectLighting lights_evaluate_area_light_ltc(
 		vec3 corner = center - ex - ey;
 		SphQuad sq = sph_quad_init(corner, ex * 2.0, ey * 2.0, hit_pos);
 		if (sq.S > 1e-5) {
-			// K on the screen primary scales with the rect solid angle, bounded by the per-preset
-			// shadow budget. Probe and deep paths keep 1 sample here; the probe knob governs that.
+			// K scales with the rect solid angle, bounded by the per-preset shadow budget. The
+			// screen primary always uses the full ratio; the probe gather is governed by the
+			// rtgi_area_light_gi_quality knob; the deep path keeps 1 sample.
 			uint K = 1u;
-			if (p_use_blue_noise_u && !rt_probe_dispatch_mode()) {
+			if (rt_probe_dispatch_mode()) {
+				// Probe-gather: Fast keeps 1 ray (the probe cache is denoised); High runs the full
+				// solid-angle-scaled ratio for photo modes.
+				if (uint(get_rt_param(RT_PARAM_AREA_LTC_QUALITY)) >= 1u) {
+					uint preset_max = max(uint(get_rt_param(RT_PARAM_DIRECT_SHADOW_SAMPLES)), 1u);
+					float t = clamp(sq.S / RT_AREA_SAMPLE_SOLID_ANGLE_REF, 0.0, 1.0);
+					K = clamp(uint(round(float(preset_max) * t)), 1u, preset_max);
+				}
+			} else if (p_use_blue_noise_u) {
+				// Screen primary: always the full ratio.
 				uint preset_max = max(uint(get_rt_param(RT_PARAM_DIRECT_SHADOW_SAMPLES)), 1u);
 				float t = clamp(sq.S / RT_AREA_SAMPLE_SOLID_ANGLE_REF, 0.0, 1.0);
 				K = clamp(uint(round(float(preset_max) * t)), 1u, preset_max);
