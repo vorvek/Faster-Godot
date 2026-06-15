@@ -9974,6 +9974,18 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_SPG_FALLBACK_CONF] = p_state->spg_fallback_conf;
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_SPG_WRC_OCT_RES] = float(p_state->spg_wrc_oct_res);
 		}
+		// The FPT-fast primary-direct dispatch reads the SAME WRC grid/cascade/spacing + oct_res slots
+		// (spg_make_wrc_params in the raygen) for the mirror channel's WRC irradiance query at a reflected
+		// hit, so the query addresses the atlas the WRC was sized from. Gated on the PRIMARY_DIRECT flag +
+		// wrc_grid > 0 sentinel; the dispatch site fills the rt_state wrc_* fields just before the dispatch.
+		// This is a dispatch-flavor override (RT_FLAG_PRIMARY_DIRECT is in the is_prepare_call mask below),
+		// so it never reaches the radiance signature -> off/cornell history is byte-identical.
+		if ((p_rt_flags & SceneShaderRaytracing::RT_FLAG_PRIMARY_DIRECT) != 0 && p_state->wrc_grid > 0u) {
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_WRC_GRID] = float(p_state->wrc_grid);
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_WRC_CASCADE_COUNT] = float(p_state->wrc_cascade_count);
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_WRC_BASE_SPACING] = p_state->wrc_base_spacing;
+			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_SPG_WRC_OCT_RES] = float(p_state->spg_wrc_oct_res);
+		}
 
 		// rt_params layout (see RaytracingParamIndex enum):
 		// [0] = VIS_MODE, [1] = SAMPLE_COUNT, [2] = MAX_BOUNCES,

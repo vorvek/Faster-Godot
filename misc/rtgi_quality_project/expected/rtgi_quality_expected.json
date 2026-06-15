@@ -121,7 +121,7 @@
 			}
 		},
 		"reflective_pool": {
-			"_note": "FPT-fast scene (rtgi_mode=1). The reflection edge energy is phase-dependent (the colored lamp highlights orbit and bob), so the floor is set to the lower phase value with margin; it is a regression baseline, not an absolute target. reflective_pool_reflection_coverage threshold is 0.0 (placeholder); the real floor is calibrated once the specular-reflection pass lands.",
+			"_note": "FPT-fast scene (rtgi_mode=1). The reflection edge energy is phase-dependent (the colored lamp highlights orbit and bob), so the floor is set to the lower phase value with margin; it is a regression baseline, not an absolute target. reflective_pool_reflection_coverage is the mirror-reflection sentinel: the no-reflection state reads ~0.12 (diffuse bounce light only) and the working mirror reads ~1.0, so the 0.5 floor catches a reflection regression with wide margin.",
 			"thresholds": {
 				"max_dark_fireflies_per_megapixel": 40.0,
 				"max_full_frame_fireflies_per_megapixel": 60.0,
@@ -130,7 +130,7 @@
 				"min_reflective_pool_reflection_edge_energy": 0.0015,
 				"min_reflective_pool_surface_mean_luma": 0.01,
 				"max_reflective_pool_reflection_fireflies": 12.0,
-				"min_reflective_pool_reflection_coverage": 0.0
+				"min_reflective_pool_reflection_coverage": 0.5
 			}
 		},
 		"fog_corridor": {

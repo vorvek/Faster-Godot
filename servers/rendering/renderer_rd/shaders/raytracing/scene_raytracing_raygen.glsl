@@ -158,6 +158,135 @@ bool rtgi_trace_specular_reflected_hit_raygen(vec3 hit_pos, vec3 geometry_normal
 	return true;
 }
 
+// Sibling of rtgi_trace_specular_reflected_hit_raygen that also fetches and resolves the hit
+// MATERIAL, for the FPT-fast mirror channel. The geometry trace is identical to the sibling
+// above (same ray flags, alpha test, below-hemisphere recovery, committed-triangle test) so a
+// glossy/metal surface reflects the same hit the deep path would. On a committed triangle hit
+// it additionally reads the STANDARD material (the same albedo_color/orm/emission fetch the
+// closest-hit standard fragment does, mip-0) so the caller can shade the reflected hit Lumen-style
+// (NEE direct + WRC indirect + emissive). On a miss it returns false so the caller falls back to
+// the environment along the reflection direction. hit_world_pos is the reflected hit point in
+// world space (the offset reflection origin + reflection_dir * committed_t). The deep-path caller
+// at the FULL_PATH_TRACING_REFERENCE body keeps using the geometry-only sibling, so it is byte-identical.
+bool rtgi_trace_and_resolve_specular_hit(vec3 origin, vec3 geom_normal, vec3 shading_normal, vec3 view_dir,
+		out float hit_distance, out vec3 hit_normal, out vec3 reflection_dir, out vec3 hit_world_pos,
+		out MaterialProperties hit_mat) {
+	hit_distance = RT_FP16_MAX;
+	hit_normal = vec3(0.0);
+	hit_world_pos = origin;
+	hit_mat.baseColor = vec3(0.0);
+	hit_mat.metalness = 0.0;
+	hit_mat.emissive = vec3(0.0);
+	hit_mat.roughness = 1.0;
+	hit_mat.dielectricF0 = 0.16 * 0.5 * 0.5; // specular_to_f0(0.5) = default 4% dielectric F0.
+	hit_mat.transmissivness = 0.0;
+	hit_mat.opacity = 1.0;
+
+	reflection_dir = reflect(-view_dir, shading_normal);
+	if (dot(reflection_dir, geom_normal) < 0.0) {
+		vec3 recovered_reflection_dir;
+		if (recoverBelowHemisphereSample(reflection_dir, geom_normal, recovered_reflection_dir)) {
+			reflection_dir = recovered_reflection_dir;
+		} else {
+			return false;
+		}
+	}
+
+	vec3 reflection_origin = offset_ray_origin(origin, geom_normal);
+	rayQueryEXT reflection_rq;
+	rayQueryInitializeEXT(reflection_rq, tlas, RT_RAY_FLAGS | gl_RayFlagsTerminateOnFirstHitEXT,
+			RT_INSTANCE_MASK_VISIBLE, reflection_origin, 0.001, reflection_dir, 10000.0);
+	float unsupported_t = 1e20;
+	while (rayQueryProceedEXT(reflection_rq)) {
+		uint candidate_type = rayQueryGetIntersectionTypeEXT(reflection_rq, false);
+		if (candidate_type == gl_RayQueryCandidateIntersectionTriangleEXT) {
+			uint candidate_geometry_idx = rayQueryGetIntersectionInstanceCustomIndexEXT(reflection_rq, false);
+			MaterialData candidate_mat = materials[candidate_geometry_idx];
+			if ((candidate_mat.flags & (RT_MAT_FLAG_ALPHA_TEST | RT_MAT_FLAG_CUSTOM_SHADER)) ==
+					(RT_MAT_FLAG_ALPHA_TEST | RT_MAT_FLAG_CUSTOM_SHADER)) {
+				unsupported_t = min(unsupported_t, rayQueryGetIntersectionTEXT(reflection_rq, false));
+				continue;
+			}
+			if (ray_query_alpha_test(
+						candidate_geometry_idx,
+						rayQueryGetIntersectionPrimitiveIndexEXT(reflection_rq, false),
+						rayQueryGetIntersectionBarycentricsEXT(reflection_rq, false),
+						rayQueryGetIntersectionObjectRayOriginEXT(reflection_rq, false) +
+								rayQueryGetIntersectionObjectRayDirectionEXT(reflection_rq, false) *
+										rayQueryGetIntersectionTEXT(reflection_rq, false))) {
+				rayQueryConfirmIntersectionEXT(reflection_rq);
+			}
+		} else if (candidate_type == gl_RayQueryCandidateIntersectionAABBEXT) {
+			unsupported_t = min(unsupported_t, rayQueryGetIntersectionTEXT(reflection_rq, false));
+		}
+	}
+	if (rayQueryGetIntersectionTypeEXT(reflection_rq, true) != gl_RayQueryCommittedIntersectionTriangleEXT) {
+		return false; // miss -> caller falls back to the environment along the reflection direction.
+	}
+
+	float committed_t = rayQueryGetIntersectionTEXT(reflection_rq, true);
+	if (unsupported_t < committed_t) {
+		return false;
+	}
+
+	uint committed_geometry_idx = rayQueryGetIntersectionInstanceCustomIndexEXT(reflection_rq, true);
+	GeometryData geom = geometries[committed_geometry_idx];
+	vec2 bary_xy = rayQueryGetIntersectionBarycentricsEXT(reflection_rq, true);
+	vec3 bary = vec3(1.0 - bary_xy.x - bary_xy.y, bary_xy.x, bary_xy.y);
+	uint i0, i1, i2;
+	get_triangle_indices_ex(geom, rayQueryGetIntersectionPrimitiveIndexEXT(reflection_rq, true), i0, i1, i2);
+	TBNResult tbn = fetch_tbn(geom, i0, i1, i2, bary);
+	vec3 world_normal = normalize(transpose(mat3(rayQueryGetIntersectionWorldToObjectEXT(reflection_rq, true))) * tbn.normal);
+	if (dot(world_normal, -reflection_dir) < 0.0) {
+		world_normal = -world_normal;
+	}
+
+	// Standard-material fetch at the reflected hit (mirrors the closest-hit standard fragment:
+	// albedo_color * albedo_tex, ORM/roughness/metallic textures, emission_color * emission_strength).
+	// Inline ray queries cannot run custom any-hit/fragment code, so custom-shader hits fall back to
+	// the material's scalar factors (no per-pixel fragment program), which keeps the reflection plausible
+	// without tunneling. Textures are mip-0 (no ray differentials), as the deep-path reflection store also does.
+	MaterialData mat = materials[committed_geometry_idx];
+	vec2 mat_uv = fetch_uv(geom, i0, i1, i2, bary) * mat.uv1_scale + mat.uv1_offset;
+	vec4 albedo_tex = sample_material_texture(mat.albedo_texture_idx, mat_uv, mat.flags);
+	vec3 albedo = albedo_tex.rgb * mat.albedo_color.rgb;
+	float roughness = mat.roughness;
+	float metallic = mat.metallic;
+	if ((mat.flags & RT_MAT_FLAG_ORM_TEXTURE) != 0u) {
+		vec3 orm = sample_material_texture(mat.orm_texture_idx, mat_uv, mat.flags).rgb;
+		roughness = clamp(orm.g, 0.0, 1.0);
+		metallic = clamp(orm.b, 0.0, 1.0);
+	} else {
+		if ((mat.flags & RT_MAT_FLAG_ROUGHNESS_TEXTURE) != 0u) {
+			vec4 roughness_sample = sample_material_texture(mat.orm_texture_idx, mat_uv, mat.flags);
+			uint roughness_channel = (mat.flags >> RT_MAT_FLAG_ROUGHNESS_CHANNEL_SHIFT) & 7u;
+			roughness = clamp(rt_material_texture_channel(roughness_sample, roughness_channel) * mat.roughness, 0.0, 1.0);
+		}
+		if ((mat.flags & RT_MAT_FLAG_METALLIC_TEXTURE) != 0u) {
+			vec4 metallic_sample = sample_material_texture(mat.metallic_texture_idx, mat_uv, mat.flags);
+			uint metallic_channel = (mat.flags >> RT_MAT_FLAG_METALLIC_CHANNEL_SHIFT) & 7u;
+			metallic = clamp(rt_material_texture_channel(metallic_sample, metallic_channel) * mat.metallic, 0.0, 1.0);
+		}
+	}
+	vec3 emission = mat.emission_color * mat.emission_strength;
+	if ((mat.flags & RT_MAT_FLAG_HAS_EMISSION_TEX) != 0u) {
+		emission *= sample_material_texture(mat.emission_texture_idx, mat_uv, mat.flags).rgb;
+	}
+
+	hit_mat.baseColor = albedo;
+	hit_mat.metalness = clamp(metallic, 0.0, 1.0);
+	hit_mat.roughness = clamp(roughness, 0.0, 1.0);
+	hit_mat.dielectricF0 = 0.16 * mat.specular * mat.specular; // specular_to_f0(mat.specular).
+	hit_mat.emissive = emission;
+	hit_mat.transmissivness = 0.0;
+	hit_mat.opacity = 1.0;
+
+	hit_distance = committed_t;
+	hit_normal = world_normal;
+	hit_world_pos = reflection_origin + reflection_dir * committed_t;
+	return true;
+}
+
 const int RTGI_RAYGEN_BRDF_DIFFUSE = 1;
 const int RTGI_RAYGEN_BRDF_SPECULAR = 2;
 
@@ -943,6 +1072,124 @@ void main() {
 		// lights' bounced/indirect contribution, not the abstract lights, so primary direct + probe
 		// indirect is additive there. Emission is added pre-energy-scale to match the deep path.
 		radiance += texelFetch(rt_guide_emission_tex, guide_pixel, 0).rgb;
+
+		// Mirror channel: a sharp/glossy surface reflects the real environment. The NEE block above
+		// gives only direct highlights (the lights' own specular lobe), NOT the surrounding scene, so
+		// a low-roughness surface reads as flat matte. Trace ONE reflection ray and shade its hit
+		// Lumen-style (NEE direct + WRC indirect + emissive at the hit; the environment along the ray
+		// on a miss), then fold it into the specular channel scaled by the surface's integrated
+		// specular response. This is gated to low-roughness pixels (roughness <= 0.35), so every other
+		// pixel skips the whole block and is byte-identical to before. pd_specular_risk mirrors the
+		// deep-path's needs_reflected_guide test so the same surfaces that get a reflected guide there
+		// get a shaded reflection here. The store is RAW (no demodulation): the resolve composite
+		// (rtgi_gi_resolve.glsl) adds spec in radiance space with the BRDF already applied and does NOT
+		// re-multiply by a BRDF, so the surface specular term is baked in here. The deep-path demodulate
+		// at the oracle store is a separate path this does not touch.
+		float pd_specular_risk = max(1.0 - pd_roughness, pd_metalness);
+		if (pd_specular_risk > 0.55 && pd_roughness <= 0.35) {
+			float refl_hit_dist;
+			vec3 refl_hit_normal;
+			vec3 refl_dir;
+			vec3 refl_hit_pos;
+			MaterialProperties refl_mat;
+			bool refl_hit = rtgi_trace_and_resolve_specular_hit(rworld_pos, geom_N, N_bent, V,
+					refl_hit_dist, refl_hit_normal, refl_dir, refl_hit_pos, refl_mat);
+
+			vec3 reflected_radiance;
+			if (!refl_hit) {
+				// Miss: the environment/sky along the reflection ray (same evaluator the primary
+				// background-on-miss uses, so the reflected sky matches the visible sky).
+				reflected_radiance = rt_primary_eval_sky(refl_dir);
+			} else {
+				// Shade the reflected hit: NEE direct (one indirect-bounce evaluation, the same
+				// shared estimator the deep path uses at an indirect hit) + WRC indirect (the unified
+				// environment-indirect the probes carry, modulated by the hit albedo) + the hit's own
+				// emissive. refl_hit_normal is used as BOTH the geometry and shading normal (a reflected
+				// hit carries no relief/bent normal). refl_V is the direction from the hit back toward
+				// the reflecting surface (the eye of the reflected sub-path).
+				vec3 refl_V = -refl_dir;
+				// Decorrelate the reflected-hit shadow RNG from the primary NEE's sample-0 stream
+				// (a distinct sample index so the two white-noise streams do not share draws).
+				uint refl_rng = init_blue_noise_rng(rng_pixel, uint(get_rt_param(RT_PARAM_FRAME_INDEX)), 0x5A17u);
+				uint r_source_key = 0u;
+				uint r_slot_source_key = 0u;
+				float r_slot_pdf = 0.0;
+				RTDirectLighting r_slot_light = rt_direct_lighting_zero();
+				bool r_slot_stochastic = false;
+				float r_slot_reservoir_m = 0.0;
+				float r_slot_reservoir_weight_sum = 0.0;
+				float r_slot_target = 0.0;
+				bool r_slot_temporal_accepted = false;
+				bool r_slot_spatial_accepted = false;
+				uint r_slot_temporal_reject = RT_SOURCE_REJECT_PREV_UV;
+				uint r_slot_spatial_reject = RT_SOURCE_REJECT_PREV_UV;
+				uint r_slot_visibility_failures = 0u;
+				uint r_slot_valid_light_count = 0u;
+				vec3 refl_direct_diffuse = vec3(0.0);
+				vec3 refl_direct_specular = vec3(0.0);
+				if (pd_light_count > 0u && (rtgi_sampling_controls & RTGI_SAMPLING_ANALYTIC_LIGHTS_BIT) != 0u) {
+					// is_indirect = true: the indirect-bounce shadow budget (deterministic_light_limit 4),
+					// the same path the closest-hit uses for an indirect hit, so the energy convention
+					// matches the deep path. White-noise PCG (no screen-space coherence at a reflected hit).
+					RTDirectLighting refl_direct = lights_evaluate_direct_lighting_split(
+							refl_hit_pos, refl_hit_normal, refl_hit_normal, refl_V, refl_mat, refl_rng,
+							/*is_indirect=*/true, /*receiver_layer_mask=*/0xFFFFFFFFu, pd_light_count,
+							r_source_key, r_slot_source_key, r_slot_pdf, r_slot_light, r_slot_stochastic,
+							r_slot_reservoir_m, r_slot_reservoir_weight_sum, r_slot_target,
+							r_slot_temporal_accepted, r_slot_spatial_accepted, r_slot_temporal_reject,
+							r_slot_spatial_reject, r_slot_visibility_failures, r_slot_valid_light_count,
+							/*p_use_blue_noise_u=*/false, /*p_blue_noise_u=*/vec2(0.0));
+					refl_direct_diffuse = rt_clamp_path_contribution(refl_direct.diffuse, refl_mat.roughness, refl_mat.metalness, true, false);
+					refl_direct_specular = rt_clamp_path_contribution(refl_direct.specular, refl_mat.roughness, refl_mat.metalness, true, false);
+				}
+				// WRC indirect: cosine irradiance from the world radiance cache at the reflected hit,
+				// modulated by the hit albedo (irradiance * diffuse albedo = the diffuse indirect the
+				// resolve composite would have applied at a directly-visible surface). The atlas samplers
+				// (bindings 111/112) + WRC params are bound for the primary-direct dispatch.
+				WrcParams refl_wp = spg_make_wrc_params();
+				float refl_wrc_conf = 0.0;
+				vec3 refl_irradiance = rtgi_wrc_sample_irradiance(rt_wrc_radiance_for_spg, rt_wrc_distance_for_spg, refl_wp, refl_hit_pos, refl_hit_normal, refl_wrc_conf);
+				vec3 refl_indirect = refl_irradiance * (refl_mat.baseColor * (1.0 - refl_mat.metalness));
+				reflected_radiance = refl_direct_diffuse + refl_direct_specular + refl_indirect + refl_mat.emissive;
+			}
+			reflected_radiance = sanitize_payload_vec3(reflected_radiance);
+
+			// Surface specular response: the integrated split-sum environment-BRDF specular albedo
+			// (F0 Fresnel scale + bias) at the reflecting surface, the same term the engine uses for
+			// the spec-albedo G-buffer (DLSSRR_computeSpecularAlbedo in brdf_inc.glsl, used by the
+			// closest-hit at the spec-albedo debug view). It is the integral analogue of how the NEE
+			// direct_specular above is F0/Fresnel-scaled, so the mirror channel and the direct
+			// highlights share one specular response. NdotV uses the bent shading normal N_bent and V.
+			float surf_NdotV = clamp(dot(N_bent, V), 1e-4, 1.0);
+			vec3 surf_spec = DLSSRR_computeSpecularAlbedo(brdf_mat.baseColor, brdf_mat.metalness, brdf_mat.dielectricF0, pd_roughness, surf_NdotV);
+			vec3 mirror_contribution = reflected_radiance * surf_spec;
+			// Add to BOTH the specular channel (the reflection IS specular) and the total radiance, so
+			// the diffuse store below (radiance - specular) keeps the diffuse == radiance - specular
+			// invariant: the mirror term lands entirely in specular and zero in diffuse.
+			specular += mirror_contribution;
+			radiance += mirror_contribution;
+
+			// Virtual-point reprojection for the specular denoiser: reproject the MIRROR-IMAGE point
+			// (the surface position + reflection_dir * hit_distance) between the current and previous
+			// unjittered view-projections, so the denoiser tracks the reflection's parallax-correct
+			// motion rather than the surface motion. Mirrors the deep-path block (the oracle path's
+			// rt_specular_reprojection_image write) so the same denoiser consumes both. The guide image
+			// carries roughness + hit distance + risk for the resolve's spec virtual-BRDF + history match.
+			vec4 specular_reprojection = vec4(0.0);
+			if (refl_hit) {
+				vec3 virtual_pos = rworld_pos + refl_dir * refl_hit_dist;
+				vec2 curr_virtual_uv;
+				vec2 prev_virtual_uv;
+				if (project_uv_checked(virtual_pos, curr_vp_unjittered, curr_virtual_uv) &&
+						project_uv_checked(virtual_pos, prev_vp_unjittered, prev_virtual_uv)) {
+					vec2 curr_virtual_texture_uv = rt_visible_to_texture_uv(curr_virtual_uv, rt_current_origin());
+					vec2 prev_virtual_texture_uv = rt_visible_to_texture_uv(prev_virtual_uv, rt_previous_origin());
+					specular_reprojection = vec4(prev_virtual_texture_uv - curr_virtual_texture_uv, clamp(refl_hit_dist / 128.0, 0.0, 1.0), 1.0);
+				}
+			}
+			imageStore(rt_specular_reprojection_image, pixel_i, specular_reprojection);
+			imageStore(rt_specular_guide_image, pixel_i, vec4(pd_roughness, refl_hit ? refl_hit_dist : 0.0, pd_specular_risk, 1.0));
+		}
 
 		radiance *= max(0.0, get_rt_param(RT_PARAM_ENERGY));
 		specular *= max(0.0, get_rt_param(RT_PARAM_ENERGY));

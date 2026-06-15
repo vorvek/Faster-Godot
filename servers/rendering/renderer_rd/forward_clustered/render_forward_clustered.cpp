@@ -4195,6 +4195,17 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				// rt_flags), writing the deep-path beauty the oracle composite blits below. Otherwise keep
 				// PRIMARY_DIRECT for the normal FPT-fast guide-surface NEE primary (indirect bounces == 0).
 				const uint32_t pd_flags = rt_flags | (rt_fpt_reference ? 0u : SceneShaderRaytracing::RT_FLAG_PRIMARY_DIRECT);
+				// Channel the WRC's own clipmap values into the params UBO the primary-direct raygen reads
+				// (via update_uniform_set's RT_FLAG_PRIMARY_DIRECT override), so the FPT-fast mirror channel's
+				// WRC irradiance query at a reflected hit addresses the SAME atlas the WRC was sized from.
+				// Set unconditionally here (not inside the SPG-gather guard) so the query is correct whether or
+				// not SPG ran this frame. These slots are dispatch-flavor overrides: update_uniform_set hashes
+				// the radiance signature only on the no-flavor prepare call, so the primary-direct fill never
+				// perturbs the off/cornell history (RT_FLAG_PRIMARY_DIRECT is a flavor bit).
+				rt_state->wrc_grid = (uint32_t)wrc_params.grid;
+				rt_state->wrc_cascade_count = (uint32_t)wrc_params.cascade_count;
+				rt_state->wrc_base_spacing = wrc_params.base_spacing;
+				rt_state->spg_wrc_oct_res = (uint32_t)wrc_params.oct_res; // WRC atlas oct_res for the mirror query.
 				raytracing->dispatch_primary_direct_backend(rt_backend_context, pd_flags);
 				rt_state = rt_backend_context.viewport_state;
 
