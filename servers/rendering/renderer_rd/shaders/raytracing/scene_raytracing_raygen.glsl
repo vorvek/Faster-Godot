@@ -1162,7 +1162,10 @@ void main() {
 			// highlights share one specular response. NdotV uses the bent shading normal N_bent and V.
 			float surf_NdotV = clamp(dot(N_bent, V), 1e-4, 1.0);
 			vec3 surf_spec = DLSSRR_computeSpecularAlbedo(brdf_mat.baseColor, brdf_mat.metalness, brdf_mat.dielectricF0, pd_roughness, surf_NdotV);
-			vec3 mirror_contribution = reflected_radiance * surf_spec;
+			// Crossfade the reflection out across the rough seam so there is no hard line at the 0.35 cutoff:
+			// full at roughness <= 0.25, fading to zero at 0.35 where the diffuse/probe handling takes over.
+			float refl_w = smoothstep(0.35, 0.25, pd_roughness);
+			vec3 mirror_contribution = reflected_radiance * surf_spec * refl_w;
 			// Add to BOTH the specular channel (the reflection IS specular) and the total radiance, so
 			// the diffuse store below (radiance - specular) keeps the diffuse == radiance - specular
 			// invariant: the mirror term lands entirely in specular and zero in diffuse.
