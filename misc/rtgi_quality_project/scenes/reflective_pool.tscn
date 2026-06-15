@@ -17,7 +17,7 @@ sky = SubResource("Sky_syx0u")
 ambient_light_source = 1
 rtgi_enabled = true
 rtgi_quality_preset = 0
-rtgi_mode = 0
+rtgi_mode = 1
 rtgi_max_bounces = 5
 rtgi_disable_in_editor = false
 

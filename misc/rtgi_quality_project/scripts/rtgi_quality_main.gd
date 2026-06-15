@@ -3051,12 +3051,37 @@ func _measure_reflective_pool_image(image: Image) -> Dictionary:
 	var reflection := _measure_detail_region(image, int(width * 0.20), int(height * 0.56), int(width * 0.80), int(height * 0.96))
 	var pool_luma := _measure_mean_luma(image, int(width * 0.10), int(height * 0.60), int(width * 0.90), int(height * 0.98))
 	var reflection_fireflies := _count_isolated_hot_pixels(image, int(width * 0.10), int(height * 0.56), int(width * 0.90), int(height * 0.98))
+	# Reflected-content coverage: fraction of the pool reflection ROI brighter than 0.15 luma. With no
+	# real reflection this is just the few NEE highlight slivers (~1-2%); a true mirror fills the pool
+	# with reflected sphere/window content, lifting coverage several-fold. Counts area, not peak
+	# brightness, so individually-bright slivers do not inflate it.
+	var refl_cov := _measure_bright_coverage(image, int(width*0.20), int(height*0.56), int(width*0.80), int(height*0.96), 0.15)
 	return {
 		"reflective_pool_reflection_edge_energy": reflection["edge_energy"],
 		"reflective_pool_reflection_luma_stddev": reflection["luma_stddev"],
 		"reflective_pool_surface_mean_luma": pool_luma,
 		"reflective_pool_reflection_fireflies": reflection_fireflies,
+		"reflective_pool_reflection_coverage": refl_cov,
 	}
+
+
+# Returns the fraction of pixels inside [x0,x1) x [y0,y1) whose luma exceeds
+# luma_threshold. With no real reflection only tiny NEE highlight slivers cross
+# the threshold (~1-2% of the ROI); a true mirror fills the pool with reflected
+# content and lifts coverage several-fold. Returns 0.0 for empty ROIs.
+func _measure_bright_coverage(image: Image, x0: int, y0: int, x1: int, y1: int, luma_threshold: float) -> float:
+	var total := 0
+	var above := 0
+	for py in range(y0, y1):
+		for px in range(x0, x1):
+			var c := image.get_pixel(px, py)
+			var luma := maxf(c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722, 0.0)
+			total += 1
+			if luma > luma_threshold:
+				above += 1
+	if total == 0:
+		return 0.0
+	return float(above) / float(total)
 
 
 # Fog-parity measurement for the committed fog_corridor scene. The probe-rect
@@ -4492,6 +4517,7 @@ func _compare_metrics(metrics: Dictionary, expected: Dictionary) -> Array[String
 	_check_min_threshold(metrics, thresholds, "reflective_pool_reflection_edge_energy", failures)
 	_check_min_threshold(metrics, thresholds, "reflective_pool_surface_mean_luma", failures)
 	_check_max_threshold(metrics, thresholds, "reflective_pool_reflection_fireflies", failures)
+	_check_min_threshold(metrics, thresholds, "reflective_pool_reflection_coverage", failures)
 	_check_max_threshold(metrics, thresholds, "light_grid_orbit_delta_avg", failures)
 	_check_max_threshold(metrics, thresholds, "light_grid_orbit_sparkle_max", failures)
 	_check_max_threshold(metrics, thresholds, "light_grid_static_tail_delta", failures)
