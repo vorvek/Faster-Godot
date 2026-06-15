@@ -194,6 +194,8 @@ bool rtgi_trace_and_resolve_specular_hit(vec3 origin, vec3 geom_normal, vec3 sha
 
 	vec3 reflection_origin = offset_ray_origin(origin, geom_normal);
 	rayQueryEXT reflection_rq;
+	// TerminateOnFirstHit lets the driver stop the proceed loop on the first OPAQUE commit; alpha-test
+	// candidates still iterate the loop until one is confirmed. Same flags as the geometry-only sibling.
 	rayQueryInitializeEXT(reflection_rq, tlas, RT_RAY_FLAGS | gl_RayFlagsTerminateOnFirstHitEXT,
 			RT_INSTANCE_MASK_VISIBLE, reflection_origin, 0.001, reflection_dir, 10000.0);
 	float unsupported_t = 1e20;
@@ -1086,6 +1088,8 @@ void main() {
 		// re-multiply by a BRDF, so the surface specular term is baked in here. The deep-path demodulate
 		// at the oracle store is a separate path this does not touch.
 		float pd_specular_risk = max(1.0 - pd_roughness, pd_metalness);
+		// The 0.35 roughness cutoff must stay in sync with the resolve's sharp-spec reproject branch
+		// (rtgi_gi_resolve.glsl resolve_spec_reproject) and the crossfade below; all three share it.
 		if (pd_specular_risk > 0.55 && pd_roughness <= 0.35) {
 			float refl_hit_dist;
 			vec3 refl_hit_normal;

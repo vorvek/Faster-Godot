@@ -680,7 +680,10 @@ ivec2 resolve_spec_reproject(ivec2 pos, ivec2 surface_prev, float roughness) {
 		vec2 size = vec2(pc.screen_w, pc.screen_h);
 		vec2 curr_uv = (vec2(pos) + 0.5) / size;
 		vec2 prev_uv = curr_uv + vp.xy;
-		return ivec2(prev_uv * size - 0.5 + 0.5);
+		// Inverse of the (pos + 0.5)/size center convention above: the pixel that CONTAINS prev_uv is
+		// floor(prev_uv * size), which ivec2() gives directly for the on-screen (positive) case. Do NOT
+		// rewrite this as ivec2(prev_uv * size - 0.5): that shifts the fetch by one pixel.
+		return ivec2(prev_uv * size);
 	}
 	// Glossy/rough domain (or no valid virtual point): the reflection tracks the surface.
 	return surface_prev;
