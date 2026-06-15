@@ -243,6 +243,18 @@ layout(set = 0, binding = 17, std140) uniform CompositeFogParams {
 }
 composite_fog;
 
+// Specular virtual-point reprojection image (binding 18): written by the FPT primary raygen
+// (RB_TEX_RT_SPECULAR_REPROJECTION). A reflection moves with its VIRTUAL hit point, not the
+// reflecting surface, so the sharp-specular history must reproject on that virtual motion or it
+// smears under camera/object motion. Texel contract (mirrors scene_raytracing_raygen.glsl):
+//   .xy = (prev - curr) TEXTURE-UV delta of the reflected virtual point (same prev-cur sign as
+//         the velocity buffer at binding 3), .z = clamp(hit_dist / 128, 0, 1) confidence,
+//   .w  = 1.0 when the virtual-point estimate is valid (a sharp specular hit), else 0.0.
+// Only the TEMPORAL spec reproject (resolve_spec_reproject) samples it, and only on the sharp
+// branch; the other modes bind it neutrally to keep the shared set-0 layout valid. Bound at the
+// SAME RT/internal size as the resolve, so texelFetch shares the resolve's pixel coordinates.
+layout(set = 0, binding = 18) uniform sampler2D rt_specular_reprojection_tex;
+
 // Split-sum environment-BRDF DFG approximation (Karis' analytic fit), returning the
 // (scale, bias) pair so the specular term is F0 * dfg.x + dfg.y. This is the SAME analytic
 // fit the engine already relies on in brdf_inc.glsl (DLSSRR_envBRDFApprox /
@@ -650,21 +662,27 @@ bool resolve_history_valid(ivec2 cur_pos, ivec2 prev_pos) {
 }
 
 // SPECULAR reproject (C17): a HARD SELECT on roughness, NEVER a lerp between the two
-// reprojections. Below the rough cutoff (sharp-ish, where the reflection tracks the virtual
-// image) we WOULD reproject on the virtual position (offset toward the reflected hit); a robust
-// virtual-position estimate is not available from the current resolve buffers (no per-pixel hit
-// distance is stored), so the sharp branch reuses the surface reproject as the documented
-// approximation -- but the MECHANISM is a hard branch on roughness, not a blend. At/above the
-// cutoff (broad lobe) the reflection tracks the surface, so we use the surface reproject. The
-// review-graded requirement is the hard branch; both arms returning surface_prev today does not
-// make it a lerp (a future virtual-position estimate slots straight into the sharp arm).
-ivec2 resolve_spec_reproject(ivec2 cur_pos, ivec2 surface_prev, float roughness) {
-	if (roughness < pc.rough_cutoff) {
-		// Sharp domain: virtual-position reproject. No virtual-position estimate available from
-		// the current buffers -> fall back to the surface reproject (documented approximation).
-		return surface_prev;
+// reprojections. In the SHARP domain a reflection moves with its VIRTUAL hit point (the mirror
+// image behind the surface), not the reflecting surface, so reprojecting the specular history on
+// the surface motion smears it under camera/object motion. The FPT primary raygen path-traces the
+// reflected ray and writes the virtual point's prev-curr texture-UV delta into the specular
+// reprojection image (binding 18); the sharp branch reprojects on THAT delta. The glossy/rough
+// domain keeps the surface reproject: the lobe is broad and the reflection tracks the surface, and
+// the seam crossfade between the two is a later refinement (this is still a hard branch, not a lerp).
+// The delta is applied in UV space then converted back to pixels via the resolve's existing
+// uv<->pixel convention (vec2(pc.screen_w, pc.screen_h); same size the TEMPORAL surface reproject
+// uses), so the reprojected fetch shares the resolve's pixel grid.
+ivec2 resolve_spec_reproject(ivec2 pos, ivec2 surface_prev, float roughness) {
+	vec4 vp = texelFetch(rt_specular_reprojection_tex, pos, 0); // .xy = prev-curr UV delta, .w = valid.
+	if (vp.w > 0.5 && roughness <= 0.35) {
+		// Sharp domain: reproject on the reflected virtual point. Convert this pixel to texture-UV,
+		// add the virtual-point delta, and convert back to pixel space with the resolve's convention.
+		vec2 size = vec2(pc.screen_w, pc.screen_h);
+		vec2 curr_uv = (vec2(pos) + 0.5) / size;
+		vec2 prev_uv = curr_uv + vp.xy;
+		return ivec2(prev_uv * size - 0.5 + 0.5);
 	}
-	// Rough domain: the lobe is broad, the reflection tracks the surface -> surface reproject.
+	// Glossy/rough domain (or no valid virtual point): the reflection tracks the surface.
 	return surface_prev;
 }
 
@@ -743,9 +761,15 @@ void resolve_temporal_main(ivec2 pos) {
 			n_d = h.a * n_cap; // recover the stored sample count (.a == n / n_cap).
 		}
 		// SPECULAR: reproject on the roughness-SELECTED position (hard branch, C17), then the
-		// SAME same-surface rejection at that reprojected pixel.
+		// SAME same-surface rejection at that reprojected pixel. The sharp branch derives sprev from
+		// the virtual-point delta, which can land OFF-SCREEN (the reflection's mirror image leaving
+		// the frame) -- unlike the surface prev the outer guard already bounded -- so re-bound sprev
+		// here: an off-screen virtual point is a disocclusion (n_s stays 0 -> reset to the current
+		// frame), and the guard also keeps the spec_history/depth texelFetches in range.
 		ivec2 sprev = resolve_spec_reproject(pos, prev, roughness);
-		if (resolve_history_valid(pos, sprev)) {
+		if (all(greaterThanEqual(sprev, ivec2(0))) &&
+				sprev.x < int(pc.screen_w) && sprev.y < int(pc.screen_h) &&
+				resolve_history_valid(pos, sprev)) {
 			vec4 h = texelFetch(spec_history, sprev, 0);
 			hist_s = h.rgb;
 			n_s = h.a * n_cap;

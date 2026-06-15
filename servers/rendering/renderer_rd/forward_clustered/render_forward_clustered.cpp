@@ -4163,10 +4163,16 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					// the guide prepass and here); a later frame re-runs the prepass. This keeps a
 					// torn-down (null) guide from being bound, which would crash the resolve dispatch.
 					if (rb_data->rt_has_material_guides()) {
+						// The FPT raygen writes the specular virtual-point reprojection into this RT
+						// texture; pass it so the resolve's TEMPORAL spec reproject can follow the
+						// reflected hit point on sharp surfaces. When it has not been allocated this frame
+						// (Hybrid, or the RT buffers torn down between the raygen and here) pass RID(): the
+						// resolve binds a TRANSPARENT neutral whose .w == 0 keeps the sharp branch inert.
+						const RID spec_reprojection = rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_REPROJECTION) ? rb_data->rt_get_specular_reprojection() : RID();
 						rtgi_resolve->run_resolve(rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), spg_vel,
 								rb_data->rt_get_guide_albedo(), rb_data->rt_get_guide_orm(),
 								rtgi_spg->get_radiance_filtered(), rtgi_spg->get_header_plane(), rtgi_spg->get_header_aux(),
-								rtgi_wrc->get_radiance_atlas(), rtgi_wrc->get_distance_atlas(),
+								rtgi_wrc->get_radiance_atlas(), rtgi_wrc->get_distance_atlas(), spec_reprojection,
 								rfp, rtgi_inv_projection, p_render_data->scene_data->cam_transform,
 								rtgi_prev_projection, p_render_data->scene_data->prev_cam_transform);
 					}

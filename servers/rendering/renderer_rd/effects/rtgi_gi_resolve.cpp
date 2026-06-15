@@ -254,7 +254,7 @@ bool RTGIGIResolve::ensure_resources(Ref<RenderSceneBuffersRD> p_rb, const GiRes
 void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_velocity,
 		RID p_guide_albedo, RID p_guide_orm,
 		RID p_spg_radiance, RID p_spg_header_plane, RID p_spg_header_aux,
-		RID p_wrc_radiance, RID p_wrc_distance,
+		RID p_wrc_radiance, RID p_wrc_distance, RID p_specular_reprojection,
 		const GiResolveFrameParams &p_frame, const Projection &p_inv_proj, const Transform3D &p_inv_view,
 		const Projection &p_prev_cam_projection, const Transform3D &p_prev_cam_transform) {
 	// THE FRAME SWAP: flip read_index ONCE at the TOP of the frame (mirrors
@@ -325,6 +325,14 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	RID guide_default = RendererRD::TextureStorage::get_singleton()->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
 	RID guide_albedo_rid = p_guide_albedo.is_valid() ? p_guide_albedo : guide_default;
 	RID guide_orm_rid = p_guide_orm.is_valid() ? p_guide_orm : guide_default;
+
+	// Specular virtual-point reprojection (binding 18): the TEMPORAL spec reproject samples it on the
+	// sharp branch (a reflection follows its virtual hit point, not the surface). When the FPT raygen
+	// did not write it this frame (Hybrid, or the RT buffers torn down between the raygen and here)
+	// fall back to the TRANSPARENT default: its .w == 0 marks every texel invalid, so
+	// resolve_spec_reproject keeps the surface reproject -- byte-identical to the pre-wire behavior.
+	RID reproj_default = RendererRD::TextureStorage::get_singleton()->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_TRANSPARENT);
+	RID specular_reprojection_rid = p_specular_reprojection.is_valid() ? p_specular_reprojection : reproj_default;
 
 	// Set 0 declares EVERY binding any mode of rtgi_gi_resolve.glsl uses (one GLSL
 	// shader's set-0 layout must declare all of them): G-buffers (0-1), the material-guide
@@ -499,6 +507,18 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
 		u.binding = 17;
 		u.append_id(resolve_ubo);
+		uniforms.push_back(u);
+	}
+	// Binding 18: the specular virtual-point reprojection image. TEMPORAL reads it (the sharp-spec
+	// reproject); INTEGRATE ignores it. It is a plain read texture on a sampler slot, so it adds no
+	// same-resource read+write hazard (the set's only images are 9/10/13/16). The TRANSPARENT
+	// fallback (above) keeps the sharp branch inert when no FPT reprojection was written.
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 18;
+		u.append_id(linear_sampler);
+		u.append_id(specular_reprojection_rid);
 		uniforms.push_back(u);
 	}
 	GiResolveUBO ubo;
@@ -798,6 +818,17 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 		u.append_id(resolve_ubo);
 		uniforms.push_back(u);
 	}
+	// Binding 18 (specular reprojection): neutral here -- DEBUG_GI does not sample it (only TEMPORAL
+	// does), so it points at the resolved-diffuse read texture like the other neutral samplers. The
+	// shared set-0 layout must still provide the slot.
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 18;
+		u.append_id(linear_sampler);
+		u.append_id(diffuse_gi[read_index]);
+		uniforms.push_back(u);
+	}
 	PushConstant push_constant;
 	memset(&push_constant, 0, sizeof(PushConstant));
 	push_constant.mode = RESOLVE_MODE_DEBUG_GI;
@@ -1017,6 +1048,17 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_normal_roughness, RID p_
 		u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
 		u.binding = 17;
 		u.append_id(composite_fog_ubo);
+		uniforms.push_back(u);
+	}
+	// Binding 18 (specular reprojection): neutral here -- COMPOSITE does not sample it (only TEMPORAL
+	// does), so it points at the resolved-diffuse read texture like the other neutral samplers. The
+	// shared set-0 layout must still provide the slot.
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 18;
+		u.append_id(linear_sampler);
+		u.append_id(diffuse_gi[read_index]);
 		uniforms.push_back(u);
 	}
 	PushConstant push_constant;

@@ -138,7 +138,7 @@ public:
 	void run_resolve(RID p_depth, RID p_normal_roughness, RID p_velocity,
 			RID p_guide_albedo, RID p_guide_orm,
 			RID p_spg_radiance, RID p_spg_header_plane, RID p_spg_header_aux,
-			RID p_wrc_radiance, RID p_wrc_distance,
+			RID p_wrc_radiance, RID p_wrc_distance, RID p_specular_reprojection,
 			const GiResolveFrameParams &p_frame, const Projection &p_inv_proj, const Transform3D &p_inv_view,
 			const Projection &p_prev_cam_projection, const Transform3D &p_prev_cam_transform);
 
