@@ -657,8 +657,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	if (total_bounces == 0u && rt_mode == RT_MODE_PATH_TRACED && RT_GET_SAMPLE_COUNT() == 1u) {
 		ps.rng_state = rtgi_primary_surface_rng_seed(h, m, uint(get_rt_param(RT_PARAM_FRAME_INDEX)));
 	}
-	bool reflections_only = rt_mode == RT_MODE_REFLECTIONS_RT_ONLY;
-	bool raster_owned_primary = (reflections_only || rt_mode == RT_MODE_HYBRID) && total_bounces == 0u;
+	bool raster_owned_primary = (rt_mode == RT_MODE_HYBRID) && total_bounces == 0u;
 	// WRC probe-update and SPG-gather rays are full path traces that cache WORLD radiance for the GI
 	// probes. They inherit RT_PARAM_MODE (== RT_MODE_HYBRID in a Hybrid frame), but their first hit is
 	// NOT a raster-owned camera primary -- raster shades the camera pixel, not what a probe ray sees.
@@ -774,10 +773,10 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		vec3 raw_direct_specular = ps.throughput * direct_light.specular;
 		vec3 direct_diffuse = rt_clamp_path_contribution(raw_direct_diffuse, material_roughness, m.metalness, is_indirect, false);
 		vec3 direct_specular = rt_clamp_path_contribution(raw_direct_specular, material_roughness, m.metalness, is_indirect, false);
-		vec3 direct_total = reflections_only ? direct_specular : direct_diffuse + direct_specular;
+		vec3 direct_total = direct_diffuse + direct_specular;
 		vec3 raw_direct_slot_diffuse = ps.throughput * direct_slot_light.diffuse;
 		vec3 raw_direct_slot_specular = ps.throughput * direct_slot_light.specular;
-		vec3 direct_slot_diffuse = reflections_only ? vec3(0.0) : rt_clamp_path_contribution(raw_direct_slot_diffuse, material_roughness, m.metalness, is_indirect, false);
+		vec3 direct_slot_diffuse = rt_clamp_path_contribution(raw_direct_slot_diffuse, material_roughness, m.metalness, is_indirect, false);
 		vec3 direct_slot_specular = rt_clamp_path_contribution(raw_direct_slot_specular, material_roughness, m.metalness, is_indirect, false);
 		vec3 direct_slot_total = direct_slot_diffuse + direct_slot_specular;
 		if (!is_indirect && !rt_probe_dispatch_mode()) {
@@ -830,7 +829,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 		vec3 raw_emissive_specular = ps.throughput * emissive_light.specular;
 		vec3 emissive_diffuse = rt_clamp_path_contribution(raw_emissive_diffuse, material_roughness, m.metalness, is_indirect, true);
 		vec3 emissive_specular = rt_clamp_path_contribution(raw_emissive_specular, material_roughness, m.metalness, is_indirect, true);
-		vec3 explicit_emissive_total = reflections_only ? emissive_specular : emissive_diffuse + emissive_specular;
+		vec3 explicit_emissive_total = emissive_diffuse + emissive_specular;
 		// Recorded at ALL bounces (no !is_indirect gate, unlike the direct path above) on
 		// purpose: rt_source_candidate_record keeps the per-pixel MAX-luminance emissive
 		// reaching this pixel (including via a bounce), which feeds the unified candidate /
@@ -862,15 +861,7 @@ void shade_and_bounce(HitData h, MaterialResult m) {
 	// P(specular lobe) actually used for selection — fed to rt_bsdf_sampling_pdf
 	// so the emissive BSDF-hit MIS weight (Part 3) matches this vertex's sampler.
 	float next_p_spec = 0.0;
-	if (reflections_only) {
-		if (specularLum < 0.0001) {
-			ps.packed_bounces_flags = set_path_terminated(ps.packed_bounces_flags);
-			path_pack(payload, ps);
-			return;
-		}
-		brdfType = SPECULAR_TYPE;
-		next_p_spec = 1.0;
-	} else if (diffuseLum < 0.0001) {
+	if (diffuseLum < 0.0001) {
 		brdfType = SPECULAR_TYPE;
 		next_p_spec = 1.0;
 	} else if (specularLum < 0.0001) {

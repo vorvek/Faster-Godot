@@ -1335,9 +1335,6 @@ void main() {
 		if (get_rt_param(RT_PARAM_VIS_MODE) == 0.0) {
 			vec3 sample_radiance = sanitize_payload_vec3(ps.radiance);
 			vec3 sample_specular = min(sanitize_payload_vec3(ps.specular_radiance), sample_radiance);
-			if (rt_mode == RT_MODE_REFLECTIONS_RT_ONLY && has_primary_raster_gi_owner(ps.packed_bounces_flags)) {
-				sample_radiance = sample_specular;
-			}
 			total_radiance += sample_radiance;
 			total_specular_radiance += sample_specular;
 		} else {
@@ -1522,7 +1519,7 @@ void main() {
 	// gather modes lets those rays fall through to the sky term below, so radiance_probes-Hybrid
 	// gathers the environment exactly as FPT does (where this gate is inactive). The per-pixel
 	// primary miss (neither probe mode) still gets the raster background as before.
-	if ((rt_mode == RT_MODE_REFLECTIONS_RT_ONLY || rt_mode == RT_MODE_HYBRID) &&
+	if (rt_mode == RT_MODE_HYBRID &&
 			get_total_bounces(ps.packed_bounces_flags) == 0u &&
 			!rt_wrc_probe_update_mode() && !rt_spg_gather_mode()) {
 		ps.radiance = vec3(0.0);
