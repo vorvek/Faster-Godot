@@ -37,11 +37,6 @@ class reference.
     hidden `rendering/rtgi/*` pipeline project settings resolve to the
     `Balanced` tier; with `--verbose`, the renderer notes this substitution.
 - `rtgi_mode`
-  - `Reflections RT Only`: keeps the normal Forward+ raster path and raster GI
-    systems responsible for diffuse GI, with ray tracing intended for specular
-    and reflection paths only. This mode currently produces no composited RTGI
-    output: the frame keeps the raster GI, and the engine warns once while the
-    mode is active.
   - `Hybrid RTGI`: keeps the normal Forward+ raster opaque pass and traces RTGI
     against raster G-buffer guides, then denoises and blends the RTGI
     contribution into the raster frame. This is the default mode.
@@ -311,18 +306,16 @@ backends can dispatch directly through `RenderingDevice`.
 ## Rendering Behavior
 
 RTGI is a view-time override. Existing SDFGI and VoxelGI resources stay in the
-scene for fallback and comparison. `Reflections RT Only` preserves raster GI
-ownership for diffuse lighting and suppresses diffuse RT paths, `Hybrid RTGI`
-adds denoised ray-traced GI onto the raster frame, and `Full Path Tracing`
-disables incompatible baked and screen-space GI contributions for the view.
+scene for fallback and comparison. `Hybrid RTGI` adds denoised ray-traced GI
+onto the raster frame, and `Full Path Tracing` disables incompatible baked and
+screen-space GI contributions for the view.
 
-`Reflections RT Only` is intended to write ray-traced specular/reflection
-lighting into the existing Forward+ composition path, but it currently
-produces no composited RTGI output; the frame keeps the raster GI and the
-engine warns once. `Hybrid RTGI` writes a denoised RTGI contribution before
-additive blending. `Full Path Tracing` routes full lighting
-through the ray tracing path and disables incompatible screen-space or baked GI
-contributions for that view.
+`Hybrid RTGI` writes a denoised RTGI contribution before additive blending.
+`Full Path Tracing` routes full opaque lighting through the ray tracing path
+and disables incompatible screen-space or baked GI contributions for that view.
+On surfaces with roughness 0.35 or lower, `Full Path Tracing` also traces a
+reflection ray off the primary hit and folds the result into the specular
+channel; see the Mirror reflections section below.
 
 A baked `LightmapGI` does not disable RTGI. When `Hybrid RTGI` or `Full Path
 Tracing` composites, RTGI owns the diffuse indirect for the view, and the opaque
@@ -335,11 +328,10 @@ instance, or SDFGI enabled alongside Hybrid, used to silently veto the whole
 RTGI composite while every RT dispatch kept running and was thrown away each
 frame. When a composite-active RTGI mode is set, VoxelGI is now excluded from
 the frame and SDFGI is disabled, each with a one-shot warning, so the composite
-the frame already paid for is the one on screen. `Reflections RT Only` does not
-composite and still coexists with both raster GI providers, unchanged. One cost
-is deferred: the cull-side `voxel_gi_update` work, the re-voxelization of
-probes whose dynamic objects moved, still runs while a VoxelGI node is in the
-tree; the render-side voxel work is skipped.
+the frame already paid for is the one on screen. One cost is deferred: the
+cull-side `voxel_gi_update` work, the re-voxelization of probes whose dynamic
+objects moved, still runs while a VoxelGI node is in the tree; the render-side
+voxel work is skipped.
 
 Fog is a camera effect in the ray-traced modes, applied once where the raster
 path applies it. The RT fog helper used to evaluate only the exponential model,
@@ -792,7 +784,7 @@ generic color copy or additive blend to hide the lower-resolution signal. A
 dedicated two-stage RTGI reconstruction path first upsamples into
 `rt_reconstructed_temp`, then refines the result into the full-resolution
 `rt_reconstructed` texture before Full Path Tracing copy-out or Hybrid RTGI
-additive composition. Hybrid and Reflections modes guide both stages with
+additive composition. Hybrid RTGI guides both stages with
 full-resolution raster depth and normal/roughness textures. Scaled Full Path
 Tracing uses its material guide prepass for full-resolution depth, normal, and
 roughness, so the final reconstruction is anchored to full-resolution primary
@@ -858,9 +850,9 @@ vectors at `rtgi_resolution_scale` values below `1.0` instead of receiving valid
 vectors only in the scaled RT texture's top-left footprint. Reconstruction also
 writes a full-resolution `rt_reconstructed_reactivity` mask,
 which is used by a dedicated post-reconstruction RTGI TAA resolve. That resolve runs in
-separate history contexts for Full Path Tracing, Hybrid RTGI, and
-Reflections-only RT so full-resolution GI history is stabilized before copy-out
-or additive composition without sharing state with the normal viewport TAA.
+separate history contexts for Full Path Tracing and Hybrid RTGI so full-resolution
+GI history is stabilized before copy-out or additive composition without sharing
+state with the normal viewport TAA.
 The reconstruction step also builds full-resolution history-validity and
 history-ID textures from the low-resolution RT guides. These are conservative:
 the nearest low-resolution identity is used only when the local source support
@@ -868,10 +860,9 @@ agrees, and ambiguous low-resolution edge footprints are invalidated. The
 post-reconstruction TAA resolve consumes those full-resolution gates so
 reconstructed GI history cannot freely accumulate across surface-ID changes just
 because velocity/depth reprojection still lands on screen.
-Hybrid/Reflections RTGI also requests the raster motion-vector pass for this
-internal stabilization even when the user-facing viewport TAA option is off, so
-the GI reconstruction does not rely on final-frame TAA to hide low-resolution
-lighting.
+Hybrid RTGI also requests the raster motion-vector pass for this internal
+stabilization even when the user-facing viewport TAA option is off, so the GI
+reconstruction does not rely on final-frame TAA to hide low-resolution lighting.
 
 After RTGI denoising, the renderer also builds an internal `rt_taa_reactivity`
 mask from the denoiser's diagnostics: light-change reactivity, rejection,
@@ -930,8 +921,6 @@ the existing non-ray-traced path instead of destructively changing scene data.
 The engine reports once per session when RTGI output is discarded or
 substituted, instead of staying silent:
 
-- `Reflections RT Only` warns that it produces no composited RTGI output; the
-  frame keeps the raster GI.
 - `Full Scene Path-Traced GI` under FSR 2 warns that the path-traced primary
   is not temporally stabilized there and recommends `Hybrid RTGI`.
 - With `--verbose`, the `Custom` quality preset notes that the hidden
@@ -1133,7 +1122,38 @@ the geometric incidence so it never exceeds what the flat surface would receive.
 Texels whose geometry truly faces away stay dark. This keeps the normal-map
 relief while removing the black veins, and it matches the deep-path reference.
 The change touches only the fast path's primary direct lighting; the deep-path
-reference, Hybrid, and Reflections modes are unchanged.
+reference and Hybrid RTGI are unchanged.
+
+## Mirror reflections in the fast path tracer
+
+Full Path Tracing traces a sharp reflection bounce off low-roughness surfaces
+at the primary hit. Any surface with a roughness value of 0.35 or lower is
+eligible. For those surfaces, the path tracer fires one reflection ray from the
+primary hit point along the specularly reflected view direction. The reflected
+hit is shaded with next-event direct lighting (one shadow ray to the dominant
+light), cached indirect light from the world radiance cache, and the hit's own
+emission. On a sky miss the ray samples the environment or sky along the
+reflection direction. The resulting reflected radiance is weighted by the
+surface's specular response and folded into the specular channel before the
+ASVFG denoiser runs.
+
+To keep the reflected lighting stable under camera and object movement, the
+resolve reprojects the previous frame's specular history along the reflected
+hit's virtual point: the reflected surface position is reprojected into the
+prior frame's view to find a matching history texel, matching the approach used
+in Lumen's specular reprojection. This keeps sharp reflections from crawling
+or boiling when the camera pans across a metal surface or when a light moves.
+
+The reflection contribution crossfades out between roughness 0.25 and 0.35.
+At roughness 0.25 and below the full reflected hit shading is used; at
+roughness 0.35 and above it reaches zero. This avoids a hard seam where sharp
+reflection lighting hands off to the diffuse and probe handling that covers
+rougher surfaces.
+
+Without this bounce the fast path tracer evaluates only next-event direct
+lighting at the primary hit, so smooth metal and glass surfaces show no
+environment reflection. The reflection bounce is what lets those surfaces
+mirror the scene around them.
 
 ## Pros
 
