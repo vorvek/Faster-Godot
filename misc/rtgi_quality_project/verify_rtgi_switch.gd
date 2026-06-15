@@ -21,7 +21,7 @@ const FRAMES_PER_ITER := 3
 func _initialize() -> void:
 	_root = get_root()
 	_root.size = Vector2i(640, 360)
-	_modes = [Environment.RTGI_MODE_HYBRID, Environment.RTGI_MODE_REFLECTIONS_RT_ONLY, Environment.RTGI_MODE_FULL_PATH_TRACING]
+	_modes = [Environment.RTGI_MODE_HYBRID, Environment.RTGI_MODE_FULL_PATH_TRACING]
 
 	var scene := Node3D.new()
 	_root.add_child(scene)

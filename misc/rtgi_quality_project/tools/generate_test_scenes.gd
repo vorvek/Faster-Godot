@@ -373,12 +373,12 @@ func _build_reflective_pool_scene() -> Node3D:
 	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
 	env.tonemap_exposure = 1.0
 	env.rtgi_max_bounces = 5
-	# Reflections RT Only so the low-roughness plane shows true ray-traced mirror
-	# reflections of the floating emissives. Hybrid resolves indirect specular from
-	# the probe gather (too low frequency to mirror small bright emitters), and
-	# FPT-fast shades a NEE primary-direct without a sharp reflection bounce; only
-	# the dedicated RT reflection path mirrors the emitters crisply on the surface.
-	env.rtgi_mode = Environment.RTGI_MODE_REFLECTIONS_RT_ONLY
+	# The fast path tracer so the low-roughness plane shows true ray-traced mirror
+	# reflections of the floating emissives: its primary-direct pass traces a sharp
+	# reflection ray off low-roughness surfaces and shades the hit. Hybrid resolves
+	# indirect specular from the probe gather (too low frequency to mirror small
+	# bright emitters), so it does not produce a crisp mirror on this surface.
+	env.rtgi_mode = Environment.RTGI_MODE_FULL_PATH_TRACING
 	root.add_child(_make_world_environment(env))
 	_claim(root, root.get_node("RTGIWorldEnvironment"))
 

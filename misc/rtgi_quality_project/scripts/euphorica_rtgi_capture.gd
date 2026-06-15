@@ -647,7 +647,7 @@ func _apply_camera_motion_frame(state: Dictionary, frame: int, frame_count: int)
 func _apply_environment(test_case: Dictionary, env: Environment) -> void:
 	env.rtgi_enabled = test_case["rtgi_enabled"]
 	env.rtgi_disable_in_editor = false
-	env.rtgi_mode = Environment.RTGI_MODE_REFLECTIONS_RT_ONLY if test_case["mode"] == "simple_rt" else Environment.RTGI_MODE_FULL_PATH_TRACING
+	env.rtgi_mode = Environment.RTGI_MODE_FULL_PATH_TRACING
 	env.rtgi_samples_per_pixel = int(test_case.get("spp", 1))
 	env.rtgi_max_bounces = int(test_case.get("max_bounces", 3))
 	env.rtgi_denoiser = int(test_case.get("denoiser", Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL))

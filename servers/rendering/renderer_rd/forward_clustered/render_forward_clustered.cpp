@@ -3027,12 +3027,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	const bool rt_radiance_probes_composite = rt_gi_active && rt_env_params &&
 			((uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_HYBRID ||
 					(uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_FULL_PATH_TRACING);
-	// Mode 0 (REFLECTIONS_RT_ONLY) is excluded from the composite gate above: the RT work
-	// runs but the frame keeps the raster GI output. Warn once instead of discarding silently.
-	if (rt_gi_active && rt_env_params &&
-			(uint32_t)rt_env_params[RSE::PT_PARAM_MODE] == SceneShaderRaytracing::RT_MODE_REFLECTIONS_RT_ONLY) {
-		WARN_PRINT_ONCE("The Reflections RT Only RTGI mode currently produces no composited output; the frame keeps raster GI. Set Environment.rtgi_mode to Hybrid RTGI or Full Scene Path-Traced GI to see RTGI output.");
-	}
 	// True radiance_probes-FPT (FULL_PATH_TRACING only). Drives the extra full-screen
 	// primary-direct path-trace dispatch that coexists with the WRC/SPG probe dispatches.
 	// HYBRID never sets this, so its proven path is byte-unchanged.

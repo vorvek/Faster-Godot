@@ -254,9 +254,6 @@ func _apply_rtgi_mode(mode: String) -> void:
 			# divergence); the per-scene gates are calibrated for the fast path.
 			_environment.rtgi_enabled = true
 			_environment.rtgi_mode = Environment.RTGI_MODE_FULL_PATH_TRACING_REFERENCE
-		"reflections":
-			_environment.rtgi_enabled = true
-			_environment.rtgi_mode = Environment.RTGI_MODE_REFLECTIONS_RT_ONLY
 		"off":
 			# Raster reference config: keep the scene as authored but disable RTGI
 			# entirely, so per-scene comparisons (for example fog parity) can
@@ -396,14 +393,14 @@ func _parse_args() -> void:
 			_specular_object_motion = true
 		elif arg.begins_with("--rtgi-mode="):
 			var mode := arg.trim_prefix("--rtgi-mode=").to_lower()
-			if mode in ["hybrid", "fpt", "fpt-reference", "reflections", "off"]:
+			if mode in ["hybrid", "fpt", "fpt-reference", "off"]:
 				_rtgi_mode_override = mode
 			else:
 				push_warning("Unknown RTGI mode '%s'; leaving the scene-authored mode untouched." % mode)
 		elif arg.begins_with("--rtgi-modes="):
 			for mode_token in arg.trim_prefix("--rtgi-modes=").to_lower().split(",", false):
 				var token := mode_token.strip_edges()
-				if token in ["hybrid", "fpt", "fpt-reference", "reflections", "off"]:
+				if token in ["hybrid", "fpt", "fpt-reference", "off"]:
 					_rtgi_modes.append(token)
 				else:
 					push_warning("Unknown RTGI mode '%s' in --rtgi-modes; skipping it." % token)
@@ -2476,32 +2473,6 @@ func _capture_comparison_grid(base_name: String) -> void:
 			"ray_max_radiance": _ray_max_radiance,
 		},
 		{
-			"name": "reflections_only_asvfg_1spp",
-			"enabled": true,
-			"mode": Environment.RTGI_MODE_REFLECTIONS_RT_ONLY,
-			"spp": 1,
-			"denoiser": Environment.RTGI_DENOISER_ASVFG_EXPERIMENTAL,
-			"max_bounces": 3,
-			"split_signals": _split_signals,
-			"analytic_light_sampling": _analytic_light_sampling,
-			"explicit_emissive_sampling": _explicit_emissive_sampling,
-			"ray_firefly_suppression": _ray_firefly_suppression,
-			"ray_max_radiance": _ray_max_radiance,
-		},
-		{
-			"name": "reflections_only_internal_signal_decomposition_1spp",
-			"enabled": true,
-			"mode": Environment.RTGI_MODE_REFLECTIONS_RT_ONLY,
-			"spp": 1,
-			"denoiser": Environment.RTGI_DENOISER_INTERNAL_SIGNAL_DECOMPOSITION,
-			"max_bounces": 3,
-			"split_signals": true,
-			"analytic_light_sampling": _analytic_light_sampling,
-			"explicit_emissive_sampling": _explicit_emissive_sampling,
-			"ray_firefly_suppression": _ray_firefly_suppression,
-			"ray_max_radiance": _ray_max_radiance,
-		},
-		{
 			"name": "path_traced_asvfg_strc_off_1spp",
 			"enabled": true,
 			"mode": Environment.RTGI_MODE_FULL_PATH_TRACING,
@@ -2564,7 +2535,7 @@ func _capture_comparison_grid(base_name: String) -> void:
 		{
 			"name": "no_rtgi",
 			"enabled": false,
-			"mode": Environment.RTGI_MODE_REFLECTIONS_RT_ONLY,
+			"mode": Environment.RTGI_MODE_HYBRID,
 			"spp": 1,
 			"denoiser": Environment.RTGI_DENOISER_NONE,
 			"max_bounces": 3,
@@ -2969,10 +2940,9 @@ func _measure_cornell_box_image(image: Image) -> Dictionary:
 func _measure_energy_scaling(metrics: Dictionary, mode_label: String, image_size: Vector2i) -> void:
 	var energy := _rtgi_energy_override
 	# Guard on the live environment state, not the label string: when RTGI is
-	# disabled (the off config) or the mode composites no GI (reflections only
-	# replaces the specular signal), the occluded face can never scale with
+	# disabled (the off config) the occluded face can never scale with
 	# rtgi_energy, so neither record a reference nor verdict the config.
-	if _environment == null or not _environment.rtgi_enabled or _environment.rtgi_mode == Environment.RTGI_MODE_REFLECTIONS_RT_ONLY:
+	if _environment == null or not _environment.rtgi_enabled:
 		print("ENERGY mode=%s energy=%.4f verdict=SKIP reason=no-rtgi-gi" % [mode_label, energy])
 		metrics["rtgi_energy_verdict"] = "SKIP"
 		return

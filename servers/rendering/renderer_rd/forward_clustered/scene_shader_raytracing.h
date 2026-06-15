@@ -183,7 +183,6 @@ public:
 	// render_raytracing.cpp.
 	static constexpr uint32_t RT_PARAM_SHADER_FLOAT_COUNT = 52;
 
-	static constexpr uint32_t RT_MODE_REFLECTIONS_RT_ONLY = 0;
 	static constexpr uint32_t RT_MODE_FULL_PATH_TRACING = 1;
 	static constexpr uint32_t RT_MODE_HYBRID = 2;
 	static constexpr uint32_t RT_MODE_PATH_TRACED = RT_MODE_FULL_PATH_TRACING;

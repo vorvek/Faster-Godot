@@ -820,7 +820,6 @@ Environment::RTGIQualityPreset Environment::get_rtgi_quality_preset() const {
 
 void Environment::set_rtgi_mode(RTGIMode p_mode) {
 	switch ((int)p_mode) {
-		case RTGI_MODE_REFLECTIONS_RT_ONLY:
 		case RTGI_MODE_FULL_PATH_TRACING:
 		case RTGI_MODE_HYBRID:
 		case RTGI_MODE_FULL_PATH_TRACING_REFERENCE:
@@ -1879,7 +1878,7 @@ void Environment::_bind_methods() {
 	// rtgi_mode enum hint uses explicit Name:value pairs so the dropdown can show the oracle
 	// (REFERENCE) right after Full Scene Path-Traced GI while keeping the serialized values stable
 	// (REFLECTIONS 0, FULL_PATH_TRACING 1, HYBRID 2, REFERENCE 3) for backward compatibility.
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_mode", PROPERTY_HINT_ENUM, "Reflections RT Only:0,Full Scene Path-Traced GI:1,Full Scene Path-Traced GI (Reference):3,Hybrid RTGI:2"), "set_rtgi_mode", "get_rtgi_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "rtgi_mode", PROPERTY_HINT_ENUM, "Full Scene Path-Traced GI:1,Full Scene Path-Traced GI (Reference):3,Hybrid RTGI:2"), "set_rtgi_mode", "get_rtgi_mode");
 	// rtgi_fpt_reference is the legacy standalone bool for the deep-path A/B oracle. The oracle is
 	// now a first-class entry of rtgi_mode (RTGI_MODE_FULL_PATH_TRACING_REFERENCE), so this stays
 	// bound + serialized ONLY as a compatibility shim: pre-fold scenes that saved
@@ -2103,7 +2102,6 @@ void Environment::_bind_methods() {
 
 	BIND_ENUM_CONSTANT(RTGI_BACKEND_VULKAN_GENERIC);
 
-	BIND_ENUM_CONSTANT(RTGI_MODE_REFLECTIONS_RT_ONLY);
 	BIND_ENUM_CONSTANT(RTGI_MODE_FULL_PATH_TRACING);
 	BIND_ENUM_CONSTANT(RTGI_MODE_HYBRID);
 	BIND_ENUM_CONSTANT(RTGI_MODE_FULL_PATH_TRACING_REFERENCE);

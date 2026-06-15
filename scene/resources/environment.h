@@ -82,13 +82,15 @@ public:
 	};
 
 	enum RTGIMode {
-		RTGI_MODE_REFLECTIONS_RT_ONLY,
-		RTGI_MODE_FULL_PATH_TRACING,
-		RTGI_MODE_HYBRID,
+		// Explicit values keep the serialized FULL_PATH_TRACING / HYBRID (1/2) unchanged after the
+		// former reflections-only (0) entry was retired. A project saved with rtgi_mode = 0 now
+		// loads as HYBRID (set_rtgi_mode clamps any unknown value to HYBRID).
+		RTGI_MODE_FULL_PATH_TRACING = 1,
+		RTGI_MODE_HYBRID = 2,
 		// Deep-path A/B oracle (full path tracer, probe composite bypassed). Folded into this enum
 		// from the former hidden rtgi_fpt_reference bool so it is a first-class, toggleable editor
 		// choice (set/get_rtgi_fpt_reference remain as compatibility shims). Explicit = 3 so the
-		// existing REFLECTIONS / FULL_PATH_TRACING / HYBRID serialized values (0/1/2) are unchanged.
+		// existing FULL_PATH_TRACING / HYBRID serialized values (1/2) are unchanged.
 		RTGI_MODE_FULL_PATH_TRACING_REFERENCE = 3,
 		RTGI_MODE_PATH_TRACED = RTGI_MODE_FULL_PATH_TRACING,
 	};
