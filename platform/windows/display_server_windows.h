@@ -519,6 +519,8 @@ class DisplayServerWindows : public DisplayServer {
 
 	void initialize_tts() const;
 	void process_raw_input();
+	Vector2 _get_raw_mouse_motion(const RAWINPUT &p_raw, WindowID p_window_id);
+	void _process_raw_mouse_motion(const Vector2 &p_relative, bool p_left_button_down, WindowID p_window_id);
 	void _process_raw_input_event(const RAWINPUT &p_raw, WindowID p_window_id);
 	LocalVector<uint8_t> raw_input_buffer;
 
