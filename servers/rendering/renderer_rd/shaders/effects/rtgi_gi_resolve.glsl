@@ -259,7 +259,7 @@ layout(set = 0, binding = 18) uniform sampler2D rt_specular_reprojection_tex;
 // dispatch (scene_raytracing_raygen.glsl rt_hybrid_specular_only_mode), RB_TEX_RT_SPECULAR_RADIANCE.
 // The resolve's probe-derived rough-spec channel (do_spec) covers only the ROUGH domain
 // (roughness >= rough_cutoff); the SHARP domain (a mirror/glossy reflection) was the deferred
-// ray-traced path. Under HYBRID this texture carries the energy-scaled, BRDF-applied sharp
+// ray-traced path. Under HYBRID this texture carries the BRDF-applied sharp
 // reflection radiance for low-roughness pixels (0 elsewhere); INTEGRATE injects it into spec_gi
 // for sharp pixels when pc.sharp_spec_inject != 0, so the composite (which adds spec_gi directly)
 // shows the RT reflection on top of the raster beauty. FPT leaves sharp_spec_inject 0 (its sharp
@@ -607,7 +607,7 @@ void resolve_integrate_main(ivec2 pos) {
 	// only the rough domain (do_spec, rough >= cutoff). For the SHARP domain (rough < cutoff, a
 	// mirror/glossy reflector) the resolve historically wrote 0 (the deferred ray-traced path). When
 	// the HYBRID specular-only screen dispatch ran (pc.sharp_spec_inject != 0), it wrote the
-	// energy-scaled, BRDF-applied sharp reflection radiance into binding 19 for exactly those pixels;
+	// BRDF-applied sharp reflection radiance into binding 19 for exactly those pixels;
 	// take it as the spec output here so the composite (which adds spec_gi directly) shows the RT
 	// reflection. Gated on rough_enabled + rough < cutoff so it never touches the rough-spec pixels
 	// resolved above, and on sharp_spec_inject so FPT (which reaches its sharp reflection via the

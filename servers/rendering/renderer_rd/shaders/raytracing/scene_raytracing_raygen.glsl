@@ -823,6 +823,9 @@ void main() {
 		// FPT path (rt_primary_direct_mode) is reached only when RT_FLAG_PRIMARY_DIRECT is set, which
 		// Hybrid never sets, so it stays byte-identical; this branch runs only under the new bit.
 		if (!pixel_in_visible) {
+			// Out-of-visible-bounds pixel: write 0 to the sharp-spec output so stale texels from a
+			// prior frame do not persist (matches the FPT primary-direct miss convention at line 1005).
+			imageStore(rt_specular_radiance_image, pixel_i, vec4(0.0));
 			return;
 		}
 		float rdepth;
@@ -831,10 +834,11 @@ void main() {
 		bool hit = rtgi_load_raster_surface(visible_pixel_i, inv_view,
 				rdepth, rview_pos, rworld_pos, rworld_normal, rroughness, ralbedo_proxy);
 		if (!hit) {
-			// Background: no reflecting surface. The RT spec textures were cleared to 0 this frame
-			// (rt_ensure_textures -> rt_clear_textures), so leave them -- the resolve reads empty spec
-			// here, matching the cleared-target convention. Do NOT touch the diffuse/depth/guide
-			// G-buffers: Hybrid's raster pass + the material-guide prepass own those.
+			// Background: no reflecting surface. Write 0 to the sharp-spec output so the resolve reads
+			// a clean zero here (matches the FPT primary-direct miss convention at line 1005). Do NOT
+			// touch the diffuse/depth/guide G-buffers: Hybrid's raster pass + the material-guide
+			// prepass own those; this branch is a pure specular writer.
+			imageStore(rt_specular_radiance_image, pixel_i, vec4(0.0));
 			return;
 		}
 

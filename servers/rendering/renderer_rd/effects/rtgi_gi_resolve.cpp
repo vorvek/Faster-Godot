@@ -336,7 +336,7 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	RID specular_reprojection_rid = p_specular_reprojection.is_valid() ? p_specular_reprojection : reproj_default;
 
 	// RT-traced sharp specular radiance (binding 19): the HYBRID specular-only screen dispatch wrote
-	// the energy-scaled, BRDF-applied sharp reflection radiance here (RB_TEX_RT_SPECULAR_RADIANCE).
+	// the BRDF-applied sharp reflection radiance here (RB_TEX_RT_SPECULAR_RADIANCE).
 	// INTEGRATE injects it into spec_gi for sharp pixels only when p_sharp_spec_inject (HYBRID). When
 	// the texture is absent (the RT buffers torn down, or not a HYBRID frame) fall back to the BLACK
 	// default so the injection is a no-op and the bind stays valid.
