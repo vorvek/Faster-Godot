@@ -39,7 +39,19 @@ class reference.
 - `rtgi_mode`
   - `Hybrid RTGI`: keeps the normal Forward+ raster opaque pass and traces RTGI
     against raster G-buffer guides, then denoises and blends the RTGI
-    contribution into the raster frame. This is the default mode.
+    contribution into the raster frame. This is the default mode. Sharp and
+    glossy surfaces (roughness at or below `0.35`) also get a ray-traced
+    reflection: one reflection ray per pixel reflects the real environment,
+    emissive geometry, and sky, where the raster opaque pass could only show its
+    prefiltered environment cubemap. So a mirror floor now reflects the scene's
+    own emitters and geometry instead of a static sky map. On that sharp
+    band RTGI is the sole specular-indirect provider, so the raster environment
+    and reflection-probe specular fade out there (across roughness `0.25` to
+    `0.35`, the exact range where the ray-traced reflection fades in) to keep the
+    reflection from being counted twice; rougher surfaces keep their raster
+    environment reflection unchanged. Screen-space reflections stay off whenever
+    RTGI is active, in either mode, because the ray-traced reflection replaces
+    them.
   - `Full Scene Path-Traced GI`: routes full opaque lighting through the ray
     tracing path for the view. It disables incompatible baked and screen-space
     GI contributions and then composites transparent raster overlays after RT
