@@ -207,7 +207,7 @@
 			}
 		},
 		"hybrid_mirror": {
-			"_note": "WS8 Hybrid specular sentinel: near-mirror surface (metallic=1.0, roughness=0.05) under rtgi_mode=2 (Hybrid) with three floating emissive spheres. hybrid_mirror_reflection_coverage is the headline gate: without an RT specular channel under Hybrid the pool shows only diffuse bounce and NEE highlights (measured ~9.8% coverage above 0.15 luma), while the fpt-reference oracle fills it with traced mirror content (~91%). min_hybrid_mirror_reflection_coverage is set to 0.35 (the post-fix target floor) so the current pre-fix binary FAILS this gate intentionally, confirming the sharp channel is missing. After WS8 T2-T5 the fixed binary should clear 0.35 with margin. edge_energy and surface_mean_luma are regression baselines (floors set to near-zero so they do not gate on the pre-fix run). The firefly cap is set to 2000 to accommodate the fpt-reference oracle path tracer which is noisy at the 120-frame settle (not yet converged to its steady-state low-noise state).",
+			"_note": "Hybrid sharp-reflection sentinel: a near-mirror surface (metallic=1.0, roughness=0.05) under rtgi_mode=2 (Hybrid) with three floating emissive spheres. hybrid_mirror_reflection_coverage, the fraction of the pool ROI above 0.15 luma, is the headline metric. Under Hybrid the surface traces a sharp ray-traced reflection of the scene, so the pool fills with the reflected emitters (about 0.99 coverage); the fpt-reference oracle is the ground-truth reference (about 0.91). The 0.35 coverage floor guards the sharp-reflection channel against regressing to the raster-only level (about 0.10, which is just diffuse bounce and direct highlights with no traced reflection). edge_energy and surface_mean_luma floors are near-zero regression baselines. The firefly cap is generous because the fpt-reference oracle path tracer is still noisy at the 120-frame settle.",
 			"thresholds": {
 				"min_hybrid_mirror_reflection_edge_energy": 0.0001,
 				"min_hybrid_mirror_surface_mean_luma": 0.005,
@@ -216,10 +216,10 @@
 			}
 		},
 		"hybrid_rough_metal": {
-			"_note": "WS8 Hybrid rough-metal double-count sentinel: wall with metallic=0.31 / roughness=0.77 under rtgi_mode=2 (Hybrid), bright sky (background_energy_multiplier=3.0). Under Hybrid the raster env cubemap specular and the RTGI probe rough-spec both fire on the same pixel, making the wall brighter than the fpt-reference oracle. hybrid_rough_metal_wall_luma is the mean linear luma of the metal wall ROI: the double-count raises it above the oracle level. The band gate here is intentionally wide (0.0 floor, 100.0 ceiling) so the pre-fix run does not hard-fail on the wall_luma threshold itself; the double-count signal is reported in the metrics JSON and beauty PNG for manual confirmation. Recalibrate to a tight max after the fix ships and the oracle ratio is measured. The firefly cap stays generous.",
+			"_note": "Hybrid rough-metal guard: a wall with metallic=0.31 / roughness=0.77 under rtgi_mode=2 (Hybrid), bright sky (background_energy_multiplier=3.0). The roughness is above the 0.35 sharp band, so Hybrid leaves this surface's raster environment specular and the probe rough-spec untouched (the sharp-band suppression weight is exactly 1.0 here). hybrid_rough_metal_wall_luma is the mean linear luma of the metal wall ROI; the fpt-reference oracle measures about 0.85 and Hybrid about 0.77. The band brackets that level so the rough band cannot regress to dim or blow out, which is the guard that the sharp-band suppression never reaches a rough surface. The firefly cap is generous for the noisy oracle at the 120-frame settle.",
 			"thresholds": {
-				"min_hybrid_rough_metal_wall_luma": 0.0,
-				"max_hybrid_rough_metal_wall_luma": 100.0,
+				"min_hybrid_rough_metal_wall_luma": 0.60,
+				"max_hybrid_rough_metal_wall_luma": 0.95,
 				"max_hybrid_rough_metal_wall_fireflies": 40.0
 			}
 		}
