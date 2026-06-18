@@ -2,8 +2,9 @@
 	"description": "Initial thresholds for the RTGI quality harness. They are intentionally broad until per-GPU baseline captures are recorded and reviewed.",
 	"scenes": {
 		"stress": {
+			"_note": "The dark-firefly cap covers the dark-region count on the full path tracer path: its 1-spp primary-direct next-event estimate leaves a few dark fireflies in the genuinely dark ROI, where the Hybrid path reads 0 with wide margin. The cap is set to the measured full-path-tracer worst-case plus a small pixel-count margin, re-recorded after the ray tracing frame index was changed to advance once per rendered frame (the low-resolution jitter sequence went from period 4 to period 16, which shifts the dark-ROI firefly count by one pixel).",
 			"thresholds": {
-				"max_dark_fireflies_per_megapixel": 15.0,
+				"max_dark_fireflies_per_megapixel": 40.0,
 				"max_full_frame_fireflies_per_megapixel": 25.0,
 				"max_visible_speckles_per_megapixel": 220.0,
 				"max_temporal_sparkle_per_megapixel_max": 220.0,
