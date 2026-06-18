@@ -3637,9 +3637,10 @@ func _motion_ghost_rects(width: int, height: int) -> Dictionary:
 	var current_pos := Vector2i(
 			clampi(int(current_center.x) - size.x / 2, 0, width - size.x),
 			clampi(int(current_center.y) - size.y / 2, 0, height - size.y))
-	# Static background: the top-left corner. The light sweeps along world +X at
-	# z = 0 (a horizontal mid line under the top-down camera), so the upper-left
-	# corner is far from the pool's path for the whole sweep.
+	# Static background: the top-left corner. The light orbits a circle (radius 3.4)
+	# around the origin, which projects to a ring around screen center under the
+	# top-down camera, so the upper-left corner stays clear of the pool's path for
+	# the whole sweep.
 	var static_size := Vector2i(int(width * 0.12), int(height * 0.12))
 	var static_pos := Vector2i(int(width * 0.04), int(height * 0.04))
 	return {
