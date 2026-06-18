@@ -41,10 +41,11 @@ class reference.
     against raster G-buffer guides, then denoises and blends the RTGI
     contribution into the raster frame. This is the default mode. Sharp and
     glossy surfaces (roughness at or below `0.35`) also get a ray-traced
-    reflection: one reflection ray per pixel reflects the real environment,
-    emissive geometry, and sky, where the raster opaque pass could only show its
-    prefiltered environment cubemap. So a mirror floor now reflects the scene's
-    own emitters and geometry instead of a static sky map. On that sharp
+    reflection: one reflection ray per pixel reflects the scene's emissive
+    geometry and other surfaces, or the environment on a miss, where the raster
+    opaque pass could only show its prefiltered environment cubemap. A mirror
+    floor reflects the scene's own emitters and geometry, not a static sky map.
+    On that sharp
     band RTGI is the sole specular-indirect provider, so the raster environment
     and reflection-probe specular fade out there (across roughness `0.25` to
     `0.35`, the exact range where the ray-traced reflection fades in) to keep the
