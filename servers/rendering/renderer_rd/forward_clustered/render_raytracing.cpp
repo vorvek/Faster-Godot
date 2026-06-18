@@ -9993,11 +9993,31 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		// [14] = LIGHT_COUNT, [15] = FRAME_INDEX,
 		// [16-19] = RTGI denoiser controls, [20] = RAY_FIREFLY_SUPPRESSION,
 		// [21] = RAY_MAX_RADIANCE, [22-24] = split-signal denoiser controls.
-		const uint32_t rt_frame_index = p_state->frame_counter++;
-		if (p_state->frame_counter == 0u) {
-			// frame_index 0 is the resolve's no-history seed signal (rtgi_gi_resolve.glsl TEMPORAL
-			// path); a uint32 wrap must not re-trigger a scene-wide GI reseed mid-session.
-			p_state->frame_counter = 1u;
+		// Advance the ray tracing frame index ONCE per rendered frame and reuse it across
+		// that frame's dispatch flavors. This call runs 2-4x per rendered frame (the no-flavor
+		// prepare dispatch first, then the WRC/SPG/primary-direct flavors), so incrementing here
+		// unconditionally advanced the index ~4x per frame. The low-resolution halton jitter
+		// (_rt_halton_value(rt_frame_index & 15u, ...) below) and the WRC sweep cadence sequence
+		// on this index expecting a stride of one, so a +4 stride collapsed the jitter to a
+		// period of four and gapped the cache sweep. The first dispatch of each rendered frame
+		// is detected by the engine frame number rising, which is exactly one per rendered frame
+		// in every mode -- unlike the is_prepare flag, which the deep-path oracle (fpt-reference)
+		// raises twice per frame because its full-screen dispatch carries no flavor bit.
+		const uint32_t current_engine_frame = (uint32_t)RSG::rasterizer->get_frame_number();
+		uint32_t rt_frame_index;
+		if (p_state->last_advanced_engine_frame != current_engine_frame) {
+			rt_frame_index = p_state->frame_counter++;
+			if (p_state->frame_counter == 0u) {
+				// frame_index 0 is the resolve's no-history seed signal (rtgi_gi_resolve.glsl TEMPORAL
+				// path), set once per context at startup; a uint32 wrap must not re-trigger a
+				// scene-wide GI reseed mid-session.
+				p_state->frame_counter = 1u;
+			}
+			DEV_ASSERT(p_state->frame_counter != 0u);
+			p_state->rendered_frame_index = rt_frame_index;
+			p_state->last_advanced_engine_frame = current_engine_frame;
+		} else {
+			rt_frame_index = p_state->rendered_frame_index;
 		}
 		rt_ubo.params[SceneShaderRaytracing::RT_PARAM_FRAME_INDEX] = float(rt_frame_index);
 

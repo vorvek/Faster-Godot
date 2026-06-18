@@ -470,6 +470,18 @@ struct RTViewportState {
 	bool light_buffer_signature_valid = false;
 
 	uint32_t frame_counter = 0;
+	// The frame_counter value chosen for the current rendered frame, advanced once on
+	// that frame's first update_uniform_set call (the no-flavor prepare dispatch) and
+	// reused by the WRC/SPG/primary-direct flavors that follow in the same frame, so the
+	// halton jitter and WRC sweep cadence that sequence on it see a stride of one.
+	uint32_t rendered_frame_index = 0;
+	// The engine frame number (RSG::rasterizer->get_frame_number()) the index was last
+	// advanced on. UINT32_MAX means "not advanced yet". The first dispatch of a new
+	// rendered frame is detected by this value differing from the current frame number,
+	// which holds in every mode: oracle (fpt-reference) runs two no-flavor dispatches per
+	// frame, so the is_prepare flag alone would double-advance, but the frame number rises
+	// by one per rendered frame regardless of how many dispatch flavors run.
+	uint32_t last_advanced_engine_frame = 0xFFFFFFFFu;
 
 	// WRC clipmap params channeled to update_uniform_set so the WRC probe-update
 	// raygen reads the WRC's own grid/cascade/spacing/rays (which the WRC atlas was
