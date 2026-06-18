@@ -1,0 +1,73 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/motion_ghost_anim.gd" id="1_ds5at"]
+
+[sub_resource type="Environment" id="Environment_fq1cl"]
+background_mode = 1
+background_color = Color(0.002, 0.002, 0.003, 1)
+ambient_light_source = 1
+rtgi_enabled = true
+rtgi_quality_preset = 0
+rtgi_disable_in_editor = false
+
+[sub_resource type="BoxMesh" id="BoxMesh_227df"]
+size = Vector3(16, 0.1, 16)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hvbwu"]
+cull_mode = 2
+diffuse_mode = 1
+specular_mode = 2
+albedo_color = Color(0.45, 0.45, 0.45, 1)
+
+[sub_resource type="SphereMesh" id="SphereMesh_rhadh"]
+radius = 0.14
+height = 0.28
+radial_segments = 48
+rings = 24
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_eou8q"]
+albedo_color = Color(1, 0.86, 0.62, 1)
+roughness = 0.35
+emission_enabled = true
+emission = Color(1, 0.86, 0.62, 1)
+emission_energy_multiplier = 5.0
+
+[node name="MotionGhost" type="Node3D" unique_id=1673649661]
+script = ExtResource("1_ds5at")
+
+[node name="RTGIWorldEnvironment" type="WorldEnvironment" parent="." unique_id=1180884314]
+environment = SubResource("Environment_fq1cl")
+
+[node name="Floor" type="MeshInstance3D" parent="." unique_id=1455403601]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+mesh = SubResource("BoxMesh_227df")
+surface_material_override/0 = SubResource("StandardMaterial3D_hvbwu")
+
+[node name="Mover" type="Node3D" parent="." unique_id=2030926931]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, 3.4)
+
+[node name="MovingLight" type="OmniLight3D" parent="Mover" unique_id=1025285301]
+light_energy = 6.0
+light_size = 0.12
+shadow_enabled = true
+omni_range = 3.0
+
+[node name="Marker" type="MeshInstance3D" parent="Mover" unique_id=1193978206]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.7, 0)
+gi_mode = 2
+mesh = SubResource("SphereMesh_rhadh")
+surface_material_override/0 = SubResource("StandardMaterial3D_eou8q")
+
+[node name="FillLight" type="OmniLight3D" parent="." unique_id=139470361]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6, 0)
+light_energy = 0.1
+omni_range = 20.0
+
+[node name="MotionGhostCamera" type="Camera3D" parent="." unique_id=1096150234]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 12, 0)
+current = true
+fov = 60.0
+far = 60.0

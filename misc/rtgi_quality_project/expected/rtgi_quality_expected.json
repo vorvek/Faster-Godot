@@ -162,6 +162,24 @@
 				"min_light_toggle_contact_sharpness": 0.00365
 			}
 		},
+		"wall_leak": {
+			"_note": "Sealed thin-wall light-leak probe. A box open at the top is split on the x = 0 plane by a thin full-height opaque divider into a lit half (a bright omni inside it) and a sealed dark half (no light, no opening except through the divider). A straight-down camera frames both chamber floors side by side. wall_leak_luma is the mean LINEAR luma of the dark-half floor ROI just past the divider, which has no legitimate light path and should read near zero; wall_lit_luma is the matching lit-half ROI as the context reference. The leak reads as the fraction wall_leak_luma / wall_lit_luma. Measured on this binary (pinned-120 --rtgi-modes=fpt,hybrid): wall_lit_luma fpt 0.956, hybrid 0.939; wall_leak_luma fpt 0.00160, hybrid 0.00183; leak fraction 0.17 percent (fpt) and 0.19 percent (hybrid), i.e. effectively no through-wall leak. max_wall_leak_luma sits at 0.006, about 3.3x the worst measured value and 0.6 percent of the lit reference, so a leak that brightens the sealed dark floor to even 1 percent of the lit floor trips it while the current leak-free binary gates green. The firefly caps stay generous: the only thing in frame is two flat Lambert floors, which must not produce fireflies.",
+			"thresholds": {
+				"max_dark_fireflies_per_megapixel": 2000.0,
+				"max_full_frame_fireflies_per_megapixel": 2000.0,
+				"max_temporal_sparkle_per_megapixel_max": 60.0,
+				"max_wall_leak_luma": 0.006
+			}
+		},
+		"motion_ghost": {
+			"_note": "Continuous-motion temporal-trail probe for the diffuse screen-probe-gather (SPG). A bright compact omni orbits a circle on a large neutral floor under a static straight-down camera, so the only thing moving on screen is the lit pool, isolating the diffuse SPG indirect path. motion_ghost_luma is the residual LINEAR luma (above the static-background floor) at a floor point the orbiting pool covered 50 frames ago but has since orbited about 4.4 m past, well outside its roughly 2.65 m direct pool, so any luma there is indirect/temporal trail. motion_ghost_current_luma is the live pool ROI as the context reference and motion_ghost_static_luma is a fixed far-corner ROI the pool never reaches. The trail reads as the ratio motion_ghost_luma / (current - static). Measured on this binary (pinned-120 --rtgi-modes=fpt,hybrid): current pool fpt 0.456, hybrid 0.452; static background about 0.00002; motion_ghost_luma fpt 0.00413, hybrid 0.00487; ghost ratio 0.91 percent (fpt) and 1.08 percent (hybrid), i.e. a faint indirect trail about 200x the static floor but only about 1 percent of the live pool. max_motion_ghost_luma sits at 0.012, about 2.5x the worst measured value and about 2.6 percent of the live pool, so a doubling of the trail trips it while the current binary gates green. The sparkle cap admits the moving pool edge (about 15.4/Mpx measured) and the firefly caps stay generous (a single moving light on a flat floor must not produce fireflies).",
+			"thresholds": {
+				"max_dark_fireflies_per_megapixel": 2000.0,
+				"max_full_frame_fireflies_per_megapixel": 2000.0,
+				"max_temporal_sparkle_per_megapixel_max": 60.0,
+				"max_motion_ghost_luma": 0.012
+			}
+		},
 		"sun_penumbra_ramp": {
 			"_note": "Soft contact-shadow characterization scene (a low, large-disc sun behind a thin wall, casting a long penumbra across a neutral floor). It pins its own short canonical settle of 16 frames: the structural edge width (sun_penumbra_width_px) is settled there (raster reads 29 columns, the ray-traced pass reads about 38), while sun_penumbra_band_hf (the mean per-column vertical scatter of the soft shadow edge, the within-column per-sample shadow noise) captures the residual shadow noise at that settle. width_px and band_hf now gate: max_sun_penumbra_width_px 40 admits both the raster 29 and the ray-traced edge with headroom, and max_sun_penumbra_band_hf 0.072 sits above the raster reference band noise (about 0.065, the same cap applies to the off mode) and well below the one-sample ray-traced baseline (about 0.080), so the gate admits the raster path and the multi-sampled ray-traced path while still catching a regression back to a single shadow sample. The solid-angle-scaled multi-sample shadow drops the ray-traced band_hf from about 0.080 (one sample) to about 0.047 (balanced preset, two samples). lit_luma and occluded_luma stay report-only (generous caps) since their absolute level is not a quality gate.",
 			"thresholds": {

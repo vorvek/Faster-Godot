@@ -1,0 +1,108 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/wall_leak_anim.gd" id="1_86q16"]
+
+[sub_resource type="Environment" id="Environment_bvkqt"]
+background_mode = 1
+background_color = Color(0.002, 0.002, 0.003, 1)
+ambient_light_source = 1
+rtgi_enabled = true
+rtgi_quality_preset = 0
+rtgi_disable_in_editor = false
+
+[sub_resource type="BoxMesh" id="BoxMesh_u78ov"]
+size = Vector3(6, 0.1, 6)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ehgs1"]
+cull_mode = 2
+diffuse_mode = 1
+specular_mode = 2
+albedo_color = Color(0.42, 0.42, 0.42, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_f3fpv"]
+size = Vector3(6, 4.2, 0.1)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="BoxMesh" id="BoxMesh_730gh"]
+size = Vector3(6, 4.2, 0.1)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="BoxMesh" id="BoxMesh_m4lqb"]
+size = Vector3(0.1, 4.2, 6.2)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="BoxMesh" id="BoxMesh_o0ag2"]
+size = Vector3(0.1, 4.2, 6.2)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="BoxMesh" id="BoxMesh_m4raq"]
+size = Vector3(0.16, 4, 6)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_sptnf"]
+cull_mode = 2
+diffuse_mode = 1
+specular_mode = 2
+albedo_color = Color(0.3, 0.3, 0.3, 1)
+
+[node name="WallLeak" type="Node3D" unique_id=950499583]
+script = ExtResource("1_86q16")
+
+[node name="RTGIWorldEnvironment" type="WorldEnvironment" parent="." unique_id=159038604]
+environment = SubResource("Environment_bvkqt")
+
+[node name="Floor" type="MeshInstance3D" parent="." unique_id=543548314]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+mesh = SubResource("BoxMesh_u78ov")
+surface_material_override/0 = SubResource("StandardMaterial3D_ehgs1")
+
+[node name="BackWall" type="MeshInstance3D" parent="." unique_id=657311364]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -3.05)
+mesh = SubResource("BoxMesh_f3fpv")
+surface_material_override/0 = SubResource("StandardMaterial3D_ehgs1")
+
+[node name="FrontWall" type="MeshInstance3D" parent="." unique_id=1039063977]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 3.05)
+mesh = SubResource("BoxMesh_730gh")
+surface_material_override/0 = SubResource("StandardMaterial3D_ehgs1")
+
+[node name="DarkSideWall" type="MeshInstance3D" parent="." unique_id=1737474932]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.05, 2, 0)
+mesh = SubResource("BoxMesh_m4lqb")
+surface_material_override/0 = SubResource("StandardMaterial3D_ehgs1")
+
+[node name="LitSideWall" type="MeshInstance3D" parent="." unique_id=1070659994]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.05, 2, 0)
+mesh = SubResource("BoxMesh_o0ag2")
+surface_material_override/0 = SubResource("StandardMaterial3D_ehgs1")
+
+[node name="Divider" type="MeshInstance3D" parent="." unique_id=2010620055]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
+mesh = SubResource("BoxMesh_m4raq")
+surface_material_override/0 = SubResource("StandardMaterial3D_sptnf")
+
+[node name="LitChamberLight" type="OmniLight3D" parent="." unique_id=949026592]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.7, 1.6, -0.6)
+light_energy = 14.0
+light_size = 0.12
+shadow_enabled = true
+omni_range = 11.0
+
+[node name="WallLeakCamera" type="Camera3D" parent="." unique_id=817796616]
+transform = Transform3D(1, 0, 0, 0, 0.17134123, 0.98521173, 0, -0.98521173, 0.17134123, 0, 11.5, 1.6)
+current = true
+fov = 58.0
+far = 60.0

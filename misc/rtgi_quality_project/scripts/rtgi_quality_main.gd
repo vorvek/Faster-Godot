@@ -97,6 +97,14 @@ const LIGHT_TOGGLE_RECONVERGE_DELTA_FLOOR := 0.0015
 # overrides this. The two-frame run-to-run delta is 0.0 (the scene is static and
 # the pass is deterministic), so this settle gates cleanly.
 const SUN_PENUMBRA_SETTLE_FRAMES := 16
+# motion_ghost sweep length. After the normal settle the bright light is orbited
+# for this many frames, stepped every frame so the screen-probe-gather never gets
+# a static frame to re-converge the vacated region on. It must exceed the anim
+# script's GHOST_LAG (50) so the harness reads after the orbit has tracked a full
+# lag's worth of fresh motion (the per-frame vacated point is always GHOST_LAG
+# frames behind the live pool, so the trail is sampled in a settled moving
+# regime); 64 frames keeps the run short while clearing the lag with margin.
+const MOTION_GHOST_SWEEP_FRAMES := 64
 
 var _denoise_strength := 1.0
 var _history_weight := 0.95
@@ -373,7 +381,7 @@ func _parse_args() -> void:
 			_convergence_frames = clampi(arg.trim_prefix("--rtgi-convergence-frames=").to_int(), 0, 128)
 		elif arg.begins_with("--rtgi-scene="):
 			var requested_scene := arg.trim_prefix("--rtgi-scene=").to_lower()
-			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability", "offscreen_bounce", "cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid", "light_toggle", "sun_penumbra_ramp", "area_light_wall", "textured_area"]:
+			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability", "offscreen_bounce", "cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid", "light_toggle", "sun_penumbra_ramp", "area_light_wall", "textured_area", "wall_leak", "motion_ghost"]:
 				_scene_mode = requested_scene
 			else:
 				push_warning("Unknown RTGI quality scene '%s'; using stress scene." % requested_scene)
@@ -569,7 +577,7 @@ func _build_scene() -> void:
 
 
 func _is_packed_test_scene() -> bool:
-	return _scene_mode in ["cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid", "light_toggle", "sun_penumbra_ramp", "area_light_wall", "textured_area"]
+	return _scene_mode in ["cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid", "light_toggle", "sun_penumbra_ramp", "area_light_wall", "textured_area", "wall_leak", "motion_ghost"]
 
 
 # Loads one of the committed static test scenes (cornell_box, specular_motion,
@@ -1293,6 +1301,10 @@ func _capture_and_measure_config(base_suffix: String) -> Array[String]:
 		metrics.merge(_measure_area_light_wall(final_image, base_name), true)
 	elif _scene_mode == "textured_area":
 		metrics.merge(_measure_textured_area(final_image, base_name), true)
+	elif _scene_mode == "wall_leak":
+		metrics.merge(_measure_wall_leak(final_image, base_name), true)
+	elif _scene_mode == "motion_ghost":
+		metrics.merge(await _measure_motion_ghost(final_image, base_name), true)
 	elif _is_coexistence_scene():
 		metrics.merge(await _measure_coexistence_image(final_image, base_name), true)
 	metrics["denoise_strength"] = _denoise_strength
@@ -3413,6 +3425,230 @@ func _measure_vertical_luma_gradient(image: Image, rect: Rect2i) -> float:
 	return sum / maxf(float(count), 1.0)
 
 
+# Sealed thin-wall light-leak probe for the committed wall_leak scene. A closed
+# box is split by a thin full-height opaque divider into a LIT chamber (a bright
+# OmniLight inside it) and a SEALED DARK chamber (no light, no opening). The
+# camera sits in the dark chamber. No legitimate light path reaches the dark
+# floor, so on a leak-free fork it reads near-zero indirect luma; the world
+# radiance cache leaking lit-side texel radiance through the divider (a WRC query
+# with no DDGI backface/wrap weight) brightens it.
+#
+# Both metrics are mean LINEAR luma (the scene pins a linear tonemapper, so luma
+# tracks indirect radiance proportionally, like the cornell_box energy check):
+#   - wall_leak_luma: mean over the DARK-chamber ROI, centered on the camera
+#     projection of the dark floor point just past the divider
+#     (get_dark_probe_point). HIGHER = more through-wall leak. This is the
+#     symptom value.
+#   - wall_lit_luma: mean over the matching LIT-chamber ROI (the mirror point
+#     across the divider, get_lit_probe_point) as the context reference, so the
+#     leak reads as a fraction wall_leak_luma / wall_lit_luma.
+# The lit ROI is across the sealed divider from the camera, so it is projected
+# but only visible if the divider does not occlude it; the dark ROI is the gated
+# symptom. The leak fraction is recorded in the curve JSON for the human read.
+func _measure_wall_leak(final_image: Image, base_name: String) -> Dictionary:
+	_apply_debug_view("beauty")
+	var width := final_image.get_width()
+	var height := final_image.get_height()
+	var rects := _wall_leak_rects(width, height)
+	var dark: Rect2i = rects["dark"]
+	var lit: Rect2i = rects["lit"]
+
+	var leak_luma := _measure_mean_linear_luma(final_image, dark.position.x, dark.position.y, dark.end.x, dark.end.y)
+	var lit_luma := _measure_mean_linear_luma(final_image, lit.position.x, lit.position.y, lit.end.x, lit.end.y)
+	var leak_fraction := leak_luma / maxf(lit_luma, 1e-6)
+
+	var curve_path := "%s/%s_wall_leak.json" % [_output_dir, base_name]
+	_write_json(curve_path, {
+		"wall_leak_luma": leak_luma,
+		"wall_lit_luma": lit_luma,
+		"wall_leak_fraction": leak_fraction,
+		"dark_rect": [dark.position.x, dark.position.y, dark.size.x, dark.size.y],
+		"lit_rect": [lit.position.x, lit.position.y, lit.size.x, lit.size.y],
+	})
+	return {
+		"wall_leak_luma": leak_luma,
+		"wall_lit_luma": lit_luma,
+		"wall_leak_fraction": leak_fraction,
+		"wall_leak_curve_path": ProjectSettings.globalize_path(curve_path),
+	}
+
+
+# Dark/lit measurement rects for the wall_leak scene, projected from the world
+# floor points the scene root exposes (dark just past the divider on the unlit
+# side, lit the mirror point on the lit side). The dark rect is the gated leak
+# ROI; the lit rect is the context reference. Falls back to image-relative rects
+# (dark lower-center where the dark floor lands, lit a small upper strip) when
+# the scene root or camera cannot project.
+func _wall_leak_rects(width: int, height: int) -> Dictionary:
+	var dark_center := Vector2(float(width) * 0.5, float(height) * 0.60)
+	var lit_center := Vector2(float(width) * 0.5, float(height) * 0.30)
+	if _camera != null and _packed_scene_root != null:
+		if _packed_scene_root.has_method("get_dark_probe_point"):
+			var dp: Vector3 = _packed_scene_root.get_dark_probe_point()
+			if not _camera.is_position_behind(dp):
+				var pr := _camera.unproject_position(dp)
+				dark_center = Vector2(
+						clampf(pr.x, float(width) * 0.12, float(width) * 0.88),
+						clampf(pr.y, float(height) * 0.12, float(height) * 0.88))
+		if _packed_scene_root.has_method("get_lit_probe_point"):
+			var lp: Vector3 = _packed_scene_root.get_lit_probe_point()
+			if not _camera.is_position_behind(lp):
+				var pr2 := _camera.unproject_position(lp)
+				lit_center = Vector2(
+						clampf(pr2.x, float(width) * 0.12, float(width) * 0.88),
+						clampf(pr2.y, float(height) * 0.06, float(height) * 0.94))
+	var dark_size := Vector2i(int(width * 0.12), int(height * 0.12))
+	var dark_pos := Vector2i(
+			clampi(int(dark_center.x) - dark_size.x / 2, 0, width - dark_size.x),
+			clampi(int(dark_center.y) - dark_size.y / 2, 0, height - dark_size.y))
+	var lit_size := Vector2i(int(width * 0.12), int(height * 0.12))
+	var lit_pos := Vector2i(
+			clampi(int(lit_center.x) - lit_size.x / 2, 0, width - lit_size.x),
+			clampi(int(lit_center.y) - lit_size.y / 2, 0, height - lit_size.y))
+	return {
+		"dark": Rect2i(dark_pos, dark_size),
+		"lit": Rect2i(lit_pos, lit_size),
+	}
+
+
+# Continuous-motion temporal-trail probe for the committed motion_ghost scene. A
+# single bright OmniLight (plus a co-located emissive marker) glides in a
+# straight line along +X across a large neutral diffuse floor under a static
+# top-down camera, so the only thing that moves on screen is the bright pool it
+# paints: this isolates the diffuse screen-probe-gather (SPG) path. The SPG
+# reprojects last frame's indirect forward and (unlike the world radiance cache)
+# has no rel_change accumulation-collapse, so a continuously moving bright
+# feature can smear stale indirect into the floor it just vacated.
+#
+# The harness arrives here after the normal settle. It drives the light along
+# its sweep for a fixed window, keeping it moving every frame so the SPG never
+# gets a static frame to re-converge on, then on the final frame samples two ROIs
+# in LINEAR luma (the scene pins a linear tonemapper):
+#   - motion_ghost_luma: mean over the VACATED ROI, centered on the camera
+#     projection of the world floor point the pool covered GHOST_LAG frames ago
+#     but has since moved well past (get_vacated_point). Residual indirect here
+#     is the temporal trail. HIGHER = more smear. This is the symptom value.
+#   - motion_ghost_current_luma: mean over the LIVE pool ROI under the light now
+#     (get_current_point), the context reference, so the trail reads as a ratio
+#     motion_ghost_luma / motion_ghost_current_luma.
+#   - motion_ghost_static_luma: mean over a fixed far-corner background ROI the
+#     pool never reaches, the clean static-indirect floor the vacated point
+#     should decay back toward. Recorded for the human read.
+# The per-frame vacated-ROI luma series is written to <base>_motion_ghost_curve.json.
+func _measure_motion_ghost(final_image: Image, base_name: String) -> Dictionary:
+	_apply_debug_view("beauty")
+	var width := final_image.get_width()
+	var height := final_image.get_height()
+
+	# Drive the light along its sweep, sampling the vacated ROI each frame so the
+	# trail (if any) is visible as it forms. The ROIs are recomputed each frame
+	# from the live light position, so they track the actual sweep phase. The
+	# light is stepped every frame (never frozen), so the SPG never gets a static
+	# frame to re-converge the vacated region on.
+	var series := []
+	var vacated_mean := 0.0
+	var current_mean := 0.0
+	var static_mean := 0.0
+	var last_vacated := Rect2i()
+	var last_current := Rect2i()
+	var last_static := Rect2i()
+	for _f in range(MOTION_GHOST_SWEEP_FRAMES):
+		_animate_specular_objects(_scene_frame)
+		await _wait_render_frame()
+		_scene_frame += 1
+		var frame := get_viewport().get_texture().get_image()
+		frame.convert(Image.FORMAT_RGBA8)
+		var rects := _motion_ghost_rects(width, height)
+		last_vacated = rects["vacated"]
+		last_current = rects["current"]
+		last_static = rects["static"]
+		vacated_mean = _measure_mean_linear_luma(frame, last_vacated.position.x, last_vacated.position.y, last_vacated.end.x, last_vacated.end.y)
+		current_mean = _measure_mean_linear_luma(frame, last_current.position.x, last_current.position.y, last_current.end.x, last_current.end.y)
+		static_mean = _measure_mean_linear_luma(frame, last_static.position.x, last_static.position.y, last_static.end.x, last_static.end.y)
+		series.append({
+			"frame": _f,
+			"vacated_linear_luma": vacated_mean,
+			"current_linear_luma": current_mean,
+			"static_linear_luma": static_mean,
+		})
+
+	# The reported ghost value is the residual at the vacated point ABOVE the
+	# clean static-indirect floor: subtracting the static background isolates the
+	# smear from the scene's ambient bounce floor, so a trail-free fork reads near
+	# zero regardless of the floor's base level.
+	var ghost_luma := maxf(vacated_mean - static_mean, 0.0)
+	var ghost_ratio := ghost_luma / maxf(current_mean - static_mean, 1e-6)
+
+	var curve_path := "%s/%s_motion_ghost_curve.json" % [_output_dir, base_name]
+	_write_json(curve_path, {
+		"sweep_frames": MOTION_GHOST_SWEEP_FRAMES,
+		"vacated_rect": [last_vacated.position.x, last_vacated.position.y, last_vacated.size.x, last_vacated.size.y],
+		"current_rect": [last_current.position.x, last_current.position.y, last_current.size.x, last_current.size.y],
+		"static_rect": [last_static.position.x, last_static.position.y, last_static.size.x, last_static.size.y],
+		"vacated_linear_luma": vacated_mean,
+		"current_linear_luma": current_mean,
+		"static_linear_luma": static_mean,
+		"ghost_luma": ghost_luma,
+		"ghost_ratio": ghost_ratio,
+		"series": series,
+	})
+	return {
+		"motion_ghost_luma": ghost_luma,
+		"motion_ghost_vacated_raw_luma": vacated_mean,
+		"motion_ghost_current_luma": current_mean,
+		"motion_ghost_static_luma": static_mean,
+		"motion_ghost_ratio": ghost_ratio,
+		"motion_ghost_curve_path": ProjectSettings.globalize_path(curve_path),
+	}
+
+
+# Vacated/current/static measurement rects for the motion_ghost scene. The
+# vacated rect is centered on the camera projection of the world point the pool
+# covered GHOST_LAG frames ago (the trail ROI, gated); the current rect is
+# centered on the point under the light now (the live pool, context reference);
+# the static rect is a fixed far-corner strip the pool never reaches (the clean
+# background floor). Falls back to image-relative rects when the scene root or
+# camera cannot project.
+func _motion_ghost_rects(width: int, height: int) -> Dictionary:
+	var vacated_center := Vector2(float(width) * 0.35, float(height) * 0.5)
+	var current_center := Vector2(float(width) * 0.65, float(height) * 0.5)
+	if _camera != null and _packed_scene_root != null:
+		if _packed_scene_root.has_method("get_vacated_point"):
+			var vp: Vector3 = _packed_scene_root.get_vacated_point()
+			if not _camera.is_position_behind(vp):
+				var pr := _camera.unproject_position(vp)
+				vacated_center = Vector2(
+						clampf(pr.x, float(width) * 0.10, float(width) * 0.90),
+						clampf(pr.y, float(height) * 0.10, float(height) * 0.90))
+		if _packed_scene_root.has_method("get_current_point"):
+			var cp: Vector3 = _packed_scene_root.get_current_point()
+			if not _camera.is_position_behind(cp):
+				var pr2 := _camera.unproject_position(cp)
+				current_center = Vector2(
+						clampf(pr2.x, float(width) * 0.10, float(width) * 0.90),
+						clampf(pr2.y, float(height) * 0.10, float(height) * 0.90))
+	# A modest ROI: large enough to average out per-pixel noise, small enough that
+	# the live pool ROI does not overlap the vacated ROI (they are separated by
+	# GHOST_LAG frames of travel).
+	var size := Vector2i(int(width * 0.10), int(height * 0.10))
+	var vacated_pos := Vector2i(
+			clampi(int(vacated_center.x) - size.x / 2, 0, width - size.x),
+			clampi(int(vacated_center.y) - size.y / 2, 0, height - size.y))
+	var current_pos := Vector2i(
+			clampi(int(current_center.x) - size.x / 2, 0, width - size.x),
+			clampi(int(current_center.y) - size.y / 2, 0, height - size.y))
+	# Static background: the top-left corner. The light sweeps along world +X at
+	# z = 0 (a horizontal mid line under the top-down camera), so the upper-left
+	# corner is far from the pool's path for the whole sweep.
+	var static_size := Vector2i(int(width * 0.12), int(height * 0.12))
+	var static_pos := Vector2i(int(width * 0.04), int(height * 0.04))
+	return {
+		"vacated": Rect2i(vacated_pos, size),
+		"current": Rect2i(current_pos, size),
+		"static": Rect2i(static_pos, static_size),
+	}
+
+
 # Penumbra-band measurement for the committed sun_penumbra_ramp scene. The ROI is a horizontal
 # strip across the soft shadow edge; columns run from fully lit to fully occluded.
 # penumbra_width_px = count of columns whose normalized luma is in the transition band [0.1,0.9];
@@ -4702,6 +4938,8 @@ func _compare_metrics(metrics: Dictionary, expected: Dictionary) -> Array[String
 	_check_max_threshold(metrics, thresholds, "light_toggle_convergence_frames", failures)
 	_check_max_threshold(metrics, thresholds, "light_toggle_leak_luma", failures)
 	_check_min_threshold(metrics, thresholds, "light_toggle_contact_sharpness", failures)
+	_check_max_threshold(metrics, thresholds, "wall_leak_luma", failures)
+	_check_max_threshold(metrics, thresholds, "motion_ghost_luma", failures)
 	_check_max_threshold(metrics, thresholds, "sun_penumbra_width_px", failures)
 	_check_max_threshold(metrics, thresholds, "sun_penumbra_band_hf", failures)
 	_check_max_threshold(metrics, thresholds, "sun_penumbra_lit_luma", failures)

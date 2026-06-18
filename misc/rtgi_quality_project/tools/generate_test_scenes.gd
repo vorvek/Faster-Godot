@@ -24,6 +24,8 @@ extends SceneTree
 #   res://scenes/sun_penumbra_ramp.tscn
 #   res://scenes/area_light_wall.tscn
 #   res://scenes/textured_area.tscn
+#   res://scenes/wall_leak.tscn
+#   res://scenes/motion_ghost.tscn
 
 const SCENES_DIR := "res://scenes"
 const SPECULAR_ANIM_SCRIPT := "res://scripts/specular_motion_anim.gd"
@@ -31,6 +33,8 @@ const REFLECTIVE_ANIM_SCRIPT := "res://scripts/reflective_pool_anim.gd"
 const FOG_METRIC_SCRIPT := "res://scripts/fog_corridor_metric.gd"
 const LIGHT_GRID_ANIM_SCRIPT := "res://scripts/light_grid_anim.gd"
 const LIGHT_TOGGLE_ANIM_SCRIPT := "res://scripts/light_toggle_anim.gd"
+const WALL_LEAK_ANIM_SCRIPT := "res://scripts/wall_leak_anim.gd"
+const MOTION_GHOST_ANIM_SCRIPT := "res://scripts/motion_ghost_anim.gd"
 
 
 func _initialize() -> void:
@@ -44,6 +48,8 @@ func _initialize() -> void:
 	ok = _save_scene(_build_sun_penumbra_ramp_scene(), "%s/sun_penumbra_ramp.tscn" % SCENES_DIR) and ok
 	ok = _save_scene(build_area_light_wall(), "%s/area_light_wall.tscn" % SCENES_DIR) and ok
 	ok = _save_scene(build_textured_area(), "%s/textured_area.tscn" % SCENES_DIR) and ok
+	ok = _save_scene(_build_wall_leak_scene(), "%s/wall_leak.tscn" % SCENES_DIR) and ok
+	ok = _save_scene(_build_motion_ghost_scene(), "%s/motion_ghost.tscn" % SCENES_DIR) and ok
 	if ok:
 		print("RTGI test-scene generation complete.")
 	else:
@@ -1074,6 +1080,226 @@ func build_textured_area() -> Node3D:
 			Vector3(0.0, 0.659380, -0.751828),
 			Vector3(0.0, 0.751828, 0.659380),
 			Vector3(0.0, 7.0, 8.0))
+	root.add_child(camera)
+	_claim(root, camera)
+
+	return root
+
+
+# --- Wall leak --------------------------------------------------------------
+# Sealed thin-wall light-leak probe. A mid-gray Lambert box (interior x in
+# [-3, 3], floor at y = 0, ceiling at y = 4, back at z = -3) is split down the
+# middle by a thin opaque divider standing on the x = 0 plane into a LIT chamber
+# (the +X half, holding a bright OmniLight3D) and a SEALED DARK chamber (the -X
+# half, no light). The divider spans the full interior height and depth with no
+# gap, and the floor, ceiling, back wall, and both side walls are solid
+# shadow-casters, so the ONLY interior boundary between the two chambers is the
+# opaque divider: there is no legitimate light path from the lit half into the
+# dark half. A leak-free fork leaves the dark half near-black; the world radiance
+# cache leaking lit-side texel radiance through the divider (a WRC query with no
+# DDGI backface/wrap weight) brightens it.
+#
+# The box is open at the TOP so a single near-straight-down camera sees both
+# chamber floors at once: two side-by-side rectangles split by the thin divider
+# line down the middle, the lit half on screen-right and the dark half on
+# screen-left, each rendering as real gray floor geometry. A straight-down view
+# is what keeps both floors visible past the tall central divider (an oblique
+# view has the 4 m divider occlude the far floor). The full-height divider blocks
+# every horizontal cross-path between the halves, and with no ceiling there is no
+# surface above the divider for the lit half's light to bounce off and back down
+# into the dark half, so the only path that could brighten the dark floor is
+# still through the divider itself; the open top faces the near-black background,
+# which adds no light. The dark-probe and lit-probe floor points (exposed by
+# wall_leak_anim.gd) are mirror images across the divider at matching |x| offsets,
+# so wall_leak_luma / wall_lit_luma is a clean leak fraction. RTGI is enabled with
+# a linear tonemapper so the luma tracks indirect radiance proportionally; the
+# harness overrides the mode per run.
+func _build_wall_leak_scene() -> Node3D:
+	var root := Node3D.new()
+	root.name = "WallLeak"
+	root.set_script(load(WALL_LEAK_ANIM_SCRIPT))
+
+	var env := _make_rtgi_environment()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.002, 0.002, 0.003)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_DISABLED
+	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	env.tonemap_exposure = 1.0
+	env.rtgi_max_bounces = 4
+	root.add_child(_make_world_environment(env))
+	_claim(root, root.get_node("RTGIWorldEnvironment"))
+
+	# Mid-gray Lambert shell. The divider is a touch darker so it reads as a
+	# distinct surface in the captures.
+	var gray := _make_lambert_material(Color(0.42, 0.42, 0.42))
+	var divider_mat := _make_lambert_material(Color(0.30, 0.30, 0.30))
+
+	# Box shell, open at the TOP (no ceiling): floor, all four side walls (back at
+	# -Z, front at +Z, and both X side walls). Every face is solid and
+	# shadow-casting (the default for these boxes). The top is intentionally left
+	# open so the straight-down camera sees both chamber floors.
+	var t := 0.1
+	_add_box(root, root, "Floor", Vector3(0.0, -t * 0.5, 0.0), Vector3(6.0, t, 6.0), gray)
+	_add_box(root, root, "BackWall", Vector3(0.0, 2.0, -3.0 - t * 0.5), Vector3(6.0, 4.0 + t * 2.0, t), gray)
+	_add_box(root, root, "FrontWall", Vector3(0.0, 2.0, 3.0 + t * 0.5), Vector3(6.0, 4.0 + t * 2.0, t), gray)
+	_add_box(root, root, "DarkSideWall", Vector3(-3.0 - t * 0.5, 2.0, 0.0), Vector3(t, 4.0 + t * 2.0, 6.0 + t * 2.0), gray)
+	_add_box(root, root, "LitSideWall", Vector3(3.0 + t * 0.5, 2.0, 0.0), Vector3(t, 4.0 + t * 2.0, 6.0 + t * 2.0), gray)
+
+	# Thin full-height, full-depth opaque divider on the x = 0 plane, splitting
+	# the interior into the dark half (-X) and the lit half (+X). 0.16 m thick:
+	# thin enough that a leak through it is a clear WRC-query artifact, thick
+	# enough to be a solid two-sided wall (a paper-thin wall could let a single
+	# voxel straddle both halves). It runs the full interior depth (z in [-3, 3])
+	# and the full height (y in [0, 4]), so the only way light crosses from the lit
+	# half to the dark half is through the wall (or over the open top, which has no
+	# ceiling to bounce it back down).
+	_add_box(root, root, "Divider", Vector3(0.0, 2.0, 0.0), Vector3(0.16, 4.0, 6.0), divider_mat)
+
+	# Bright key light deep in the LIT half (+X), low so it stays well below the
+	# divider top (no direct line over the open top into the dark half) and away
+	# from the divider so the lit chamber is strongly lit and its bounce is the
+	# only thing that could leak. shadow_enabled so the divider is a true traced
+	# occluder.
+	var key := OmniLight3D.new()
+	key.name = "LitChamberLight"
+	key.position = Vector3(1.7, 1.6, -0.6)
+	key.light_energy = 14.0
+	key.light_size = 0.12
+	key.omni_range = 11.0
+	key.shadow_enabled = true
+	root.add_child(key)
+	_claim(root, key)
+
+	# Camera high above the box center looking nearly straight down. From directly
+	# overhead both chamber floors read as two side-by-side rectangles split by the
+	# thin divider line down the middle: the dark half on screen-left (where the
+	# leak ROI lands) and the lit half on screen-right (where the reference ROI
+	# lands). The eye is nudged slightly toward +Z and the target toward -Z so the
+	# view is a few degrees off vertical (a perfectly vertical look_at with a Y up
+	# vector is degenerate), but it stays steep enough that the 4 m divider appears
+	# as a thin line and does not occlude either floor. look_at_from_position is
+	# used (not plain look_at, which errors on a root that is never inside a scene
+	# tree, and not a hand-authored basis, which is error-prone); the fog_corridor
+	# builder relies on the same call for the same reason.
+	var camera := Camera3D.new()
+	camera.name = "WallLeakCamera"
+	camera.current = true
+	camera.fov = 58.0
+	camera.near = 0.05
+	camera.far = 60.0
+	camera.position = Vector3(0.0, 11.5, 1.6)
+	root.add_child(camera)
+	_claim(root, camera)
+	camera.look_at_from_position(camera.position, Vector3(0.0, 0.0, -0.4), Vector3.UP)
+
+	return root
+
+
+# --- Motion ghost -----------------------------------------------------------
+# Continuous-motion temporal-trail probe for the diffuse screen-probe-gather
+# (SPG). A large neutral Lambert floor (16 x 16 m), a dim always-on fill so the
+# floor never goes fully black, and a single bright OmniLight3D that ORBITS a
+# circle on the floor at a constant rate per frame (driven by
+# motion_ghost_anim.gd). The camera is STATIC and looks straight down, so the
+# only thing that moves on screen is the bright pool the light paints: this
+# isolates the SPG diffuse indirect path (no specular, no camera motion). A small
+# emissive marker is co-located with the light so the hot spot also reads in the
+# captures and feeds the indirect bounce. The orbit (rather than a straight
+# sweep) keeps the light on the floor and moving for any frame counter, which the
+# harness needs because the counter accumulates across the settle and across
+# every mode in a multi-config run.
+#
+# The light pool is kept compact (short omni range, low energy) so that over the
+# anim script's GHOST_LAG frames the light orbits several pool radii away and its
+# DIRECT pool fully clears the vacated sample point. Any luma left at the vacated
+# point is then indirect/temporal, so the SPG reprojecting last frame's indirect
+# forward (with no rel_change accumulation-collapse) is what would leave a trail
+# there. The harness samples the indirect luma at the vacated point (the trail)
+# against the point under the light now (the live pool), so the residual reads as
+# a ratio. RTGI is enabled with a linear tonemapper so the luma tracks radiance
+# proportionally; the harness overrides the mode per run.
+func _build_motion_ghost_scene() -> Node3D:
+	var root := Node3D.new()
+	root.name = "MotionGhost"
+	root.set_script(load(MOTION_GHOST_ANIM_SCRIPT))
+
+	var env := _make_rtgi_environment()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.002, 0.002, 0.003)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_DISABLED
+	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	env.tonemap_exposure = 1.0
+	env.rtgi_max_bounces = 4
+	root.add_child(_make_world_environment(env))
+	_claim(root, root.get_node("RTGIWorldEnvironment"))
+
+	# Large neutral Lambert floor so the orbiting pool stays well inside the plane
+	# and the vacated sample point is always real floor.
+	var gray := _make_lambert_material(Color(0.45, 0.45, 0.45))
+	var t := 0.1
+	_add_box(root, root, "Floor", Vector3(0.0, -t * 0.5, 0.0), Vector3(16.0, t, 16.0), gray)
+
+	# The moving feature: a bright OmniLight plus a small emissive marker, both
+	# under a Mover node the anim script orbits. The light carries the compact
+	# direct pool and the bounce; the marker keeps the hot spot visible and feeds
+	# the emissive indirect. A SHORT omni range (3 m) keeps the pool compact so it
+	# clears the vacated point within the orbit arc. Frame-0 pose matches
+	# motion_ghost_anim.gd advance_to_frame(0): orbit angle 0 -> (sin 0 * R, height,
+	# cos 0 * R) = (0, 1.4, 3.4) with ORBIT_RADIUS 3.4 and ORBIT_HEIGHT 1.4.
+	var mover := Node3D.new()
+	mover.name = "Mover"
+	mover.position = Vector3(0.0, 1.4, 3.4)
+	root.add_child(mover)
+	_claim(root, mover)
+
+	var light := OmniLight3D.new()
+	light.name = "MovingLight"
+	light.position = Vector3.ZERO
+	light.light_energy = 6.0
+	light.light_size = 0.12
+	light.omni_range = 3.0
+	light.shadow_enabled = true
+	mover.add_child(light)
+	_claim(root, light)
+
+	var marker_material := _make_emissive_material(Color(1.0, 0.86, 0.62), 5.0)
+	var marker := _add_sphere(root, mover, "Marker", Vector3(0.0, -0.7, 0.0), 0.14, marker_material)
+	marker.gi_mode = GeometryInstance3D.GI_MODE_DYNAMIC
+
+	# Dim always-on fill high above the center so the floor keeps a small static
+	# base level (the vacated point must read against a non-black background, and
+	# the SPG path must stay exercised even far from the orbiting pool). Kept far
+	# dimmer than the moving light so the moving pool is the dominant variable.
+	var fill := OmniLight3D.new()
+	fill.name = "FillLight"
+	fill.position = Vector3(0.0, 6.0, 0.0)
+	fill.light_energy = 0.10
+	fill.omni_range = 20.0
+	fill.shadow_enabled = false
+	root.add_child(fill)
+	_claim(root, fill)
+
+	# Static top-down camera high over the floor center, looking straight down
+	# (-Y) with world +X to screen-right and world -Z to screen-up, so the orbiting
+	# pool tracks a circle in the frame and the vacated point stays in view. Eye at
+	# (0, 12, 0). Forward = (0, -1, 0). Camera -Z = forward, so z_col = (0, 1, 0).
+	# Pick x_col = world X = (1, 0, 0); then y_col = cross(z_col, x_col) =
+	# cross((0,1,0),(1,0,0)) = (0, 0, -1). This constructor takes basis columns (x,
+	# y, z, origin). A pure top-down basis is authored verbatim (no look_at on a
+	# root that is never inside a scene tree; look_at straight down is also
+	# degenerate with a Y up vector). At 12 m the 16 m floor fills the frame and the
+	# 3.4 m orbit radius sits comfortably inside it.
+	var camera := Camera3D.new()
+	camera.name = "MotionGhostCamera"
+	camera.current = true
+	camera.fov = 60.0
+	camera.near = 0.05
+	camera.far = 60.0
+	camera.transform = Transform3D(
+			Vector3(1.0, 0.0, 0.0),
+			Vector3(0.0, 0.0, -1.0),
+			Vector3(0.0, 1.0, 0.0),
+			Vector3(0.0, 12.0, 0.0))
 	root.add_child(camera)
 	_claim(root, camera)
 
