@@ -4120,6 +4120,38 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				wrc_seed.seed_samples = spg_params.wrc_seed_samples;
 				rtgi_spg->run_accumulate(sfp, wrc_seed);
 
+				// HYBRID specular-only RT dispatch (WS8). Hybrid traces no full-screen screen rays,
+				// so sharp/glossy surfaces show only the dim raster reflection. This adds the SAME WS6
+				// reflection trace the FPT-fast primary-direct path runs, but ONLY for low-roughness
+				// pixels and ONLY the reflection: it writes the screen specular radiance/guide/
+				// reprojection textures the GI resolve below already consumes (the resolve binds the RT
+				// specular reprojection when the texture is present, which rt_ensure_textures allocates
+				// under Hybrid). HYBRID-ONLY: gated on rt_radiance_probes_composite && !rt_radiance_probes_fpt
+				// so the FPT-fast path (which traces specular in its own primary-direct dispatch at
+				// :4190) and the deep-path oracle (excluded by the !rt_fpt_reference guard on this block)
+				// never issue it. It coexists with the WRC/SPG probe dispatches recorded above the SAME
+				// way the FPT primary-direct dispatch does: dispatch_hybrid_specular_backend reuses the
+				// already-built per-frame viewport_state/TLAS (no re-prepare) and the RT_FLAG_HYBRID_
+				// SPECULAR_ONLY uniform set decouples the phantom probe-buffer (107/108) write. Plain
+				// raster (no RTGI) never enters this block, so it costs nothing there.
+				if (rt_radiance_probes_composite && !rt_radiance_probes_fpt && rt_state) {
+					RENDER_TIMESTAMP("RTGI Hybrid Specular");
+					RD::get_singleton()->draw_command_begin_label("RTGI Hybrid Specular");
+					// Channel the WRC's own clipmap values into the params UBO the specular-only raygen
+					// reads (via update_uniform_set's RT_FLAG_HYBRID_SPECULAR_ONLY override), so the mirror
+					// channel's WRC irradiance query at a reflected hit addresses the SAME atlas the WRC was
+					// sized from. These slots are dispatch-flavor overrides (the flavor bit is in the
+					// is_prepare_call mask), so the fill never perturbs the off/cornell radiance history.
+					rt_state->wrc_grid = (uint32_t)wrc_params.grid;
+					rt_state->wrc_cascade_count = (uint32_t)wrc_params.cascade_count;
+					rt_state->wrc_base_spacing = wrc_params.base_spacing;
+					rt_state->spg_wrc_oct_res = (uint32_t)wrc_params.oct_res; // WRC atlas oct_res for the mirror query.
+					const uint32_t hs_flags = rt_flags | SceneShaderRaytracing::RT_FLAG_HYBRID_SPECULAR_ONLY;
+					raytracing->dispatch_hybrid_specular_backend(rt_backend_context, hs_flags);
+					rt_state = rt_backend_context.viewport_state;
+					RD::get_singleton()->draw_command_end_label();
+				}
+
 				// RTGI GI Resolve: the production per-pixel consumer of the SPG/WRC
 				// probes. INTEGRATE reconstructs world pos/normal from the SAME raster
 				// G-buffers the SPG placement used, gathers the 4 surrounding probes
@@ -4163,12 +4195,21 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 						// (Hybrid, or the RT buffers torn down between the raygen and here) pass RID(): the
 						// resolve binds a TRANSPARENT neutral whose .w == 0 keeps the sharp branch inert.
 						const RID spec_reprojection = rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_REPROJECTION) ? rb_data->rt_get_specular_reprojection() : RID();
+						// HYBRID sharp-spec injection (WS8): the HYBRID specular-only screen dispatch above
+						// wrote the RT-traced sharp reflection into RB_TEX_RT_SPECULAR_RADIANCE. Pass it +
+						// the Hybrid-only inject flag so INTEGRATE folds it into spec_gi for sharp pixels
+						// (the resolve's probe rough-spec only covers rough >= cutoff). FPT leaves the flag
+						// off -- its sharp reflection reaches beauty via the primary-direct REPLACE
+						// composite, so passing it would double-count; gating keeps FPT byte-identical.
+						const bool sharp_spec_inject = rt_radiance_probes_composite && !rt_radiance_probes_fpt;
+						const RID rt_specular_radiance = (sharp_spec_inject && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_RADIANCE)) ? rb_data->rt_get_specular_radiance() : RID();
 						rtgi_resolve->run_resolve(rb->get_depth_texture(), rb->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS), spg_vel,
 								rb_data->rt_get_guide_albedo(), rb_data->rt_get_guide_orm(),
 								rtgi_spg->get_radiance_filtered(), rtgi_spg->get_header_plane(), rtgi_spg->get_header_aux(),
 								rtgi_wrc->get_radiance_atlas(), rtgi_wrc->get_distance_atlas(), spec_reprojection,
 								rfp, rtgi_inv_projection, p_render_data->scene_data->cam_transform,
-								rtgi_prev_projection, p_render_data->scene_data->prev_cam_transform);
+								rtgi_prev_projection, p_render_data->scene_data->prev_cam_transform,
+								rt_specular_radiance, sharp_spec_inject);
 					}
 				}
 				RD::get_singleton()->draw_command_end_label();

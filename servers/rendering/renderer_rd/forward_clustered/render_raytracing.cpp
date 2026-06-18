@@ -5644,6 +5644,50 @@ RTGIBackendDispatchResult RenderRaytracing::dispatch_primary_direct_backend(RTGI
 	return result;
 }
 
+RTGIBackendDispatchResult RenderRaytracing::dispatch_hybrid_specular_backend(RTGIBackendFrameContext &p_context, uint32_t p_hybrid_specular_flags) {
+	// The HYBRID specular-only full-screen screen dispatch. Like dispatch_primary_direct_backend
+	// it COEXISTS with the WRC/SPG probe dispatches already recorded this frame (it runs between
+	// the SPG accumulate and the GI resolve), so it REUSES the backend frame context's
+	// already-built viewport_state/TLAS rather than re-preparing the frame -- re-running
+	// prepare_backend_frame would rebuild the in-flight TLAS the probe dispatches reference. It
+	// only swaps in a specular-only uniform set + pipeline built from p_hybrid_specular_flags
+	// (which carries RT_FLAG_HYBRID_SPECULAR_ONLY, so update_uniform_set binds the probe
+	// ray-result buffers 107/108 to the default RW buffer -- no phantom probe-buffer dependency --
+	// and forwards the WRC clipmap params for the mirror channel's WRC query; the raygen runs ONLY
+	// the WS6 reflection trace + the spec store). The dispatch itself is the existing full-screen
+	// dispatch_path_trace_backend, run against the same context after a save/restore of its
+	// dispatch fields, exactly mirroring the proven primary-direct pattern (own set, shared
+	// context). It writes the SAME screen specular textures (binding 37 specular radiance,
+	// 38 guide, 63 reprojection) the FPT primary-direct dispatch writes and the GI resolve consumes.
+	if (p_context.viewport_state == nullptr) {
+		return RTGI_BACKEND_DISPATCH_UNSAFE_FAILURE;
+	}
+	SceneShaderRaytracing *rt_shader = get_shader();
+	if (rt_shader == nullptr) {
+		return RTGI_BACKEND_DISPATCH_UNSAFE_FAILURE;
+	}
+
+	const RID hs_uniform_set = update_uniform_set(p_context.viewport_state, p_context.render_data, p_hybrid_specular_flags);
+	const RID hs_pipeline = rt_shader->get_raytracing_pipeline(p_hybrid_specular_flags);
+	if (!hs_uniform_set.is_valid() || !hs_pipeline.is_valid()) {
+		return RTGI_BACKEND_DISPATCH_UNSAFE_FAILURE;
+	}
+
+	const RID saved_uniform_set = p_context.uniform_set;
+	const RID saved_pipeline = p_context.pipeline;
+	const uint32_t saved_rt_flags = p_context.rt_flags;
+	p_context.uniform_set = hs_uniform_set;
+	p_context.pipeline = hs_pipeline;
+	p_context.rt_flags = p_hybrid_specular_flags;
+
+	const RTGIBackendDispatchResult result = dispatch_path_trace_backend(p_context);
+
+	p_context.uniform_set = saved_uniform_set;
+	p_context.pipeline = saved_pipeline;
+	p_context.rt_flags = saved_rt_flags;
+	return result;
+}
+
 RTGIBackendDispatchResult RenderRaytracing::dispatch_probe_update_backend(RTGIBackendFrameContext &p_context, uint32_t p_probe_flags, RID p_probe_output_buffer, uint32_t p_ray_count) {
 	RTGIBackend *backend = rtgi_backends[active_backend];
 	ERR_FAIL_NULL_V(backend, RTGI_BACKEND_DISPATCH_UNSAFE_FAILURE);
@@ -9974,13 +10018,14 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_SPG_FALLBACK_CONF] = p_state->spg_fallback_conf;
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_SPG_WRC_OCT_RES] = float(p_state->spg_wrc_oct_res);
 		}
-		// The FPT-fast primary-direct dispatch reads the SAME WRC grid/cascade/spacing + oct_res slots
-		// (spg_make_wrc_params in the raygen) for the mirror channel's WRC irradiance query at a reflected
-		// hit, so the query addresses the atlas the WRC was sized from. Gated on the PRIMARY_DIRECT flag +
-		// wrc_grid > 0 sentinel; the dispatch site fills the rt_state wrc_* fields just before the dispatch.
-		// This is a dispatch-flavor override (RT_FLAG_PRIMARY_DIRECT is in the is_prepare_call mask below),
-		// so it never reaches the radiance signature -> off/cornell history is byte-identical.
-		if ((p_rt_flags & SceneShaderRaytracing::RT_FLAG_PRIMARY_DIRECT) != 0 && p_state->wrc_grid > 0u) {
+		// The FPT-fast primary-direct dispatch AND the HYBRID specular-only dispatch read the SAME WRC
+		// grid/cascade/spacing + oct_res slots (spg_make_wrc_params in the raygen) for the mirror channel's
+		// WRC irradiance query at a reflected hit, so the query addresses the atlas the WRC was sized from.
+		// Gated on the PRIMARY_DIRECT or HYBRID_SPECULAR_ONLY flag + the wrc_grid > 0 sentinel; the dispatch
+		// site fills the rt_state wrc_* fields just before the dispatch. Both are dispatch-flavor overrides
+		// (both bits are in the is_prepare_call mask below), so neither reaches the radiance signature ->
+		// off/cornell history is byte-identical.
+		if ((p_rt_flags & (SceneShaderRaytracing::RT_FLAG_PRIMARY_DIRECT | SceneShaderRaytracing::RT_FLAG_HYBRID_SPECULAR_ONLY)) != 0 && p_state->wrc_grid > 0u) {
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_WRC_GRID] = float(p_state->wrc_grid);
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_WRC_CASCADE_COUNT] = float(p_state->wrc_cascade_count);
 			rt_ubo.params[SceneShaderRaytracing::RT_PARAM_RTGI_WRC_BASE_SPACING] = p_state->wrc_base_spacing;
@@ -10129,7 +10174,7 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		// hashes differ across the other flavors.
 		// IMPORTANT: any new dispatch-flavor flag bit must be added to this mask, or the
 		// signature will hash flavor-variant inputs again.
-		const bool is_prepare_call = (p_rt_flags & (SceneShaderRaytracing::RT_FLAG_WRC_PROBE_UPDATE | SceneShaderRaytracing::RT_FLAG_SPG_GATHER | SceneShaderRaytracing::RT_FLAG_PRIMARY_DIRECT)) == 0;
+		const bool is_prepare_call = (p_rt_flags & (SceneShaderRaytracing::RT_FLAG_WRC_PROBE_UPDATE | SceneShaderRaytracing::RT_FLAG_SPG_GATHER | SceneShaderRaytracing::RT_FLAG_PRIMARY_DIRECT | SceneShaderRaytracing::RT_FLAG_HYBRID_SPECULAR_ONLY)) == 0;
 		if (is_prepare_call) {
 			uint64_t radiance_signature = _rt_radiance_signature(p_rt_flags, p_render_data ? p_render_data->environment : RID(), p_render_data ? p_render_data->camera_attributes : RID(), rt_ubo.params, background_color, background_uses_sky, rt_light_data, rt_light_count);
 			radiance_signature = _rt_history_mix(radiance_signature, p_state->emissive_candidate_signature);
@@ -10362,14 +10407,17 @@ RID RenderRaytracing::update_uniform_set(RTViewportState *p_state, const RenderD
 		uniforms.push_back(u);
 	}
 
-	// The full-screen FPT primary-direct dispatch (RT_FLAG_PRIMARY_DIRECT) binds the
-	// WRC/SPG ray-result buffers (107/108) to the *default* RW buffer instead of the real
-	// probe buffers. The primary-direct raygen never touches 107/108, but binding the real
-	// buffers RW would record this full-screen dispatch as a phantom WRITER of the probe
-	// buffers in the draw graph -- the coexistence root cause (it zeroed the gather /
-	// GPU-hung). Pointing them at the default buffer removes that phantom dependency while
-	// keeping the descriptor layout the pipeline expects.
-	const bool primary_direct_dispatch = (p_rt_flags & SceneShaderRaytracing::RT_FLAG_PRIMARY_DIRECT) != 0;
+	// The full-screen FPT primary-direct dispatch (RT_FLAG_PRIMARY_DIRECT) AND the HYBRID
+	// specular-only dispatch (RT_FLAG_HYBRID_SPECULAR_ONLY) bind the WRC/SPG ray-result buffers
+	// (107/108) to the *default* RW buffer instead of the real probe buffers. Neither raygen
+	// touches 107/108, but binding the real buffers RW would record this full-screen dispatch as
+	// a phantom WRITER of the probe buffers in the draw graph -- the coexistence root cause (it
+	// zeroed the gather / GPU-hung). Pointing them at the default buffer removes that phantom
+	// dependency while keeping the descriptor layout the pipeline expects. The HYBRID
+	// specular-only dispatch coexists with the SAME in-flight WRC/SPG dispatches the FPT path
+	// does (it runs between the SPG accumulate and the GI resolve), so it needs the identical
+	// decoupling.
+	const bool primary_direct_dispatch = (p_rt_flags & (SceneShaderRaytracing::RT_FLAG_PRIMARY_DIRECT | SceneShaderRaytracing::RT_FLAG_HYBRID_SPECULAR_ONLY)) != 0;
 
 	// Binding 107: RTGI World Radiance Cache probe-update ray-result buffer.
 	// Mirrors the STRC binding-66 wiring; written by the WRC probe-update raygen

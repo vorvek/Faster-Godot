@@ -10,6 +10,7 @@ layout(constant_id = 0) const uint RT_FLAGS = 0u;
 #define RT_FLAG_SPG_GATHER (1u << 8)
 #define RT_FLAG_PRIMARY_DIRECT (1u << 9)
 #define RT_FLAG_FOG_DEPTH_MODE (1u << 10)
+#define RT_FLAG_HYBRID_SPECULAR_ONLY (1u << 11)
 
 #define RT_SAMPLE_COUNT_SHIFT 21u
 #define RT_SAMPLE_COUNT_MASK 0xFFu
@@ -73,6 +74,15 @@ bool rt_probe_dispatch_mode() {
 // + sky-on-miss only; the resolved probe indirect is added at the composite.
 bool rt_primary_direct_mode() {
 	return (RT_FLAGS & RT_FLAG_PRIMARY_DIRECT) != 0u;
+}
+
+// The HYBRID specular-only screen dispatch. Runs ONLY the WS6 reflection trace (raster
+// surface + one reflection ray + WRC/NEE shade) for low-roughness pixels, writing the
+// screen specular textures the GI resolve consumes. No NEE-direct, no diffuse, no FPT
+// spec-raw store: the raster opaque pass owns the direct + diffuse under Hybrid. FPT never
+// sets this bit, so rt_primary_direct_mode() stays byte-identical.
+bool rt_hybrid_specular_only_mode() {
+	return (RT_FLAGS & RT_FLAG_HYBRID_SPECULAR_ONLY) != 0u;
 }
 
 #ifndef RT_STAGE_ANY_HIT

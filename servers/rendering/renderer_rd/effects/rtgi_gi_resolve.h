@@ -140,7 +140,8 @@ public:
 			RID p_spg_radiance, RID p_spg_header_plane, RID p_spg_header_aux,
 			RID p_wrc_radiance, RID p_wrc_distance, RID p_specular_reprojection,
 			const GiResolveFrameParams &p_frame, const Projection &p_inv_proj, const Transform3D &p_inv_view,
-			const Projection &p_prev_cam_projection, const Transform3D &p_prev_cam_transform);
+			const Projection &p_prev_cam_projection, const Transform3D &p_prev_cam_transform,
+			RID p_rt_specular_radiance = RID(), bool p_sharp_spec_inject = false);
 
 	RID get_diffuse_gi() const { return diffuse_gi[read_index]; } // RGBA16F: rgb = lighting-space A, a = confidence/variance.
 	RID get_spec_gi() const { return spec_gi[read_index]; } // RGBA16F: rgb = rough-spec radiance, a = variance.
@@ -219,7 +220,7 @@ private:
 		uint32_t debug_channel; // DEBUG_GI: 0 = diffuse only, 1 = spec only, else = combined.
 		float history_rejection; // TEMPORAL: depth/normal reproject tolerance scale (was pad0).
 		uint32_t write_reactive; // COMPOSITE: 1 = also write the GI-aware reactive mask (binding 16); 0 = skip (was pad1).
-		uint32_t pad2;
+		uint32_t sharp_spec_inject; // INTEGRATE: 1 = inject the RT-traced sharp specular (binding 19) into spec_gi for sharp HYBRID pixels; 0 = skip (was pad2). FPT keeps 0 -> byte-identical.
 		// Cold-start hide enable (mirrors the appended Params fields in rtgi_gi_resolve.glsl): > 0
 		// turns on the COMPOSITE's convergence-gated fade-from-zero; 0 disables. 80 B -> 96 B.
 		float fade_time;

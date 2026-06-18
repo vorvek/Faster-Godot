@@ -256,7 +256,8 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		RID p_spg_radiance, RID p_spg_header_plane, RID p_spg_header_aux,
 		RID p_wrc_radiance, RID p_wrc_distance, RID p_specular_reprojection,
 		const GiResolveFrameParams &p_frame, const Projection &p_inv_proj, const Transform3D &p_inv_view,
-		const Projection &p_prev_cam_projection, const Transform3D &p_prev_cam_transform) {
+		const Projection &p_prev_cam_projection, const Transform3D &p_prev_cam_transform,
+		RID p_rt_specular_radiance, bool p_sharp_spec_inject) {
 	// THE FRAME SWAP: flip read_index ONCE at the TOP of the frame (mirrors
 	// RTGIScreenProbeGather::run_placement). AFTER the flip [read_index] is THIS frame's set
 	// (INTEGRATE writes it, TEMPORAL accumulates in place) and [1 - read_index] is the previous
@@ -333,6 +334,14 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	// resolve_spec_reproject keeps the surface reproject -- byte-identical to the pre-wire behavior.
 	RID reproj_default = RendererRD::TextureStorage::get_singleton()->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_TRANSPARENT);
 	RID specular_reprojection_rid = p_specular_reprojection.is_valid() ? p_specular_reprojection : reproj_default;
+
+	// RT-traced sharp specular radiance (binding 19): the HYBRID specular-only screen dispatch wrote
+	// the energy-scaled, BRDF-applied sharp reflection radiance here (RB_TEX_RT_SPECULAR_RADIANCE).
+	// INTEGRATE injects it into spec_gi for sharp pixels only when p_sharp_spec_inject (HYBRID). When
+	// the texture is absent (the RT buffers torn down, or not a HYBRID frame) fall back to the BLACK
+	// default so the injection is a no-op and the bind stays valid.
+	RID rt_specular_black = RendererRD::TextureStorage::get_singleton()->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+	RID rt_specular_radiance_rid = p_rt_specular_radiance.is_valid() ? p_rt_specular_radiance : rt_specular_black;
 
 	// Set 0 declares EVERY binding any mode of rtgi_gi_resolve.glsl uses (one GLSL
 	// shader's set-0 layout must declare all of them): G-buffers (0-1), the material-guide
@@ -521,6 +530,18 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 		u.append_id(specular_reprojection_rid);
 		uniforms.push_back(u);
 	}
+	// Binding 19: RT-traced sharp specular radiance. INTEGRATE reads it (sharp-domain injection)
+	// only when push_constant.sharp_spec_inject is set; the other modes ignore it. A plain read
+	// texture on a sampler slot, so no same-resource read+write hazard. BLACK fallback keeps the
+	// injection inert when no HYBRID specular dispatch wrote it.
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 19;
+		u.append_id(linear_sampler);
+		u.append_id(rt_specular_radiance_rid);
+		uniforms.push_back(u);
+	}
 	GiResolveUBO ubo;
 	memset(&ubo, 0, sizeof(GiResolveUBO));
 	MaterialStorage::store_camera(p_inv_proj, ubo.inv_projection);
@@ -554,6 +575,10 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	// TEMPORAL reproject tolerance scale; carried for both dispatches (INTEGRATE ignores
 	// it). temporal_n_cap (set above) is the history responsiveness, also shared by both.
 	push_constant.history_rejection = cached_params.history_rejection;
+	// HYBRID sharp-spec injection: when set, INTEGRATE writes the RT-traced sharp reflection (binding
+	// 19) into spec_gi for sharp pixels (rough < cutoff). FPT leaves this 0 (its sharp reflection
+	// reaches beauty via the primary-direct REPLACE composite), so its INTEGRATE output is byte-identical.
+	push_constant.sharp_spec_inject = p_sharp_spec_inject ? 1u : 0u;
 	const float fade_override = rtgi_gi_fade_time_override();
 	push_constant.fade_time = MAX(fade_override >= 0.0f ? fade_override : cached_params.cold_start_fade_time, 0.0f);
 
@@ -829,6 +854,18 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 		u.append_id(diffuse_gi[read_index]);
 		uniforms.push_back(u);
 	}
+	// Binding 19 (RT-traced sharp specular): neutral here -- DEBUG_GI does not sample it (only
+	// INTEGRATE does, and only when sharp_spec_inject is set, which stays 0 in this DEBUG_GI memset).
+	// Points at the resolved-diffuse read texture like the other neutral samplers; the shared set-0
+	// layout must still provide the slot.
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 19;
+		u.append_id(linear_sampler);
+		u.append_id(diffuse_gi[read_index]);
+		uniforms.push_back(u);
+	}
 	PushConstant push_constant;
 	memset(&push_constant, 0, sizeof(PushConstant));
 	push_constant.mode = RESOLVE_MODE_DEBUG_GI;
@@ -1057,6 +1094,17 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_normal_roughness, RID p_
 		RD::Uniform u;
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
 		u.binding = 18;
+		u.append_id(linear_sampler);
+		u.append_id(diffuse_gi[read_index]);
+		uniforms.push_back(u);
+	}
+	// Binding 19 (RT-traced sharp specular): neutral here -- COMPOSITE does not sample it (only
+	// INTEGRATE does). Points at the resolved-diffuse read texture like the other neutral samplers;
+	// the shared set-0 layout must still provide the slot.
+	{
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.binding = 19;
 		u.append_id(linear_sampler);
 		u.append_id(diffuse_gi[read_index]);
 		uniforms.push_back(u);

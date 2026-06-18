@@ -118,7 +118,7 @@ layout(push_constant, std430) uniform Params {
 	uint debug_channel;
 	float history_rejection; // TEMPORAL: depth/normal reproject tolerance scale (was pad0).
 	uint write_reactive; // COMPOSITE: 1 = also write the GI-aware reactive mask (binding 16); 0 = skip (was pad1).
-	uint pad2;
+	uint sharp_spec_inject; // INTEGRATE: 1 = inject the RT-traced sharp specular (binding 19) into spec_gi for sharp pixels (HYBRID); 0 = skip (was pad2). FPT keeps 0 -> byte-identical.
 	// Cold-start hide enable: > 0 turns on the COMPOSITE's convergence-gated fade-from-zero (the
 	// reveal pace is driven by the temporal sample count, not this value; 0 disables for A/B).
 	// Grows the block 80 B -> 96 B (a multiple of 16); mirrors RTGIGIResolve::PushConstant EXACTLY.
@@ -254,6 +254,19 @@ composite_fog;
 // branch; the other modes bind it neutrally to keep the shared set-0 layout valid. Bound at the
 // SAME RT/internal size as the resolve, so texelFetch shares the resolve's pixel coordinates.
 layout(set = 0, binding = 18) uniform sampler2D rt_specular_reprojection_tex;
+
+// RT-traced sharp specular radiance (binding 19): written by the HYBRID specular-only screen
+// dispatch (scene_raytracing_raygen.glsl rt_hybrid_specular_only_mode), RB_TEX_RT_SPECULAR_RADIANCE.
+// The resolve's probe-derived rough-spec channel (do_spec) covers only the ROUGH domain
+// (roughness >= rough_cutoff); the SHARP domain (a mirror/glossy reflection) was the deferred
+// ray-traced path. Under HYBRID this texture carries the energy-scaled, BRDF-applied sharp
+// reflection radiance for low-roughness pixels (0 elsewhere); INTEGRATE injects it into spec_gi
+// for sharp pixels when pc.sharp_spec_inject != 0, so the composite (which adds spec_gi directly)
+// shows the RT reflection on top of the raster beauty. FPT leaves sharp_spec_inject 0 (its sharp
+// reflection already reaches beauty via the primary-direct REPLACE composite), so this is inert
+// there and FPT stays byte-identical. The other modes bind it neutrally (the shared set-0 layout
+// must stay valid). Bound at the resolve/internal size, so texelFetch shares the resolve pixels.
+layout(set = 0, binding = 19) uniform sampler2D rt_specular_radiance_tex;
 
 // Split-sum environment-BRDF DFG approximation (Karis' analytic fit), returning the
 // (scale, bias) pair so the specular term is F0 * dfg.x + dfg.y. This is the SAME analytic
@@ -589,6 +602,24 @@ void resolve_integrate_main(ivec2 pos) {
 		float NoV = max(dot(world_N, V), 1e-4);
 		vec3 F0 = mix(vec3(0.04), albedo, metalness); // dielectric 4% -> albedo-tinted for metals.
 		spec = pref * resolve_env_brdf_specular(F0, rough, NoV); // FssEss + FmsEms.
+	}
+	// SHARP-domain RT reflection injection (HYBRID, WS8). The probe-derived rough-spec above covers
+	// only the rough domain (do_spec, rough >= cutoff). For the SHARP domain (rough < cutoff, a
+	// mirror/glossy reflector) the resolve historically wrote 0 (the deferred ray-traced path). When
+	// the HYBRID specular-only screen dispatch ran (pc.sharp_spec_inject != 0), it wrote the
+	// energy-scaled, BRDF-applied sharp reflection radiance into binding 19 for exactly those pixels;
+	// take it as the spec output here so the composite (which adds spec_gi directly) shows the RT
+	// reflection. Gated on rough_enabled + rough < cutoff so it never touches the rough-spec pixels
+	// resolved above, and on sharp_spec_inject so FPT (which reaches its sharp reflection via the
+	// primary-direct REPLACE composite) is byte-identical. The RT texture is 0 on non-sharp /
+	// background pixels, so this is a no-op there too.
+	if (pc.sharp_spec_inject != 0u && pc.rough_enabled != 0u && rough < pc.rough_cutoff) {
+		vec3 rt_spec = texelFetch(rt_specular_radiance_tex, pos, 0).rgb;
+		// Sanitize (the proven copy.glsl idiom used by COMPOSITE below): zero out NaN/Inf, clamp
+		// non-negative so a bad texel cannot inject a firefly / negative radiance.
+		rt_spec = mix(rt_spec, vec3(0.0), isnan(rt_spec));
+		rt_spec = mix(rt_spec, vec3(0.0), isinf(rt_spec));
+		spec = max(rt_spec, vec3(0.0));
 	}
 	// .a: INTEGRATE writes the source quality (the spec shares the diffuse's probes and prior
 	// fraction, so the same q applies); TEMPORAL overwrites it with the sample-count fraction

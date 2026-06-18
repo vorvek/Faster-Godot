@@ -933,6 +933,9 @@ public:
 	RTGIBackendDispatchResult dispatch_probe_update_backend(RTGIBackendFrameContext &p_context, uint32_t p_probe_flags, RID p_probe_output_buffer, uint32_t p_ray_count);
 	// Full-screen FPT primary-direct dispatch that coexists with the probe dispatches.
 	RTGIBackendDispatchResult dispatch_primary_direct_backend(RTGIBackendFrameContext &p_context, uint32_t p_primary_direct_flags);
+	// Full-screen HYBRID specular-only dispatch that coexists with the probe dispatches (same
+	// shared-context reuse as the primary-direct dispatch; only the flavor flag differs).
+	RTGIBackendDispatchResult dispatch_hybrid_specular_backend(RTGIBackendFrameContext &p_context, uint32_t p_hybrid_specular_flags);
 
 	void copy_output_texture(const RenderDataRD *p_render_data);
 	void free_viewport_state(RenderSceneBuffersRD *p_render_buffers);

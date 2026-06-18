@@ -811,6 +811,176 @@ void main() {
 	vec4 origin = inv_view * vec4(0.0, 0.0, 0.0, 1.0);
 	vec4 direction = inv_view * vec4(normalize(target.xyz), 0);
 
+	if (rt_hybrid_specular_only_mode()) {
+		// HYBRID specular-only screen pass (WS8). Hybrid's raster opaque pass owns the direct +
+		// diffuse beauty and the probe composite owns the diffuse GI; this dispatch adds ONLY the
+		// ray-traced sharp/glossy reflection the raster cannot produce, writing the screen specular
+		// radiance the GI resolve already consumes. It reuses the SAME WS6 reflection trace the
+		// FPT-fast primary-direct path runs (rtgi_trace_and_resolve_specular_hit + WRC/NEE shade +
+		// the integrated specular response), but with NO NEE-direct, NO diffuse, and NO FPT spec-raw
+		// store -- the surface preamble below is the minimal subset of the FPT primary-direct preamble
+		// (the surface load + the guide material + geom_N/N_bent) the reflection block depends on. The
+		// FPT path (rt_primary_direct_mode) is reached only when RT_FLAG_PRIMARY_DIRECT is set, which
+		// Hybrid never sets, so it stays byte-identical; this branch runs only under the new bit.
+		if (!pixel_in_visible) {
+			return;
+		}
+		float rdepth;
+		vec3 rview_pos, rworld_pos, rworld_normal, ralbedo_proxy;
+		float rroughness;
+		bool hit = rtgi_load_raster_surface(visible_pixel_i, inv_view,
+				rdepth, rview_pos, rworld_pos, rworld_normal, rroughness, ralbedo_proxy);
+		if (!hit) {
+			// Background: no reflecting surface. The RT spec textures were cleared to 0 this frame
+			// (rt_ensure_textures -> rt_clear_textures), so leave them -- the resolve reads empty spec
+			// here, matching the cleared-target convention. Do NOT touch the diffuse/depth/guide
+			// G-buffers: Hybrid's raster pass + the material-guide prepass own those.
+			return;
+		}
+
+		// Raw material from the guide G-buffer (same convention as the FPT primary-direct path:
+		// guide_albedo.rgb = linear albedo; ORM r=ao, g=roughness, b=metallic). Full-res guides
+		// indexed with the mapped raster pixel, NOT the RT pixel, for resolution_scale < 1.
+		ivec2 guide_pixel = rtgi_visible_to_raster_pixel(visible_pixel_i, textureSize(rt_guide_albedo_tex, 0));
+		vec3 guide_alb = texelFetch(rt_guide_albedo_tex, guide_pixel, 0).rgb;
+		vec4 guide_orm = texelFetch(rt_guide_orm_tex, guide_pixel, 0);
+		MaterialProperties brdf_mat;
+		brdf_mat.baseColor = guide_alb;
+		brdf_mat.metalness = clamp(guide_orm.b, 0.0, 1.0);
+		brdf_mat.roughness = clamp(guide_orm.g, 0.0, 1.0);
+		brdf_mat.dielectricF0 = 0.16 * 0.5 * 0.5; // == specular_to_f0(0.5) = default 4% dielectric F0.
+		brdf_mat.emissive = vec3(0.0);
+		brdf_mat.transmissivness = 0.0;
+		brdf_mat.opacity = 1.0;
+
+		vec3 N = rworld_normal;
+		vec3 V = normalize(rt_camera_world_origin() - rworld_pos);
+
+		// Relief-FREE geometric normal (binding 116), decoded + camera-sign-flipped exactly as the
+		// FPT primary-direct path does. The reflection trace uses geom_N as the geometry normal and
+		// N_bent as the shading normal; under this specular-only path there is no grazing-crevice
+		// light fill (no NEE here), so N_bent collapses to N (have_L_dom is never evaluated), but we
+		// derive geom_N the same way so rtgi_trace_and_resolve_specular_hit sees the same inputs as
+		// the FPT mirror channel.
+		vec3 geom_N = rworld_normal;
+		{
+			vec3 g_enc = texelFetch(rt_guide_normal_tex, guide_pixel, 0).xyz;
+			vec3 g_view = g_enc * 2.0 - 1.0;
+			float g_len2 = dot(g_view, g_view);
+			if (g_len2 >= 1e-8 && !isnan(g_len2) && !isinf(g_len2)) {
+				vec3 g_world = mat3(inv_view) * normalize(g_view);
+				float gw_len2 = dot(g_world, g_world);
+				if (gw_len2 >= 1e-8 && !isnan(gw_len2) && !isinf(gw_len2)) {
+					geom_N = normalize(g_world);
+				}
+			}
+		}
+		if (dot(geom_N, V) < 0.0) {
+			geom_N = -geom_N;
+		}
+		// No light-aware bend on the specular-only path (no NEE direct): the reflection trace's
+		// geometry/shading normals are geom_N/N where N is the relief normal, matching what the FPT
+		// mirror channel passes for a surface with no grazing-crevice fill.
+		vec3 N_bent = N;
+
+		uint rtgi_sampling_controls = uint(get_rt_param(RT_PARAM_RTGI_SAMPLING_CONTROLS));
+		float pd_roughness = brdf_mat.roughness;
+		float pd_metalness = brdf_mat.metalness;
+		uint pd_light_count = uint(get_rt_param(RT_PARAM_LIGHT_COUNT));
+
+		vec3 specular = vec3(0.0);
+
+		// --- WS6 reflection block (specular-only reuse) ---
+		// Identical to the FPT-fast mirror channel: trace ONE reflection ray, shade its hit
+		// Lumen-style (NEE direct + WRC indirect + emissive; environment on a miss), fold it into
+		// the specular channel scaled by the integrated specular response, crossfade across the rough
+		// seam. Gated to low-roughness pixels so every other pixel writes 0 specular (the cleared
+		// target). The 0.35 cutoff stays in sync with the resolve's sharp-spec reproject branch.
+		float pd_specular_risk = max(1.0 - pd_roughness, pd_metalness);
+		if (pd_specular_risk > 0.55 && pd_roughness <= 0.35) {
+			float refl_hit_dist;
+			vec3 refl_hit_normal;
+			vec3 refl_dir;
+			vec3 refl_hit_pos;
+			MaterialProperties refl_mat;
+			bool refl_hit = rtgi_trace_and_resolve_specular_hit(rworld_pos, geom_N, N_bent, V,
+					refl_hit_dist, refl_hit_normal, refl_dir, refl_hit_pos, refl_mat);
+
+			vec3 reflected_radiance;
+			if (!refl_hit) {
+				reflected_radiance = rt_primary_eval_sky(refl_dir);
+			} else {
+				vec3 refl_V = -refl_dir;
+				uint refl_rng = init_blue_noise_rng(rng_pixel, uint(get_rt_param(RT_PARAM_FRAME_INDEX)), 0x5A17u);
+				uint r_source_key = 0u;
+				uint r_slot_source_key = 0u;
+				float r_slot_pdf = 0.0;
+				RTDirectLighting r_slot_light = rt_direct_lighting_zero();
+				bool r_slot_stochastic = false;
+				float r_slot_reservoir_m = 0.0;
+				float r_slot_reservoir_weight_sum = 0.0;
+				float r_slot_target = 0.0;
+				bool r_slot_temporal_accepted = false;
+				bool r_slot_spatial_accepted = false;
+				uint r_slot_temporal_reject = RT_SOURCE_REJECT_PREV_UV;
+				uint r_slot_spatial_reject = RT_SOURCE_REJECT_PREV_UV;
+				uint r_slot_visibility_failures = 0u;
+				uint r_slot_valid_light_count = 0u;
+				vec3 refl_direct_diffuse = vec3(0.0);
+				vec3 refl_direct_specular = vec3(0.0);
+				if (pd_light_count > 0u && (rtgi_sampling_controls & RTGI_SAMPLING_ANALYTIC_LIGHTS_BIT) != 0u) {
+					RTDirectLighting refl_direct = lights_evaluate_direct_lighting_split(
+							refl_hit_pos, refl_hit_normal, refl_hit_normal, refl_V, refl_mat, refl_rng,
+							/*is_indirect=*/true, /*receiver_layer_mask=*/0xFFFFFFFFu, pd_light_count,
+							r_source_key, r_slot_source_key, r_slot_pdf, r_slot_light, r_slot_stochastic,
+							r_slot_reservoir_m, r_slot_reservoir_weight_sum, r_slot_target,
+							r_slot_temporal_accepted, r_slot_spatial_accepted, r_slot_temporal_reject,
+							r_slot_spatial_reject, r_slot_visibility_failures, r_slot_valid_light_count,
+							/*p_use_blue_noise_u=*/false, /*p_blue_noise_u=*/vec2(0.0));
+					refl_direct_diffuse = rt_clamp_path_contribution(refl_direct.diffuse, refl_mat.roughness, refl_mat.metalness, true, false);
+					refl_direct_specular = rt_clamp_path_contribution(refl_direct.specular, refl_mat.roughness, refl_mat.metalness, true, false);
+				}
+				WrcParams refl_wp = spg_make_wrc_params();
+				float refl_wrc_conf = 0.0;
+				vec3 refl_irradiance = rtgi_wrc_sample_irradiance(rt_wrc_radiance_for_spg, rt_wrc_distance_for_spg, refl_wp, refl_hit_pos, refl_hit_normal, refl_wrc_conf);
+				vec3 refl_indirect = refl_irradiance * (refl_mat.baseColor * (1.0 - refl_mat.metalness));
+				reflected_radiance = refl_direct_diffuse + refl_direct_specular + refl_indirect + refl_mat.emissive;
+			}
+			reflected_radiance = sanitize_payload_vec3(reflected_radiance);
+
+			float surf_NdotV = clamp(dot(N_bent, V), 1e-4, 1.0);
+			vec3 surf_spec = DLSSRR_computeSpecularAlbedo(brdf_mat.baseColor, brdf_mat.metalness, brdf_mat.dielectricF0, pd_roughness, surf_NdotV);
+			float refl_w = smoothstep(0.35, 0.25, pd_roughness);
+			vec3 mirror_contribution = reflected_radiance * surf_spec * refl_w;
+			specular += mirror_contribution;
+
+			vec4 specular_reprojection = vec4(0.0);
+			if (refl_hit) {
+				vec3 virtual_pos = rworld_pos + refl_dir * refl_hit_dist;
+				vec2 curr_virtual_uv;
+				vec2 prev_virtual_uv;
+				if (project_uv_checked(virtual_pos, curr_vp_unjittered, curr_virtual_uv) &&
+						project_uv_checked(virtual_pos, prev_vp_unjittered, prev_virtual_uv)) {
+					vec2 curr_virtual_texture_uv = rt_visible_to_texture_uv(curr_virtual_uv, rt_current_origin());
+					vec2 prev_virtual_texture_uv = rt_visible_to_texture_uv(prev_virtual_uv, rt_previous_origin());
+					specular_reprojection = vec4(prev_virtual_texture_uv - curr_virtual_texture_uv, clamp(refl_hit_dist / 128.0, 0.0, 1.0), 1.0);
+				}
+			}
+			imageStore(rt_specular_reprojection_image, pixel_i, specular_reprojection);
+			imageStore(rt_specular_guide_image, pixel_i, vec4(pd_roughness, refl_hit ? refl_hit_dist : 0.0, pd_specular_risk, 1.0));
+		}
+
+		// Do NOT apply RT_PARAM_ENERGY here: the GI resolve composite multiplies the injected sharp
+		// spec by gi_energy (== Environment rtgi_energy) alongside the probe-derived rough spec
+		// (rtgi_gi_resolve.glsl COMPOSITE: indirect = (albedo*A + spec) * gi_energy). Scaling here too
+		// would square the energy. The probe rough-spec the resolve produces is likewise un-scaled at
+		// store time and gets gi_energy only at the composite, so this matches that convention. No fog
+		// either (Hybrid's raster pass owns the beauty fog; the composite attenuates the indirect).
+		specular = sanitize_payload_vec3(specular);
+		imageStore(rt_specular_radiance_image, pixel_i, vec4(specular, 1.0));
+		return;
+	}
+
 	if (rt_primary_direct_mode()) {
 		// FPT-fast primary: raster-surface visibility + PT NEE direct (no camera-ray trace).
 		// Visibility == the FPT composite's depth mask by construction (we write the raster

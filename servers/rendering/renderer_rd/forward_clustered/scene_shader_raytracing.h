@@ -91,6 +91,17 @@ public:
 		// formula (begin/end/curve) instead of the exponential model. Twin of the raster's
 		// sc_use_depth_fog() specialization constant.
 		RT_FLAG_FOG_DEPTH_MODE = (1 << 10),
+		// HYBRID-only specular-only screen dispatch. Runs the SAME WS6 reflection trace the
+		// FPT primary-direct path runs (raster-surface + one reflection ray + WRC/NEE shade),
+		// but ONLY for low-roughness pixels, writing the screen specular textures the GI
+		// resolve already consumes. NO NEE-direct, NO diffuse, NO FPT spec-raw store: it does
+		// the reflection trace + the spec store/crossfade and nothing else. Like
+		// RT_FLAG_PRIMARY_DIRECT it is a dispatch-flavor bit (excluded from the is_prepare_call
+		// radiance-signature mask) and tells update_uniform_set to bind the probe ray-result
+		// buffers (107/108) to the default RW buffer and to forward the WRC clipmap params so
+		// the mirror channel's WRC query addresses the atlas the WRC was sized from. FPT never
+		// sets this bit, so the FPT primary-direct path stays byte-identical.
+		RT_FLAG_HYBRID_SPECULAR_ONLY = (1 << 11),
 	};
 
 	constexpr static uint32_t RT_SAMPLE_COUNT_SHIFT = 21;
