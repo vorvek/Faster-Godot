@@ -56,6 +56,32 @@ const LIGHT_GRID_RECOVERY_FLOOR := 0.0005
 # (--rtgi-mode=off) run measures exactly 0.0 here, and an RTGI pipeline whose
 # history survives frames must approach it.
 const LIGHT_GRID_TAIL_PAIRS := 8
+# light_toggle reconvergence measurement. After the initial settle the key light
+# is flipped off and HELD long enough for the RTGI temporal history to fully
+# decay (the resolve caps at 16 accumulated samples, so a ~45-frame hold drains
+# it and the umbra behind the occluder collapses to the faint always-on fill
+# level). The key light is then flipped back on and the harness watches the
+# indirect rebuild from that decayed floor up to its converged level. The
+# convergence count is the first frame after the on-flip whose mean per-pixel
+# indirect delta (this frame vs a converged reference captured at the end of the
+# window) drops under a fixed fraction of the toggle depth. A short off-hold
+# would leave the history nearly intact and the rebuild would finish in one
+# frame, giving the gate no dynamic range; the long hold forces a real,
+# multi-frame rebuild a reconvergence regression can lengthen.
+const LIGHT_TOGGLE_OFF_HOLD_FRAMES := 45
+const LIGHT_TOGGLE_RECONVERGE_FRAMES := 64
+# Frames at the end of the on-window averaged into the converged reference image.
+const LIGHT_TOGGLE_REFERENCE_TAIL_FRAMES := 8
+# Reconvergence threshold as a fraction of the toggle depth (converged minus the
+# decayed off-state ROI luma). The indirect is treated as reconverged once the
+# frame-vs-reference delta drops within this fraction of that depth, so the
+# count scales with the scene's own contrast instead of an absolute luma the
+# exposure or albedo could drift. 0.08 (within 8% of the rebuilt level) lands a
+# few frames into the rebuild, leaving headroom for a regression to push it out.
+const LIGHT_TOGGLE_RECONVERGE_DELTA_FRACTION := 0.08
+# Absolute floor under the fractional threshold so a low-contrast capture cannot
+# make the threshold so tight that ordinary temporal noise never clears it.
+const LIGHT_TOGGLE_RECONVERGE_DELTA_FLOOR := 0.0015
 # Canonical settle for the sun_penumbra_ramp scene. Its sun_penumbra_band_hf
 # metric is the per-column vertical scatter of the soft shadow edge, which the
 # temporal denoiser converges away: by the 120-frame mode-switch floor the
@@ -347,7 +373,7 @@ func _parse_args() -> void:
 			_convergence_frames = clampi(arg.trim_prefix("--rtgi-convergence-frames=").to_int(), 0, 128)
 		elif arg.begins_with("--rtgi-scene="):
 			var requested_scene := arg.trim_prefix("--rtgi-scene=").to_lower()
-			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability", "offscreen_bounce", "cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid", "sun_penumbra_ramp", "area_light_wall", "textured_area"]:
+			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability", "offscreen_bounce", "cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid", "light_toggle", "sun_penumbra_ramp", "area_light_wall", "textured_area"]:
 				_scene_mode = requested_scene
 			else:
 				push_warning("Unknown RTGI quality scene '%s'; using stress scene." % requested_scene)
@@ -543,7 +569,7 @@ func _build_scene() -> void:
 
 
 func _is_packed_test_scene() -> bool:
-	return _scene_mode in ["cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid", "sun_penumbra_ramp", "area_light_wall", "textured_area"]
+	return _scene_mode in ["cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid", "light_toggle", "sun_penumbra_ramp", "area_light_wall", "textured_area"]
 
 
 # Loads one of the committed static test scenes (cornell_box, specular_motion,
@@ -1259,6 +1285,8 @@ func _capture_and_measure_config(base_suffix: String) -> Array[String]:
 		metrics.merge(_measure_fog_corridor_image(final_image), true)
 	elif _scene_mode == "light_grid":
 		metrics.merge(await _measure_light_grid(final_image, base_name), true)
+	elif _scene_mode == "light_toggle":
+		metrics.merge(await _measure_light_toggle(final_image, base_name), true)
 	elif _scene_mode == "sun_penumbra_ramp":
 		metrics.merge(_measure_sun_penumbra_ramp(final_image, base_name), true)
 	elif _scene_mode == "area_light_wall":
@@ -3207,6 +3235,184 @@ func _measure_light_grid(final_image: Image, base_name: String) -> Dictionary:
 	}
 
 
+# Diffuse reconvergence + indirect-occlusion measurement for the committed
+# light_toggle scene. The scene is static apart from the scripted key-light
+# toggle: a bright OmniLight (KeyLight) is the dominant direct source, a thin
+# static Occluder slab stands on the floor between it and the back of the room,
+# and the floor strip in the occluder's umbra (toward -Z) is lit almost entirely
+# by indirect bounce. A dim always-on FillLight keeps a base level so the scene
+# never goes black with the key light off.
+#
+# The harness arrives here after the normal settle (key light on, indirect
+# converged). It first records the three steady-state metrics from the already
+# settled beauty frame, then drives the toggle to measure reconvergence:
+#   1. flip KeyLight off, hold a few frames so the off state stabilizes;
+#   2. flip KeyLight back on and render LIGHT_TOGGLE_RECONVERGE_FRAMES frames,
+#      keeping each frame's LINEAR luma in the occluded ROI;
+#   3. average the tail frames into a converged reference, then walk the series
+#      from the on-flip and report the first frame whose mean per-pixel ROI
+#      delta vs that reference drops under LIGHT_TOGGLE_RECONVERGE_DELTA.
+# The per-frame ROI delta series is written to <base>_light_toggle_curve.json.
+#
+# ROIs (all projected from world points the scene root exposes, so they track
+# the authored framing rather than hard-coded pixels):
+#   - OCCLUDED ROI: a rect centered on the camera projection of the floor point
+#     ~1.9 m behind the occluder (get_occluded_floor_point), deep in the umbra.
+#     This is both the leak ROI and the reconvergence ROI: with the key light on
+#     it is indirect-only, so its luma is the leaked indirect energy
+#     (light_toggle_leak_luma; lower = less leak), and the rebuild of that same
+#     energy after the on-flip is the reconvergence signal.
+#   - CONTACT band: a tall thin rect centered on the camera projection of the
+#     occluder base on the shadowed side (get_occluder_floor_contact_point).
+#     light_toggle_contact_sharpness is the mean magnitude of the VERTICAL luma
+#     gradient (|luma[y+1] - luma[y-1]|) down that band: a crisp contact
+#     darkening at the occluder base reads as a strong gradient; a washed-out /
+#     leaked contact reads as a weak one (higher = crisper occlusion).
+func _measure_light_toggle(final_image: Image, base_name: String) -> Dictionary:
+	_apply_debug_view("beauty")
+	var width := final_image.get_width()
+	var height := final_image.get_height()
+	var rects := _light_toggle_rects(width, height)
+	var occluded: Rect2i = rects["occluded"]
+	var contact: Rect2i = rects["contact"]
+
+	# Steady-state metrics from the already-settled on frame the harness captured.
+	# Leak luma is read in LINEAR space (the scene pins a linear tonemapper) so it
+	# tracks indirect radiance proportionally, like the cornell_box energy check.
+	var leak_luma := _measure_mean_linear_luma(final_image, occluded.position.x, occluded.position.y, occluded.end.x, occluded.end.y)
+	var contact_sharpness := _measure_vertical_luma_gradient(final_image, contact)
+
+	# Reconvergence. Flip the key light off, hold so the off state stabilizes.
+	if _packed_scene_root != null and _packed_scene_root.has_method("set_toggle_light"):
+		_packed_scene_root.set_toggle_light(false)
+	else:
+		push_warning("light_toggle scene root does not expose set_toggle_light; regenerate the scene with tools/generate_test_scenes.gd.")
+	var off_roi_mean := 0.0
+	for _i in range(LIGHT_TOGGLE_OFF_HOLD_FRAMES):
+		await _wait_render_frame()
+		_scene_frame += 1
+	var off_frame := get_viewport().get_texture().get_image()
+	off_frame.convert(Image.FORMAT_RGBA8)
+	off_roi_mean = _measure_mean_linear_luma(off_frame, occluded.position.x, occluded.position.y, occluded.end.x, occluded.end.y)
+
+	# Flip back on; capture the per-frame LINEAR luma of the occluded ROI as the
+	# indirect rebuilds. The mean over the ROI per frame is the reconvergence
+	# observable (the umbra is the slowest indirect region to re-settle).
+	if _packed_scene_root != null and _packed_scene_root.has_method("set_toggle_light"):
+		_packed_scene_root.set_toggle_light(true)
+	var roi_means := PackedFloat32Array()
+	for _f in range(LIGHT_TOGGLE_RECONVERGE_FRAMES):
+		await _wait_render_frame()
+		_scene_frame += 1
+		var frame := get_viewport().get_texture().get_image()
+		frame.convert(Image.FORMAT_RGBA8)
+		roi_means.push_back(_measure_mean_linear_luma(frame, occluded.position.x, occluded.position.y, occluded.end.x, occluded.end.y))
+
+	# Converged reference = mean of the tail ROI means (well after the on-flip).
+	var tail := mini(LIGHT_TOGGLE_REFERENCE_TAIL_FRAMES, roi_means.size())
+	var ref_sum := 0.0
+	for i in range(roi_means.size() - tail, roi_means.size()):
+		ref_sum += roi_means[i]
+	var converged_ref := ref_sum / maxf(float(tail), 1.0)
+
+	# Threshold scales with the toggle depth (converged minus the decayed
+	# off-state), so the reconvergence count tracks the rebuild fraction rather
+	# than an absolute luma the exposure could shift.
+	var toggle_depth := converged_ref - off_roi_mean
+	var reconverge_delta := maxf(absf(toggle_depth) * LIGHT_TOGGLE_RECONVERGE_DELTA_FRACTION, LIGHT_TOGGLE_RECONVERGE_DELTA_FLOOR)
+
+	# Reconvergence frame: first frame whose ROI mean is within the delta of the
+	# converged reference. If it never settles, report the full window length.
+	var convergence_frames := LIGHT_TOGGLE_RECONVERGE_FRAMES
+	var curve := []
+	for i in range(roi_means.size()):
+		var d := absf(roi_means[i] - converged_ref)
+		curve.append({ "frame": i, "roi_mean_linear_luma": roi_means[i], "delta_vs_ref": d })
+	for i in range(roi_means.size()):
+		if absf(roi_means[i] - converged_ref) <= reconverge_delta:
+			convergence_frames = i
+			break
+
+	var curve_path := "%s/%s_light_toggle_curve.json" % [_output_dir, base_name]
+	_write_json(curve_path, {
+		"off_hold_frames": LIGHT_TOGGLE_OFF_HOLD_FRAMES,
+		"reconverge_frames": LIGHT_TOGGLE_RECONVERGE_FRAMES,
+		"reconverge_delta": reconverge_delta,
+		"reconverge_delta_fraction": LIGHT_TOGGLE_RECONVERGE_DELTA_FRACTION,
+		"converged_ref_linear_luma": converged_ref,
+		"off_roi_linear_luma": off_roi_mean,
+		"toggle_depth": toggle_depth,
+		"occluded_rect": [occluded.position.x, occluded.position.y, occluded.size.x, occluded.size.y],
+		"contact_rect": [contact.position.x, contact.position.y, contact.size.x, contact.size.y],
+		"series": curve,
+	})
+	return {
+		"light_toggle_convergence_frames": convergence_frames,
+		"light_toggle_leak_luma": leak_luma,
+		"light_toggle_contact_sharpness": contact_sharpness,
+		"light_toggle_converged_ref_linear_luma": converged_ref,
+		"light_toggle_off_roi_linear_luma": off_roi_mean,
+		"light_toggle_toggle_depth": toggle_depth,
+		"light_toggle_curve_path": ProjectSettings.globalize_path(curve_path),
+	}
+
+
+# Occluded and contact measurement rects for the light_toggle scene, projected
+# from world points the scene root exposes. The occluded rect is centered on the
+# floor point deep in the occluder umbra (indirect-only); the contact band is a
+# tall thin rect over the occluder base on the shadowed side. Falls back to
+# image-relative rects when the scene root or camera cannot project.
+func _light_toggle_rects(width: int, height: int) -> Dictionary:
+	var occ_center := Vector2(float(width) * 0.5, float(height) * 0.62)
+	var contact_center := Vector2(float(width) * 0.5, float(height) * 0.50)
+	if _camera != null and _packed_scene_root != null:
+		if _packed_scene_root.has_method("get_occluded_floor_point"):
+			var op: Vector3 = _packed_scene_root.get_occluded_floor_point()
+			if not _camera.is_position_behind(op):
+				var pr := _camera.unproject_position(op)
+				occ_center = Vector2(
+						clampf(pr.x, float(width) * 0.12, float(width) * 0.88),
+						clampf(pr.y, float(height) * 0.12, float(height) * 0.88))
+		if _packed_scene_root.has_method("get_occluder_floor_contact_point"):
+			var cp: Vector3 = _packed_scene_root.get_occluder_floor_contact_point()
+			if not _camera.is_position_behind(cp):
+				var pr2 := _camera.unproject_position(cp)
+				contact_center = Vector2(
+						clampf(pr2.x, float(width) * 0.12, float(width) * 0.88),
+						clampf(pr2.y, float(height) * 0.10, float(height) * 0.90))
+	var occ_size := Vector2i(int(width * 0.16), int(height * 0.10))
+	var occ_pos := Vector2i(
+			clampi(int(occ_center.x) - occ_size.x / 2, 0, width - occ_size.x),
+			clampi(int(occ_center.y) - occ_size.y / 2, 0, height - occ_size.y))
+	# Tall thin contact band straddling the occluder base contact line.
+	var contact_size := Vector2i(int(width * 0.10), int(height * 0.22))
+	var contact_pos := Vector2i(
+			clampi(int(contact_center.x) - contact_size.x / 2, 0, width - contact_size.x),
+			clampi(int(contact_center.y) - contact_size.y / 2, 0, height - contact_size.y))
+	return {
+		"occluded": Rect2i(occ_pos, occ_size),
+		"contact": Rect2i(contact_pos, contact_size),
+	}
+
+
+# Mean magnitude of the vertical luma gradient down the rect: for each interior
+# pixel, |luma(x, y+1) - luma(x, y-1)|, averaged. A crisp contact darkening (a
+# dark line where the occluder meets the floor) produces a strong vertical
+# gradient; a leaked/washed-out contact produces a weak one.
+func _measure_vertical_luma_gradient(image: Image, rect: Rect2i) -> float:
+	var x0 := maxi(rect.position.x, 0)
+	var x1 := mini(rect.end.x, image.get_width())
+	var y0 := maxi(rect.position.y, 1)
+	var y1 := mini(rect.end.y, image.get_height() - 1)
+	var sum := 0.0
+	var count := 0
+	for y in range(y0, y1):
+		for x in range(x0, x1):
+			sum += absf(_luma(image.get_pixel(x, y + 1)) - _luma(image.get_pixel(x, y - 1)))
+			count += 1
+	return sum / maxf(float(count), 1.0)
+
+
 # Penumbra-band measurement for the committed sun_penumbra_ramp scene. The ROI is a horizontal
 # strip across the soft shadow edge; columns run from fully lit to fully occluded.
 # penumbra_width_px = count of columns whose normalized luma is in the transition band [0.1,0.9];
@@ -4493,6 +4699,9 @@ func _compare_metrics(metrics: Dictionary, expected: Dictionary) -> Array[String
 	_check_max_threshold(metrics, thresholds, "light_grid_static_tail_delta", failures)
 	_check_max_threshold(metrics, thresholds, "light_grid_toggle_recovery_frames", failures)
 	_check_max_threshold(metrics, thresholds, "light_grid_toggle_far_rect_delta", failures)
+	_check_max_threshold(metrics, thresholds, "light_toggle_convergence_frames", failures)
+	_check_max_threshold(metrics, thresholds, "light_toggle_leak_luma", failures)
+	_check_min_threshold(metrics, thresholds, "light_toggle_contact_sharpness", failures)
 	_check_max_threshold(metrics, thresholds, "sun_penumbra_width_px", failures)
 	_check_max_threshold(metrics, thresholds, "sun_penumbra_band_hf", failures)
 	_check_max_threshold(metrics, thresholds, "sun_penumbra_lit_luma", failures)

@@ -20,6 +20,7 @@ extends SceneTree
 #   res://scenes/reflective_pool.tscn
 #   res://scenes/fog_corridor.tscn
 #   res://scenes/light_grid.tscn
+#   res://scenes/light_toggle.tscn
 #   res://scenes/sun_penumbra_ramp.tscn
 #   res://scenes/area_light_wall.tscn
 #   res://scenes/textured_area.tscn
@@ -29,6 +30,7 @@ const SPECULAR_ANIM_SCRIPT := "res://scripts/specular_motion_anim.gd"
 const REFLECTIVE_ANIM_SCRIPT := "res://scripts/reflective_pool_anim.gd"
 const FOG_METRIC_SCRIPT := "res://scripts/fog_corridor_metric.gd"
 const LIGHT_GRID_ANIM_SCRIPT := "res://scripts/light_grid_anim.gd"
+const LIGHT_TOGGLE_ANIM_SCRIPT := "res://scripts/light_toggle_anim.gd"
 
 
 func _initialize() -> void:
@@ -38,6 +40,7 @@ func _initialize() -> void:
 	ok = _save_scene(_build_reflective_pool_scene(), "%s/reflective_pool.tscn" % SCENES_DIR) and ok
 	ok = _save_scene(_build_fog_corridor_scene(), "%s/fog_corridor.tscn" % SCENES_DIR) and ok
 	ok = _save_scene(_build_light_grid_scene(), "%s/light_grid.tscn" % SCENES_DIR) and ok
+	ok = _save_scene(_build_light_toggle_scene(), "%s/light_toggle.tscn" % SCENES_DIR) and ok
 	ok = _save_scene(_build_sun_penumbra_ramp_scene(), "%s/sun_penumbra_ramp.tscn" % SCENES_DIR) and ok
 	ok = _save_scene(build_area_light_wall(), "%s/area_light_wall.tscn" % SCENES_DIR) and ok
 	ok = _save_scene(build_textured_area(), "%s/textured_area.tscn" % SCENES_DIR) and ok
@@ -674,6 +677,124 @@ func _build_light_grid_scene() -> Node3D:
 			Vector3(0, 0.870023, -0.493013),
 			Vector3(0, 0.493013, 0.870023),
 			Vector3(0.0, 1.7, 3.0))
+	root.add_child(camera)
+	_claim(root, camera)
+
+	return root
+
+
+# --- Light toggle -----------------------------------------------------------
+# Diffuse reconvergence + indirect-occlusion scene. A small enclosed mid-gray
+# Lambert room (floor at y=0, walls at x = +/-3 and z = +/-3, ceiling at y=4) so
+# bounce light is the dominant fill. A single bright OmniLight3D named KeyLight
+# sits high and toward +Z; a thin static wall-like Occluder stands on the floor
+# at the room center between the key light and the back of the room. The key
+# light's direct illumination lands on the floor and walls, but the Occluder
+# blocks it from the floor strip directly behind it (toward -Z), so that strip
+# is lit almost entirely by indirect bounce. A dim, always-on FillLight keeps a
+# little base illumination so the indirect path stays exercised even with the
+# key light off (and so neither the fpt nor the hybrid frame goes fully black on
+# the off frame, which would make the reconvergence unmeasurable).
+#
+# The harness flips KeyLight off then on and times how many frames the indirect
+# behind the Occluder takes to re-settle (light_toggle_convergence_frames). The
+# floor strip in the umbra is the leak ROI (light_toggle_leak_luma): with the
+# key light on it should stay dark relative to the directly-lit floor, and a GI
+# leak through or around the occluder shows up as extra luma there. The dark
+# contact line where the Occluder base meets the floor is the contact-occlusion
+# ROI (light_toggle_contact_sharpness): a crisp ambient-occlusion-like darkening
+# at the base reads as a strong vertical luma gradient there.
+#
+# The scene is static (no orbit, no moving geometry): the only state change is
+# the scripted toggle, so a captured run reproduces frame for frame. The camera
+# transform is authored directly because look_at() errors on a root that is
+# never inside a scene tree.
+func _build_light_toggle_scene() -> Node3D:
+	var root := Node3D.new()
+	root.name = "LightToggle"
+	root.set_script(load(LIGHT_TOGGLE_ANIM_SCRIPT))
+
+	var env := _make_rtgi_environment()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.004, 0.004, 0.005)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_DISABLED
+	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	env.tonemap_exposure = 1.0
+	env.rtgi_max_bounces = 4
+	root.add_child(_make_world_environment(env))
+	_claim(root, root.get_node("RTGIWorldEnvironment"))
+
+	# Darker Lambert shell (albedo 0.32). A bright shell turns the room into a
+	# uniform multi-bounce box where the umbra behind the occluder barely darkens
+	# when the key light toggles (the global bounce floor swamps the key light's
+	# first-bounce contribution). A darker shell keeps the global bounce modest so
+	# the key light's bounce into the umbra is the dominant, measurable variable.
+	var gray := _make_lambert_material(Color(0.32, 0.32, 0.32))
+	var occluder_mat := _make_lambert_material(Color(0.22, 0.22, 0.22))
+
+	# Room interior: x in [-3, 3], floor at y = 0, ceiling at y = 4, z in [-3, 3].
+	var t := 0.1
+	_add_box(root, root, "Floor", Vector3(0.0, -t * 0.5, 0.0), Vector3(6.0, t, 6.0), gray)
+	_add_box(root, root, "Ceiling", Vector3(0.0, 4.0 + t * 0.5, 0.0), Vector3(6.0, t, 6.0), gray)
+	_add_box(root, root, "BackWall", Vector3(0.0, 2.0, -3.0 - t * 0.5), Vector3(6.0, 4.0 + t * 2.0, t), gray)
+	_add_box(root, root, "LeftWall", Vector3(-3.0 - t * 0.5, 2.0, 0.0), Vector3(t, 4.0 + t * 2.0, 6.0 + t * 2.0), gray)
+	_add_box(root, root, "RightWall", Vector3(3.0 + t * 0.5, 2.0, 0.0), Vector3(t, 4.0 + t * 2.0, 6.0 + t * 2.0), gray)
+
+	# Static occluder: a thin wide slab standing on the floor at the room center,
+	# 2.4 m wide in X, 1.8 m tall, 0.2 m deep in Z, centered at (0, 0.9, -0.5).
+	# The key light is in front of and above it (+Z, +Y), so its shadow of the
+	# occluder falls on the floor strip toward -Z (the back of the room). That
+	# strip is the indirect-only region the leak and reconvergence metrics read.
+	_add_box(root, root, "Occluder", Vector3(0.0, 0.9, -0.5), Vector3(2.4, 1.8, 0.2), occluder_mat)
+
+	# Bright key light, high and toward +Z so the occluder casts a clear shadow
+	# toward -Z. shadow_enabled + light_size above the RT cutoff so the contact
+	# shadow is a real traced occlusion, not an ambient-darkening approximation.
+	var key := OmniLight3D.new()
+	key.name = "KeyLight"
+	key.position = Vector3(0.0, 3.3, 1.6)
+	key.light_energy = 9.0
+	key.light_size = 0.12
+	key.omni_range = 12.0
+	key.shadow_enabled = true
+	root.add_child(key)
+	_claim(root, key)
+
+	# Faint always-on fill so the scene keeps a small base level when the key
+	# light is off (the indirect path must stay exercised on the off frame, and a
+	# fully black frame would make the reconvergence delta meaningless). It is
+	# kept much dimmer than the key light so the umbra behind the occluder is
+	# dominated by the key light's bounce, not the fill: toggling the key light
+	# then drives a large umbra-indirect transient the reconvergence count reads.
+	# Placed low toward the camera so it does not itself fill the back shadow.
+	var fill := OmniLight3D.new()
+	fill.name = "FillLight"
+	fill.position = Vector3(0.0, 1.0, 2.7)
+	fill.light_energy = 0.12
+	fill.light_size = 0.1
+	fill.omni_range = 9.0
+	fill.shadow_enabled = true
+	root.add_child(fill)
+	_claim(root, fill)
+
+	# Camera: eye at (0, 2.2, 4.2), target (0, 0.6, -1.0), so the occluder and the
+	# shadowed floor strip behind it are both framed. Forward = normalize(target -
+	# eye) = normalize(0, -1.6, -5.2) = (0, -0.294079, -0.955757). Camera -Z =
+	# forward, so z_col = -forward = (0, 0.294079, 0.955757). x_col = up.cross(z) =
+	# (1, 0, 0). y_col = z.cross(x) = (0, 0.955757, -0.294079). This constructor
+	# takes basis columns (x, y, z, origin). Authored verbatim (no look_at on a
+	# root that is never in a tree).
+	var camera := Camera3D.new()
+	camera.name = "LightToggleCamera"
+	camera.current = true
+	camera.fov = 60.0
+	camera.near = 0.05
+	camera.far = 60.0
+	camera.transform = Transform3D(
+			Vector3(1.0, 0.0, 0.0),
+			Vector3(0.0, 0.955757, -0.294079),
+			Vector3(0.0, 0.294079, 0.955757),
+			Vector3(0.0, 2.2, 4.2))
 	root.add_child(camera)
 	_claim(root, camera)
 

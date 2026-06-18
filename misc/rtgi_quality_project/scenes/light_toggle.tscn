@@ -1,0 +1,115 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/light_toggle_anim.gd" id="1_rqkr6"]
+
+[sub_resource type="Environment" id="Environment_23a31"]
+background_mode = 1
+background_color = Color(0.004, 0.004, 0.005, 1)
+ambient_light_source = 1
+rtgi_enabled = true
+rtgi_quality_preset = 0
+rtgi_disable_in_editor = false
+
+[sub_resource type="BoxMesh" id="BoxMesh_dcsoi"]
+size = Vector3(6, 0.1, 6)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ly1io"]
+cull_mode = 2
+diffuse_mode = 1
+specular_mode = 2
+albedo_color = Color(0.32, 0.32, 0.32, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_jyd33"]
+size = Vector3(6, 0.1, 6)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="BoxMesh" id="BoxMesh_hir18"]
+size = Vector3(6, 4.2, 0.1)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="BoxMesh" id="BoxMesh_v0nb0"]
+size = Vector3(0.1, 4.2, 6.2)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="BoxMesh" id="BoxMesh_yo7o8"]
+size = Vector3(0.1, 4.2, 6.2)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="BoxMesh" id="BoxMesh_0wugk"]
+size = Vector3(2.4, 1.8, 0.2)
+subdivide_width = 3
+subdivide_height = 3
+subdivide_depth = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7uumf"]
+cull_mode = 2
+diffuse_mode = 1
+specular_mode = 2
+albedo_color = Color(0.22, 0.22, 0.22, 1)
+
+[node name="LightToggle" type="Node3D" unique_id=421517167]
+script = ExtResource("1_rqkr6")
+
+[node name="RTGIWorldEnvironment" type="WorldEnvironment" parent="." unique_id=1991025074]
+environment = SubResource("Environment_23a31")
+
+[node name="Floor" type="MeshInstance3D" parent="." unique_id=753338308]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+mesh = SubResource("BoxMesh_dcsoi")
+surface_material_override/0 = SubResource("StandardMaterial3D_ly1io")
+
+[node name="Ceiling" type="MeshInstance3D" parent="." unique_id=550089016]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.05, 0)
+mesh = SubResource("BoxMesh_jyd33")
+surface_material_override/0 = SubResource("StandardMaterial3D_ly1io")
+
+[node name="BackWall" type="MeshInstance3D" parent="." unique_id=2037696453]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -3.05)
+mesh = SubResource("BoxMesh_hir18")
+surface_material_override/0 = SubResource("StandardMaterial3D_ly1io")
+
+[node name="LeftWall" type="MeshInstance3D" parent="." unique_id=1602210276]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.05, 2, 0)
+mesh = SubResource("BoxMesh_v0nb0")
+surface_material_override/0 = SubResource("StandardMaterial3D_ly1io")
+
+[node name="RightWall" type="MeshInstance3D" parent="." unique_id=2112400763]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.05, 2, 0)
+mesh = SubResource("BoxMesh_yo7o8")
+surface_material_override/0 = SubResource("StandardMaterial3D_ly1io")
+
+[node name="Occluder" type="MeshInstance3D" parent="." unique_id=490141111]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, -0.5)
+mesh = SubResource("BoxMesh_0wugk")
+surface_material_override/0 = SubResource("StandardMaterial3D_7uumf")
+
+[node name="KeyLight" type="OmniLight3D" parent="." unique_id=921607226]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.3, 1.6)
+light_energy = 9.0
+light_size = 0.12
+shadow_enabled = true
+omni_range = 12.0
+
+[node name="FillLight" type="OmniLight3D" parent="." unique_id=1989545441]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 2.7)
+light_energy = 0.12
+light_size = 0.1
+shadow_enabled = true
+omni_range = 9.0
+
+[node name="LightToggleCamera" type="Camera3D" parent="." unique_id=1012510850]
+transform = Transform3D(1, 0, 0, 0, 0.955757, 0.294079, 0, -0.294079, 0.955757, 0, 2.2, 4.2)
+current = true
+fov = 60.0
+far = 60.0

@@ -151,6 +151,17 @@
 				"max_light_grid_toggle_far_rect_delta": 0.0006
 			}
 		},
+		"light_toggle": {
+			"_note": "Diffuse reconvergence + indirect-occlusion scene: one bright key light, a thin static occluder on the floor, and the indirect-only floor strip in the occluder umbra. The harness flips the key light off (held 45 frames so the RTGI history fully decays), then on, and measures the umbra-indirect rebuild. The metrics are regression sentinels, not absolute targets, gated against the pinned-120 --rtgi-modes=fpt,hybrid baseline (fpt is the worse case for both luma metrics). light_toggle_convergence_frames is the recovery sentinel: this fork's diffuse resolve re-lights the umbra in a single frame, so a healthy binary reads 0; the max-8 cap (matching light_grid_toggle_recovery_frames) catches a regression that stalls the rebuild for several frames. light_toggle_leak_luma is the occlusion-leak sentinel (mean LINEAR luma of the umbra ROI, indirect-only with the key light on): fpt 0.0895, hybrid 0.0688; the max cap sits at the fpt value plus ~28% so a leak that brightens the shadowed strip trips it. light_toggle_contact_sharpness is the contact-occlusion sentinel (mean vertical luma gradient across the dark line at the occluder base): fpt 0.00486, hybrid 0.00501; the min cap sits at the lower value times 0.75 so a washed-out, leaked contact trips it. The firefly caps stay generous: the only noise is the traced contact shadow, which must not produce fireflies.",
+			"thresholds": {
+				"max_dark_fireflies_per_megapixel": 2000.0,
+				"max_full_frame_fireflies_per_megapixel": 2000.0,
+				"max_temporal_sparkle_per_megapixel_max": 60.0,
+				"max_light_toggle_convergence_frames": 8.0,
+				"max_light_toggle_leak_luma": 0.1150,
+				"min_light_toggle_contact_sharpness": 0.00365
+			}
+		},
 		"sun_penumbra_ramp": {
 			"_note": "Soft contact-shadow characterization scene (a low, large-disc sun behind a thin wall, casting a long penumbra across a neutral floor). It pins its own short canonical settle of 16 frames: the structural edge width (sun_penumbra_width_px) is settled there (raster reads 29 columns, the ray-traced pass reads about 38), while sun_penumbra_band_hf (the mean per-column vertical scatter of the soft shadow edge, the within-column per-sample shadow noise) captures the residual shadow noise at that settle. width_px and band_hf now gate: max_sun_penumbra_width_px 40 admits both the raster 29 and the ray-traced edge with headroom, and max_sun_penumbra_band_hf 0.072 sits above the raster reference band noise (about 0.065, the same cap applies to the off mode) and well below the one-sample ray-traced baseline (about 0.080), so the gate admits the raster path and the multi-sampled ray-traced path while still catching a regression back to a single shadow sample. The solid-angle-scaled multi-sample shadow drops the ray-traced band_hf from about 0.080 (one sample) to about 0.047 (balanced preset, two samples). lit_luma and occluded_luma stay report-only (generous caps) since their absolute level is not a quality gate.",
 			"thresholds": {
