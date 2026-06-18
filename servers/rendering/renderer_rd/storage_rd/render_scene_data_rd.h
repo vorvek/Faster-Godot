@@ -101,7 +101,13 @@ public:
 	// .a (the IBL/reflection energy scale) and the separate USE_REFLECTION_CUBEMAP specular path are
 	// left intact. Used by the RTGI radiance-probes Hybrid opaque pass so the GI composite is the
 	// sole environment-diffuse-indirect provider (no double-count). Defaults false (legacy behavior).
-	void update_ubo(RID p_uniform_buffer, RS::ViewportDebugDraw p_debug_mode, RID p_env, RID p_reflection_probe_instance, RID p_camera_attributes, bool p_pancake_shadows, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, float p_luminance_multiplier, bool p_opaque_render_buffers, bool p_apply_alpha_multiplier, bool p_suppress_environment_ambient = false);
+	// p_suppress_sharp_reflection_spec: when true (RTGI Hybrid ONLY), set
+	// SCENE_DATA_FLAGS_RTGI_SUPPRESS_SHARP_SPEC so the opaque pass fades out the raster
+	// environment-reflection + reflection-probe SPECULAR on the sharp band (roughness <= 0.35), where
+	// the RTGI sharp RT reflection is the sole provider. Distinct from p_suppress_environment_ambient
+	// (which also fires under FPT): the sharp-spec flag must stay OFF under FPT so its byte-identical
+	// raster path is untouched. Defaults false (legacy behavior).
+	void update_ubo(RID p_uniform_buffer, RS::ViewportDebugDraw p_debug_mode, RID p_env, RID p_reflection_probe_instance, RID p_camera_attributes, bool p_pancake_shadows, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, float p_luminance_multiplier, bool p_opaque_render_buffers, bool p_apply_alpha_multiplier, bool p_suppress_environment_ambient = false, bool p_suppress_sharp_reflection_spec = false);
 	virtual RID get_uniform_buffer() const override;
 
 	static uint32_t get_uniform_buffer_size_bytes() { return sizeof(UBODATA); }
@@ -122,6 +128,12 @@ private:
 		// RTGI radiance-probes composite can be the sole diffuse-indirect provider without a ~2x
 		// double-count. Set together with the env-ambient suppression (see update_ubo). Forward+ only.
 		SCENE_DATA_FLAGS_SUPPRESS_LIGHTMAP = 1 << 8,
+		// When set (RTGI Hybrid only), the opaque pass fades out the raster environment-reflection and
+		// reflection-probe SPECULAR on the sharp band (roughness <= 0.35) so the RTGI sharp RT reflection
+		// is the sole sharp-specular provider (otherwise mirrors double-count: RT reflection + raster
+		// cubemap reflection). The fade is the exact complement of the RT crossfade in the raygen, so the
+		// rough band (roughness >= 0.35) keeps its energy-correct raster spec untouched. Forward+ only.
+		SCENE_DATA_FLAGS_RTGI_SUPPRESS_SHARP_SPEC = 1 << 9,
 		SCENE_DATA_FLAGS_MAX
 	};
 

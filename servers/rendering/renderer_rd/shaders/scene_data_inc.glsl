@@ -12,6 +12,7 @@
 #define SCENE_DATA_FLAGS_USE_PANCAKE_SHADOWS (1 << 6)
 #define SCENE_DATA_FLAGS_IN_SHADOW_PASS (1 << 7)
 #define SCENE_DATA_FLAGS_SUPPRESS_LIGHTMAP (1 << 8)
+#define SCENE_DATA_FLAGS_RTGI_SUPPRESS_SHARP_SPEC (1 << 9)
 
 struct SceneData {
 	mat4 projection_matrix;

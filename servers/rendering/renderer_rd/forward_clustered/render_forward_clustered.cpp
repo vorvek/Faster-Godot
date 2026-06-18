@@ -1823,7 +1823,7 @@ void RenderForwardClustered::_render_list_with_draw_list(RenderListParameters *p
 	RD::get_singleton()->draw_list_end();
 }
 
-uint32_t RenderForwardClustered::_setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, bool p_opaque_render_buffers, bool p_apply_alpha_multiplier, bool p_pancake_shadows, bool p_disable_screen_space_effects, bool p_suppress_environment_ambient) {
+uint32_t RenderForwardClustered::_setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, bool p_opaque_render_buffers, bool p_apply_alpha_multiplier, bool p_pancake_shadows, bool p_disable_screen_space_effects, bool p_suppress_environment_ambient, bool p_suppress_sharp_reflection_spec) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
 	Ref<RenderSceneBuffersRD> rd = p_render_data->render_buffers;
@@ -1844,7 +1844,7 @@ uint32_t RenderForwardClustered::_setup_environment(const RenderDataRD *p_render
 
 	float luminance_multiplier = rd.is_valid() ? rd->get_luminance_multiplier() : 1.0;
 
-	p_render_data->scene_data->update_ubo(scene_state.uniform_buffers[uniform_buffer_index], get_debug_draw_mode(), env, reflection_probe_instance, p_render_data->camera_attributes, p_pancake_shadows, p_screen_size, p_viewport_size, p_default_bg_color, luminance_multiplier, p_opaque_render_buffers, p_apply_alpha_multiplier, p_suppress_environment_ambient);
+	p_render_data->scene_data->update_ubo(scene_state.uniform_buffers[uniform_buffer_index], get_debug_draw_mode(), env, reflection_probe_instance, p_render_data->camera_attributes, p_pancake_shadows, p_screen_size, p_viewport_size, p_default_bg_color, luminance_multiplier, p_opaque_render_buffers, p_apply_alpha_multiplier, p_suppress_environment_ambient, p_suppress_sharp_reflection_spec);
 
 	// now do implementation UBO
 
@@ -3236,7 +3236,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				}
 			}
 			if (environment_get_ssr_enabled(p_render_data->environment)) {
-				if (!p_render_data->transparent_bg) {
+				if (rt_radiance_probes_composite) {
+					// RTGI owns specular reflections (RT sharp reflections under Hybrid, the
+					// path-traced primary under FPT); running SSR on top would double-count the
+					// same reflection. Same RTGI-owns-the-channel rule as VoxelGI/SDFGI above.
+					WARN_PRINT_ONCE("Screen-space reflections are disabled while RTGI is active; RTGI provides specular reflections.");
+				} else if (!p_render_data->transparent_bg) {
 					scene_features.set(SCENE_FEATURE_SSR);
 				} else {
 					WARN_PRINT_ONCE("Screen-space reflections are not supported in viewports with a transparent background. Disabling SSR in transparent viewport.");
@@ -3874,7 +3879,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				rtgi_resolve != nullptr && rtgi_resolve->get_diffuse_gi().is_valid() &&
 				rb_data.is_valid() && rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS);
 
-		uint32_t opaque_pass_uniform_buffer_index = _setup_environment(p_render_data, is_reflection_probe, screen_size, screen_size, p_default_bg_color, true, using_motion_pass, false, scene_features.rt, suppress_environment_ambient_for_radiance_probes_hybrid);
+		// HYBRID-ONLY raster sharp-spec suppression. suppress_environment_ambient_for_radiance_probes_hybrid
+		// fires under BOTH Hybrid and FPT (it requires rt_radiance_probes_composite, which is true for both),
+		// so ANDing !rt_radiance_probes_fpt narrows it to Hybrid (mode 2). This is the exact gate that drives
+		// the WS6 sharp-spec RT injection (rt_radiance_probes_composite && !rt_radiance_probes_fpt), so the
+		// raster reflection fades out precisely where (and only where) the RT sharp reflection fades in. Under
+		// FPT the raster primary is REPLACED and never reaches the beauty, so its spec must stay byte-identical.
+		const bool suppress_sharp_reflection_spec_for_hybrid =
+				suppress_environment_ambient_for_radiance_probes_hybrid && !rt_radiance_probes_fpt;
+		uint32_t opaque_pass_uniform_buffer_index = _setup_environment(p_render_data, is_reflection_probe, screen_size, screen_size, p_default_bg_color, true, using_motion_pass, false, scene_features.rt, suppress_environment_ambient_for_radiance_probes_hybrid, suppress_sharp_reflection_spec_for_hybrid);
 
 		rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_OPAQUE, p_render_data, radiance_texture, samplers, opaque_pass_uniform_buffer_index, true);
 

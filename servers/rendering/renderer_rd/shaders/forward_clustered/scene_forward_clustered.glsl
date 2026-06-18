@@ -2140,6 +2140,22 @@ void fragment_shader(in SceneData scene_data) {
 #endif
 	}
 
+	// RTGI radiance-probes Hybrid (mode 2) ONLY: fade out the raster indirect reflection SPECULAR on the
+	// sharp band so the RTGI sharp RT reflection (injected into the GI composite by the WS6 specular-only
+	// pass) is the sole sharp-specular provider -- otherwise a mirror double-counts (RT reflection AND this
+	// raster env-cubemap + reflection-probe reflection). indirect_specular_light here is the fully combined
+	// env-cubemap + reflection-probe indirect reflection (the { process reflections } block above merged
+	// the probes into it); the DIRECT analytical-light specular (direct_specular_light) and the diffuse/
+	// ambient path are separate variables and stay untouched. The weight is the EXACT complement of the RT
+	// crossfade in scene_raytracing_raygen.glsl (smoothstep(0.35, 0.25, roughness)): rough <= 0.25 -> 0
+	// (RT owns it, fully suppressed), rough in [0.25, 0.35] -> smooth 0->1 crossfade as RT fades out, and
+	// rough >= 0.35 -> 1 (the rough band's energy-correct raster spec is left UNCHANGED). The flag is set
+	// Hybrid-only on the CPU side (it is NOT set under FPT, which replaces the raster primary), so this is a
+	// pure no-op off / under FPT / under no-RTGI.
+	if (bool(scene_data.flags & SCENE_DATA_FLAGS_RTGI_SUPPRESS_SHARP_SPEC)) {
+		indirect_specular_light *= smoothstep(0.25, 0.35, roughness);
+	}
+
 	//finalize ambient light here
 	{
 		ambient_light *= ao;

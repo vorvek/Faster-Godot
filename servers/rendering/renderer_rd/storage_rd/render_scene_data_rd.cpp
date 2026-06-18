@@ -69,7 +69,7 @@ RID RenderSceneDataRD::create_uniform_buffer() {
 	return RD::get_singleton()->uniform_buffer_create(sizeof(UBODATA));
 }
 
-void RenderSceneDataRD::update_ubo(RID p_uniform_buffer, RS::ViewportDebugDraw p_debug_mode, RID p_env, RID p_reflection_probe_instance, RID p_camera_attributes, bool p_pancake_shadows, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, float p_luminance_multiplier, bool p_opaque_render_buffers, bool p_apply_alpha_multiplier, bool p_suppress_environment_ambient) {
+void RenderSceneDataRD::update_ubo(RID p_uniform_buffer, RS::ViewportDebugDraw p_debug_mode, RID p_env, RID p_reflection_probe_instance, RID p_camera_attributes, bool p_pancake_shadows, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, float p_luminance_multiplier, bool p_opaque_render_buffers, bool p_apply_alpha_multiplier, bool p_suppress_environment_ambient, bool p_suppress_sharp_reflection_spec) {
 	RendererSceneRenderRD *render_scene_render = RendererSceneRenderRD::get_singleton();
 
 	UBODATA ubo_data;
@@ -260,6 +260,22 @@ void RenderSceneDataRD::update_ubo(RID p_uniform_buffer, RS::ViewportDebugDraw p
 		ubo.ambient_light_color_energy[0] = 0.0;
 		ubo.ambient_light_color_energy[1] = 0.0;
 		ubo.ambient_light_color_energy[2] = 0.0;
+	}
+
+	// RTGI radiance-probes Hybrid (mode 2) ONLY: fade out the raster environment-reflection and
+	// reflection-probe SPECULAR on the sharp band (roughness <= 0.35) in the opaque pass. Under Hybrid
+	// the raster opaque is the beauty base, but the RTGI resolve also injects a sharp RT reflection on
+	// the same sharp pixels (the WS6 specular-only pass), so a mirror would double-count (RT reflection
+	// + raster cubemap/probe reflection). The fragment fades the indirect reflection specular with the
+	// EXACT complement of the RT crossfade in the raygen (smoothstep(0.25, 0.35, roughness)), so RT
+	// fades in as raster fades out -> continuous, energy-preserving handoff. The rough band
+	// (roughness >= 0.35) keeps its energy-correct raster spec untouched; only the indirect
+	// reflection specular is weighted (direct analytical-light specular and the diffuse/ambient path
+	// are unaffected). This is gated SEPARATELY from p_suppress_environment_ambient because that signal
+	// also fires under FPT (mode 1), where the raster primary is REPLACED and must stay byte-identical;
+	// this flag is requested Hybrid-only by the caller (rt_radiance_probes_composite && !FPT).
+	if (p_suppress_sharp_reflection_spec) {
+		ubo.flags |= SCENE_DATA_FLAGS_RTGI_SUPPRESS_SHARP_SPEC;
 	}
 
 	if (p_camera_attributes.is_valid()) {
