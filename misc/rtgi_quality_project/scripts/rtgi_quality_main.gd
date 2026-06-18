@@ -3110,21 +3110,21 @@ func _measure_hybrid_mirror_image(image: Image) -> Dictionary:
 
 
 # Rough-metal double-count measurement for the committed hybrid_rough_metal
-# scene. A large wall with metallic=0.31 / roughness=0.77 faces a bright sky
-# (background_energy_multiplier=3.0). Under Hybrid, the raster env cubemap
-# specular and the RTGI probe rough-spec fire independently and accumulate on
-# the same pixel, making the wall visibly brighter than the oracle (fpt-reference
-# full path tracer) which counts env-specular exactly once. surface_mean_luma
-# over the metal wall ROI is the double-count signal. The ratio
-# hybrid/oracle > 1.10 confirms the premise.
+# scene. A large horizontal floor with metallic=0.31 / roughness=0.77 under a
+# bright sky (background_energy_multiplier=3.0), viewed straight down. Under
+# Hybrid, the raster env cubemap specular and the RTGI probe rough-spec fire
+# independently and accumulate on the same pixel, making the floor visibly
+# brighter than the oracle (fpt-reference full path tracer) which counts
+# env-specular exactly once. surface_mean_luma over the floor ROI is the
+# double-count signal. The ratio hybrid/oracle > 1.10 confirms the premise.
 func _measure_hybrid_rough_metal_image(image: Image) -> Dictionary:
 	var width := image.get_width()
 	var height := image.get_height()
-	# Wall ROI: the metal wall fills roughly the upper 65% of the frame
-	# (sky visible above, floor below). The safe inner band avoids the sky
-	# boundary at the top and the floor crease at the bottom.
-	var wall_luma := _measure_mean_linear_luma(image, int(width * 0.15), int(height * 0.15), int(width * 0.85), int(height * 0.62))
-	var wall_fireflies := _count_isolated_hot_pixels(image, int(width * 0.15), int(height * 0.15), int(width * 0.85), int(height * 0.62))
+	# Floor ROI: the camera looks straight down so the rough-metal floor fills
+	# the entire frame. The central 60% band (20-80% in both axes) avoids the
+	# few-pixel edge where tone-mapping or mip-boundary artifacts can appear.
+	var wall_luma := _measure_mean_linear_luma(image, int(width * 0.20), int(height * 0.20), int(width * 0.80), int(height * 0.80))
+	var wall_fireflies := _count_isolated_hot_pixels(image, int(width * 0.20), int(height * 0.20), int(width * 0.80), int(height * 0.80))
 	return {
 		"hybrid_rough_metal_wall_luma": wall_luma,
 		"hybrid_rough_metal_wall_fireflies": wall_fireflies,
