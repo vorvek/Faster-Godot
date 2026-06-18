@@ -1,0 +1,71 @@
+[gd_scene format=3]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_rmsk1"]
+sky_top_color = Color(0.25, 0.45, 0.9, 1)
+sky_horizon_color = Color(0.7, 0.78, 0.92, 1)
+ground_bottom_color = Color(0.18, 0.18, 0.22, 1)
+ground_horizon_color = Color(0.55, 0.58, 0.65, 1)
+sun_angle_max = 30.0
+sun_curve = 0.09
+
+[sub_resource type="Sky" id="Sky_rmsk2"]
+sky_material = SubResource("ProceduralSkyMaterial_rmsk1")
+
+[sub_resource type="Environment" id="Environment_rmsk3"]
+background_mode = 2
+sky = SubResource("Sky_rmsk2")
+background_energy_multiplier = 3.0
+ambient_light_source = 2
+ambient_light_energy = 1.0
+tonemap_mode = 2
+rtgi_enabled = true
+rtgi_quality_preset = 0
+rtgi_mode = 2
+rtgi_max_bounces = 3
+rtgi_disable_in_editor = false
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_rmsk4"]
+size = Vector2(12, 10)
+subdivide_width = 3
+subdivide_depth = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_rmsk5"]
+albedo_color = Color(0.6, 0.56, 0.5, 1)
+metallic = 0.31
+roughness = 0.77
+
+[sub_resource type="BoxMesh" id="BoxMesh_rmsk6"]
+size = Vector3(12, 0.1, 12)
+subdivide_width = 2
+subdivide_height = 1
+subdivide_depth = 2
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_rmsk7"]
+albedo_color = Color(0.35, 0.34, 0.32, 1)
+roughness = 0.95
+
+[node name="HybridRoughMetal" type="Node3D"]
+
+[node name="RTGIWorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_rmsk3")
+
+[node name="MetalWall" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 5, -5)
+mesh = SubResource("PlaneMesh_rmsk4")
+surface_material_override/0 = SubResource("StandardMaterial3D_rmsk5")
+
+[node name="Floor" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+mesh = SubResource("BoxMesh_rmsk6")
+surface_material_override/0 = SubResource("StandardMaterial3D_rmsk7")
+
+[node name="SunLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.86602539, -0.35355338, 0.35355338, 0, 0.70710678, 0.70710678, -0.5, -0.61237246, 0.61237246, 0, 8, 0)
+light_energy = 2.5
+shadow_enabled = true
+
+[node name="HybridRoughMetalCamera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.98480773, 0.17364818, 0, -0.17364818, 0.98480773, 0, 1.8, 5.5)
+current = true
+fov = 60.0
+far = 60.0

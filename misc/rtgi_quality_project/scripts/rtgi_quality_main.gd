@@ -381,7 +381,7 @@ func _parse_args() -> void:
 			_convergence_frames = clampi(arg.trim_prefix("--rtgi-convergence-frames=").to_int(), 0, 128)
 		elif arg.begins_with("--rtgi-scene="):
 			var requested_scene := arg.trim_prefix("--rtgi-scene=").to_lower()
-			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability", "offscreen_bounce", "cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid", "light_toggle", "sun_penumbra_ramp", "area_light_wall", "textured_area", "wall_leak", "motion_ghost"]:
+			if requested_scene in ["stress", "cornell", "convergence", "sponza", "sdfgi", "voxelgi", "lightmap", "lightprobe", "path_traced_sdfgi_exclusive", "many_light_emissive", "specular_stability", "offscreen_bounce", "cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid", "light_toggle", "sun_penumbra_ramp", "area_light_wall", "textured_area", "wall_leak", "motion_ghost", "hybrid_mirror", "hybrid_rough_metal"]:
 				_scene_mode = requested_scene
 			else:
 				push_warning("Unknown RTGI quality scene '%s'; using stress scene." % requested_scene)
@@ -577,7 +577,7 @@ func _build_scene() -> void:
 
 
 func _is_packed_test_scene() -> bool:
-	return _scene_mode in ["cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid", "light_toggle", "sun_penumbra_ramp", "area_light_wall", "textured_area", "wall_leak", "motion_ghost"]
+	return _scene_mode in ["cornell_box", "specular_motion", "reflective_pool", "fog_corridor", "light_grid", "light_toggle", "sun_penumbra_ramp", "area_light_wall", "textured_area", "wall_leak", "motion_ghost", "hybrid_mirror", "hybrid_rough_metal"]
 
 
 # Loads one of the committed static test scenes (cornell_box, specular_motion,
@@ -1305,6 +1305,10 @@ func _capture_and_measure_config(base_suffix: String) -> Array[String]:
 		metrics.merge(_measure_wall_leak(final_image, base_name), true)
 	elif _scene_mode == "motion_ghost":
 		metrics.merge(await _measure_motion_ghost(final_image, base_name), true)
+	elif _scene_mode == "hybrid_mirror":
+		metrics.merge(_measure_hybrid_mirror_image(final_image), true)
+	elif _scene_mode == "hybrid_rough_metal":
+		metrics.merge(_measure_hybrid_rough_metal_image(final_image), true)
 	elif _is_coexistence_scene():
 		metrics.merge(await _measure_coexistence_image(final_image, base_name), true)
 	metrics["denoise_strength"] = _denoise_strength
@@ -3072,6 +3076,58 @@ func _measure_reflective_pool_image(image: Image) -> Dictionary:
 		"reflective_pool_surface_mean_luma": pool_luma,
 		"reflective_pool_reflection_fireflies": reflection_fireflies,
 		"reflective_pool_reflection_coverage": refl_cov,
+	}
+
+
+# Reflection-quality measurement for the committed hybrid_mirror scene. The
+# scene is structurally identical to reflective_pool but uses rtgi_mode=2
+# (Hybrid). Under the current engine a Hybrid near-mirror receives NO RT
+# specular channel, so the reflection coverage over the pool ROI should be LOW
+# (the emitters are visible only as NEE highlights) compared to the fpt-reference
+# oracle that does trace mirror rays. This gap is the WS8 "headline early" gate:
+# after the fix, coverage should rise to match the oracle. The surface_mean_luma
+# and edge_energy tracks are kept as regression baselines alongside the sentinel.
+func _measure_hybrid_mirror_image(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var reflection := _measure_detail_region(image, int(width * 0.20), int(height * 0.56), int(width * 0.80), int(height * 0.96))
+	var pool_luma := _measure_mean_luma(image, int(width * 0.10), int(height * 0.60), int(width * 0.90), int(height * 0.98))
+	var reflection_fireflies := _count_isolated_hot_pixels(image, int(width * 0.10), int(height * 0.56), int(width * 0.90), int(height * 0.98))
+	# Reflection coverage: fraction of the pool ROI above 0.15 luma. Without RT
+	# specular under Hybrid, this collapses to a few NEE slivers (<5%). The oracle
+	# (fpt-reference) fills the pool with reflected emitter content (~50-100%).
+	# The gate is deliberately permissive on the floor (0.05) so a correctly dim
+	# scene does not trip it, and tight enough that the no-reflection state is
+	# clearly below the oracle level.
+	var refl_cov := _measure_bright_coverage(image, int(width * 0.20), int(height * 0.56), int(width * 0.80), int(height * 0.96), 0.15)
+	return {
+		"hybrid_mirror_reflection_edge_energy": reflection["edge_energy"],
+		"hybrid_mirror_reflection_luma_stddev": reflection["luma_stddev"],
+		"hybrid_mirror_surface_mean_luma": pool_luma,
+		"hybrid_mirror_reflection_fireflies": reflection_fireflies,
+		"hybrid_mirror_reflection_coverage": refl_cov,
+	}
+
+
+# Rough-metal double-count measurement for the committed hybrid_rough_metal
+# scene. A large wall with metallic=0.31 / roughness=0.77 faces a bright sky
+# (background_energy_multiplier=3.0). Under Hybrid, the raster env cubemap
+# specular and the RTGI probe rough-spec fire independently and accumulate on
+# the same pixel, making the wall visibly brighter than the oracle (fpt-reference
+# full path tracer) which counts env-specular exactly once. surface_mean_luma
+# over the metal wall ROI is the double-count signal. The ratio
+# hybrid/oracle > 1.10 confirms the premise.
+func _measure_hybrid_rough_metal_image(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	# Wall ROI: the metal wall fills roughly the upper 65% of the frame
+	# (sky visible above, floor below). The safe inner band avoids the sky
+	# boundary at the top and the floor crease at the bottom.
+	var wall_luma := _measure_mean_linear_luma(image, int(width * 0.15), int(height * 0.15), int(width * 0.85), int(height * 0.62))
+	var wall_fireflies := _count_isolated_hot_pixels(image, int(width * 0.15), int(height * 0.15), int(width * 0.85), int(height * 0.62))
+	return {
+		"hybrid_rough_metal_wall_luma": wall_luma,
+		"hybrid_rough_metal_wall_fireflies": wall_fireflies,
 	}
 
 
@@ -4951,6 +5007,13 @@ func _compare_metrics(metrics: Dictionary, expected: Dictionary) -> Array[String
 	_check_max_threshold(metrics, thresholds, "area_textured_mean_luma", failures)
 	_check_min_threshold(metrics, thresholds, "area_textured_mean_luma", failures)
 	_check_min_threshold(metrics, thresholds, "area_textured_structure_stddev", failures)
+	_check_min_threshold(metrics, thresholds, "hybrid_mirror_reflection_edge_energy", failures)
+	_check_min_threshold(metrics, thresholds, "hybrid_mirror_surface_mean_luma", failures)
+	_check_max_threshold(metrics, thresholds, "hybrid_mirror_reflection_fireflies", failures)
+	_check_min_threshold(metrics, thresholds, "hybrid_mirror_reflection_coverage", failures)
+	_check_max_threshold(metrics, thresholds, "hybrid_rough_metal_wall_luma", failures)
+	_check_min_threshold(metrics, thresholds, "hybrid_rough_metal_wall_luma", failures)
+	_check_max_threshold(metrics, thresholds, "hybrid_rough_metal_wall_fireflies", failures)
 	return failures
 
 
