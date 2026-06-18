@@ -812,10 +812,10 @@ void main() {
 	vec4 direction = inv_view * vec4(normalize(target.xyz), 0);
 
 	if (rt_hybrid_specular_only_mode()) {
-		// HYBRID specular-only screen pass (WS8). Hybrid's raster opaque pass owns the direct +
+		// HYBRID specular-only screen pass. Hybrid's raster opaque pass owns the direct +
 		// diffuse beauty and the probe composite owns the diffuse GI; this dispatch adds ONLY the
 		// ray-traced sharp/glossy reflection the raster cannot produce, writing the screen specular
-		// radiance the GI resolve already consumes. It reuses the SAME WS6 reflection trace the
+		// radiance the GI resolve already consumes. It reuses the same shared sharp-reflection trace the
 		// FPT-fast primary-direct path runs (rtgi_trace_and_resolve_specular_hit + WRC/NEE shade +
 		// the integrated specular response), but with NO NEE-direct, NO diffuse, and NO FPT spec-raw
 		// store -- the surface preamble below is the minimal subset of the FPT primary-direct preamble
@@ -894,7 +894,7 @@ void main() {
 
 		vec3 specular = vec3(0.0);
 
-		// --- WS6 reflection block (specular-only reuse) ---
+		// --- sharp-reflection block (specular-only reuse) ---
 		// Identical to the FPT-fast mirror channel: trace ONE reflection ray, shade its hit
 		// Lumen-style (NEE direct + WRC indirect + emissive; environment on a miss), fold it into
 		// the specular channel scaled by the integrated specular response, crossfade across the rough

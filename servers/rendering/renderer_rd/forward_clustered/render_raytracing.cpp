@@ -5654,7 +5654,7 @@ RTGIBackendDispatchResult RenderRaytracing::dispatch_hybrid_specular_backend(RTG
 	// (which carries RT_FLAG_HYBRID_SPECULAR_ONLY, so update_uniform_set binds the probe
 	// ray-result buffers 107/108 to the default RW buffer -- no phantom probe-buffer dependency --
 	// and forwards the WRC clipmap params for the mirror channel's WRC query; the raygen runs ONLY
-	// the WS6 reflection trace + the spec store). The dispatch itself is the existing full-screen
+	// the shared sharp-reflection trace + the spec store). The dispatch itself is the existing full-screen
 	// dispatch_path_trace_backend, run against the same context after a save/restore of its
 	// dispatch fields, exactly mirroring the proven primary-direct pattern (own set, shared
 	// context). It writes the SAME screen specular textures (binding 37 specular radiance,

@@ -91,7 +91,7 @@ public:
 		// formula (begin/end/curve) instead of the exponential model. Twin of the raster's
 		// sc_use_depth_fog() specialization constant.
 		RT_FLAG_FOG_DEPTH_MODE = (1 << 10),
-		// HYBRID-only specular-only screen dispatch. Runs the SAME WS6 reflection trace the
+		// HYBRID-only specular-only screen dispatch. Runs the same shared sharp-reflection trace the
 		// FPT primary-direct path runs (raster-surface + one reflection ray + WRC/NEE shade),
 		// but ONLY for low-roughness pixels, writing the screen specular textures the GI
 		// resolve already consumes. NO NEE-direct, NO diffuse, NO FPT spec-raw store: it does

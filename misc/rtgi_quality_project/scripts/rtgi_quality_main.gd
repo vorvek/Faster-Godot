@@ -3081,12 +3081,11 @@ func _measure_reflective_pool_image(image: Image) -> Dictionary:
 
 # Reflection-quality measurement for the committed hybrid_mirror scene. The
 # scene is structurally identical to reflective_pool but uses rtgi_mode=2
-# (Hybrid). Under the current engine a Hybrid near-mirror receives NO RT
-# specular channel, so the reflection coverage over the pool ROI should be LOW
-# (the emitters are visible only as NEE highlights) compared to the fpt-reference
-# oracle that does trace mirror rays. This gap is the WS8 "headline early" gate:
-# after the fix, coverage should rise to match the oracle. The surface_mean_luma
-# and edge_energy tracks are kept as regression baselines alongside the sentinel.
+# (Hybrid). Under Hybrid a near-mirror surface traces a sharp ray-traced
+# reflection, so the reflection coverage over the pool ROI is high (the emitters
+# fill the pool) and tracks close to the fpt-reference oracle that path-traces
+# the same reflection. The surface_mean_luma and edge_energy tracks are kept as
+# regression baselines alongside the coverage gate.
 func _measure_hybrid_mirror_image(image: Image) -> Dictionary:
 	var width := image.get_width()
 	var height := image.get_height()
@@ -3109,14 +3108,13 @@ func _measure_hybrid_mirror_image(image: Image) -> Dictionary:
 	}
 
 
-# Rough-metal double-count measurement for the committed hybrid_rough_metal
-# scene. A large horizontal floor with metallic=0.31 / roughness=0.77 under a
-# bright sky (background_energy_multiplier=3.0), viewed straight down. Under
-# Hybrid, the raster env cubemap specular and the RTGI probe rough-spec fire
-# independently and accumulate on the same pixel, making the floor visibly
-# brighter than the oracle (fpt-reference full path tracer) which counts
-# env-specular exactly once. surface_mean_luma over the floor ROI is the
-# double-count signal. The ratio hybrid/oracle > 1.10 confirms the premise.
+# Rough-metal guard for the committed hybrid_rough_metal scene. A large
+# horizontal floor with metallic=0.31 / roughness=0.77 under a bright sky
+# (background_energy_multiplier=3.0), viewed straight down. The roughness is
+# above the 0.35 sharp-band cutoff, so Hybrid leaves the raster environment
+# specular and the probe rough-spec untouched on this surface. hybrid_rough_metal_wall_luma
+# is the mean linear luma of the floor ROI (Hybrid ~0.77, fpt-reference oracle ~0.85).
+# The gate brackets that level so the rough band cannot regress to dim or blow out.
 func _measure_hybrid_rough_metal_image(image: Image) -> Dictionary:
 	var width := image.get_width()
 	var height := image.get_height()

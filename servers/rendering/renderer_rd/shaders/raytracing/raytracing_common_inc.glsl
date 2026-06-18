@@ -76,7 +76,7 @@ bool rt_primary_direct_mode() {
 	return (RT_FLAGS & RT_FLAG_PRIMARY_DIRECT) != 0u;
 }
 
-// The HYBRID specular-only screen dispatch. Runs ONLY the WS6 reflection trace (raster
+// The HYBRID specular-only screen dispatch. Runs ONLY the shared sharp-reflection trace (raster
 // surface + one reflection ray + WRC/NEE shade) for low-roughness pixels, writing the
 // screen specular textures the GI resolve consumes. No NEE-direct, no diffuse, no FPT
 // spec-raw store: the raster opaque pass owns the direct + diffuse under Hybrid. FPT never

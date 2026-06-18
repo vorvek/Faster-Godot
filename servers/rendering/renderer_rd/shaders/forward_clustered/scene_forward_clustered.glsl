@@ -2141,7 +2141,7 @@ void fragment_shader(in SceneData scene_data) {
 	}
 
 	// RTGI radiance-probes Hybrid (mode 2) ONLY: fade out the raster indirect reflection SPECULAR on the
-	// sharp band so the RTGI sharp RT reflection (injected into the GI composite by the WS6 specular-only
+	// sharp band so the RTGI sharp RT reflection (injected into the GI composite by the specular-only
 	// pass) is the sole sharp-specular provider -- otherwise a mirror double-counts (RT reflection AND this
 	// raster env-cubemap + reflection-probe reflection). indirect_specular_light here is the fully combined
 	// env-cubemap + reflection-probe indirect reflection (the { process reflections } block above merged

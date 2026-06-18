@@ -3882,7 +3882,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// HYBRID-ONLY raster sharp-spec suppression. suppress_environment_ambient_for_radiance_probes_hybrid
 		// fires under BOTH Hybrid and FPT (it requires rt_radiance_probes_composite, which is true for both),
 		// so ANDing !rt_radiance_probes_fpt narrows it to Hybrid (mode 2). This is the exact gate that drives
-		// the WS6 sharp-spec RT injection (rt_radiance_probes_composite && !rt_radiance_probes_fpt), so the
+		// the sharp-spec RT injection (rt_radiance_probes_composite && !rt_radiance_probes_fpt), so the
 		// raster reflection fades out precisely where (and only where) the RT sharp reflection fades in. Under
 		// FPT the raster primary is REPLACED and never reaches the beauty, so its spec must stay byte-identical.
 		const bool suppress_sharp_reflection_spec_for_hybrid =
@@ -4133,9 +4133,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				wrc_seed.seed_samples = spg_params.wrc_seed_samples;
 				rtgi_spg->run_accumulate(sfp, wrc_seed);
 
-				// HYBRID specular-only RT dispatch (WS8). Hybrid traces no full-screen screen rays,
-				// so sharp/glossy surfaces show only the dim raster reflection. This adds the SAME WS6
-				// reflection trace the FPT-fast primary-direct path runs, but ONLY for low-roughness
+				// HYBRID specular-only RT dispatch. Hybrid traces no full-screen screen rays,
+				// so sharp/glossy surfaces show only the dim raster reflection. This adds the same
+				// shared sharp-reflection trace the FPT-fast primary-direct path runs, but ONLY for low-roughness
 				// pixels and ONLY the reflection: it writes the screen specular radiance/guide/
 				// reprojection textures the GI resolve below already consumes (the resolve binds the RT
 				// specular reprojection when the texture is present, which rt_ensure_textures allocates
@@ -4208,7 +4208,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 						// (Hybrid, or the RT buffers torn down between the raygen and here) pass RID(): the
 						// resolve binds a TRANSPARENT neutral whose .w == 0 keeps the sharp branch inert.
 						const RID spec_reprojection = rb->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_RT_SPECULAR_REPROJECTION) ? rb_data->rt_get_specular_reprojection() : RID();
-						// HYBRID sharp-spec injection (WS8): the HYBRID specular-only screen dispatch above
+						// HYBRID sharp-spec injection: the HYBRID specular-only screen dispatch above
 						// wrote the RT-traced sharp reflection into RB_TEX_RT_SPECULAR_RADIANCE. Pass it +
 						// the Hybrid-only inject flag so INTEGRATE folds it into spec_gi for sharp pixels
 						// (the resolve's probe rough-spec only covers rough >= cutoff). FPT leaves the flag

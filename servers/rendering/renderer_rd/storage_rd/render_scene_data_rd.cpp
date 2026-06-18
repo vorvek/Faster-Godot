@@ -265,7 +265,7 @@ void RenderSceneDataRD::update_ubo(RID p_uniform_buffer, RS::ViewportDebugDraw p
 	// RTGI radiance-probes Hybrid (mode 2) ONLY: fade out the raster environment-reflection and
 	// reflection-probe SPECULAR on the sharp band (roughness <= 0.35) in the opaque pass. Under Hybrid
 	// the raster opaque is the beauty base, but the RTGI resolve also injects a sharp RT reflection on
-	// the same sharp pixels (the WS6 specular-only pass), so a mirror would double-count (RT reflection
+	// the same sharp pixels (the specular-only pass), so a mirror would double-count (RT reflection
 	// + raster cubemap/probe reflection). The fragment fades the indirect reflection specular with the
 	// EXACT complement of the RT crossfade in the raygen (smoothstep(0.25, 0.35, roughness)), so RT
 	// fades in as raster fades out -> continuous, energy-preserving handoff. The rough band

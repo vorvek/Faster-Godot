@@ -603,7 +603,7 @@ void resolve_integrate_main(ivec2 pos) {
 		vec3 F0 = mix(vec3(0.04), albedo, metalness); // dielectric 4% -> albedo-tinted for metals.
 		spec = pref * resolve_env_brdf_specular(F0, rough, NoV); // FssEss + FmsEms.
 	}
-	// SHARP-domain RT reflection injection (HYBRID, WS8). The probe-derived rough-spec above covers
+	// SHARP-domain RT reflection injection (HYBRID). The probe-derived rough-spec above covers
 	// only the rough domain (do_spec, rough >= cutoff). For the SHARP domain (rough < cutoff, a
 	// mirror/glossy reflector) the resolve historically wrote 0 (the deferred ray-traced path). When
 	// the HYBRID specular-only screen dispatch ran (pc.sharp_spec_inject != 0), it wrote the
