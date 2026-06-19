@@ -89,6 +89,13 @@
 #include "tests/core/math/test_vector3i.h"
 #include "tests/core/math/test_vector4.h"
 #include "tests/core/math/test_vector4i.h"
+
+// Local-only performance microbenchmarks (gitignored under tests/perf/). Included here, not as
+// a standalone .cpp TU, so the linker pulls these TEST_CASEs from the tests static library; a
+// separate object would be dropped (nothing references it) and its registrations would never
+// run. This edit is kept out of git status via: git update-index --skip-worktree tests/test_main.cpp
+#include "tests/perf/test_perf_containers.h"
+#include "tests/perf/test_perf_math.h"
 #include "tests/core/object/test_class_db.h"
 #include "tests/core/object/test_method_bind.h"
 #include "tests/core/object/test_object.h"
@@ -161,6 +168,7 @@
 #include "tests/servers/rendering/test_rtgi_spg_math.h"
 #include "tests/servers/rendering/test_rtgi_wrc_math.h"
 #include "tests/servers/rendering/test_shader_preprocessor.h"
+#include "tests/servers/rendering/test_spherical_rectangle.h"
 #include "tests/servers/test_nav_heap.h"
 #include "tests/servers/test_text_server.h"
 #include "tests/test_validate_testing.h"
