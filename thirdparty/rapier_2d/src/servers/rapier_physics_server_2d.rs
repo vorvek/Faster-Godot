@@ -333,6 +333,7 @@ impl IPhysicsServer2DExtension for RapierPhysicsServer2D {
         shape_idx: i32,
         enable: bool,
         margin: f32,
+        _direction: godot::prelude::Vector2,
     ) {
         self.implementation
             .body_set_shape_as_one_way_collision(body, shape_idx, enable, margin);

@@ -8,7 +8,7 @@ This directory is a trimmed copy of the upstream Rust source needed to build
 the 2D static library. SCons builds the static library into
 `bin/rapier_2d_static` and links it into the engine.
 
-`extension_api.faster_godot_4_6_3.json` is generated from the reduced
+`extension_api.faster_godot_4_7_0.json` is generated from the reduced
 Faster-Godot API and is passed to godot-rust through `api-custom-json`, so the
 Rust bindings do not expect classes or methods removed from this fork.
 
@@ -21,13 +21,18 @@ The build is intentionally offline:
   `b30c622534ac6c0c1010f88192b8834e95262e69`.
 
 Vendored godot-rust has local compatibility patches for this fork's reduced
-Godot 4.6 extension API:
+Godot 4.7 extension API:
 
 - Use pre-generated GDExtension Rust bindings instead of build-time libclang.
 - Remove an obsolete `FileAccess.create_temp` enum special case.
 - Accept namespaced enum constants emitted by this fork's API JSON.
 - Skip generated rendering methods whose raytracing-only parameter types are
   absent from the reduced API.
+- `Object.is_class` takes a `StringName` (was `String`) in 4.7.
+- `SceneTree.get_root` returns a non-nullable `Window` in 4.7.
+
+The 2D server override also follows 4.7's `body_set_shape_as_one_way_collision`,
+which gained a `direction` parameter.
 
 `RUST_CRATE_LICENSES.md` records the full `Cargo.lock` license inventory.
 `RELEASE_NOTICES.md` lists the notice and source materials that must accompany

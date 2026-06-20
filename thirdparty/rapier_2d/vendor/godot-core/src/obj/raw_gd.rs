@@ -116,7 +116,7 @@ impl<T: GodotClass> RawGd<T> {
         U: GodotClass,
     {
         self.is_null() // Null can be cast to anything.
-            || self.as_object_ref().is_class(&U::class_id().to_gstring())
+            || self.as_object_ref().is_class(&U::class_id().to_string_name())
     }
 
     /// Returns `Ok(cast_obj)` on success, `Err(self)` on error

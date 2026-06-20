@@ -11,7 +11,7 @@ Import("env_modules")
 
 RAPIER_VERSION = "v0.8.32"
 RAPIER_SOURCE_DIR = "#thirdparty/rapier_2d"
-RAPIER_API_JSON = "#thirdparty/rapier_2d/extension_api.faster_godot_4_6_3.json"
+RAPIER_API_JSON = "#thirdparty/rapier_2d/extension_api.faster_godot_4_7_0.json"
 RAPIER_FEATURES = [
     "simd-nightly",
     "serde-serialize",

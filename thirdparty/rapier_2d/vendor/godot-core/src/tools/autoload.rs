@@ -106,9 +106,7 @@ where
 
     let autoload_path = NodePath::from(&format!("/root/{autoload_name}"));
 
-    let root = scene_tree
-        .get_root()
-        .ok_or_else(|| ConvertError::new("scene tree root not available"))?;
+    let root = scene_tree.get_root();
 
     let autoload_node = root
         .try_get_node_as::<Node>(&autoload_path)
