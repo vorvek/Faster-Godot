@@ -157,6 +157,24 @@ scons platform=linuxbsd target=editor arch=x86_64 production=yes tests=no optimi
 The forked binaries use the `faster-godot` basename and receive the
 `.faster_godot` suffix.
 
+## Extension Development
+
+Faster-Godot ships a reduced, customized API, so GDExtensions need bindings that
+match this fork rather than stock Godot. Dump the fork's API with
+`faster-godot --headless --dump-extension-api` and point your binding generator
+at the result.
+
+For C++, use the godot-cpp fork at
+[vorvek/godot-cpp](https://github.com/vorvek/godot-cpp). It tracks upstream
+4.7-stable plus our local fixes and bundles the fork API as
+`gdextension/extension_api-4-7.json`, so you build with
+`custom_api_file=gdextension/extension_api-4-7.json`.
+
+For Rust, use [vorvek/gdext](https://github.com/vorvek/gdext). Enable the
+`api-custom-json` feature on the `godot` crate and set `GODOT4_GDEXTENSION_JSON`
+to the fork's `extension_api.json`. The `faster-godot/` directory there has a
+setup guide and a current API dump.
+
 ## Changes From Official Godot
 
 The short index is in [CHANGES_FROM_OFFICIAL.md](CHANGES_FROM_OFFICIAL.md).
