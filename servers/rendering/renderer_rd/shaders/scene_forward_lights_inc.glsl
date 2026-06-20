@@ -19,13 +19,6 @@
 #define SPEC_CONSTANT_LOOP_ANNOTATION
 #endif
 
-// area_lights_inc.glsl re-defines M_PI (to the same value). The including shader
-// (scene_forward_clustered_inc.glsl) already defines M_PI before this file is
-// included, so undef it first to avoid a macro redefinition error.
-#ifdef M_PI
-#undef M_PI
-#endif
-
 half D_GGX(half NoH, half roughness, hvec3 n, hvec3 h) {
 	half a = NoH * roughness;
 #ifdef EXPLICIT_FP16

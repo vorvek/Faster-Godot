@@ -91,10 +91,6 @@ layout(set = 0, binding = 12) uniform texture3D occlusion_texture;
 
 layout(set = 1, binding = 0) uniform texture2D area_light_atlas;
 
-layout(set = 0, binding = 12) uniform sampler linear_sampler_with_mipmaps;
-
-layout(set = 1, binding = 0) uniform texture2D area_light_atlas;
-
 layout(push_constant, std430) uniform Params {
 	vec3 grid_size;
 	uint max_cascades;
