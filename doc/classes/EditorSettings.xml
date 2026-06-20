@@ -1103,7 +1103,6 @@
 			The size of the font in the editor interface.
 		</member>
 		<member name="interface/editor/input/mouse_extra_buttons_navigate_history" type="bool" setter="" getter="">
-			If [code]true[/code], the mouse's additional side buttons will be usable to navigate in the script editor's file history. Set this to [code]false[/code] if you're using the side buttons for other purposes (such as a push-to-talk button in a VoIP program).
 		</member>
 		<member name="interface/editor/input/tablet_driver" type="int" setter="" getter="">
 			Overrides the tablet driver used by the editor.
@@ -1118,6 +1117,15 @@
 		</member>
 		<member name="interface/editor/localization/ui_layout_direction" type="int" setter="" getter="">
 			Editor UI default layout direction.
+		</member>
+		<member name="interface/editor/max_fps" type="int" setter="" getter="">
+			Maximum number of frames per second the editor can render. A value of [code]0[/code] means "no limit". The actual number of frames per second may still be below this value if the CPU or GPU cannot keep up with the editor logic and rendering.
+			Limiting the editor FPS can be useful to reduce system power consumption, heat, and noise emissions. It can also reduce the performance impact of a continuously redrawing editor viewport.
+			See also [member interface/editor/max_fps_while_playing].
+		</member>
+		<member name="interface/editor/max_fps_while_playing" type="int" setter="" getter="">
+			Maximum number of frames per second the editor can render while the project is running from the editor. A value of [code]0[/code] keeps using [member interface/editor/max_fps].
+			This can be useful to reduce the editor's CPU/GPU usage while testing the running project, especially when an editor viewport is expensive to redraw.
 		</member>
 		<member name="interface/editor/timers/dragging_hover_wait_seconds" type="float" setter="" getter="">
 			During a drag-and-drop, this is how long to wait over a UI element before it triggers a reaction (e.g. a section unfolds to show nested items).
@@ -1310,10 +1318,6 @@
 			Specify the multiplier to apply to the scale for the editor gizmo handles to improve usability on touchscreen devices.
 			[b]Note:[/b] Defaults to [code]1[/code] on non-touchscreen devices.
 		</member>
-		<member name="interface/touchscreen/touch_actions_panel" type="int" setter="" getter="">
-			A touch-friendly panel that provides easy access to common actions such as save, delete, undo, and redo without requiring a keyboard.
-			[b]Note:[/b] Only available in the Android and XR editor.
-		</member>
 		<member name="network/connection/check_for_updates" type="int" setter="" getter="">
 			Specifies how the engine should check for updates.
 			- [b]Disable Update Checks[/b] will block the engine from checking updates (see also [member network/connection/network_mode]).
@@ -1376,7 +1380,7 @@
 			[b]Note:[/b] Only supported when using Mbed TLS 3.0 or later (Linux distribution packages may be compiled against older system Mbed TLS packages), otherwise the maximum supported TLS version is always TLSv1.2.
 		</member>
 		<member name="project_manager/default_renderer" type="String" setter="" getter="">
-			The renderer type that will be checked off by default when creating a new project. Accepted strings are "forward_plus", "mobile" or "gl_compatibility".
+			The renderer type that will be checked off by default when creating a new project. Accepted string is "forward_plus".
 		</member>
 		<member name="project_manager/directory_naming_convention" type="int" setter="" getter="">
 			Directory naming convention for the project manager. Options are "No Convention" (project name is directory name), "kebab-case" (default), "snake_case", "camelCase", "PascalCase", or "Title Case".
@@ -1406,13 +1410,6 @@
 		</member>
 		<member name="run/platforms/linuxbsd/prefer_wayland" type="bool" setter="" getter="">
 			If [code]true[/code], on Linux/BSD, the editor will check for Wayland first instead of X11 (if available).
-		</member>
-		<member name="run/window_placement/android_window" type="int" setter="" getter="">
-			Specifies how the Play window is launched relative to the Android editor.
-			- [b]Auto (based on screen size)[/b] (default) will automatically choose how to launch the Play window based on the device and screen metrics. Defaults to [b]Same as Editor[/b] on phones and [b]Side-by-side with Editor[/b] on tablets.
-			- [b]Same as Editor[/b] will launch the Play window in the same window as the Editor.
-			- [b]Side-by-side with Editor[/b] will launch the Play window side-by-side with the Editor window.
-			[b]Note:[/b] Only available in the Android editor.
 		</member>
 		<member name="run/window_placement/game_embed_mode" type="int" setter="" getter="">
 			Overrides game embedding setting for all newly opened projects. If enabled, game embedding settings are not saved.

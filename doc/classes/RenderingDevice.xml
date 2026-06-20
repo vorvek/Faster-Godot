@@ -973,14 +973,6 @@
 				Returns [code]true[/code] if implementation supports using a texture of [param format] with the given [param sampler_filter].
 			</description>
 		</method>
-		<method name="screen_get_framebuffer_format" qualifiers="const">
-			<return type="int" />
-			<param index="0" name="screen" type="int" default="0" />
-			<description>
-				Returns the framebuffer format of the given screen.
-				[b]Note:[/b] Only the main [RenderingDevice] returned by [method RenderingServer.get_rendering_device] has a format. If called on a local [RenderingDevice], this method prints an error and returns [constant INVALID_ID].
-			</description>
-		</method>
 		<method name="screen_get_driver_resource">
 			<return type="int" />
 			<param index="0" name="resource" type="int" enum="RenderingDevice.DriverResource" />
@@ -989,6 +981,14 @@
 			<description>
 				Returns the native driver [param resource] for the given screen or window. This is intended for internal integrations that need swapchain, framebuffer, queue, or queue-family handles for the presented backbuffer.
 				[b]Note:[/b] Only the main [RenderingDevice] returned by [method RenderingServer.get_rendering_device] has screen resources.
+			</description>
+		</method>
+		<method name="screen_get_framebuffer_format" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="screen" type="int" default="0" />
+			<description>
+				Returns the framebuffer format of the given screen.
+				[b]Note:[/b] Only the main [RenderingDevice] returned by [method RenderingServer.get_rendering_device] has a format. If called on a local [RenderingDevice], this method prints an error and returns [constant INVALID_ID].
 			</description>
 		</method>
 		<method name="screen_get_height" qualifiers="const">
@@ -1425,6 +1425,12 @@
 			The native id of the data format of the texture.
 			- Vulkan: [code]VkFormat[/code].
 		</constant>
+		<constant name="DRIVER_RESOURCE_TEXTURE_DEVICE_MEMORY" value="13" enum="DriverResource">
+			- Vulkan: [code]VkDeviceMemory[/code] for the texture allocation.
+		</constant>
+		<constant name="DRIVER_RESOURCE_TEXTURE_USAGE_FLAGS" value="14" enum="DriverResource">
+			- Vulkan: [code]VkImageUsageFlags[/code] for the texture.
+		</constant>
 		<constant name="DRIVER_RESOURCE_SAMPLER" value="8" enum="DriverResource">
 			- Vulkan: [code]VkSampler[/code].
 		</constant>
@@ -1440,12 +1446,6 @@
 		</constant>
 		<constant name="DRIVER_RESOURCE_RENDER_PIPELINE" value="12" enum="DriverResource">
 			- Vulkan: [code]VkPipeline[/code].
-		</constant>
-		<constant name="DRIVER_RESOURCE_TEXTURE_DEVICE_MEMORY" value="13" enum="DriverResource">
-			- Vulkan: [code]VkDeviceMemory[/code] for the texture allocation.
-		</constant>
-		<constant name="DRIVER_RESOURCE_TEXTURE_USAGE_FLAGS" value="14" enum="DriverResource">
-			- Vulkan: [code]VkImageUsageFlags[/code] for the texture.
 		</constant>
 		<constant name="DRIVER_RESOURCE_COMMAND_BUFFER" value="15" enum="DriverResource">
 			Native command buffer handle. This is primarily intended for internal driver callbacks that already have a command buffer id.

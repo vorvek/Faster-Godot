@@ -1133,7 +1133,7 @@
 			<return type="RenderingDevice" />
 			<description>
 				Creates a RenderingDevice that can be used to do draw and compute operations on a separate thread. Cannot draw to the screen nor share data with the global RenderingDevice.
-				[b]Note:[/b] When using the OpenGL rendering driver or when running in headless mode, this function always returns [code]null[/code].
+				[b]Note:[/b] When running in headless mode, this function always returns [code]null[/code].
 			</description>
 		</method>
 		<method name="debug_canvas_item_get_rect">
@@ -1284,7 +1284,6 @@
 			<param index="0" name="enable" type="bool" />
 			<description>
 				If [param enable] is [code]true[/code], enables bicubic upscaling for glow which improves quality at the cost of performance. Equivalent to [member ProjectSettings.rendering/environment/glow/upscale_mode].
-				[b]Note:[/b] This setting is only effective when using the Forward+ or Mobile rendering methods, as Compatibility uses a different glow implementation.
 			</description>
 		</method>
 		<method name="environment_set_adjustment">
@@ -1635,17 +1634,15 @@
 		<method name="get_current_rendering_driver_name" qualifiers="const">
 			<return type="String" />
 			<description>
-				Returns the name of the current rendering driver. This can be [code]vulkan[/code], [code]d3d12[/code], [code]metal[/code], [code]opengl3[/code], [code]opengl3_es[/code], or [code]opengl3_angle[/code]. See also [method get_current_rendering_method].
-				When [member ProjectSettings.rendering/renderer/rendering_method] is [code]forward_plus[/code] or [code]mobile[/code], the rendering driver is determined by [member ProjectSettings.rendering/rendering_device/driver].
-				When [member ProjectSettings.rendering/renderer/rendering_method] is [code]gl_compatibility[/code], the rendering driver is determined by [member ProjectSettings.rendering/gl_compatibility/driver].
-				The rendering driver is also determined by the [code]--rendering-driver[/code] command line argument that overrides this project setting, or an automatic fallback that is applied depending on the hardware.
+				Returns the name of the current rendering driver. This fork supports [code]vulkan[/code] for the Forward+ renderer. See also [method get_current_rendering_method].
+				The rendering driver is also determined by the [code]--rendering-driver[/code] command line argument that overrides this project setting.
 			</description>
 		</method>
 		<method name="get_current_rendering_method" qualifiers="const">
 			<return type="String" />
 			<description>
-				Returns the name of the current rendering method. This can be [code]forward_plus[/code], [code]mobile[/code], or [code]gl_compatibility[/code]. See also [method get_current_rendering_driver_name].
-				The rendering method is determined by [member ProjectSettings.rendering/renderer/rendering_method], the [code]--rendering-method[/code] command line argument that overrides this project setting, or an automatic fallback that is applied depending on the hardware.
+				Returns the name of the current rendering method. This fork supports [code]forward_plus[/code]. See also [method get_current_rendering_driver_name].
+				The rendering method is determined by [member ProjectSettings.rendering/renderer/rendering_method] or the [code]--rendering-method[/code] command line argument that overrides this project setting.
 			</description>
 		</method>
 		<method name="get_default_clear_color">
@@ -1664,7 +1661,7 @@
 			<return type="RenderingDevice" />
 			<description>
 				Returns the global RenderingDevice.
-				[b]Note:[/b] When using the OpenGL rendering driver or when running in headless mode, this function always returns [code]null[/code].
+				[b]Note:[/b] When running in headless mode, this function always returns [code]null[/code].
 			</description>
 		</method>
 		<method name="get_rendering_info">
@@ -1720,14 +1717,13 @@
 			<description>
 				Returns the name of the video adapter (e.g. "GeForce GTX 1080/PCIe/SSE2").
 				[b]Note:[/b] When running a headless or server binary, this function returns an empty string.
-				[b]Note:[/b] On the web platform, some browsers such as Firefox may report a different, fixed GPU name such as "GeForce GTX 980" (regardless of the user's actual GPU model). This is done to make fingerprinting more difficult.
 			</description>
 		</method>
 		<method name="get_video_adapter_type" qualifiers="const">
 			<return type="int" enum="RenderingDevice.DeviceType" />
 			<description>
 				Returns the type of the video adapter. Since dedicated graphics cards from a given generation will [i]usually[/i] be significantly faster than integrated graphics made in the same generation, the device type can be used as a basis for automatic graphics settings adjustment. However, this is not always true, so make sure to provide users with a way to manually override graphics settings.
-				[b]Note:[/b] When using the OpenGL rendering driver or when running in headless mode, this function always returns [constant RenderingDevice.DEVICE_TYPE_OTHER].
+				[b]Note:[/b] When running in headless mode, this function always returns [code]RenderingDevice.DEVICE_TYPE_OTHER[/code].
 			</description>
 		</method>
 		<method name="get_video_adapter_vendor" qualifiers="const">
@@ -2029,6 +2025,22 @@
 			<param index="2" name="use_aabb_center" type="bool" />
 			<description>
 				Sets the sorting offset and switches between using the bounding box or instance origin for depth sorting.
+			</description>
+		</method>
+		<method name="instance_set_rt_procedural">
+			<return type="void" />
+			<param index="0" name="instance" type="RID" />
+			<param index="1" name="procedural" type="bool" />
+			<param index="2" name="aabb" type="AABB" />
+			<description>
+			</description>
+		</method>
+		<method name="instance_set_rt_procedural_bounds">
+			<return type="void" />
+			<param index="0" name="instance" type="RID" />
+			<param index="1" name="aabb_data" type="PackedFloat32Array" />
+			<param index="2" name="expose_bounds" type="bool" />
+			<description>
 			</description>
 		</method>
 		<method name="instance_set_scenario">
@@ -2416,8 +2428,8 @@
 			<return type="void" />
 			<param index="0" name="enable" type="bool" />
 			<description>
-				When using the Mobile renderer, [method material_set_use_debanding] can be used to enable or disable the debanding feature of 3D materials ([BaseMaterial3D] and [ShaderMaterial]).
-				[method material_set_use_debanding] has no effect when using the Compatibility or Forward+ renderer. In Forward+, [Viewport] debanding can be used instead.
+				[method material_set_use_debanding] is kept for API compatibility. Use [member Viewport.use_debanding] or [method viewport_set_use_debanding] for Forward+ rendering.
+				[method material_set_use_debanding] has no effect in this fork. Use [Viewport] debanding instead.
 				See also [member ProjectSettings.rendering/anti_aliasing/quality/use_debanding] and [method RenderingServer.viewport_set_use_debanding].
 			</description>
 		</method>
@@ -3377,6 +3389,25 @@
 				If [code]true[/code], particles use local coordinates. If [code]false[/code] they use global coordinates. Equivalent to [member GPUParticles3D.local_coords].
 			</description>
 		</method>
+		<method name="pathtracing_get_backend_capabilities" qualifiers="const">
+			<return type="Array" />
+			<description>
+				Returns runtime capability information for every path tracing backend. Each dictionary reports the backend identifier, display name, runtime availability, initialization state, runtime name, active RenderingDevice family/name/vendor, Vulkan integration path, resource exchange support, denoiser handoff support, and fallback reason when unavailable. The nested [code]availability_checks[/code] dictionary reports [code]backend_compiled[/code], [code]runtime_detected[/code], [code]device_supported[/code], [code]resource_exchange_supported[/code], [code]implementation_ready[/code], [code]failure[/code], [code]compile_failure_reason[/code], [code]runtime_failure_reason[/code], [code]device_failure_reason[/code], [code]resource_exchange_failure_reason[/code], and [code]implementation_failure_reason[/code], where [code]failure[/code] is [code]"none"[/code] only when the backend is available.
+			</description>
+		</method>
+		<method name="pathtracing_get_backend_status" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				Returns runtime status for the path tracing backend, including the requested backend, active backend, runtime availability, initialization state, fallback backend target, fallback reason, and capability dictionaries. [code]fallback_backend[/code] is [code]-1[/code] when no fallback is active.
+			</description>
+		</method>
+		<method name="pathtracing_get_backend_status_for_backend" qualifiers="const">
+			<return type="Dictionary" />
+			<param index="0" name="backend" type="int" enum="RenderingServer.PathtracingBackend" />
+			<description>
+				Returns the status and fallback decision that would apply if [param backend] were requested, without mutating the active environment or waiting for a frame to render. This is useful for UI and tools that need to show whether a vendor backend is actually available before selection.
+			</description>
+		</method>
 		<method name="positional_soft_shadow_filter_set_quality">
 			<return type="void" />
 			<param index="0" name="quality" type="int" enum="RenderingServer.ShadowQuality" />
@@ -3603,6 +3634,7 @@
 			<description>
 				If [param generate] is [code]true[/code], generates debug wireframes for all meshes that are loaded when using the Compatibility renderer. By default, the engine does not generate debug wireframes at runtime, since they slow down loading of assets and take up VRAM.
 				[b]Note:[/b] You must call this method before loading any meshes when using the Compatibility renderer. Otherwise, wireframes will not be used.
+				If [param generate] is [code]true[/code], generates debug wireframes for all meshes that are loaded. By default, the engine does not generate debug wireframes at runtime, since they slow down loading of assets and take up VRAM.
 			</description>
 		</method>
 		<method name="set_default_clear_color">
@@ -4094,6 +4126,24 @@
 				[b]Note:[/b] The equivalent node is [Viewport].
 			</description>
 		</method>
+		<method name="viewport_get_frame_generation_latency" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="viewport" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="viewport_get_frame_generation_output_fps" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="viewport" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="viewport_get_frame_generation_real_fps" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="viewport" type="RID" />
+			<description>
+			</description>
+		</method>
 		<method name="viewport_get_measured_render_time_cpu" qualifiers="const">
 			<return type="float" />
 			<param index="0" name="viewport" type="RID" />
@@ -4153,6 +4203,12 @@
 			<description>
 				Returns the viewport's update mode.
 				[b]Warning:[/b] Calling this from any thread other than the rendering thread will be detrimental to performance.
+			</description>
+		</method>
+		<method name="viewport_is_frame_generation_active" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="viewport" type="RID" />
+			<description>
 			</description>
 		</method>
 		<method name="viewport_remove_canvas">
@@ -4265,6 +4321,27 @@
 			<param index="1" name="mode" type="int" enum="RenderingServer.ViewportEnvironmentMode" />
 			<description>
 				Sets the viewport's environment mode which allows enabling or disabling rendering of 3D environment over 2D canvas. When disabled, 2D will not be affected by the environment. When enabled, 2D will be affected by the environment if the environment background mode is [constant ENV_BG_CANVAS]. The default behavior is to inherit the setting from the viewport's parent. If the topmost parent is also set to [constant VIEWPORT_ENVIRONMENT_INHERIT], then the behavior will be the same as if it was set to [constant VIEWPORT_ENVIRONMENT_ENABLED].
+			</description>
+		</method>
+		<method name="viewport_set_frame_generation_mode">
+			<return type="void" />
+			<param index="0" name="viewport" type="RID" />
+			<param index="1" name="frame_generation_mode" type="int" enum="RenderingServer.ViewportFrameGenerationMode" />
+			<description>
+			</description>
+		</method>
+		<method name="viewport_set_frame_generation_target_fps">
+			<return type="void" />
+			<param index="0" name="viewport" type="RID" />
+			<param index="1" name="target_fps" type="int" />
+			<description>
+			</description>
+		</method>
+		<method name="viewport_set_frame_generation_warp_scale">
+			<return type="void" />
+			<param index="0" name="viewport" type="RID" />
+			<param index="1" name="warp_scale" type="float" />
+			<description>
 			</description>
 		</method>
 		<method name="viewport_set_fsr_sharpness">
@@ -4424,6 +4501,41 @@
 				If [code]true[/code], canvas item vertices (i.e. polygon points) are snapped to the nearest pixel when rendering. This can lead to a crisper appearance at the cost of less smooth movement, especially when [Camera2D] smoothing is enabled. Equivalent to [member ProjectSettings.rendering/2d/snap/snap_2d_vertices_to_pixel].
 			</description>
 		</method>
+		<method name="viewport_set_taa_disocclusion_threshold">
+			<return type="void" />
+			<param index="0" name="viewport" type="RID" />
+			<param index="1" name="threshold" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="viewport_set_taa_history_weight">
+			<return type="void" />
+			<param index="0" name="viewport" type="RID" />
+			<param index="1" name="history_weight" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="viewport_set_taa_jitter_phase_count">
+			<return type="void" />
+			<param index="0" name="viewport" type="RID" />
+			<param index="1" name="jitter_phase_count" type="int" />
+			<description>
+			</description>
+		</method>
+		<method name="viewport_set_taa_jitter_scale">
+			<return type="void" />
+			<param index="0" name="viewport" type="RID" />
+			<param index="1" name="jitter_scale" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="viewport_set_taa_sharpness">
+			<return type="void" />
+			<param index="0" name="viewport" type="RID" />
+			<param index="1" name="sharpness" type="float" />
+			<description>
+			</description>
+		</method>
 		<method name="viewport_set_texture_mipmap_bias">
 			<return type="void" />
 			<param index="0" name="viewport" type="RID" />
@@ -4481,14 +4593,6 @@
 			<param index="1" name="enable" type="bool" />
 			<description>
 				If [code]true[/code], use temporal antialiasing. Equivalent to [member ProjectSettings.rendering/anti_aliasing/quality/use_taa] or [member Viewport.use_taa].
-			</description>
-		</method>
-		<method name="viewport_set_use_xr">
-			<return type="void" />
-			<param index="0" name="viewport" type="RID" />
-			<param index="1" name="use_xr" type="bool" />
-			<description>
-				If [code]true[/code], the viewport uses augmented or virtual reality technologies. See [XRInterface].
 			</description>
 		</method>
 		<method name="viewport_set_vrs_mode">
@@ -5351,19 +5455,35 @@
 			Use AMD FidelityFX Super Resolution 2.2 upscaling for the viewport's 3D buffer. The amount of scaling can be set using [member Viewport.scaling_3d_scale]. Values less than [code]1.0[/code] will result in the viewport being upscaled using FSR2. Values greater than [code]1.0[/code] are not supported and bilinear downsampling will be used instead. A value of [code]1.0[/code] will use FSR2 at native resolution as a TAA solution.
 		</constant>
 		<constant name="VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL" value="3" enum="ViewportScaling3DMode">
-			Use MetalFX spatial upscaling for the viewport's 3D buffer. The amount of scaling can be set using [member Viewport.scaling_3d_scale]. Values less than [code]1.0[/code] will result in the viewport being upscaled using MetalFX. Values greater than [code]1.0[/code] are not supported and bilinear downsampling will be used instead. A value of [code]1.0[/code] disables scaling.
-			[b]Note:[/b] Only supported when the Metal rendering driver is in use, which limits this scaling mode to macOS and iOS.
 		</constant>
 		<constant name="VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL" value="4" enum="ViewportScaling3DMode">
-			Use MetalFX temporal upscaling for the viewport's 3D buffer. The amount of scaling can be set using [member Viewport.scaling_3d_scale]. Values less than [code]1.0[/code] will result in the viewport being upscaled using MetalFX. Values greater than [code]1.0[/code] are not supported and bilinear downsampling will be used instead. A value of [code]1.0[/code] will use MetalFX at native resolution as a TAA solution.
-			[b]Note:[/b] Only supported when the Metal rendering driver is in use, which limits this scaling mode to macOS and iOS.
 		</constant>
 		<constant name="VIEWPORT_SCALING_3D_MODE_NEAREST" value="5" enum="ViewportScaling3DMode">
 			Use nearest-neighbor filtering for the viewport's 3D buffer. This looks crisper than [constant VIEWPORT_SCALING_3D_MODE_BILINEAR] and has no additional rendering cost. The amount of scaling can be set using [member Viewport.scaling_3d_scale]. Values greater than [code]1.0[/code] are not supported and bilinear downsampling will be used instead. A value of [code]1.0[/code] disables scaling.
 			[b]Note:[/b] When using the [b]Nearest[/b] scaling mode, to avoid uneven pixel scaling, it's highly recommended to use a value equal to an integer divisor with a dividend of [code]1[/code]. For example, it's best to use a scale of [code]0.5[/code] (1/2), [code]0.3333[/code] (1/3), [code]0.25[/code] (1/4), [code]0.2[/code] (1/5), and so on.
 		</constant>
-		<constant name="VIEWPORT_SCALING_3D_MODE_MAX" value="6" enum="ViewportScaling3DMode">
-			Represents the size of the [enum ViewportScaling3DMode] enum.
+		<constant name="VIEWPORT_SCALING_3D_MODE_SHARP_BILINEAR" value="6" enum="ViewportScaling3DMode">
+			Use sharp bilinear scaling for the viewport's 3D buffer.
+		</constant>
+		<constant name="VIEWPORT_SCALING_3D_MODE_BICUBIC" value="7" enum="ViewportScaling3DMode">
+			Use bicubic scaling for the viewport's 3D buffer.
+		</constant>
+		<constant name="VIEWPORT_SCALING_3D_MODE_SGSR" value="8" enum="ViewportScaling3DMode">
+			Use SGSR spatial upscaling for the viewport's 3D buffer.
+		</constant>
+		<constant name="VIEWPORT_SCALING_3D_MODE_XESS" value="11" enum="ViewportScaling3DMode">
+			Use Intel XeSS temporal upscaling for the viewport's 3D buffer when the native backend is available. Falls back to [constant VIEWPORT_SCALING_3D_MODE_FSR2] if unavailable or disabled for driver/runtime safety.
+		</constant>
+		<constant name="VIEWPORT_SCALING_3D_MODE_MAX" value="12" enum="ViewportScaling3DMode">
+		</constant>
+		<constant name="VIEWPORT_FRAME_GENERATION_DISABLED" value="0" enum="ViewportFrameGenerationMode">
+			Disable frame generation.
+		</constant>
+		<constant name="VIEWPORT_FRAME_GENERATION_INTERPOLATED" value="1" enum="ViewportFrameGenerationMode">
+			Use Godot's internal motion-vector interpolation path.
+		</constant>
+		<constant name="VIEWPORT_FRAME_GENERATION_MAX" value="2" enum="ViewportFrameGenerationMode">
+			Represents the size of the [enum ViewportFrameGenerationMode] enum.
 		</constant>
 		<constant name="VIEWPORT_UPDATE_DISABLED" value="0" enum="ViewportUpdateMode">
 			Do not update the viewport's render target.
@@ -5491,7 +5611,31 @@
 		<constant name="VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME" value="2" enum="ViewportRenderInfo">
 			Number of draw calls during this frame.
 		</constant>
-		<constant name="VIEWPORT_RENDER_INFO_MAX" value="3" enum="ViewportRenderInfo">
+		<constant name="VIEWPORT_RENDER_INFO_RT_TLAS_INSTANCES" value="3" enum="ViewportRenderInfo">
+			Number of ray tracing TLAS instances submitted during this frame.
+		</constant>
+		<constant name="VIEWPORT_RENDER_INFO_RT_BLAS_BUILDS" value="4" enum="ViewportRenderInfo">
+			Number of ray tracing BLAS builds submitted during this frame.
+		</constant>
+		<constant name="VIEWPORT_RENDER_INFO_RT_BLAS_REFITS" value="5" enum="ViewportRenderInfo">
+			Number of ray tracing BLAS refits submitted during this frame.
+		</constant>
+		<constant name="VIEWPORT_RENDER_INFO_RT_TRIANGLES_BUILT" value="6" enum="ViewportRenderInfo">
+			Number of triangles included in ray tracing BLAS builds during this frame.
+		</constant>
+		<constant name="VIEWPORT_RENDER_INFO_RT_TRIANGLES_REFIT" value="7" enum="ViewportRenderInfo">
+			Number of triangles included in ray tracing BLAS refits during this frame.
+		</constant>
+		<constant name="VIEWPORT_RENDER_INFO_RTGI_RECONSTRUCTED_COPY_COUNT" value="8" enum="ViewportRenderInfo">
+			Number of RTGI output copies that used reconstructed full-resolution radiance during this frame.
+		</constant>
+		<constant name="VIEWPORT_RENDER_INFO_RTGI_RAW_FALLBACK_COPY_COUNT" value="9" enum="ViewportRenderInfo">
+			Number of RTGI output copies that fell back to raw ray tracing texture copy or scaling during this frame.
+		</constant>
+		<constant name="VIEWPORT_RENDER_INFO_RTGI_RECONSTRUCTION_GUIDE_QUALITY" value="10" enum="ViewportRenderInfo">
+			RTGI reconstruction guide quality for this frame: 0 for none, 1 for depth, 2 for depth plus normal/roughness, 3 for depth plus normal/roughness plus material guides.
+		</constant>
+		<constant name="VIEWPORT_RENDER_INFO_MAX" value="11" enum="ViewportRenderInfo">
 			Represents the size of the [enum ViewportRenderInfo] enum.
 		</constant>
 		<constant name="VIEWPORT_RENDER_INFO_TYPE_VISIBLE" value="0" enum="ViewportRenderInfoType">
@@ -5550,7 +5694,7 @@
 		</constant>
 		<constant name="VIEWPORT_DEBUG_DRAW_SCENE_LUMINANCE" value="11" enum="ViewportDebugDraw">
 			Draws the estimated scene luminance. This is a 1×1 texture that is generated when autoexposure is enabled to control the scene's exposure.
-			[b]Note:[/b] Only supported when using the Forward+ or Mobile rendering methods.
+			[b]Note:[/b] Only supported when using the Forward+ rendering method.
 		</constant>
 		<constant name="VIEWPORT_DEBUG_DRAW_SSAO" value="12" enum="ViewportDebugDraw">
 			Draws the screen space ambient occlusion texture instead of the scene so that you can clearly see how it is affecting objects. In order for this display mode to work, you must have [member Environment.ssao_enabled] set in your [WorldEnvironment].
@@ -5563,11 +5707,11 @@
 		<constant name="VIEWPORT_DEBUG_DRAW_PSSM_SPLITS" value="14" enum="ViewportDebugDraw">
 			Colors each PSSM split for the [DirectionalLight3D]s in the scene a different color so you can see where the splits are. In order (from closest to furthest from the camera), they are colored red, green, blue, and yellow.
 			[b]Note:[/b] When using this debug draw mode, custom shaders are ignored since all materials in the scene temporarily use a debug material. This means the result from custom shader functions (such as vertex displacement) won't be visible anymore when using this debug draw mode.
-			[b]Note:[/b] Only supported when using the Forward+ or Mobile rendering methods.
+			[b]Note:[/b] Only supported when using the Forward+ rendering method.
 		</constant>
 		<constant name="VIEWPORT_DEBUG_DRAW_DECAL_ATLAS" value="15" enum="ViewportDebugDraw">
 			Draws the decal atlas that stores decal textures from [Decal]s.
-			[b]Note:[/b] Only supported when using the Forward+ or Mobile rendering methods.
+			[b]Note:[/b] Only supported when using the Forward+ rendering method.
 		</constant>
 		<constant name="VIEWPORT_DEBUG_DRAW_SDFGI" value="16" enum="ViewportDebugDraw">
 			Draws SDFGI cascade data. This is the data structure that is used to bounce lighting against and create reflections.
@@ -5603,7 +5747,7 @@
 		</constant>
 		<constant name="VIEWPORT_DEBUG_DRAW_OCCLUDERS" value="24" enum="ViewportDebugDraw">
 			Draws the occlusion culling buffer. This low-resolution occlusion culling buffer is rasterized on the CPU and is used to check whether instances are occluded by other objects.
-			[b]Note:[/b] Only supported when using the Forward+ or Mobile rendering methods.
+			[b]Note:[/b] Only supported when using the Forward+ rendering method.
 		</constant>
 		<constant name="VIEWPORT_DEBUG_DRAW_MOTION_VECTORS" value="25" enum="ViewportDebugDraw">
 			Draws the motion vectors buffer. This is used by temporal antialiasing to correct for motion that occurs during gameplay.
@@ -5611,7 +5755,77 @@
 		</constant>
 		<constant name="VIEWPORT_DEBUG_DRAW_INTERNAL_BUFFER" value="26" enum="ViewportDebugDraw">
 			Internal buffer is drawn instead of regular scene so you can see the per-pixel output that will be used by post-processing effects.
-			[b]Note:[/b] Only supported when using the Forward+ or Mobile rendering methods.
+			[b]Note:[/b] Only supported when using the Forward+ rendering method.
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_CLUSTER_AREA_LIGHTS" value="27" enum="ViewportDebugDraw">
+			Draws the [AreaLight3D] cluster. Clustering determines where lights are positioned in screen-space, which allows the engine to only process these portions of the screen for lighting.
+			[b]Note:[/b] Only supported when using the Forward+ rendering method.
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_AREA_LIGHT_ATLAS" value="28" enum="ViewportDebugDraw">
+			Draws the atlas used by [AreaLight3D] nodes in the upper left quadrant of the [Viewport].
+			[b]Note:[/b] Only supported when using the Forward+ rendering method.
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RECONSTRUCTED_DEPTH" value="29" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_NOISY" value="30" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_NORMAL_ROUGHNESS" value="31" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_VIEWZ_HITDIST" value="32" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_MOTION_VECTORS" value="33" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_FINAL" value="34" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED" value="35" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED_REACTIVITY" value="36" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_GUIDE" value="37" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTION_DIRECTION" value="38" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTED_HIT_DISTANCE" value="39" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_REFLECTED_HIT_NORMAL" value="40" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_SPECULAR_ROUGHNESS_BUCKET" value="41" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_WRC_RADIANCE" value="42" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_WRC_CONFIDENCE" value="43" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_WRC_GI" value="44" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_SPG_RADIANCE" value="45" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_SPG_GI" value="46" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_RESOLVE_GI" value="47" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_RESOLVE_SPEC" value="48" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_CANDIDATE" value="49" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_HISTORY" value="50" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_TEMPORAL_DELTA" value="51" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_SOURCE_REJECTION" value="52" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_RAW_RADIANCE" value="53" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_DENOISED_RADIANCE" value="54" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTED_RADIANCE" value="55" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_REACTIVITY" value="56" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_SIGNAL_CONFIDENCE" value="57" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_GUIDE_MISMATCH" value="58" enum="ViewportDebugDraw">
+		</constant>
+		<constant name="VIEWPORT_DEBUG_DRAW_RTGI_RECONSTRUCTION_FILL_SOURCE" value="59" enum="ViewportDebugDraw">
 		</constant>
 		<constant name="VIEWPORT_VRS_DISABLED" value="0" enum="ViewportVRSMode">
 			Variable rate shading is disabled.
@@ -5878,6 +6092,21 @@
 		</constant>
 		<constant name="ENV_SDFGI_UPDATE_LIGHT_MAX" value="5" enum="EnvironmentSDFGIFramesToUpdateLight">
 			Represents the size of the [enum EnvironmentSDFGIFramesToUpdateLight] enum.
+		</constant>
+		<constant name="PT_BACKEND_VULKAN_GENERIC" value="0" enum="PathtracingBackend">
+			Built-in Vulkan Generic path tracing backend.
+		</constant>
+		<constant name="PT_BACKEND_NVIDIA_RTXPT" value="1" enum="PathtracingBackend">
+			Legacy NVIDIA RTXPT backend identifier. The runtime currently uses [constant PT_BACKEND_VULKAN_GENERIC] instead.
+		</constant>
+		<constant name="PT_BACKEND_AMD_HIP_RT" value="2" enum="PathtracingBackend">
+			Legacy AMD HIP RT backend identifier. The runtime currently uses [constant PT_BACKEND_VULKAN_GENERIC] instead.
+		</constant>
+		<constant name="PT_BACKEND_INTEL_EMBREE" value="3" enum="PathtracingBackend">
+			Legacy Intel Embree/OSPRay backend identifier. The runtime currently uses [constant PT_BACKEND_VULKAN_GENERIC] instead.
+		</constant>
+		<constant name="PT_BACKEND_MAX" value="4" enum="PathtracingBackend">
+			Represents the size of the [enum PathtracingBackend] enum.
 		</constant>
 		<constant name="SUB_SURFACE_SCATTERING_QUALITY_DISABLED" value="0" enum="SubSurfaceScatteringQuality">
 			Disables subsurface scattering entirely, even on materials that have [member BaseMaterial3D.subsurf_scatter_enabled] set to [code]true[/code]. This has the lowest GPU requirements.
@@ -6219,7 +6448,7 @@
 			Buffer memory used (in bytes). This includes vertex data, uniform buffers, and many miscellaneous buffer types used internally.
 		</constant>
 		<constant name="RENDERING_INFO_VIDEO_MEM_USED" value="5" enum="RenderingInfo">
-			Video memory used (in bytes). When using the Forward+ or Mobile renderers, this is always greater than the sum of [constant RENDERING_INFO_TEXTURE_MEM_USED] and [constant RENDERING_INFO_BUFFER_MEM_USED], since there is miscellaneous data not accounted for by those two metrics. When using the Compatibility renderer, this is equal to the sum of [constant RENDERING_INFO_TEXTURE_MEM_USED] and [constant RENDERING_INFO_BUFFER_MEM_USED].
+			Video memory used (in bytes). This is always greater than the sum of [constant RENDERING_INFO_TEXTURE_MEM_USED] and [constant RENDERING_INFO_BUFFER_MEM_USED], since there is miscellaneous data not accounted for by those two metrics.
 		</constant>
 		<constant name="RENDERING_INFO_PIPELINE_COMPILATIONS_CANVAS" value="6" enum="RenderingInfo">
 			Number of pipeline compilations that were triggered by the 2D canvas renderer.

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="RapierPhysicsServer2D" inherits="PhysicsServer2DExtension" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+<class name="RapierPhysicsServer2D" inherits="PhysicsServer2DExtension" api_type="extension" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
 	<brief_description>
 	</brief_description>
 	<description>
@@ -19,18 +19,6 @@
 			<param index="0" name="body" type="RID" />
 			<param index="1" name="param" type="int" />
 			<param index="2" name="value" type="Variant" />
-			<description>
-			</description>
-		</method>
-		<method name="export_binary" qualifiers="static">
-			<return type="PackedByteArray" />
-			<param index="0" name="physics_object" type="RID" />
-			<description>
-			</description>
-		</method>
-		<method name="export_json" qualifiers="static">
-			<return type="String" />
-			<param index="0" name="physics_object" type="RID" />
 			<description>
 			</description>
 		</method>
@@ -76,6 +64,14 @@
 			<return type="PackedInt32Array" />
 			<param index="0" name="fluid_rid" type="RID" />
 			<param index="1" name="aabb" type="Rect2" />
+			<description>
+			</description>
+		</method>
+		<method name="fluid_get_particles_in_ball" qualifiers="static">
+			<return type="PackedInt32Array" />
+			<param index="0" name="fluid_rid" type="RID" />
+			<param index="1" name="center" type="Vector2" />
+			<param index="2" name="radius" type="float" />
 			<description>
 			</description>
 		</method>
@@ -151,10 +147,52 @@
 			<description>
 			</description>
 		</method>
-		<method name="import_binary" qualifiers="static">
+		<method name="joint_get_extra_param" qualifiers="static">
+			<return type="Variant" />
+			<param index="0" name="joint" type="RID" />
+			<param index="1" name="param" type="int" />
+			<description>
+			</description>
+		</method>
+		<method name="joint_reset_ik_options" qualifiers="static">
 			<return type="void" />
-			<param index="0" name="physics_object" type="RID" />
-			<param index="1" name="data" type="PackedByteArray" />
+			<param index="0" name="joint" type="RID" />
+			<description>
+			</description>
+		</method>
+		<method name="joint_set_extra_param" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="joint" type="RID" />
+			<param index="1" name="param" type="int" />
+			<param index="2" name="value" type="Variant" />
+			<description>
+			</description>
+		</method>
+		<method name="joint_set_ik_options" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="joint" type="RID" />
+			<param index="1" name="damping" type="float" />
+			<param index="2" name="max_iterations" type="int" />
+			<param index="3" name="constrained_axes" type="int" />
+			<param index="4" name="epsilon_linear" type="float" />
+			<param index="5" name="epsilon_angular" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="joint_set_motor_position_options" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="joint" type="RID" />
+			<param index="1" name="target_pos" type="float" />
+			<param index="2" name="stiffness" type="float" />
+			<param index="3" name="damping" type="float" />
+			<param index="4" name="enabled" type="bool" />
+			<description>
+			</description>
+		</method>
+		<method name="joint_solve_inverse_kinematics" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="joint" type="RID" />
+			<param index="1" name="target_transform" type="Transform2D" />
 			<description>
 			</description>
 		</method>
@@ -191,4 +229,22 @@
 			</description>
 		</method>
 	</methods>
+	<constants>
+		<constant name="BODY_PARAM_CONTACT_SKIN" value="0">
+		</constant>
+		<constant name="BODY_PARAM_DOMINANCE" value="1">
+		</constant>
+		<constant name="BODY_PARAM_MASSLESS" value="3">
+		</constant>
+		<constant name="BODY_PARAM_SOFT_CCD" value="2">
+		</constant>
+		<constant name="JOINT_TYPE" value="0">
+		</constant>
+		<constant name="JOINT_TYPE_INPULSE_JOINT" value="0">
+		</constant>
+		<constant name="JOINT_TYPE_MULTIBODY_JOINT" value="1">
+		</constant>
+		<constant name="JOINT_TYPE_MULTIBODY_KINEMATIC_JOINT" value="2">
+		</constant>
+	</constants>
 </class>

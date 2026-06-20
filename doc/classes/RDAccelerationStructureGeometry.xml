@@ -10,8 +10,18 @@
 	<tutorials>
 	</tutorials>
 	<members>
+		<member name="aabb_buffer" type="RID" setter="set_aabb_buffer" getter="get_aabb_buffer" default="RID()">
+		</member>
+		<member name="aabb_count" type="int" setter="set_aabb_count" getter="get_aabb_count" default="0">
+		</member>
+		<member name="aabb_offset" type="int" setter="set_aabb_offset" getter="get_aabb_offset" default="0">
+		</member>
+		<member name="aabb_stride" type="int" setter="set_aabb_stride" getter="get_aabb_stride" default="24">
+		</member>
 		<member name="flags" type="int" setter="set_flags" getter="get_flags" enum="RenderingDevice.AccelerationStructureGeometryFlagBits" is_bitfield="true" default="0">
 			Flags for the geometry.
+		</member>
+		<member name="geometry_type" type="int" setter="set_geometry_type" getter="get_geometry_type" enum="RDAccelerationStructureGeometry.Type" default="0">
 		</member>
 		<member name="index_buffer" type="RID" setter="set_index_buffer" getter="get_index_buffer" default="RID()">
 			Buffer containing vertex indices. If [code]null[/code], triangles are non-indexed.
@@ -38,4 +48,10 @@
 			Number of bytes between each vertex in [member vertex_buffer].
 		</member>
 	</members>
+	<constants>
+		<constant name="TYPE_TRIANGLES" value="0" enum="Type">
+		</constant>
+		<constant name="TYPE_AABBS" value="1" enum="Type">
+		</constant>
+	</constants>
 </class>

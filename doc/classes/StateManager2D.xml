@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="StateManager2D" inherits="Node" api_type="extension" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+	<brief_description>
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="cache_state">
+			<return type="void" />
+			<param index="0" name="in_space" type="RID" />
+			<param index="1" name="tag" type="Variant" />
+			<description>
+			</description>
+		</method>
+		<method name="clear_cache">
+			<return type="void" />
+			<description>
+			</description>
+		</method>
+		<method name="export_state">
+			<return type="Variant" />
+			<param index="0" name="in_space" type="RID" />
+			<param index="1" name="format" type="String" />
+			<description>
+			</description>
+		</method>
+		<method name="export_state_from_cache">
+			<return type="Variant" />
+			<param index="0" name="cache_index" type="int" />
+			<param index="1" name="format" type="String" />
+			<description>
+			</description>
+		</method>
+		<method name="import_state">
+			<return type="void" />
+			<param index="0" name="in_space" type="RID" />
+			<param index="1" name="load_state" type="Variant" />
+			<description>
+			</description>
+		</method>
+		<method name="load_cached_state">
+			<return type="bool" />
+			<param index="0" name="in_space" type="RID" />
+			<param index="1" name="index" type="int" />
+			<description>
+			</description>
+		</method>
+		<method name="ordered_cache_tags" qualifiers="const">
+			<return type="Array" />
+			<description>
+			</description>
+		</method>
+		<method name="remove_cached_by_index">
+			<return type="void" />
+			<param index="0" name="at_index" type="int" />
+			<description>
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="max_cache_length" type="int" setter="set_max_cache_length" getter="get_max_cache_length" default="10">
+		</member>
+		<member name="rolling_cache" type="bool" setter="set_rolling_cache" getter="get_rolling_cache" default="false">
+		</member>
+		<member name="root_node" type="Node" setter="set_root_node" getter="get_root_node" default="null">
+		</member>
+	</members>
+</class>

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="Fluid2D" inherits="Node2D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+<class name="Fluid2D" inherits="Node2D" api_type="extension" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
 	<brief_description>
 	</brief_description>
 	<description>
@@ -41,6 +41,13 @@
 		<method name="get_particles_in_aabb" qualifiers="const">
 			<return type="PackedInt32Array" />
 			<param index="0" name="aabb" type="Rect2" />
+			<description>
+			</description>
+		</method>
+		<method name="get_particles_in_circle" qualifiers="const">
+			<return type="PackedInt32Array" />
+			<param index="0" name="center" type="Vector2" />
+			<param index="1" name="radius" type="float" />
 			<description>
 			</description>
 		</method>

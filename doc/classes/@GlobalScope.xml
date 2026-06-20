@@ -1575,10 +1575,6 @@
 		<member name="GDExtensionManager" type="GDExtensionManager" setter="" getter="">
 			The [GDExtensionManager] singleton.
 		</member>
-		<member name="GDScriptLanguageProtocol" type="GDScriptLanguageProtocol" setter="" getter="">
-			The [GDScriptLanguageProtocol] singleton.
-			[b]Note:[/b] Only available in editor builds.
-		</member>
 		<member name="Geometry2D" type="Geometry2D" setter="" getter="">
 			The [Geometry2D] singleton.
 		</member>
@@ -1622,7 +1618,7 @@
 		<member name="Performance" type="Performance" setter="" getter="">
 			The [Performance] singleton.
 		</member>
-		<member name="PhysicsServer2D" type="PhysicsServer2D" setter="" getter="">
+		<member name="PhysicsServer2D" type="RapierPhysicsServer2D" setter="" getter="">
 			The [PhysicsServer2D] singleton.
 		</member>
 		<member name="PhysicsServer2DManager" type="PhysicsServer2DManager" setter="" getter="">
@@ -1663,9 +1659,6 @@
 		</member>
 		<member name="WorkerThreadPool" type="WorkerThreadPool" setter="" getter="">
 			The [WorkerThreadPool] singleton.
-		</member>
-		<member name="XRServer" type="XRServer" setter="" getter="">
-			The [XRServer] singleton.
 		</member>
 	</members>
 	<constants>
