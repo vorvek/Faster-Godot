@@ -36,6 +36,8 @@
 
 class Sky;
 
+class Sky;
+
 class Environment : public Resource {
 	GDCLASS(Environment, Resource);
 

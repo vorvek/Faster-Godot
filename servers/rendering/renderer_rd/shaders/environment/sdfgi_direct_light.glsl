@@ -10,8 +10,9 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 layout(set = 0, binding = 1) uniform texture3D sdf_cascades[MAX_CASCADES];
 layout(set = 0, binding = 2) uniform sampler linear_sampler;
+layout(set = 0, binding = 3) uniform sampler linear_sampler_with_mipmaps;
 
-layout(set = 0, binding = 3, std430) restrict readonly buffer DispatchData {
+layout(set = 0, binding = 4, std430) restrict readonly buffer DispatchData {
 	uint x;
 	uint y;
 	uint z;
@@ -28,17 +29,17 @@ struct ProcessVoxel {
 };
 
 #ifdef MODE_PROCESS_STATIC
-layout(set = 0, binding = 4, std430) restrict buffer ProcessVoxels {
+layout(set = 0, binding = 5, std430) restrict buffer ProcessVoxels {
 #else
-layout(set = 0, binding = 4, std430) restrict buffer readonly ProcessVoxels {
+layout(set = 0, binding = 5, std430) restrict buffer readonly ProcessVoxels {
 #endif
 	ProcessVoxel data[];
 }
 process_voxels;
 
-layout(r32ui, set = 0, binding = 5) uniform restrict uimage3D dst_light;
-layout(rgba8, set = 0, binding = 6) uniform restrict image3D dst_aniso0;
-layout(rg8, set = 0, binding = 7) uniform restrict image3D dst_aniso1;
+layout(r32ui, set = 0, binding = 6) uniform restrict uimage3D dst_light;
+layout(rgba8, set = 0, binding = 7) uniform restrict image3D dst_aniso0;
+layout(rg8, set = 0, binding = 8) uniform restrict image3D dst_aniso1;
 
 struct CascadeData {
 	vec3 offset; //offset of (0,0,0) in world coordinates
@@ -48,7 +49,7 @@ struct CascadeData {
 	vec4 pad2;
 };
 
-layout(set = 0, binding = 8, std140) uniform Cascades {
+layout(set = 0, binding = 9, std140) uniform Cascades {
 	CascadeData data[MAX_CASCADES];
 }
 cascades;
@@ -80,13 +81,15 @@ struct Light {
 	vec4 area_projector_rect;
 };
 
-layout(set = 0, binding = 9, std140) buffer restrict readonly Lights {
+layout(set = 0, binding = 10, std140) buffer restrict readonly Lights {
 	Light data[];
 }
 lights;
 
-layout(set = 0, binding = 10) uniform texture2DArray lightprobe_texture;
-layout(set = 0, binding = 11) uniform texture3D occlusion_texture;
+layout(set = 0, binding = 11) uniform texture2DArray lightprobe_texture;
+layout(set = 0, binding = 12) uniform texture3D occlusion_texture;
+
+layout(set = 1, binding = 0) uniform texture2D area_light_atlas;
 
 layout(set = 0, binding = 12) uniform sampler linear_sampler_with_mipmaps;
 

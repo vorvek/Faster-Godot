@@ -81,15 +81,15 @@
   <!-- Godot DefineConstants. -->
   <PropertyGroup>
     <!-- Define constants to identify Godot builds. -->
-    <GodotDefineConstants>GODOT</GodotDefineConstants>
+    <_GodotDefineConstants>GODOT</_GodotDefineConstants>
 
     <!--
     Define constant to determine the target Godot platform. This includes the
     recognized platform names and the platform category (PC, MOBILE or WEB).
     -->
-    <GodotPlatformConstants Condition=" '$(GodotTargetPlatform)' == 'windows' ">GODOT_WINDOWS;GODOT_PC</GodotPlatformConstants>
-    <GodotPlatformConstants Condition=" '$(GodotTargetPlatform)' == 'linuxbsd' ">GODOT_LINUXBSD;GODOT_PC</GodotPlatformConstants>
+    <_GodotPlatformConstants Condition=" '$(GodotTargetPlatform)' == 'windows' ">GODOT_WINDOWS;GODOT_PC</_GodotPlatformConstants>
+    <_GodotPlatformConstants Condition=" '$(GodotTargetPlatform)' == 'linuxbsd' ">GODOT_LINUXBSD;GODOT_PC</_GodotPlatformConstants>
 
-    <GodotDefineConstants>$(GodotDefineConstants);$(GodotPlatformConstants);$(GodotVersionConstants)</GodotDefineConstants>
+    <_GodotDefineConstants>$(_GodotDefineConstants);$(_GodotPlatformConstants);$(_GodotVersionConstants)</_GodotDefineConstants>
   </PropertyGroup>
 </Project>

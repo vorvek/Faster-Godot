@@ -31,12 +31,14 @@
 #include "editor_visual_profiler.h"
 
 #include "core/io/image.h"
+#include "core/object/callable_mp.h"
 #include "core/string/translation_server.h"
 #include "editor/editor_string_names.h"
 #include "editor/run/editor_run_bar.h"
 #include "editor/settings/editor_settings.h"
 #include "editor/themes/editor_scale.h"
 #include "scene/gui/flow_container.h"
+#include "scene/gui/label.h"
 #include "scene/resources/image_texture.h"
 
 void EditorVisualProfiler::set_hardware_info(const String &p_cpu_name, const String &p_gpu_name) {
@@ -111,6 +113,7 @@ void EditorVisualProfiler::clear() {
 	last_metric = -1;
 	variables->clear();
 	//activate->set_pressed(false);
+	category_folding.clear();
 
 	graph_limit = 1000.0f / CLAMP(int(EDITOR_GET("debugger/profiler_target_fps")), 1, 1000);
 
@@ -156,6 +159,11 @@ void EditorVisualProfiler::_item_selected() {
 	}
 	selected_area = item->get_metadata(0);
 	_update_plot();
+}
+
+void EditorVisualProfiler::_item_collapsed(TreeItem *p_item) {
+	StringName fullpath = p_item->get_metadata(0);
+	category_folding[fullpath] = p_item->is_collapsed();
 }
 
 void EditorVisualProfiler::_update_plot() {
@@ -367,9 +375,14 @@ void EditorVisualProfiler::_update_frame(bool p_focus_selected) {
 
 			name = name.substr(1);
 
+			category->set_metadata(0, m.areas[i].fullpath_cache);
 			category->set_text(0, name);
 			category->set_metadata(1, cpu_time);
 			category->set_metadata(2, gpu_time);
+
+			if (category_folding.has(m.areas[i].fullpath_cache)) {
+				category->set_collapsed(category_folding[m.areas[i].fullpath_cache]);
+			}
 			continue;
 		}
 
@@ -414,6 +427,13 @@ void EditorVisualProfiler::_update_frame(bool p_focus_selected) {
 	}
 
 	if (ensure_selected) {
+		// Make visible when it's collapsed.
+		TreeItem *node = ensure_selected->get_parent();
+		while (node) {
+			node->set_collapsed(false);
+			node = node->get_parent();
+		}
+		ensure_selected->select(0);
 		variables->ensure_cursor_is_visible();
 	}
 	updating_frame = false;
@@ -825,7 +845,6 @@ EditorVisualProfiler::EditorVisualProfiler() {
 
 	variables = memnew(Tree);
 	variables->set_custom_minimum_size(Size2(300, 0) * EDSCALE);
-	variables->set_hide_folding(true);
 	h_split->add_child(variables);
 	variables->set_hide_root(true);
 	variables->set_columns(3);
@@ -844,6 +863,7 @@ EditorVisualProfiler::EditorVisualProfiler() {
 	variables->set_column_custom_minimum_width(2, 75 * EDSCALE);
 	variables->set_theme_type_variation("TreeSecondary");
 	variables->connect("cell_selected", callable_mp(this, &EditorVisualProfiler::_item_selected));
+	variables->connect("item_collapsed", callable_mp(this, &EditorVisualProfiler::_item_collapsed));
 
 	graph = memnew(TextureRect);
 	graph->set_custom_minimum_size(Size2(250 * EDSCALE, 0));

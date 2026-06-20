@@ -113,6 +113,11 @@ Comment: Linux AppStream Metadata File
 Copyright: 2026-present, Faster-Godot contributors
 License: CC0-1.0
 
+Files: misc/logo/*
+Comment: Godot Engine logo
+Copyright: 2017, Andrea Calabró
+License: CC-BY-4.0
+
 Files: modules/betsy/alpha_stitch.glsl
  modules/betsy/bc1.glsl
  modules/betsy/bc4.glsl
@@ -306,6 +311,11 @@ Comment: The FreeType Project
 Copyright: 1996-2025, David Turner, Robert Wilhelm, and Werner Lemberg.
 License: FTL
 
+Files: thirdparty/gamepadmotionhelpers/*
+Comment: GamepadMotionHelpers
+Copyright: 2020-2023, Julian "Jibb" Smart
+License: Expat
+
 Files: thirdparty/glad/*
 Comment: glad
 Copyright: 2013-2022, David Herberth
@@ -422,6 +432,11 @@ Files: thirdparty/meshoptimizer/*
 Comment: meshoptimizer
 Copyright: 2016-2026, Arseny Kapoulkine
 License: Expat
+
+Files: thirdparty/metal-cpp/*
+Comment: metal-cpp
+Copyright: 2024, Apple Inc.
+License: Apache-2.0
 
 Files: thirdparty/mingw-std-threads/*
 Comment: mingw-std-threads
@@ -576,6 +591,11 @@ Comment: SPIRV-Cross
 Copyright: 2015-2021, Arm Limited
 License: Apache-2.0 or Expat
 
+Files: thirdparty/spirv-headers/*
+Comment: SPIRV-Headers
+Copyright: 2015-2024, The Khronos Group Inc.
+License: Expat
+
 Files: thirdparty/spirv-reflect/*
 Comment: SPIRV-Reflect
 Copyright: 2017-2022, Google Inc.
@@ -583,7 +603,7 @@ License: Apache-2.0
 
 Files: thirdparty/thorvg/*
 Comment: ThorVG
-Copyright: 2020-2024, The ThorVG Project
+Copyright: 2020-2026, The ThorVG Project
 License: Expat
 
 Files: thirdparty/tinyexr/*
@@ -605,19 +625,19 @@ License: BSD-3-clause
 
 Files: thirdparty/volk/*
 Comment: volk
-Copyright: 2018-2024, Arseny Kapoulkine
+Copyright: 2018-2025, Arseny Kapoulkine
 License: Expat
 
 Files: thirdparty/vulkan/*
 Comment: Vulkan Headers
-Copyright: 2014-2024, The Khronos Group Inc.
-  2014-2024, Valve Corporation
-  2014-2024, LunarG, Inc.
+Copyright: 2015-2025, The Khronos Group Inc.
+  2015-2025, Valve Corporation
+  2015-2025, LunarG, Inc.
 License: Apache-2.0
 
 Files: thirdparty/vulkan/vk_mem_alloc.h
 Comment: Vulkan Memory Allocator
-Copyright: 2017-2024, Advanced Micro Devices, Inc.
+Copyright: 2017-2025, Advanced Micro Devices, Inc.
 License: Expat
 
 Files: thirdparty/wayland/*

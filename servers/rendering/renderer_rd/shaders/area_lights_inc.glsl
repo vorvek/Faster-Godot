@@ -1,7 +1,14 @@
+#ifndef AREA_LIGHTS_INC_GLSL
+#define AREA_LIGHTS_INC_GLSL
+
 // Functions related to area lights
 
+#ifndef M_PI
 #define M_PI 3.14159265359
+#endif
+#ifndef M_TAU
 #define M_TAU 6.28318530718
+#endif
 
 float acos_approx(float p_x) {
 	float x = abs(p_x);
@@ -353,3 +360,5 @@ void ltc_evaluate_diff(vec3 normal, vec3 points[4], vec4 texture_rect, float max
 	float I = ltc_integrate_clipped_quad(L, L_proj, n);
 	integral = I; // no division by (2.0 * M_PI) for GI calculations
 }
+
+#endif // AREA_LIGHTS_INC_GLSL

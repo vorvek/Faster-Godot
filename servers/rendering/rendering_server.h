@@ -31,16 +31,17 @@
 #pragma once
 
 #include "core/io/image.h"
-#include "core/math/geometry_3d.h"
-#include "core/math/transform_2d.h"
 #include "core/templates/rid.h"
 #include "core/variant/typed_array.h"
 #include "core/variant/variant.h"
 #include "servers/display/display_server_enums.h"
-#include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_device_enums.h"
 #include "servers/rendering/rendering_server_enums.h"
 #include "servers/rendering/rendering_server_types.h"
+
+namespace Geometry3D {
+struct MeshData;
+}
 
 // Helper macros for code outside of the rendering server, but that is
 // called by the rendering server.
@@ -447,6 +448,8 @@ public:
 	static constexpr ViewportScaling3DMode VIEWPORT_SCALING_3D_MODE_BILINEAR = RSE::VIEWPORT_SCALING_3D_MODE_BILINEAR;
 	static constexpr ViewportScaling3DMode VIEWPORT_SCALING_3D_MODE_FSR = RSE::VIEWPORT_SCALING_3D_MODE_FSR;
 	static constexpr ViewportScaling3DMode VIEWPORT_SCALING_3D_MODE_FSR2 = RSE::VIEWPORT_SCALING_3D_MODE_FSR2;
+	static constexpr ViewportScaling3DMode VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL = RSE::VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL;
+	static constexpr ViewportScaling3DMode VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL = RSE::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL;
 	static constexpr ViewportScaling3DMode VIEWPORT_SCALING_3D_MODE_NEAREST = RSE::VIEWPORT_SCALING_3D_MODE_NEAREST;
 	static constexpr ViewportScaling3DMode VIEWPORT_SCALING_3D_MODE_SHARP_BILINEAR = RSE::VIEWPORT_SCALING_3D_MODE_SHARP_BILINEAR;
 	static constexpr ViewportScaling3DMode VIEWPORT_SCALING_3D_MODE_BICUBIC = RSE::VIEWPORT_SCALING_3D_MODE_BICUBIC;

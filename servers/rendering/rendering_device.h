@@ -1454,7 +1454,7 @@ private:
 		RID raytracing_pipeline_id;
 		RDD::RaytracingPipelineID raytracing_pipeline;
 		uint32_t index_offset = 0;
-		uint32_t raytracing_pipeline_hit_group_count = 0;
+		uint32_t raytracing_pipeline_hit_group_count = 0; // Used for validation.
 
 		Vector<uint32_t> hit_group_indices;
 		uint32_t used_hit_group_count = 0;
@@ -2007,6 +2007,8 @@ public:
 	String get_device_api_name() const;
 	String get_device_api_version() const;
 	String get_device_pipeline_cache_uuid() const;
+
+	DriverWorkarounds get_driver_workarounds() const;
 
 	uint64_t get_frames_drawn() const { return frames_drawn; }
 

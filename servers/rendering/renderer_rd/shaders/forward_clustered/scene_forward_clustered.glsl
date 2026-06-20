@@ -1551,7 +1551,7 @@ void fragment_shader(in SceneData scene_data) {
 
 	{ // process decals
 
-		uint cluster_decal_offset = cluster_offset + implementation_data.cluster_type_size * 2;
+		uint cluster_decal_offset = cluster_offset + implementation_data.cluster_type_size * 3;
 
 		uint item_min;
 		uint item_max;
@@ -2047,7 +2047,7 @@ void fragment_shader(in SceneData scene_data) {
 		vec4 cc_reflection_accum = vec4(0.0, 0.0, 0.0, 0.0);
 #endif
 
-		uint cluster_reflection_offset = cluster_offset + implementation_data.cluster_type_size * 3;
+		uint cluster_reflection_offset = cluster_offset + implementation_data.cluster_type_size * 4;
 
 		uint item_min;
 		uint item_max;
@@ -2837,12 +2837,9 @@ void fragment_shader(in SceneData scene_data) {
 		}
 	}
 
-	if (sc_use_area_lights()) { // area lights
+	if (sc_cluster_has_area_light()) { // area lights
 
-		// In this fork the cluster appends area lights as the last element type
-		// (ELEMENT_TYPE_AREA_LIGHT == 4: OMNI, SPOT, DECAL, REFLECTION_PROBE, AREA_LIGHT),
-		// so area uses cluster_type_size * 4 (decal/reflection offsets are unchanged).
-		uint cluster_area_offset = cluster_offset + implementation_data.cluster_type_size * 4;
+		uint cluster_area_offset = cluster_offset + implementation_data.cluster_type_size * 2;
 
 		uint item_min;
 		uint item_max;

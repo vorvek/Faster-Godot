@@ -135,7 +135,7 @@ vec4 BloomUpKernel4(sampler2D Tex, vec2 uv0) {
 #endif // MODE_GLOW_UPSAMPLE
 
 void main() {
-	// We do not apply our color scale here; colors stay at half brightness and scale is applied in the tonemap raster.
+	// We do not apply our color scale for our mobile renderer here, we'll leave our colors at half brightness and apply scale in the tonemap raster.
 
 #ifdef MODE_MIPMAP
 

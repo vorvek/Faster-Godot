@@ -624,15 +624,7 @@ public:
 	FUNC2(particles_set_lifetime, RID, double)
 	FUNC2(particles_set_one_shot, RID, bool)
 	FUNC2(particles_set_pre_process_time, RID, double)
-	virtual void particles_request_process_time(RID p_particles, real_t p_request_process_time, real_t p_request_process_time_residual = 0.0) override {
-		WRITE_ACTION
-		if (ASYNC_COND_PUSH) {
-			command_queue.push(server_name, static_cast<void (ServerName::*)(RID, real_t, real_t)>(&ServerName::particles_request_process_time), p_particles, p_request_process_time, p_request_process_time_residual);
-		} else {
-			command_queue.flush_if_pending();
-			server_name->particles_request_process_time(p_particles, p_request_process_time, p_request_process_time_residual);
-		}
-	}
+	FUNC3(particles_request_process_time, RID, real_t, real_t)
 	FUNC2(particles_set_explosiveness_ratio, RID, float)
 	FUNC2(particles_set_randomness_ratio, RID, float)
 	FUNC2(particles_set_seed, RID, uint32_t)
@@ -746,15 +738,7 @@ public:
 	FUNC2(viewport_set_use_xr, RID, bool)
 #endif // XR_DISABLED
 
-	virtual void viewport_set_size(RID p_viewport, int p_width, int p_height, int p_view_count = 1) override {
-		WRITE_ACTION
-		if (ASYNC_COND_PUSH) {
-			command_queue.push(server_name, static_cast<void (ServerName::*)(RID, int, int, int)>(&ServerName::viewport_set_size), p_viewport, p_width, p_height, p_view_count);
-		} else {
-			command_queue.flush_if_pending();
-			server_name->viewport_set_size(p_viewport, p_width, p_height, p_view_count);
-		}
-	}
+	FUNC4(viewport_set_size, RID, int, int, int)
 
 	FUNC2(viewport_set_active, RID, bool)
 	FUNC2(viewport_set_parent_viewport, RID, RID)
@@ -835,15 +819,7 @@ public:
 	FUNC1RC(double, viewport_get_measured_render_time_gpu, RID)
 	FUNC1RC(RID, viewport_find_from_screen_attachment, DisplayServerEnums::WindowID)
 
-	virtual void call_set_vsync_mode(DisplayServerEnums::VSyncMode p_mode, DisplayServerEnums::WindowID p_window) override {
-		WRITE_ACTION
-		if (ASYNC_COND_PUSH) {
-			command_queue.push(server_name, static_cast<void (ServerName::*)(DisplayServerEnums::VSyncMode, DisplayServerEnums::WindowID)>(&ServerName::call_set_vsync_mode), p_mode, p_window);
-		} else {
-			command_queue.flush_if_pending();
-			server_name->call_set_vsync_mode(p_mode, p_window);
-		}
-	}
+	FUNC2(call_set_vsync_mode, DisplayServerEnums::VSyncMode, DisplayServerEnums::WindowID)
 
 	FUNC2(viewport_set_vrs_mode, RID, RSE::ViewportVRSMode)
 	FUNC2(viewport_set_vrs_update_mode, RID, RSE::ViewportVRSUpdateMode)

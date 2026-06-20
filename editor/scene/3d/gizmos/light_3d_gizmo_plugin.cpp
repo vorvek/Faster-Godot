@@ -30,6 +30,7 @@
 
 #include "light_3d_gizmo_plugin.h"
 
+#include "core/math/geometry_3d.h"
 #include "editor/editor_node.h"
 #include "editor/editor_string_names.h"
 #include "editor/editor_undo_redo_manager.h"
@@ -165,7 +166,6 @@ void Light3DGizmoPlugin::set_handle(const EditorNode3DGizmo *p_gizmo, int p_id, 
 				}
 			}
 		}
-
 	} else if (p_id == 1) {
 		if (Object::cast_to<SpotLight3D>(light)) {
 			float a = _find_closest_angle_to_half_pi_arc(s[0], s[1], light->get_param(Light3D::PARAM_RANGE), gt);

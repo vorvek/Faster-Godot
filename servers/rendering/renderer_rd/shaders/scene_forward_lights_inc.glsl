@@ -2,6 +2,12 @@
 
 #extension GL_EXT_control_flow_attributes : require
 
+#ifndef M_PI
+#define M_PI 3.14159265359
+#endif
+
+#include "area_lights_inc.glsl"
+
 // This annotation macro must be placed before any loops that rely on specialization constants as their upper bound.
 // Drivers may choose to unroll these loops based on the possible range of the value that can be deduced from the
 // spec constant, which can lead to their code generation taking a much longer time than desired.
@@ -19,7 +25,6 @@
 #ifdef M_PI
 #undef M_PI
 #endif
-#include "area_lights_inc.glsl"
 
 half D_GGX(half NoH, half roughness, hvec3 n, hvec3 h) {
 	half a = NoH * roughness;
@@ -32,6 +37,31 @@ half D_GGX(half NoH, half roughness, hvec3 n, hvec3 h) {
 	half d = k * k * half(1.0 / M_PI);
 	return saturateHalf(d);
 }
+
+#ifdef LIGHT_TRANSMITTANCE_USED
+#ifdef SSS_MODE_SKIN
+hvec3 SSS_skin(half NdotL, half transmittance_depth, half transmittance_z, half transmittance_boost, hvec4 transmittance_color, hvec3 light_color) {
+	half scale = half(8.25) / transmittance_depth;
+	half d = scale * abs(transmittance_z);
+	float dd = float(-d * d);
+	hvec3 profile = hvec3(vec3(0.233, 0.455, 0.649) * exp(dd / 0.0064) +
+			vec3(0.1, 0.336, 0.344) * exp(dd / 0.0484) +
+			vec3(0.118, 0.198, 0.0) * exp(dd / 0.187) +
+			vec3(0.113, 0.007, 0.007) * exp(dd / 0.567) +
+			vec3(0.358, 0.004, 0.0) * exp(dd / 1.99) +
+			vec3(0.078, 0.0, 0.0) * exp(dd / 7.41));
+
+	return profile * transmittance_color.a * light_color * clamp(transmittance_boost - NdotL, half(0.0), half(1.0)) * half(1.0 / M_PI);
+}
+#else
+hvec3 SSS(half NdotL, half transmittance_depth, half transmittance_z, half transmittance_boost, hvec4 transmittance_color, hvec3 light_color) {
+	half scale = half(8.25) / transmittance_depth;
+	half d = scale * abs(transmittance_z);
+	half dd = -d * d;
+	return exp(dd) * transmittance_color.rgb * transmittance_color.a * light_color * clamp(transmittance_boost - NdotL, half(0.0), half(1.0)) * half(1.0 / M_PI);
+}
+#endif
+#endif
 
 // From Earl Hammon, Jr. "PBR Diffuse Lighting for GGX+Smith Microsurfaces" https://www.gdcvault.com/play/1024478/PBR-Diffuse-Lighting-for-GGX
 half V_GGX(half NdotL, half NdotV, half alpha) {
@@ -161,23 +191,9 @@ void light_compute(hvec3 N, hvec3 L, hvec3 V, half A, hvec3 light_color, bool is
 #ifdef LIGHT_TRANSMITTANCE_USED
 	{
 #ifdef SSS_MODE_SKIN
-		half scale = half(8.25) / transmittance_depth;
-		half d = scale * abs(transmittance_z);
-		float dd = float(-d * d);
-		hvec3 profile = hvec3(vec3(0.233, 0.455, 0.649) * exp(dd / 0.0064) +
-				vec3(0.1, 0.336, 0.344) * exp(dd / 0.0484) +
-				vec3(0.118, 0.198, 0.0) * exp(dd / 0.187) +
-				vec3(0.113, 0.007, 0.007) * exp(dd / 0.567) +
-				vec3(0.358, 0.004, 0.0) * exp(dd / 1.99) +
-				vec3(0.078, 0.0, 0.0) * exp(dd / 7.41));
-
-		diffuse_light += profile * transmittance_color.a * light_color * clamp(transmittance_boost - NdotL, half(0.0), half(1.0)) * half(1.0 / M_PI);
+		diffuse_light += SSS_skin(NdotL, transmittance_depth, transmittance_z, transmittance_boost, transmittance_color, light_color);
 #else
-
-		half scale = half(8.25) / transmittance_depth;
-		half d = scale * abs(transmittance_z);
-		half dd = -d * d;
-		diffuse_light += exp(dd) * transmittance_color.rgb * transmittance_color.a * light_color * clamp(transmittance_boost - NdotL, half(0.0), half(1.0)) * half(1.0 / M_PI);
+		diffuse_light += SSS(NdotL, transmittance_depth, transmittance_z, transmittance_boost, transmittance_color, light_color);
 #endif
 	}
 #endif //LIGHT_TRANSMITTANCE_USED
@@ -945,9 +961,11 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 #ifdef LIGHT_ANISOTROPY_USED
 			binormal, tangent, anisotropy,
 #endif
+
 			diffuse_light, specular_light);
 }
 
+// implementation of area lights with Linearly Transformed Cosines (LTC): https://eheitzresearch.wordpress.com/415-2/
 void light_process_area(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, hvec3 f0, half roughness, half metallic, float taa_frame_count, hvec3 albedo, inout half alpha, vec2 screen_uv, hvec3 energy_compensation,
 #ifdef LIGHT_BACKLIGHT_USED
 		hvec3 backlight,
@@ -1258,7 +1276,7 @@ void light_process_area(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	float cc_specular_ltc = 0.0;
 	vec2 cc_fresnel;
 	ltc_evaluate_specular(vec3(vertex_normal), vec3(eye_vec), sqrt(mix(0.001, 0.1, float(clearcoat_roughness))), points, area_lights.data[idx].projector_rect, max_mipmap, area_light_atlas, SAMPLER_LINEAR_WITH_MIPMAPS_CLAMP, ltc_lut1, ltc_lut2, cc_specular_ltc, cc_fresnel, cc_specular_tex_color);
-	half Fr = half(0.04) * max(half(cc_fresnel.x), half(0.0)) + half(1.0 - 0.04) * max(half(cc_fresnel.y), half(0.0)) * clearcoat;
+	half Fr = (half(0.04) * max(half(cc_fresnel.x), half(0.0)) + half(1.0 - 0.04) * max(half(cc_fresnel.y), half(0.0))) * clearcoat;
 	cc_attenuation = half(1.0) - Fr;
 	specular_light += half(cc_specular_ltc) * hvec3(cc_specular_tex_color) * Fr * color * light_attenuation_ltc * specular_amount;
 #endif // LIGHT_CLEARCOAT_USED

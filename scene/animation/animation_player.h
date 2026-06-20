@@ -30,7 +30,7 @@
 
 #pragma once
 
-#include "animation_mixer.h"
+#include "scene/animation/animation_mixer.h"
 #include "scene/resources/animation.h"
 
 class AnimationPlayer : public AnimationMixer {
@@ -64,7 +64,7 @@ private:
 
 	struct PlaybackData {
 		bool is_enabled = false;
-		StringName animation_name;
+		String animation_name;
 		double animation_length = 0.0;
 		double pos = 0.0;
 		float speed_scale = 1.0;
@@ -96,7 +96,7 @@ private:
 		bool seeked = false;
 		bool internal_seeked = false;
 		bool started = false;
-		List<Blend> blend;
+		LocalVector<Blend> blend;
 	} playback;
 
 	struct BlendKey {

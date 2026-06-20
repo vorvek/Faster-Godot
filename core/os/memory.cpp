@@ -33,6 +33,10 @@
 #include "core/profiling/profiling.h"
 #include "core/templates/safe_refcount.h"
 
+#ifdef DEV_ENABLED
+#include "core/math/math_funcs_binary.h"
+#endif
+
 #include <cstdlib>
 
 #ifdef DEBUG_ENABLED
@@ -41,7 +45,7 @@ static SafeNumeric<uint64_t> _max_mem_usage;
 #endif
 
 void *Memory::alloc_aligned_static(size_t p_bytes, size_t p_alignment) {
-	DEV_ASSERT(is_power_of_2(p_alignment));
+	DEV_ASSERT(Math::is_power_of_2(p_alignment));
 
 	void *p1, *p2;
 	if ((p1 = (void *)malloc(p_bytes + p_alignment - 1 + sizeof(uint32_t))) == nullptr) {

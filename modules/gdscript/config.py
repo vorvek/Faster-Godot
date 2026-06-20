@@ -10,7 +10,10 @@ def get_doc_classes():
     return [
         "@GDScript",
         "GDScript",
+        "GDScriptLanguageProtocol",
         "GDScriptSyntaxHighlighter",
+        "GDScriptTextDocument",
+        "GDScriptWorkspace",
     ]
 
 

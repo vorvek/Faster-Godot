@@ -19,6 +19,8 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 #include "../oct_inc.glsl"
 #include "../area_lights_inc.glsl"
 
+
+#define M_TAU 6.28318530718
 #define M_PI 3.14159265359
 
 #define DENSITY_SCALE 1024.0
@@ -36,38 +38,43 @@ layout(set = 0, binding = 4, std430) restrict readonly buffer SpotLights {
 }
 spot_lights;
 
-layout(set = 0, binding = 5, std140) uniform DirectionalLights {
+layout(set = 0, binding = 5, std430) restrict readonly buffer AreaLights {
+	LightData data[];
+}
+area_lights;
+
+layout(set = 0, binding = 6, std140) uniform DirectionalLights {
 	DirectionalLightData data[MAX_DIRECTIONAL_LIGHT_DATA_STRUCTS];
 }
 directional_lights;
 
-layout(set = 0, binding = 6, std430) buffer restrict readonly ClusterBuffer {
+layout(set = 0, binding = 7, std430) buffer restrict readonly ClusterBuffer {
 	uint data[];
 }
 cluster_buffer;
 
-layout(set = 0, binding = 7) uniform sampler linear_sampler;
+layout(set = 0, binding = 8) uniform sampler linear_sampler;
 
 #ifdef MODE_DENSITY
-layout(rgba16f, set = 0, binding = 8) uniform restrict writeonly image3D density_map;
+layout(rgba16f, set = 0, binding = 9) uniform restrict writeonly image3D density_map;
 #endif
 
 #ifdef MODE_FOG
-layout(rgba16f, set = 0, binding = 8) uniform restrict readonly image3D density_map;
-layout(rgba16f, set = 0, binding = 9) uniform restrict writeonly image3D fog_map;
+layout(rgba16f, set = 0, binding = 9) uniform restrict readonly image3D density_map;
+layout(rgba16f, set = 0, binding = 10) uniform restrict writeonly image3D fog_map;
 #endif
 
 #ifdef MODE_COPY
-layout(rgba16f, set = 0, binding = 8) uniform restrict readonly image3D source_map;
-layout(rgba16f, set = 0, binding = 9) uniform restrict writeonly image3D dest_map;
+layout(rgba16f, set = 0, binding = 9) uniform restrict readonly image3D source_map;
+layout(rgba16f, set = 0, binding = 10) uniform restrict writeonly image3D dest_map;
 #endif
 
 #ifdef MODE_FILTER
-layout(rgba16f, set = 0, binding = 8) uniform restrict readonly image3D source_map;
-layout(rgba16f, set = 0, binding = 9) uniform restrict writeonly image3D dest_map;
+layout(rgba16f, set = 0, binding = 9) uniform restrict readonly image3D source_map;
+layout(rgba16f, set = 0, binding = 10) uniform restrict writeonly image3D dest_map;
 #endif
 
-layout(set = 0, binding = 10) uniform sampler shadow_sampler;
+layout(set = 0, binding = 11) uniform sampler shadow_sampler;
 
 #define MAX_VOXEL_GI_INSTANCES 8
 
@@ -86,14 +93,14 @@ struct VoxelGIData {
 	float exposure_normalization; // 4 - 112
 };
 
-layout(set = 0, binding = 11, std140) uniform VoxelGIs {
+layout(set = 0, binding = 12, std140) uniform VoxelGIs {
 	VoxelGIData data[MAX_VOXEL_GI_INSTANCES];
 }
 voxel_gi_instances;
 
-layout(set = 0, binding = 12) uniform texture3D voxel_gi_textures[MAX_VOXEL_GI_INSTANCES];
+layout(set = 0, binding = 13) uniform texture3D voxel_gi_textures[MAX_VOXEL_GI_INSTANCES];
 
-layout(set = 0, binding = 13) uniform sampler linear_sampler_with_mipmaps;
+layout(set = 0, binding = 14) uniform sampler linear_sampler_with_mipmaps;
 
 #ifdef ENABLE_SDFGI
 
@@ -143,7 +150,7 @@ layout(set = 1, binding = 2) uniform texture3D sdfgi_occlusion_texture;
 
 #endif //SDFGI
 
-layout(set = 0, binding = 14, std140) uniform Params {
+layout(set = 0, binding = 15, std140) uniform Params {
 	vec2 fog_frustum_size_begin;
 	vec2 fog_frustum_size_end;
 
@@ -188,35 +195,30 @@ layout(set = 0, binding = 14, std140) uniform Params {
 }
 params;
 #ifndef MODE_COPY
-layout(set = 0, binding = 15) uniform texture3D prev_density_texture;
+layout(set = 0, binding = 16) uniform texture3D prev_density_texture;
 
 #ifdef NO_IMAGE_ATOMICS
-layout(set = 0, binding = 16) buffer density_only_map_buffer {
+layout(set = 0, binding = 17) buffer density_only_map_buffer {
 	uint density_only_map[];
 };
-layout(set = 0, binding = 17) buffer light_only_map_buffer {
+layout(set = 0, binding = 18) buffer light_only_map_buffer {
 	uint light_only_map[];
 };
-layout(set = 0, binding = 18) buffer emissive_only_map_buffer {
+layout(set = 0, binding = 19) buffer emissive_only_map_buffer {
 	uint emissive_only_map[];
 };
 #else
-layout(r32ui, set = 0, binding = 16) uniform uimage3D density_only_map;
-layout(r32ui, set = 0, binding = 17) uniform uimage3D light_only_map;
-layout(r32ui, set = 0, binding = 18) uniform uimage3D emissive_only_map;
+layout(r32ui, set = 0, binding = 17) uniform uimage3D density_only_map;
+layout(r32ui, set = 0, binding = 18) uniform uimage3D light_only_map;
+layout(r32ui, set = 0, binding = 19) uniform uimage3D emissive_only_map;
 #endif
 
 #ifdef USE_RADIANCE_OCTMAP_ARRAY
-layout(set = 0, binding = 19) uniform texture2DArray sky_texture;
+layout(set = 0, binding = 20) uniform texture2DArray sky_texture;
 #else
-layout(set = 0, binding = 19) uniform texture2D sky_texture;
+layout(set = 0, binding = 20) uniform texture2D sky_texture;
 #endif
 #endif // MODE_COPY
-
-layout(set = 0, binding = 20, std430) restrict readonly buffer AreaLights {
-	LightData data[];
-}
-area_lights;
 
 layout(set = 0, binding = 21) uniform texture2D area_light_atlas;
 

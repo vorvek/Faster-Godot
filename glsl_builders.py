@@ -131,7 +131,9 @@ def include_file_in_rd_header(filename: str, header_data: RDHeaderStruct, depth:
                     header_data.any_hit_included_files += [included_file]
                     if include_file_in_rd_header(included_file, header_data, depth + 1) is None:
                         print_error(f'In file "{filename}": #include "{includeline}" could not be found!"')
-                elif included_file not in header_data.closest_hit_included_files and header_data.reading == "closest_hit":
+                elif (
+                    included_file not in header_data.closest_hit_included_files and header_data.reading == "closest_hit"
+                ):
                     header_data.closest_hit_included_files += [included_file]
                     if include_file_in_rd_header(included_file, header_data, depth + 1) is None:
                         print_error(f'In file "{filename}": #include "{includeline}" could not be found!"')
@@ -139,7 +141,10 @@ def include_file_in_rd_header(filename: str, header_data: RDHeaderStruct, depth:
                     header_data.miss_included_files += [included_file]
                     if include_file_in_rd_header(included_file, header_data, depth + 1) is None:
                         print_error(f'In file "{filename}": #include "{includeline}" could not be found!"')
-                elif included_file not in header_data.intersection_included_files and header_data.reading == "intersection":
+                elif (
+                    included_file not in header_data.intersection_included_files
+                    and header_data.reading == "intersection"
+                ):
                     header_data.intersection_included_files += [included_file]
                     if include_file_in_rd_header(included_file, header_data, depth + 1) is None:
                         print_error(f'In file "{filename}": #include "{includeline}" could not be found!"')
@@ -171,21 +176,22 @@ def include_file_in_rd_header(filename: str, header_data: RDHeaderStruct, depth:
     return header_data
 
 
+def build_rd_header_lines_for_raytracing_stage(lines, stage: str):
+    if lines:
+        return f"""\
+		static const char _{stage}_code[] = {{
+{to_raw_cstring(lines)}
+		}};
+"""
+    else:
+        return f"""\
+		static const char *_{stage}_code = nullptr;
+"""
+
+
 def build_rd_header(filename: str, shader: str) -> None:
     include_file_in_rd_header(shader, header_data := RDHeaderStruct(), 0)
     class_name = os.path.basename(shader).replace(".glsl", "").title().replace("_", "").replace(".", "") + "ShaderRD"
-
-    def write_stage_code(file, variable_name: str, lines) -> None:
-        if lines:
-            file.write(f"""\
-		static const char {variable_name}[] = {{
-{to_raw_cstring(lines)}
-		}};
-""")
-        else:
-            file.write(f"""\
-		static const char *{variable_name} = nullptr;
-""")
 
     with generated_wrapper(filename) as file:
         file.write(f"""\
@@ -203,11 +209,11 @@ public:
             or header_data.miss_lines
             or header_data.intersection_lines
         ):
-            write_stage_code(file, "_raygen_code", header_data.raygen_lines)
-            write_stage_code(file, "_any_hit_code", header_data.any_hit_lines)
-            write_stage_code(file, "_closest_hit_code", header_data.closest_hit_lines)
-            write_stage_code(file, "_miss_code", header_data.miss_lines)
-            write_stage_code(file, "_intersection_code", header_data.intersection_lines)
+            file.write(build_rd_header_lines_for_raytracing_stage(header_data.raygen_lines, "raygen"))
+            file.write(build_rd_header_lines_for_raytracing_stage(header_data.any_hit_lines, "any_hit"))
+            file.write(build_rd_header_lines_for_raytracing_stage(header_data.closest_hit_lines, "closest_hit"))
+            file.write(build_rd_header_lines_for_raytracing_stage(header_data.miss_lines, "miss"))
+            file.write(build_rd_header_lines_for_raytracing_stage(header_data.intersection_lines, "intersection"))
             file.write(f"""\
 		setup_raytracing(_raygen_code, _any_hit_code, _closest_hit_code, _miss_code, _intersection_code, "{class_name}");
 """)
@@ -218,8 +224,6 @@ public:
 		static const char _compute_code[] = {{
 {to_raw_cstring(header_data.compute_lines)}
 		}};
-""")
-            file.write(f"""\
 		setup(_vertex_code, _fragment_code, _compute_code, "{class_name}");
 """)
         else:
@@ -231,15 +235,12 @@ public:
 {to_raw_cstring(header_data.fragment_lines)}
 		}};
 		static const char *_compute_code = nullptr;
-""")
-
-            file.write(f"""\
 		setup(_vertex_code, _fragment_code, _compute_code, "{class_name}");
 """)
 
-        file.write(f"""\
-	}}
-}};
+        file.write("""\
+	}
+};
 """)
 
 

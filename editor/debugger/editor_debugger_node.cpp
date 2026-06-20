@@ -30,7 +30,10 @@
 
 #include "editor_debugger_node.h"
 
+#include "core/config/engine.h"
 #include "core/io/resource_loader.h"
+#include "core/object/callable_mp.h"
+#include "core/object/class_db.h"
 #include "core/object/undo_redo.h"
 #include "editor/debugger/editor_debugger_plugin.h"
 #include "editor/debugger/editor_debugger_tree.h"
@@ -50,6 +53,7 @@
 #include "scene/gui/menu_button.h"
 #include "scene/gui/tab_container.h"
 #include "scene/resources/packed_scene.h"
+#include "servers/display/display_server.h"
 
 template <typename Func>
 void _for_all(TabContainer *p_node, const Func &p_func) {
@@ -68,9 +72,7 @@ EditorDebuggerNode::EditorDebuggerNode() {
 	set_layout_key("Debugger");
 	set_dock_shortcut(ED_SHORTCUT_AND_COMMAND("bottom_panels/toggle_debugger_bottom_panel", TTRC("Toggle Debugger Dock"), KeyModifierMask::ALT | Key::D));
 	set_default_slot(EditorDock::DOCK_SLOT_BOTTOM);
-	set_available_layouts(EditorDock::DOCK_LAYOUT_HORIZONTAL);
-	set_global(false);
-	set_transient(true);
+	set_available_layouts(EditorDock::DOCK_LAYOUT_HORIZONTAL | EditorDock::DOCK_LAYOUT_FLOATING);
 
 	_update_margins();
 
@@ -165,7 +167,7 @@ void EditorDebuggerNode::_stack_frame_selected(int p_debugger) {
 void EditorDebuggerNode::_error_selected(const String &p_file, int p_line, int p_debugger) {
 	if (!p_file.is_resource_file() && !ResourceCache::has(p_file)) {
 		// If it's a built-in script, make sure the scene is opened first.
-		EditorNode::get_singleton()->load_scene(p_file.get_slice("::", 0));
+		EditorNode::get_singleton()->open_scene(p_file.get_slice("::", 0));
 	}
 	Ref<Script> s = ResourceLoader::load(p_file);
 	emit_signal(SNAME("goto_script_line"), s, p_line - 1);

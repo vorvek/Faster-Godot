@@ -200,9 +200,12 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 	};
 
 	PipelineStatistics pipeline_statistics;
+	DriverWorkarounds driver_workarounds;
 
 	void _register_requested_device_extension(const CharString &p_extension_name, bool p_required);
 	Error _initialize_device_extensions();
+	void _check_driver_workarounds(const VkPhysicalDeviceProperties &p_device_properties, const VkPhysicalDeviceDriverPropertiesKHR *p_driver_properties);
+	void _get_device_properties();
 	Error _check_device_features();
 	Error _check_device_capabilities();
 	void _choose_vrs_capabilities();
@@ -813,6 +816,7 @@ public:
 	virtual void command_trace_rays(CommandBufferID p_cmd_buffer, const ShaderBindingTable &p_raygen_sbt, const ShaderBindingTable &p_miss_sbt, const ShaderBindingTable &p_hit_sbt, uint32_t p_width, uint32_t p_height, uint32_t p_depth) override final;
 
 public:
+	// ----- PIPELINE -----
 	virtual RaytracingPipelineID raytracing_pipeline_create(VectorView<PipelineShader> p_shaders, VectorView<uint32_t> p_raygen_shader_indices, VectorView<uint32_t> p_miss_shader_indices, VectorView<HitGroup> p_hit_groups, uint32_t p_max_trace_recursion_depth, ShaderID p_layout_defining_shader) override final;
 	virtual void raytracing_pipeline_free(RaytracingPipelineID p_pipeline) override final;
 
@@ -878,6 +882,8 @@ public:
 	virtual const RenderingShaderContainerFormat &get_shader_container_format() const override final;
 
 	virtual bool is_composite_alpha_supported(CommandQueueID p_queue) const override final;
+
+	virtual DriverWorkarounds get_driver_workarounds() const override final;
 
 private:
 	/*********************/

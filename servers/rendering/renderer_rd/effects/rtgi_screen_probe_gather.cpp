@@ -252,7 +252,7 @@ void RTGIScreenProbeGather::run_placement(Ref<RenderSceneBuffersRD> p_rb, RID p_
 	// Linear sampler, clamp-to-edge. PLACE only does integer texelFetch()es, but the
 	// G-buffers are bound as SAMPLER_WITH_TEXTURE (mirroring render_gi_debug), so a
 	// sampler is required; clamp-to-edge is the safe choice for the unused filtering.
-	RID linear_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID linear_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 
 	// Placement writes THIS frame's (current) header set. read_index was already
 	// flipped at the top of this function (the frame swap), so get_header_*() returns
@@ -387,7 +387,7 @@ void RTGIScreenProbeGather::run_accumulate(const SpgFrameParams &p_frame, const 
 	// shader keys the actual seed on seed_samples (set to 0 below in that case).
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
 	ERR_FAIL_NULL(material_storage);
-	RID linear_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID linear_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 	RID default_black = RendererRD::TextureStorage::get_singleton()->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
 	const bool wrc_available = p_wrc_seed.radiance_atlas.is_valid() && p_wrc_seed.distance_atlas.is_valid();
 	{
@@ -535,7 +535,7 @@ void RTGIScreenProbeGather::render_gi_debug(Ref<RenderSceneBuffersRD> p_rb, RID 
 	// the atlas/headers/G-buffers are bound as SAMPLER_WITH_TEXTURE (mirroring the WRC
 	// consumer + PLACE), so a sampler is required; clamp-to-edge is safe for the unused
 	// filtering.
-	RID linear_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID linear_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 
 	// Set 0: SPATIAL-filtered radiance atlas + the two probe headers (sampler+texture),
 	// depth + normal-roughness G-buffers (sampler+texture), the output storage image,

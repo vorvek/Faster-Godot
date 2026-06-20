@@ -1,9 +1,9 @@
 short_name = "faster-godot"
 name = "Faster-Godot"
 major = 4
-minor = 6
-patch = 3
+minor = 7
+patch = 0
 status = "stable"
 module_config = ""
 website = "https://github.com/vorvek/Faster-Godot"
-docs = "4.6"
+docs = "4.7"

@@ -33,7 +33,6 @@
 #include "rendering_context_driver_vulkan.h"
 
 #include "core/config/engine.h"
-
 #include "core/config/project_settings.h"
 #include "core/version.h"
 #include "drivers/vulkan/rendering_device_driver_vulkan.h"
@@ -44,7 +43,6 @@
 #endif
 
 #include <vk_enum_string_helper.h>
-
 
 #if defined(VK_TRACK_DRIVER_MEMORY)
 /*************************************************/
@@ -875,9 +873,6 @@ Error RenderingContextDriverVulkan::_initialize_devices() {
 		driver_device.name = String::utf8(props.deviceName);
 		driver_device.vendor = props.vendorID;
 		driver_device.type = DeviceType(props.deviceType);
-		driver_device.workarounds = Workarounds();
-
-		_check_driver_workarounds(props, driver_device);
 
 		uint32_t queue_family_properties_count = 0;
 		vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[i], &queue_family_properties_count, nullptr);
@@ -889,31 +884,6 @@ Error RenderingContextDriverVulkan::_initialize_devices() {
 	}
 
 	return OK;
-}
-
-void RenderingContextDriverVulkan::_check_driver_workarounds(const VkPhysicalDeviceProperties &p_device_properties, Device &r_device) {
-	// Workaround for the Adreno 6XX family of devices.
-	//
-	// There's a known issue with the Vulkan driver in this family of devices where it'll crash if a dynamic state for drawing is
-	// used in a command buffer before a dispatch call is issued. As both dynamic scissor and viewport are basic requirements for
-	// the engine to not bake this state into the PSO, the only known way to fix this issue is to reset the command buffer entirely.
-	//
-	// As the render graph has no built in limitations of whether it'll issue compute work before anything needs to draw on the
-	// frame, and there's no guarantee that compute work will never be dependent on rasterization in the future, this workaround
-	// will end recording on the current command buffer any time a compute list is encountered after a draw list was executed.
-	// A new command buffer will be created afterwards and the appropriate synchronization primitives will be inserted.
-	//
-	// Executing this workaround has the added cost of synchronization between all the command buffers that are created as well as
-	// all the individual submissions. This performance hit is accepted for the sake of being able to support these devices without
-	// limiting the design of the renderer.
-	//
-	// This bug was fixed in driver version 512.503.0, so we only enabled it on devices older than this.
-	//
-	r_device.workarounds.avoid_compute_after_draw =
-			r_device.vendor == Vendor::VENDOR_QUALCOMM &&
-			p_device_properties.deviceID >= 0x6000000 && // Adreno 6xx
-			p_device_properties.driverVersion < VK_MAKE_VERSION(512, 503, 0) &&
-			r_device.name.find("Turnip") < 0;
 }
 
 bool RenderingContextDriverVulkan::_use_validation_layers() const {
@@ -1010,13 +980,13 @@ void RenderingContextDriverVulkan::surface_set_size(SurfaceID p_surface, uint32_
 	surface->needs_resize = true;
 }
 
-void RenderingContextDriverVulkan::surface_set_vsync_mode(SurfaceID p_surface, DisplayServer::VSyncMode p_vsync_mode) {
+void RenderingContextDriverVulkan::surface_set_vsync_mode(SurfaceID p_surface, DisplayServerEnums::VSyncMode p_vsync_mode) {
 	Surface *surface = (Surface *)(p_surface);
 	surface->vsync_mode = p_vsync_mode;
 	surface->needs_resize = true;
 }
 
-DisplayServer::VSyncMode RenderingContextDriverVulkan::surface_get_vsync_mode(SurfaceID p_surface) const {
+DisplayServerEnums::VSyncMode RenderingContextDriverVulkan::surface_get_vsync_mode(SurfaceID p_surface) const {
 	Surface *surface = (Surface *)(p_surface);
 	return surface->vsync_mode;
 }

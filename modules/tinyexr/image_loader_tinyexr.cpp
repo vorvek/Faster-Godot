@@ -30,13 +30,12 @@
 
 #include "image_loader_tinyexr.h"
 
+#include "core/io/file_access_memory.h"
 #include "core/math/simd_defs.h"
 
-#include <zlib.h> // Should come before including tinyexr.
-
-#include "thirdparty/tinyexr/tinyexr.h"
-
-#include "core/io/file_access_memory.h"
+#include <zlib.h>
+// zlib should come before including tinyexr.
+#include <thirdparty/tinyexr/tinyexr.h>
 
 static _ALWAYS_INLINE_ void _tinyexr_store_8_rgba_half(
 		__m128i p_r,

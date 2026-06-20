@@ -102,15 +102,17 @@ enum TTSUtteranceEvent {
 
 /* MOUSE */
 
+// Keep synced with InputClassEnums::MouseMode enum.
 enum MouseMode {
-	MOUSE_MODE_VISIBLE,
-	MOUSE_MODE_HIDDEN,
-	MOUSE_MODE_CAPTURED,
-	MOUSE_MODE_CONFINED,
-	MOUSE_MODE_CONFINED_HIDDEN,
-	MOUSE_MODE_MAX,
+	MOUSE_MODE_VISIBLE, // Input::MouseMode::MOUSE_MODE_VISIBLE
+	MOUSE_MODE_HIDDEN, // Input::MouseMode::MOUSE_MODE_HIDDEN
+	MOUSE_MODE_CAPTURED, // Input::MouseMode::MOUSE_MODE_CAPTURED
+	MOUSE_MODE_CONFINED, // Input::MouseMode::MOUSE_MODE_CONFINED
+	MOUSE_MODE_CONFINED_HIDDEN, // Input::MouseMode::MOUSE_MODE_CONFINED_HIDDEN
+	MOUSE_MODE_MAX, // Input::MouseMode::MOUSE_MODE_MAX
 };
 
+// Keep synced with InputClassEnums and Control enums.
 #undef CursorShape
 enum CursorShape {
 	CURSOR_ARROW,
@@ -135,6 +137,7 @@ enum CursorShape {
 
 /* KEYBOARD */
 
+// Keep synced with LineEdit::VirtualKeyboardType enum.
 enum VirtualKeyboardType {
 	KEYBOARD_TYPE_DEFAULT,
 	KEYBOARD_TYPE_MULTILINE,
@@ -148,14 +151,17 @@ enum VirtualKeyboardType {
 
 /* SCREEN */
 
+// Keep synced with EditorSettings::InitialScreen enum.
 enum {
 	INVALID_SCREEN = -1,
 	SCREEN_WITH_MOUSE_FOCUS = -4,
 	SCREEN_WITH_KEYBOARD_FOCUS = -3,
 	SCREEN_PRIMARY = -2,
-	SCREEN_OF_MAIN_WINDOW = -1,
+	SCREEN_OF_MAIN_WINDOW = -1, // Note: for the main window, determine screen from position.
 };
 
+// Keep the ScreenOrientation enum values in sync with the `display/window/handheld/orientation`
+// project setting hint.
 enum ScreenOrientation {
 	SCREEN_LANDSCAPE,
 	SCREEN_PORTRAIT,
@@ -180,6 +186,11 @@ enum HandleType {
 	DISPLAY_HANDLE,
 	WINDOW_HANDLE,
 	WINDOW_VIEW,
+	OPENGL_CONTEXT,
+	EGL_DISPLAY,
+	EGL_CONFIG,
+	GLX_VISUALID,
+	GLX_FBCONFIG,
 };
 
 enum WindowMode {
@@ -207,6 +218,7 @@ enum WindowFlags {
 	WINDOW_FLAG_MAX,
 };
 
+// Separate enum otherwise we get warnings in switches not handling all values.
 enum WindowFlagsBit {
 	WINDOW_FLAG_RESIZE_DISABLED_BIT = (1 << WINDOW_FLAG_RESIZE_DISABLED),
 	WINDOW_FLAG_BORDERLESS_BIT = (1 << WINDOW_FLAG_BORDERLESS),
@@ -249,6 +261,8 @@ enum WindowResizeEdge {
 	WINDOW_EDGE_MAX,
 };
 
+// Keep the VSyncMode enum values in sync with the `display/window/vsync/vsync_mode`
+// project setting hint.
 enum VSyncMode {
 	VSYNC_DISABLED,
 	VSYNC_ENABLED,

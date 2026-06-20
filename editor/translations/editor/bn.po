@@ -19,13 +19,14 @@
 # shahriarlabib000 <shahriarlabib000@gmail.com>, 2024, 2025.
 # "deboneil." <bhattacharjeedeboneil@gmail.com>, 2025.
 # "A Thousand Ships (she/her)" <over999ships@gmail.com>, 2025.
+# Shaon Biswas <shaonbiswasjhumabiswas@gmail.com>, 2026.
 msgid ""
 msgstr ""
 "Project-Id-Version: Godot Engine editor interface\n"
 "Report-Msgid-Bugs-To: https://github.com/godotengine/godot\n"
 "POT-Creation-Date: \n"
-"PO-Revision-Date: 2025-10-14 07:27+0000\n"
-"Last-Translator: shahriarlabib000 <shahriarlabib000@gmail.com>\n"
+"PO-Revision-Date: 2026-05-12 13:11+0000\n"
+"Last-Translator: Shaon Biswas <shaonbiswasjhumabiswas@gmail.com>\n"
 "Language-Team: Bengali <https://hosted.weblate.org/projects/godot-engine/"
 "godot/bn/>\n"
 "Language: bn\n"
@@ -33,16 +34,157 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Weblate 5.14-dev\n"
+"X-Generator: Weblate 2026.5-dev\n"
 
 msgid "OK"
-msgstr "সঠিক"
+msgstr "ঠিক আছে"
+
+msgid "Failed"
+msgstr "ব্যর্থ"
+
+msgid "Unavailable"
+msgstr "উপলব্ধ নেই"
+
+msgid "Unconfigured"
+msgstr "কনফিগার করা নেই"
+
+msgid "Unauthorized"
+msgstr "অথোরাইজ করা নেই"
+
+msgid "Parameter out of range"
+msgstr "প্যারামিটার রেঞ্জের বাইরে"
+
+msgid "Out of memory"
+msgstr "মেমোরি শেষ"
+
+msgid "File not found"
+msgstr "ফাইল পাওয়া যায়নি"
+
+msgid "File: Bad drive"
+msgstr "ফাইল: ভুল ড্রাইভ"
+
+msgid "File: Bad path"
+msgstr "ফাইল: ভুল পাথ"
+
+msgid "File: Permission denied"
+msgstr "ফাইল: অনুমতি নেই"
+
+msgid "File already in use"
+msgstr "ফাইল আগে থেকেই ব্যবহারে আছে"
+
+msgid "Can't open file"
+msgstr "ফাইলটি খোলা যাচ্ছে না"
+
+msgid "Can't write file"
+msgstr "ফাইল লেখা যাচ্ছে না"
+
+msgid "Can't read file"
+msgstr "ফাইল পড়া যাচ্ছে না"
+
+msgid "File unrecognized"
+msgstr "ফাইল চেনা যাচ্ছে না"
+
+msgid "File corrupt"
+msgstr "ফাইল ক্ষতিগ্রস্ত"
+
+msgid "Missing dependencies for file"
+msgstr "ফাইলটির নির্ভরতা অনুপস্থিত"
+
+msgid "End of file"
+msgstr "ফাইলের শেষ"
+
+msgid "Can't open"
+msgstr "খোলা যাচ্ছে না"
+
+msgid "Can't create"
+msgstr "তৈরি করা যাচ্ছে না"
+
+msgid "Query failed"
+msgstr "ক্যোয়ারি ব্যর্থ হয়েছে"
+
+msgid "Already in use"
+msgstr "ইতিমধ্যে ব্যবহৃত হচ্ছে"
+
+msgid "Locked"
+msgstr "লক করা আছে"
+
+msgid "Timeout"
+msgstr "টাইমআউট"
+
+msgid "Can't connect"
+msgstr "সংযোগ করা যাচ্ছে না"
+
+msgid "Can't resolve"
+msgstr "সমাধান করা যাচ্ছে না"
+
+msgid "Connection error"
+msgstr "সংযোগে সমস্যা"
+
+msgid "Can't acquire resource"
+msgstr "রিজলভ করা যাচ্ছে না"
+
+msgid "Can't fork"
+msgstr "ফর্ক করা যাচ্ছে না"
+
+msgid "Invalid data"
+msgstr "অবৈধ ডেটা"
+
+msgid "Invalid parameter"
+msgstr "অবৈধ প্যারামিটার"
+
+msgid "Already exists"
+msgstr "%s (ইতোমধ্যে বিদ্যমান)"
+
+msgid "Does not exist"
+msgstr "%s (বিদ্যমান নয়)"
+
+msgid "Can't read database"
+msgstr "ডেটাবেস পড়া যাচ্ছে না"
+
+msgid "Can't write database"
+msgstr "ডেটাবেসে লেখা যাচ্ছে না"
+
+msgid "Compilation failed"
+msgstr "কম্পাইলেশন ব্যর্থ হয়েছে"
+
+msgid "Method not found"
+msgstr "Method পাওয়া যায় নি"
+
+msgid "Link failed"
+msgstr "লিংক করতে ব্যর্থ হয়েছে"
+
+msgid "Script failed"
+msgstr "স্ক্রিপ্ট ব্যর্থ হয়েছে"
+
+msgid "Cyclic link detected"
+msgstr "Cycilic link পাওয়া গেছে"
+
+msgid "Invalid declaration"
+msgstr "অবৈধ্য ডিকলারেশন"
+
+msgid "Duplicate symbol"
+msgstr "ডুপ্লিকেট সিম্বল আছে"
+
+msgid "Parse error"
+msgstr "পার্স করতে সমস্যা %s"
+
+msgid "Busy"
+msgstr "ব্যস্থ"
+
+msgid "Skip"
+msgstr "স্কিপ"
 
 msgid "Help"
 msgstr "হেল্প"
 
+msgid "Bug"
+msgstr "ত্রুটি"
+
+msgid "Printer on fire"
+msgstr "প্রিন্টার আগুনে"
+
 msgid "Physical"
-msgstr "শারীরিক"
+msgstr "ফিজিকল"
 
 msgid "Left Mouse Button"
 msgstr "বাম মাউস বোতাম"
@@ -54,28 +196,28 @@ msgid "Middle Mouse Button"
 msgstr "মধ্য মাউস বোতাম"
 
 msgid "Mouse Wheel Up"
-msgstr "মাউসের চাকা উপরের দিকে চক্কর"
+msgstr "মাউস হুইল আপ"
 
 msgid "Mouse Wheel Down"
-msgstr "মাউসের চাকা নিচের দিকে চক্কর"
+msgstr "মাউস হুইল ডাউন"
 
 msgid "Mouse Wheel Left"
-msgstr "চাকা উপরে তোলার বোতাম"
+msgstr "মাউস হুইল বাঁম"
 
 msgid "Mouse Wheel Right"
-msgstr "ডান বোতাম"
+msgstr "মাউস হুইল ডান"
 
 msgid "Mouse Thumb Button 1"
-msgstr "মাউসের বৃদ্ধাঙ্গুল বোতাম ১"
+msgstr "মাউস বোতাম ১"
 
 msgid "Mouse Thumb Button 2"
-msgstr "মাউসের বৃদ্ধাঙ্গুল বোতাম ২"
+msgstr "মাউস বোতাম ২"
 
 msgid "Button"
-msgstr "বাটন"
+msgstr "বোতাম"
 
 msgid "Double Click"
-msgstr "ডাবল ক্লিক"
+msgstr "ডবল ক্লিক"
 
 msgid "Mouse motion at position (%s) with velocity (%s)"
 msgstr "(%s) স্থানে (%s) বেগে মাউসের গতিবিধি"
@@ -87,10 +229,10 @@ msgid "Left Stick Y-Axis, Joystick 0 Y-Axis"
 msgstr "বাম স্টিক Y-অক্ষ, জয়স্টিক ০ Y-অক্ষ"
 
 msgid "Right Stick X-Axis, Joystick 1 X-Axis"
-msgstr "ডান স্টিক X-অক্ষ, জয়স্টিক ০ X-অক্ষ"
+msgstr "ডান স্টিক X-অক্ষ, জয়স্টিক ১ X-অক্ষ"
 
 msgid "Right Stick Y-Axis, Joystick 1 Y-Axis"
-msgstr "ডান স্টিক Y-অক্ষ, জয়স্টিক ০ Y-অক্ষ"
+msgstr "ডান স্টিক Y-অক্ষ, জয়স্টিক ১ Y-অক্ষ"
 
 msgid "Joystick 2 X-Axis, Left Trigger, Sony L2, Xbox LT"
 msgstr "জয়স্টিক ২ X-অক্ষ, বাম ট্রিগার, সোনি L2, এক্সবক্স LT"
@@ -117,10 +259,10 @@ msgid "Joypad Motion on Axis %d (%s) with Value %.2f"
 msgstr "%d (%s) অক্ষে জয়প্যাড গতিবিধি যার পরিমাণ %.2f"
 
 msgid "Bottom Action, Sony Cross, Xbox A, Nintendo B"
-msgstr "নিচের একশন,সোনি ক্রস,এক্সবক্স A, নিন্টেন্ডো B"
+msgstr "নিচের একশন, সোনি ক্রস, এক্সবক্স A, নিন্টেন্ডো B"
 
 msgid "Right Action, Sony Circle, Xbox B, Nintendo A"
-msgstr "ডান একশন, সোনি বৃত্ত, এক্সবক্স B, নিন্টেন্ডো A"
+msgstr "ডান একশন, সোনি সার্কেল, এক্সবক্স B, নিন্টেন্ডো A"
 
 msgid "Left Action, Sony Square, Xbox X, Nintendo Y"
 msgstr "বাম একশন, সোনি বর্গ, এক্সবক্স X, নিন্টেন্ডো Y"
@@ -537,11 +679,11 @@ msgstr "ক্যাপচার"
 msgid "Create points."
 msgstr "বিন্দু তৈরি করুন।"
 
-msgid "Sync:"
-msgstr "সিঙ্ক:"
+msgid "Sync"
+msgstr "সিঙ্ক"
 
-msgid "Blend:"
-msgstr "ব্লেন্ড/মিশ্রণ:"
+msgid "Position"
+msgstr "অবস্থান"
 
 msgid "Value"
 msgstr "মান"
@@ -578,9 +720,6 @@ msgstr "নোড সংযোজন করুন…"
 
 msgid "Clear"
 msgstr "পরিস্কার করুন/ক্লীয়ার"
-
-msgid "Library Name:"
-msgstr "লাইব্রেরির নাম:"
 
 msgid "Animation name can't be empty."
 msgstr "অ্যানিমেশনের নাম খালি থাকতে পারে না।"
@@ -630,9 +769,6 @@ msgstr "[গ্লোবাল]"
 msgid "Rename Animation: %s"
 msgstr "অ্যানিমেশন পুনঃনামকরণ: %s"
 
-msgid "Animation Name:"
-msgstr "অ্যানিমেশনের নাম:"
-
 msgid "Pasted Animation"
 msgstr "প্রতিলিপিত অ্যানিমেশন"
 
@@ -672,6 +808,15 @@ msgstr "ডিস্কে রিসোর্সে অ্যানিমেশ�
 msgid "Remove animation from Library."
 msgstr "লাইব্রেরি থেকে অ্যানিমেশন সরান।"
 
+msgid "Resource"
+msgstr "রিসোর্স"
+
+msgid "Storage"
+msgstr "স্টোরেজ"
+
+msgid "Library Name:"
+msgstr "লাইব্রেরির নাম:"
+
 msgid "New Library"
 msgstr "নতুন লাইব্রেরী"
 
@@ -683,12 +828,6 @@ msgstr "লাইব্রেরী লোড করুন"
 
 msgid "Load animation library from disk."
 msgstr "ডিস্ক থেকে অ্যানিমেশন লাইব্রেরি লোড করুন।"
-
-msgid "Resource"
-msgstr "রিসোর্স"
-
-msgid "Storage"
-msgstr "স্টোরেজ"
 
 msgid "Error:"
 msgstr "সমস্যা:"
@@ -771,6 +910,9 @@ msgstr "দিকনির্দেশ"
 msgid "Depth"
 msgstr "গভীরতা"
 
+msgid "Animation Name:"
+msgstr "অ্যানিমেশনের নাম:"
+
 msgid "Close"
 msgstr "বন্ধ করুন"
 
@@ -795,14 +937,8 @@ msgstr "সম্পাদন করুন (Edit) %s"
 msgid "Immediate"
 msgstr "তাৎক্ষণিক"
 
-msgid "Sync"
-msgstr "সিঙ্ক"
-
 msgid "Travel"
 msgstr "ভ্রমণ"
-
-msgid "No playback resource set at path: %s."
-msgstr "পাথে কোন প্লেব্যাক রিসোর্স সেট করা নেই: %s।"
 
 msgid "Node Removed"
 msgstr "নোড অপসারিত"
@@ -812,12 +948,6 @@ msgstr "নতুন নোড তৈরি করুন।"
 
 msgid "Connect nodes."
 msgstr "নোড সংযুক্ত করুন।"
-
-msgid "Transition:"
-msgstr "ট্র্যানজিশন/স্থানান্তরণ:"
-
-msgid "Play Mode:"
-msgstr "প্লে মোড:"
 
 msgid "Animation Change Transition"
 msgstr "অ্যানিমেশন বদল ট্রানজিশন"
@@ -1096,9 +1226,6 @@ msgstr "Object এ Method পাওয়া যায় নি:"
 msgid "Animation Move Keys"
 msgstr "অ্যানিমেশনে (Anim) চাবি/কী-সমুহ সরান"
 
-msgid "Position"
-msgstr "অবস্থান"
-
 msgid "Rotation"
 msgstr "ঘূর্ণন"
 
@@ -1249,14 +1376,26 @@ msgstr "অডিও ট্র্যাক ক্লিপ শেষ অফস�
 msgid "Path:"
 msgstr "পথ:"
 
+msgid "Errors"
+msgstr "সমস্যাসমূহ"
+
 msgid "License"
 msgstr "লাইসেন্স"
+
+msgid "Loading..."
+msgstr "লোড হচ্ছে…"
+
+msgid "Downloading..."
+msgstr "ডাউনলোড হচ্ছে…"
+
+msgid "Install..."
+msgstr "ইন্সটল…"
 
 msgid "Version:"
 msgstr "সংস্করণ:"
 
-msgid "Description:"
-msgstr "বর্ণনা:"
+msgid "Description"
+msgstr "বর্ণনা"
 
 msgid "Connection error, please try again."
 msgstr "সংযোগ ত্রুটি, আবার চেষ্টা করুন।"
@@ -1300,9 +1439,6 @@ msgstr "অ্যাসেট ডাউনলোড ত্রুটি:"
 msgid "Downloading (%s / %s)..."
 msgstr "ডাউনলোড হচ্ছে (%s / %s)..।"
 
-msgid "Downloading..."
-msgstr "ডাউনলোড হচ্ছে…"
-
 msgid "Requesting..."
 msgstr "অনুরোধ করা হচ্ছে…"
 
@@ -1312,23 +1448,11 @@ msgstr "অনুরোধ করার সময় ত্রুটি"
 msgid "Idle"
 msgstr "অনিয়োজিত"
 
-msgid "Install..."
-msgstr "ইন্সটল…"
-
 msgid "Retry"
 msgstr "পুনরায় চেষ্টা করুন"
 
-msgid "Testing"
-msgstr "পরীক্ষামূলক উৎস"
-
-msgid "Loading..."
-msgstr "লোড হচ্ছে…"
-
 msgid "All"
 msgstr "সকল"
-
-msgid "Install"
-msgstr "ইন্সটল"
 
 msgid "Plugins..."
 msgstr "প্লাগইন-সমূহ…"
@@ -1339,11 +1463,8 @@ msgstr "সাজান:"
 msgid "Category:"
 msgstr "বিভাগ:"
 
-msgid "Site:"
-msgstr "ওয়েবসাইট:"
-
-msgid "Support"
-msgstr "সাপোর্ট"
+msgid "Licenses"
+msgstr "লাইসেন্স"
 
 msgid "Assets ZIP File"
 msgstr "প্রয়োজনীয় উপকরণসমূহের ZIP ফাইল"
@@ -1368,6 +1489,9 @@ msgstr "সম্পন্ন হয়েছে!"
 
 msgid "Installation preview:"
 msgstr "ইনস্টলেশন প্রিভিউ:"
+
+msgid "Install"
+msgstr "ইন্সটল"
 
 msgid "Stop"
 msgstr "থামো"
@@ -1564,9 +1688,6 @@ msgstr "সময়"
 msgid "Linked"
 msgstr "লিংকড"
 
-msgid "Errors"
-msgstr "সমস্যাসমূহ"
-
 msgid "Main Thread"
 msgstr "প্রধান থ্রেড"
 
@@ -1630,6 +1751,9 @@ msgstr "ফরম্যাট"
 msgid "Usage"
 msgstr "ব্যবহার"
 
+msgid "View Owners..."
+msgstr "স্বত্বাধিকারীদের দেখুন..."
+
 msgid "Misc"
 msgstr "বিবিধ"
 
@@ -1674,12 +1798,6 @@ msgstr "ক্লাস:"
 
 msgid "Inherits:"
 msgstr "গ্রহণ করে:"
-
-msgid "Inherited by:"
-msgstr "গৃহীত হয়েছে:"
-
-msgid "Description"
-msgstr "বর্ণনা"
 
 msgid "Properties"
 msgstr "প্রোপার্টি-সমূহ"
@@ -1801,9 +1919,6 @@ msgstr "এই ডক ভাসমান করুন।"
 msgid "Dock Position"
 msgstr "ড্ক পজিশন"
 
-msgid "Favorites:"
-msgstr "ফেবরিট/প্রিয়-সমূহ:"
-
 msgid "Favorites"
 msgstr "ফেবরিট"
 
@@ -1847,9 +1962,6 @@ msgstr "চালান"
 
 msgid "Edit Dependencies..."
 msgstr "নির্ভরতাসমূহ সম্পাদন করুন..."
-
-msgid "View Owners..."
-msgstr "স্বত্বাধিকারীদের দেখুন..."
 
 msgid "Folder..."
 msgstr "ফোল্ডার…"
@@ -1924,6 +2036,9 @@ msgstr "নাম:"
 msgid "Global"
 msgstr "গ্লোবাল"
 
+msgid "Description:"
+msgstr "বর্ণনা:"
+
 msgid "Group name is valid."
 msgstr "গ্রুপের নাম বৈধ।"
 
@@ -1963,6 +2078,9 @@ msgstr "প্রিসেট"
 msgid "Advanced..."
 msgstr "এডভান্সড…"
 
+msgid "Make Sub-Resources Unique"
+msgstr "উপ-রিসোর্সকে অনন্য হিসেবে তৈরি করুন"
+
 msgid "Failed to load resource."
 msgstr "রিসোর্স লোড ব্যর্থ হয়েছে।"
 
@@ -1980,9 +2098,6 @@ msgstr "প্রোপার্টি-সমূহ কপি করুন"
 
 msgid "Paste Properties"
 msgstr "বৈশিষ্ট্যগুলি পেস্ট করুন"
-
-msgid "Make Sub-Resources Unique"
-msgstr "উপ-রিসোর্সকে অনন্য হিসেবে তৈরি করুন"
 
 msgid "Inspector"
 msgstr "পরিদর্শক/পরীক্ষক"
@@ -2103,17 +2218,17 @@ msgstr "দৃশ্য প্রতিলিপি করে সংরক্ষ
 msgid "Sub-Resources"
 msgstr "সাব-রিসোর্সসমূহ"
 
-msgid "Access as Unique Name"
-msgstr "অনন্য নাম হিসাবে অ্যাক্সেস"
-
 msgid "Clear Inheritance"
 msgstr "উত্তরাধিকারত্ব পরিস্কার করুন"
 
-msgid "Open in Editor"
-msgstr "এডিটরে খুলুন"
-
 msgid "Editable Children"
 msgstr "সম্পাদনযোগ্য অংশীদারীসমূহ"
+
+msgid "Access as Unique Name"
+msgstr "অনন্য নাম হিসাবে অ্যাক্সেস"
+
+msgid "Open in Editor"
+msgstr "এডিটরে খুলুন"
 
 msgid "All Scene Sub-Resources"
 msgstr "সমস্ত দৃশ্য সাব-রিসোর্সেস"
@@ -2225,9 +2340,6 @@ msgstr "নামহীন প্রকল্প"
 
 msgid "Spins when the editor window redraws."
 msgstr "এডিটরের পুন-অঙ্কনে এটি ঘূর্ণন করে।"
-
-msgid "Error saving resource!"
-msgstr "সম্পদ সংরক্ষণে ত্রুটি!"
 
 msgid "Save Resource As..."
 msgstr "রিসোর্স এইরূপে সংরক্ষণ করুন..."
@@ -2349,12 +2461,6 @@ msgstr "লেআউট সংরক্ষণ করুন…"
 
 msgid "Delete Layout..."
 msgstr "লেআউট অপসারণ করুন…"
-
-msgid "Save Layout"
-msgstr "লেআউট/নকশা সংরক্ষণ করুন"
-
-msgid "Delete Layout"
-msgstr "লেআউট/নকশা অপসারণ করুন"
 
 msgid "Save before closing?"
 msgstr "বন্ধ করার পূর্বে পরিবর্তনসমূহ সংরক্ষণ করবেন?"
@@ -2491,6 +2597,9 @@ msgstr "সংরক্ষণ করবেন না"
 msgid "Install from file"
 msgstr "ফাইল থেকে ইন্সটল করুন"
 
+msgid "Select Android sources file"
+msgstr "অ্যান্ড্রয়েড সোর্স ফাইল নির্বাচন করুন"
+
 msgid "Import Templates From ZIP File"
 msgstr "ZIP ফাইল হতে টেমপ্লেট-সমূহ ইম্পোর্ট করুন"
 
@@ -2590,45 +2699,14 @@ msgstr "লিস্ট থেকে ডিভাইস সিলেক্ট �
 msgid "The character '%s' is not allowed in Identifier."
 msgstr "আইডেন্টিফায়ারে '%s' অক্ষরটি অনুমোদিত নয়।"
 
+msgid "Could not start ios-deploy executable."
+msgstr "ios-deploy executable শুরু করা যায়নি।"
+
 msgid "Template file not found: \"%s\"."
 msgstr "টেমপ্লেট ফাইল পাওয়া যায়নি: \"%s\"।"
 
 msgid "Failed to copy export template."
 msgstr "এক্সপোর্ট টেমপ্লেট কপি করতে ব্যর্থ হয়েছে।"
-
-msgid "Can't resolve the requested address."
-msgstr "অনুরোধ করা ঠিকানা সমাধান করা যাচ্ছে না ।"
-
-msgid "Can't connect to the mirror."
-msgstr "mirror এর সাথে সংযোগ করা যাচ্ছে না।"
-
-msgid "No response from the mirror."
-msgstr "mirror থেকে কোন প্রতিক্রিয়া নেই।"
-
-msgid "Request ended up in a redirect loop."
-msgstr "অনুরোধ একটি রিডাইরেক্ট লুপে শেষ হয়েছে।"
-
-msgid "Request failed:"
-msgstr "রিকুয়েস্ট ব্যর্থ হয়েছে:"
-
-msgid ""
-"No download links found for this version. Direct download is only available "
-"for official releases."
-msgstr ""
-"এই ভার্সনের জন্য কোন ডাউনলোড লিঙ্ক পাওয়া যায় নি। সরাসরি ডাউনলোড অফিসিয়াল রিলিজের "
-"জন্য প্রযোজ্য।"
-
-msgid "Resolving"
-msgstr "সমাধান করা হচ্ছে"
-
-msgid "Can't Resolve"
-msgstr "সমস্যা সমাধানে ব্যর্থ"
-
-msgid "Can't Connect"
-msgstr "সংযোগ স্থাপন করা যাচ্ছেনা"
-
-msgid "Connection Error"
-msgstr "সংযোগে সমস্যা"
 
 msgid "Invalid version.txt format inside the export templates file: %s."
 msgstr "এক্সপোর্ট টেমপ্লেট ফাইলের ভিতরে অবৈধ version.txt ফরম্যাট: %s।"
@@ -2636,23 +2714,14 @@ msgstr "এক্সপোর্ট টেমপ্লেট ফাইলের 
 msgid "Importing:"
 msgstr "ইম্পোর্ট হচ্ছে:"
 
-msgid "Export templates are missing. Install them from a file."
-msgstr "রপ্তানি টেমপ্লেট অনুপস্থিত । একটি ফাইল থেকে তাদের ইনস্টল করুন।"
-
-msgid "Current Version:"
-msgstr "বর্তমান ভার্সন:"
-
 msgid "Download from:"
 msgstr "ডাউনলোড সোর্স:"
 
-msgid "Install from File"
-msgstr "ফাইল থেকে ইন্সটল করুন"
-
-msgid "Install templates from a local file."
-msgstr "ZIP ফাইল হতে টেমপ্লেট-সমূহ ইনস্টল করুন।"
-
 msgid "Select Template File"
 msgstr "টেমপ্লেট ফাইল নির্বাচন করুন"
+
+msgid "Export templates for this platform are missing:"
+msgstr "এই প্ল্যাটফর্মের জন্য দরকারি এক্সপোর্ট টেমপ্লেটগুলি খুঁজে পাওয়া যাচ্ছে না:"
 
 msgid "Delete preset '%s'?"
 msgstr "প্রিসেট '%s' মুছবেন?"
@@ -2699,20 +2768,6 @@ msgstr "এক্সপোর্ট মোড:"
 msgid "Keep"
 msgstr "রাখুন"
 
-msgid ""
-"Filters to export non-resource files/folders\n"
-"(comma-separated, e.g: *.json, *.txt, docs/*)"
-msgstr ""
-"রিসোর্স-নয় এমন ফাইল এক্সপোর্ট করার ফিল্টারসমূহ \n"
-"(কমা-বিভক্ত, যেমন: *.json, *.txt)"
-
-msgid ""
-"Filters to exclude files/folders from project\n"
-"(comma-separated, e.g: *.json, *.txt, docs/*)"
-msgstr ""
-"এক্সপোর্ট (export) হতে বর্জনকৃত ফিল্টারসমূহ (filter)\n"
-" (কমা-বিভক্ত, যেমন: *.json, *.txt,doc/*)"
-
 msgid "Custom (comma-separated):"
 msgstr "কাস্টম (কমা দ্বারা পৃথক করা):"
 
@@ -2745,14 +2800,8 @@ msgstr "একটি রপ্তানি মোড চয়ন করুন:"
 msgid "Export All..."
 msgstr "সবকিছু এক্সপোর্ট…"
 
-msgid "Export templates for this platform are missing:"
-msgstr "এই প্ল্যাটফর্মের জন্য দরকারি এক্সপোর্ট টেমপ্লেটগুলি খুঁজে পাওয়া যাচ্ছে না:"
-
 msgid "Dependencies For:"
 msgstr "এর জন্য নির্ভরতা-সমূহ:"
-
-msgid "Dependencies"
-msgstr "নির্ভরতা-সমূহ"
 
 msgid "Dependencies:"
 msgstr "নির্ভরতা-সমূহ:"
@@ -2860,6 +2909,9 @@ msgstr "ধরণ পরিবর্তন করুন \"%s\" এর"
 msgid "Change"
 msgstr "পরিবর্তন করুন"
 
+msgid "Favorites:"
+msgstr "ফেবরিট/প্রিয়-সমূহ:"
+
 msgid "Recent:"
 msgstr "সাম্প্রতিক:"
 
@@ -2922,9 +2974,6 @@ msgstr "কম্পনেন্টস"
 
 msgid "Components"
 msgstr "কম্পনেন্টস"
-
-msgid "Licenses"
-msgstr "লাইসেন্স"
 
 msgid "Move/Duplicate: %s"
 msgstr "সরান/ডুপ্লিকেট: %s"
@@ -3083,14 +3132,11 @@ msgstr "টেক্সট এডিট করুন:"
 msgid "Locale"
 msgstr "ঘটনাস্থল"
 
-msgid "Renaming layer %d:"
-msgstr "স্তর পুনঃনামকরণ %d:"
+msgid "Layer %d"
+msgstr "স্তর %d"
 
 msgid "Bit %d, value %d"
 msgstr "বিট %d, মান %d"
-
-msgid "Layer %d"
-msgstr "স্তর %d"
 
 msgid "Assign..."
 msgstr "নিযুক্ত…"
@@ -3442,11 +3488,11 @@ msgstr "পেন্টিং টাইলস সম্পত্তি"
 msgid "Painting:"
 msgstr "পেইন্টিং:"
 
-msgid "Index: %d"
-msgstr "সূচক: %d"
-
 msgid "Shift: Draw line."
 msgstr "Shift: লাইন আঁকুন।"
+
+msgid "Index: %d"
+msgstr "সূচক: %d"
 
 msgid "Place Random Tile"
 msgstr "দৈব টাইল বসান"
@@ -3634,9 +3680,6 @@ msgstr "Y-অক্ষ"
 msgid "Z-Axis"
 msgstr "Z-অক্ষ"
 
-msgid "Remove item %d?"
-msgstr "%d টি বস্তু অপসারণ করবেন?"
-
 msgid ""
 "Update from existing scene?:\n"
 "%s"
@@ -3646,12 +3689,6 @@ msgstr ""
 
 msgid "MeshLibrary"
 msgstr "MeshLibrary (মেস-লাইব্রেরি)"
-
-msgid "Add Item"
-msgstr "বস্তু যোগ করুন"
-
-msgid "Remove Selected Item"
-msgstr "নির্বাচিত বস্তুটি অপসারণ করুন"
 
 msgid "Update from Scene"
 msgstr "দৃশ্য হতে হালনাগাদ করুন"
@@ -3719,12 +3756,6 @@ msgstr "পপুলেট"
 msgid "Transform Aborted."
 msgstr "রুপান্তর নিষ্ফলা করা হয়েছে।"
 
-msgid "Orthogonal"
-msgstr "সমকোণীয় (Orthogonal)"
-
-msgid "Perspective"
-msgstr "পরিপ্রেক্ষিত (Perspective)"
-
 msgid "X-Axis Transform."
 msgstr "X-অক্ষ রুপান্তর।"
 
@@ -3743,11 +3774,11 @@ msgstr "চাবিসংযোক নিষ্ক্রিয় আছে (ক�
 msgid "Animation Key Inserted."
 msgstr "অ্যানিমেশনের চাবি সন্নিবেশিত হয়েছে।"
 
+msgid "Rotating %s degrees."
+msgstr "%s ডিগ্রি ঘূর্ণিত হচ্ছে।"
+
 msgid "Draw Calls: %d"
 msgstr "ড্র কলস:%d"
-
-msgid "Instantiating:"
-msgstr "তাত্ক্ষণিককরণ:"
 
 msgid "Top View."
 msgstr "শীর্ষ দর্শন।"
@@ -3773,14 +3804,8 @@ msgstr "ওভাররাইড মেটেরিয়াল সেট কর
 msgid "Error instantiating scene from %s."
 msgstr "%s হতে দৃশ্য ইনস্ট্যান্স করাতে সমস্যা হয়েছে।"
 
-msgid "Can't instantiate: %s."
-msgstr "ইনস্ট্যান্ট করা যাচ্ছে না: %s।"
-
 msgid "Translate"
 msgstr "ট্রান্সলেট"
-
-msgid "Rotating %s degrees."
-msgstr "%s ডিগ্রি ঘূর্ণিত হচ্ছে।"
 
 msgid "Translating %s."
 msgstr "%s অনুবাদ করা হচ্ছে।"
@@ -3791,8 +3816,29 @@ msgstr "%f ডিগ্রি ঘোরানো হচ্ছে।"
 msgid "Scaling %s."
 msgstr "স্কেলিং %s।"
 
+msgid "Freelook Left"
+msgstr "বাম দিকে ফ্রিলুক করুন"
+
+msgid "Freelook Right"
+msgstr "ডান দিকে ফ্রিলুক করুন"
+
+msgid "Freelook Up"
+msgstr "উপরে ফ্রিলুক করুন"
+
+msgid "Freelook Down"
+msgstr "ফ্রিলুক ডাউন"
+
+msgid "Freelook Speed Modifier"
+msgstr "ফ্রি লুক স্পিড মডিফায়ার"
+
 msgid "View"
 msgstr "দৃশ্য/পরিদর্শন"
+
+msgid "Perspective"
+msgstr "পরিপ্রেক্ষিত (Perspective)"
+
+msgid "Orthogonal"
+msgstr "সমকোণীয় (Orthogonal)"
 
 msgid "Display Normal"
 msgstr "Normal প্রদর্শন"
@@ -3838,21 +3884,6 @@ msgstr "তথ্য দেখুন"
 
 msgid "Audio Listener"
 msgstr "অডিও শ্রোতা"
-
-msgid "Freelook Left"
-msgstr "বাম দিকে ফ্রিলুক করুন"
-
-msgid "Freelook Right"
-msgstr "ডান দিকে ফ্রিলুক করুন"
-
-msgid "Freelook Up"
-msgstr "উপরে ফ্রিলুক করুন"
-
-msgid "Freelook Down"
-msgstr "ফ্রিলুক ডাউন"
-
-msgid "Freelook Speed Modifier"
-msgstr "ফ্রি লুক স্পিড মডিফায়ার"
 
 msgid "XForm Dialog"
 msgstr "XForm এর সংলাপ"
@@ -4079,9 +4110,6 @@ msgstr "ঘূর্ণায়নের অফসেট/ভারসাম্য:
 msgid "Rotation Step:"
 msgstr "ঘূর্ণায়নের পদক্ষেপ:"
 
-msgid "Add Node Here..."
-msgstr "এখানে নোড সংযোজন করুন…"
-
 msgid "Instantiate Scene Here..."
 msgstr "এখানে দৃশ্য ইন্সট্যান্স করুন…"
 
@@ -4132,12 +4160,6 @@ msgstr "৮০০% পর্যন্ত জুম"
 
 msgid "Pan Mode"
 msgstr "প্যান মোড"
-
-msgid "Toggle smart snapping."
-msgstr "স্মার্ট স্ন্যাপিং টগল করুন।"
-
-msgid "Toggle grid snapping."
-msgstr "গ্রিড স্ন্যাপিং টগল করুন।"
 
 msgid "Use Rotation Snap"
 msgstr "ঘূর্ণন স্ন্যাপ ব্যবহার করুন"
@@ -4193,17 +4215,11 @@ msgstr "গ্রিড স্টেপ দ্বিগুণ সংখ্যা
 msgid "Adding %s..."
 msgstr "%s সংযুক্ত হচ্ছে..."
 
-msgid "Can't instantiate: %s"
-msgstr "ইনস্ট্যান্ট করা যাবে না: %s"
-
 msgid "Creating inherited scene from: %s"
 msgstr "থেকে উত্তরাধিকারসূত্রে প্রাপ্ত দৃশ্য তৈরি করা হচ্ছে: %s"
 
 msgid "Instantiating: "
 msgstr "ইনস্টেন্টিয়েটিং: "
-
-msgid "Adding %s and %s..."
-msgstr "%s এবং %s যোগ করা হচ্ছে..।"
 
 msgid "Method in target node must be specified."
 msgstr "টার্গেট নোডার মেথড নির্দিষ্ট করতে হবে।"
@@ -4759,6 +4775,9 @@ msgstr "পূর্বনির্মিত স্ক্রিপ্ট:"
 msgid "Attach Node Script"
 msgstr "নোড স্ক্রিপ্ট সংযুক্ত করুন"
 
+msgid "Line"
+msgstr "লাইন"
+
 msgid "Close and save changes?"
 msgstr "বন্ধ এবং পরিবর্তন সংরক্ষণ করবেন?"
 
@@ -4828,9 +4847,6 @@ msgstr "ছোট হাতের অক্ষর"
 msgid "Capitalize"
 msgstr "বড় হাতের অক্ষরে পরিবর্তনে করুন"
 
-msgid "Standard"
-msgstr "আদর্শ"
-
 msgid "Source"
 msgstr "উৎস"
 
@@ -4853,12 +4869,6 @@ msgstr "খোলা দৃশ্য ছাড়া নোড ড্রপ ক�
 
 msgid "Pick Color"
 msgstr "রঙ পছন্দ করুন"
-
-msgid "Go to Function"
-msgstr "ফাংশনে যান"
-
-msgid "Line"
-msgstr "লাইন"
 
 msgid "Toggle Comment"
 msgstr "কমেন্ট টগল করুন"
@@ -4889,6 +4899,12 @@ msgstr "ছেদবিন্দু অদলবদল করুন (টগল �
 
 msgid "Remove All Breakpoints"
 msgstr "সকল বিরতি-বিন্দু-সমূহ অপসারণ করুন"
+
+msgid "Go to Function"
+msgstr "ফাংশনে যান"
+
+msgid "Standard"
+msgstr "আদর্শ"
 
 msgid ""
 "Invalid action name. It cannot be empty nor contain '/', ':', '=', '\\' or "
@@ -4953,9 +4969,6 @@ msgstr "Autoload সংযুক্ত করা যাচ্ছে না:"
 
 msgid "%s is an invalid path. File does not exist."
 msgstr "%s হল ভুল পথ। ফাইলটি বিদ্যমান নয়।"
-
-msgid "Node Name:"
-msgstr "নোডের নাম:"
 
 msgid "3D Engine"
 msgstr "3D ইঞ্জিন"
@@ -5033,6 +5046,12 @@ msgstr "নির্বাচিত প্রোফাইল কনফিগা�
 msgid "Extra Options:"
 msgstr "অতিরিক্ত অপশন:"
 
+msgid "Save Layout"
+msgstr "লেআউট/নকশা সংরক্ষণ করুন"
+
+msgid "Delete Layout"
+msgstr "লেআউট/নকশা অপসারণ করুন"
+
 msgid "Edit Built-in Action: %s"
 msgstr "বিল্ট-ইন অ্যাকশন সম্পাদনা করুন: %s"
 
@@ -5060,6 +5079,9 @@ msgstr "ডিভাইস/যন্ত্র"
 msgid "Filter by Event"
 msgstr "ইভেন্ট দ্বারা ফিল্টার"
 
+msgid "Reload"
+msgstr "রিলোড"
+
 msgid "Joypad Axes"
 msgstr "জয়স্টিক অক্ষ"
 
@@ -5068,9 +5090,6 @@ msgstr "\"%s\" এর জন্য ইভেন্ট কনফিগারে�
 
 msgid "Device:"
 msgstr "ডিভাইস:"
-
-msgid "Physical location"
-msgstr "শারীরিক অবস্থান"
 
 msgid "Add Input Action"
 msgstr "ইনপুট অ্যাকশন যোগ করুন"
@@ -5138,11 +5157,200 @@ msgstr "নাম অবশ্যই একটি বৈধ শনাক্ত�
 msgid "Global shader parameter '%s' already exists."
 msgstr "গ্লোবাল শেডার প্যারামিটার '%s' ইতিমধ্যেই বিদ্যমান।"
 
-msgid "Reload"
-msgstr "রিলোড"
-
 msgid "Resave"
 msgstr "পুনঃসংরক্ষণ"
+
+msgctxt "Locale"
+msgid "Script:"
+msgstr "স্ক্রিপ্ট:"
+
+msgid "Changed Locale Filter Mode"
+msgstr "লোকাল ফিল্টার মোড পরিবর্তিত হয়েছে"
+
+msgid "Country"
+msgstr "দেশ"
+
+msgid "Variant"
+msgstr "ভ্যারিয়েন্ট"
+
+msgid "Change Resource Remap Language"
+msgstr "রিসোর্স পুনঃ-নকশার ভাষা পরিবর্তন করুন"
+
+msgid "Remove Resource Remap"
+msgstr "রিসোর্সের পুনঃ-নকশা অপসারণ করুন"
+
+msgid "Remove Resource Remap Option"
+msgstr "রিসোর্সের পুনঃ-নকশার সিদ্ধান্ত অপসারণ করুন"
+
+msgid "%s cannot be found."
+msgstr "%s পাওয়া যায়নি।"
+
+msgid "Translations"
+msgstr "অনুবাদসমূহ"
+
+msgid "Translations:"
+msgstr "অনুবাদসমূহ:"
+
+msgid "Remaps"
+msgstr "পুনঃনকশাসমূহ"
+
+msgid "Resources:"
+msgstr "রিসোর্সসমূহ:"
+
+msgid "Remaps by Locale:"
+msgstr "ঘটনাস্থল দ্বারা পুনঃনকশা:"
+
+msgid "Discard changes"
+msgstr "পরিবর্তন বাতিল করুন"
+
+msgid "Commit:"
+msgstr "কমিটি:"
+
+msgid "File:"
+msgstr "ফাইল:"
+
+msgid "Do you want to remove the %s remote?"
+msgstr "আপনি কি %s রিমোট সরাতে চান?"
+
+msgid "Create Version Control Metadata"
+msgstr "ভার্সন কন্ট্রোল মেটাডেটা তৈরি করুন"
+
+msgid "Create VCS metadata files for:"
+msgstr "এর জন্য VCS মেটাডেটা ফাইল তৈরি করুন:"
+
+msgid "Connect to VCS"
+msgstr "VCS এর সাথে সংযোগ করুন"
+
+msgid "Discard all changes"
+msgstr "সকল পরিবর্তন বাতিল করুন"
+
+msgid "Permanentally delete my changes"
+msgstr "স্থায়ীভাবে আমার পরিবর্তন মুছে দিন"
+
+msgid "Stage all changes"
+msgstr "সব পরিবর্তন সাজান"
+
+msgid "Branches"
+msgstr "শাখাসমূহ"
+
+msgid "Force Push"
+msgstr "ফোর্স পুশ"
+
+msgid "View:"
+msgstr "দেখুন:"
+
+msgid "Invalid type argument to convert(), use TYPE_* constants."
+msgstr "কনভার্ট করার জন্য অবৈধ টাইপ আর্গুমেন্ট, TYPE_* ধ্রুবক ব্যবহার করুন।"
+
+msgid "Cannot resize array."
+msgstr "অ্যারের আকার পরিবর্তন করা যায়নি।"
+
+msgid "Cannot instantiate GDScript class."
+msgstr "GDScript ক্লাস ইনস্ট্যান্ট করা যাচ্ছে না।"
+
+msgid "glTF 2.0 Scene..."
+msgstr "glTF ২.০ দৃশ্য…"
+
+msgid "Couldn't run Blender executable."
+msgstr "ব্লেন্ডার এক্সিকিউটেবল চালানো যায়নি।"
+
+msgid "Couldn't extract version information from Blender executable at: %s."
+msgstr "ব্লেন্ডার থেকে এক্সিকিউটেবল সংস্করণ তথ্য বের করা যায়নি: %s।"
+
+msgid "No transition available."
+msgstr "কোনো ট্রানজিশন নেই।"
+
+msgid "From / To"
+msgstr "উৎস/গন্তব্য"
+
+msgid "Use Transition:"
+msgstr "ট্র্যানজিশন ব্যাবহার করুন:"
+
+msgid "Transition From:"
+msgstr "এ থেকে ট্র্যানজিশন করুন:"
+
+msgid "Transition To:"
+msgstr "তে ট্র্যানজিশন করুন:"
+
+msgid "Fade Mode:"
+msgstr "ফেইড মোড:"
+
+msgid "Hold Previous:"
+msgstr "পূর্ববর্তী হোল্ড:"
+
+msgid "Integrate indirect lighting %d%%"
+msgstr "পরোক্ষ আলো একত্রিত করুন %d%%"
+
+msgid "Integrating light probes %d%%"
+msgstr "হালকা প্রোবগুলিকে একীভূত করা হচ্ছে %d%%"
+
+msgid "Class name must be a valid identifier"
+msgstr "ক্লাসের নাম অবশ্যই একটি বৈধ শনাক্তকারী হতে হবে"
+
+msgid "Not enough bytes for decoding bytes, or invalid format."
+msgstr "ডিকোডিং বাইট, বা অবৈধ বিন্যাসের জন্য পর্যাপ্ত পরিমাণে বাইট নেই।"
+
+msgid "Failed to load .NET runtime"
+msgstr ".NET রানটাইম লোড করতে ব্যর্থ হয়েছে"
+
+msgid ".NET assemblies not found"
+msgstr ".NET সমাবেশ পাওয়া যায়নি"
+
+msgid "%s/s"
+msgstr "%s/সে"
+
+msgid "Node"
+msgstr "শাখা"
+
+msgid "Count"
+msgstr "গণনা"
+
+msgid "Not possible to add a new property to synchronize without a root."
+msgstr "রুট ছাড়া সিঙ্ক্রোনাইজ করার জন্য একটি নতুন সম্পত্তি যোগ করা সম্ভব নয়।"
+
+msgid "Property/path must not be empty."
+msgstr "সম্পত্তি/পথ খালি হওয়া উচিত নয়।"
+
+msgid "Invalid property path: '%s'"
+msgstr "অবৈধ সম্পত্তি পথ: '%s'"
+
+msgid "Delete Property?"
+msgstr "সম্পত্তি মুছে ফেলবেন?"
+
+msgid "Remove Property"
+msgstr "প্রোপার্টি-সমূহ অপসারণ"
+
+msgid "Create Navigation Polygon"
+msgstr "Navigation Polygon তৈরি করুন"
+
+msgid "A NavigationMesh resource must be set or created for this node to work."
+msgstr ""
+"এই নোডটি সফল্ভাবে কাজ করার জন্য একটি NavigationMesh রিসোর্স নির্ধারন বা তৈরি করতে "
+"হবে।"
+
+msgid "Error loading %s: %s."
+msgstr "লোড করার সময় ত্রুটি %s: %s।"
+
+msgid "Error saving file %s: %s"
+msgstr "ফাইল সংরক্ষণে ত্রুটি%s: %s"
+
+msgid "OpenXR Action map:"
+msgstr "OpenXR একশন মানচিত্র:"
+
+msgid "Add an action set."
+msgstr "নতুন ইনপুট অ্যাকশন ইভেন্ট সেট করুন।"
+
+msgid "Add action."
+msgstr "একশন যোগ করুন।"
+
+msgid "Remove action set."
+msgstr "একশন সেট অপসারণ করুন।"
+
+msgid "Select an interaction profile"
+msgstr "ইন্টারেকশন প্রোফাইল নির্বাচন করুন"
+
+msgid "Choose an XR runtime."
+msgstr "একটি XR রানটাইম চয়ন করুন।"
 
 msgid "Add Input"
 msgstr "ইনপুট যোগ করুন"
@@ -5291,197 +5499,23 @@ msgstr "বিভিন্ন প্যারামিটার সেট কর
 msgid "Edit Visual Property: %s"
 msgstr "ভিজ্যুয়াল প্রপার্টি সম্পাদনা করুন: %s"
 
-msgctxt "Locale"
-msgid "Script:"
-msgstr "স্ক্রিপ্ট:"
+msgid "Invalid source for preview."
+msgstr "প্রিভিউ এর জন্য অকার্যকর উৎস।"
 
-msgid "Changed Locale Filter Mode"
-msgstr "লোকাল ফিল্টার মোড পরিবর্তিত হয়েছে"
+msgid "Invalid source for shader."
+msgstr "shader এর জন্য অকার্যকর উৎস।"
 
-msgid "Country"
-msgstr "দেশ"
+msgid "Invalid operator for that type."
+msgstr "এই টাইপের জন্য অবৈধ অপারেটর।"
 
-msgid "Variant"
-msgstr "ভ্যারিয়েন্ট"
+msgid "Invalid comparison function for that type."
+msgstr "এই ধরনের জন্য অবৈধ তুলনা ফাংশন।"
 
-msgid "Change Resource Remap Language"
-msgstr "রিসোর্স পুনঃ-নকশার ভাষা পরিবর্তন করুন"
+msgid "Surface Index"
+msgstr "সারফেস ইনডেক্স"
 
-msgid "Remove Resource Remap"
-msgstr "রিসোর্সের পুনঃ-নকশা অপসারণ করুন"
-
-msgid "Remove Resource Remap Option"
-msgstr "রিসোর্সের পুনঃ-নকশার সিদ্ধান্ত অপসারণ করুন"
-
-msgid "%s cannot be found."
-msgstr "%s পাওয়া যায়নি।"
-
-msgid "Translations"
-msgstr "অনুবাদসমূহ"
-
-msgid "Translations:"
-msgstr "অনুবাদসমূহ:"
-
-msgid "Remaps"
-msgstr "পুনঃনকশাসমূহ"
-
-msgid "Resources:"
-msgstr "রিসোর্সসমূহ:"
-
-msgid "Remaps by Locale:"
-msgstr "ঘটনাস্থল দ্বারা পুনঃনকশা:"
-
-msgid "Discard changes"
-msgstr "পরিবর্তন বাতিল করুন"
-
-msgid "Commit:"
-msgstr "কমিটি:"
-
-msgid "File:"
-msgstr "ফাইল:"
-
-msgid "Do you want to remove the %s remote?"
-msgstr "আপনি কি %s রিমোট সরাতে চান?"
-
-msgid "Toggle Version Control Bottom Panel"
-msgstr "ভার্সন কন্ট্রোল বটম প্যানেল টগল করুন"
-
-msgid "Create Version Control Metadata"
-msgstr "ভার্সন কন্ট্রোল মেটাডেটা তৈরি করুন"
-
-msgid "Create VCS metadata files for:"
-msgstr "এর জন্য VCS মেটাডেটা ফাইল তৈরি করুন:"
-
-msgid "Connect to VCS"
-msgstr "VCS এর সাথে সংযোগ করুন"
-
-msgid "Discard all changes"
-msgstr "সকল পরিবর্তন বাতিল করুন"
-
-msgid "Permanentally delete my changes"
-msgstr "স্থায়ীভাবে আমার পরিবর্তন মুছে দিন"
-
-msgid "Stage all changes"
-msgstr "সব পরিবর্তন সাজান"
-
-msgid "Branches"
-msgstr "শাখাসমূহ"
-
-msgid "Force Push"
-msgstr "ফোর্স পুশ"
-
-msgid "View:"
-msgstr "দেখুন:"
-
-msgid "Invalid type argument to convert(), use TYPE_* constants."
-msgstr "কনভার্ট করার জন্য অবৈধ টাইপ আর্গুমেন্ট, TYPE_* ধ্রুবক ব্যবহার করুন।"
-
-msgid "Cannot resize array."
-msgstr "অ্যারের আকার পরিবর্তন করা যায়নি।"
-
-msgid "Cannot instantiate GDScript class."
-msgstr "GDScript ক্লাস ইনস্ট্যান্ট করা যাচ্ছে না।"
-
-msgid "glTF 2.0 Scene..."
-msgstr "glTF ২.০ দৃশ্য…"
-
-msgid "Couldn't run Blender executable."
-msgstr "ব্লেন্ডার এক্সিকিউটেবল চালানো যায়নি।"
-
-msgid "Couldn't extract version information from Blender executable at: %s."
-msgstr "ব্লেন্ডার থেকে এক্সিকিউটেবল সংস্করণ তথ্য বের করা যায়নি: %s।"
-
-msgid "No transition available."
-msgstr "কোনো ট্রানজিশন নেই।"
-
-msgid "From / To"
-msgstr "উৎস/গন্তব্য"
-
-msgid "Use Transition:"
-msgstr "ট্র্যানজিশন ব্যাবহার করুন:"
-
-msgid "Transition From:"
-msgstr "এ থেকে ট্র্যানজিশন করুন:"
-
-msgid "Transition To:"
-msgstr "তে ট্র্যানজিশন করুন:"
-
-msgid "Fade Mode:"
-msgstr "ফেইড মোড:"
-
-msgid "Hold Previous:"
-msgstr "পূর্ববর্তী হোল্ড:"
-
-msgid "Integrate indirect lighting %d%%"
-msgstr "পরোক্ষ আলো একত্রিত করুন %d%%"
-
-msgid "Integrating light probes %d%%"
-msgstr "হালকা প্রোবগুলিকে একীভূত করা হচ্ছে %d%%"
-
-msgid "Class name must be a valid identifier"
-msgstr "ক্লাসের নাম অবশ্যই একটি বৈধ শনাক্তকারী হতে হবে"
-
-msgid "Not enough bytes for decoding bytes, or invalid format."
-msgstr "ডিকোডিং বাইট, বা অবৈধ বিন্যাসের জন্য পর্যাপ্ত পরিমাণে বাইট নেই।"
-
-msgid "Failed to load .NET runtime"
-msgstr ".NET রানটাইম লোড করতে ব্যর্থ হয়েছে"
-
-msgid ".NET assemblies not found"
-msgstr ".NET সমাবেশ পাওয়া যায়নি"
-
-msgid "%s/s"
-msgstr "%s/সে"
-
-msgid "Node"
-msgstr "শাখা"
-
-msgid "Count"
-msgstr "গণনা"
-
-msgid "Not possible to add a new property to synchronize without a root."
-msgstr "রুট ছাড়া সিঙ্ক্রোনাইজ করার জন্য একটি নতুন সম্পত্তি যোগ করা সম্ভব নয়।"
-
-msgid "Property/path must not be empty."
-msgstr "সম্পত্তি/পথ খালি হওয়া উচিত নয়।"
-
-msgid "Invalid property path: '%s'"
-msgstr "অবৈধ সম্পত্তি পথ: '%s'"
-
-msgid "Delete Property?"
-msgstr "সম্পত্তি মুছে ফেলবেন?"
-
-msgid "Remove Property"
-msgstr "প্রোপার্টি-সমূহ অপসারণ"
-
-msgid "Create Navigation Polygon"
-msgstr "Navigation Polygon তৈরি করুন"
-
-msgid "A NavigationMesh resource must be set or created for this node to work."
-msgstr ""
-"এই নোডটি সফল্ভাবে কাজ করার জন্য একটি NavigationMesh রিসোর্স নির্ধারন বা তৈরি করতে "
-"হবে।"
-
-msgid "Error loading %s: %s."
-msgstr "লোড করার সময় ত্রুটি %s: %s।"
-
-msgid "Error saving file %s: %s"
-msgstr "ফাইল সংরক্ষণে ত্রুটি%s: %s"
-
-msgid "Add an action set."
-msgstr "নতুন ইনপুট অ্যাকশন ইভেন্ট সেট করুন।"
-
-msgid "Add action."
-msgstr "একশন যোগ করুন।"
-
-msgid "Remove action set."
-msgstr "একশন সেট অপসারণ করুন।"
-
-msgid "Select an interaction profile"
-msgstr "ইন্টারেকশন প্রোফাইল নির্বাচন করুন"
-
-msgid "Choose an XR runtime."
-msgstr "একটি XR রানটাইম চয়ন করুন।"
+msgid "The character '%s' is not allowed in Android application package names."
+msgstr "অ্যান্ড্রয়েড অ্যাপ্লিকেশন প্যাকেজ নামগুলিতে '%s' অক্ষরটি অনুমোদিত নয়।"
 
 msgid "Error creating keystores directory:"
 msgstr "কীস্টোর ডিরেক্টরি তৈরিতে ত্রুটি:"
@@ -5511,8 +5545,8 @@ msgstr ""
 "আউটপুট: \n"
 "%s"
 
-msgid "Could not write expansion package file!"
-msgstr "সম্প্রসারণ প্যাকেজ ফাইল লিখতে পারিনি!"
+msgid "Exporting for Android"
+msgstr "অ্যান্ড্রয়েডের জন্য রপ্তানি করা হচ্ছে"
 
 msgid "Creating APK..."
 msgstr "APK তৈরি করা হচ্ছে..।"
@@ -5697,26 +5731,8 @@ msgstr "লাইটম্যাপার প্রস্তুত হচ্ছ�
 msgid "No pose is set."
 msgstr "কোনো পোজ সেট করা নেই।"
 
-msgid "Animation not found: '%s'"
-msgstr "অ্যানিমেশন পাওয়া যায়নি: '%s'"
-
-msgid "Nothing connected to input '%s' of node '%s'."
-msgstr "'%s' নোডের '%s' ইনপুট এর সাথে কিছু সংযুক্ত নেই।"
-
-msgid "Invalid source for preview."
-msgstr "প্রিভিউ এর জন্য অকার্যকর উৎস।"
-
-msgid "Invalid source for shader."
-msgstr "shader এর জন্য অকার্যকর উৎস।"
-
-msgid "Invalid operator for that type."
-msgstr "এই টাইপের জন্য অবৈধ অপারেটর।"
-
-msgid "Invalid comparison function for that type."
-msgstr "এই ধরনের জন্য অবৈধ তুলনা ফাংশন।"
-
-msgid "Surface Index"
-msgstr "সারফেস ইনডেক্স"
+msgid "No playback resource set at path: %s."
+msgstr "পাথে কোন প্লেব্যাক রিসোর্স সেট করা নেই: %s।"
 
 msgid "Invalid arguments for the built-in function: \"%s(%s)\"."
 msgstr "অন্তর্নির্মিত ফাংশনের জন্য অবৈধ আর্গুমেন্ট: \"%s(%s)\"।"

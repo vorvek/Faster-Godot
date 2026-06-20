@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="DisplayServer" inherits="Object" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+<class name="DisplayServer" inherits="Object" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
 	<brief_description>
 		A server interface for low-level window management.
 	</brief_description>
@@ -10,7 +10,7 @@
 	<tutorials>
 	</tutorials>
 	<methods>
-		<method name="accessibility_create_element">
+		<method name="accessibility_create_element" deprecated="Use [AccessibilityServer] instead.">
 			<return type="RID" />
 			<param index="0" name="window_id" type="int" />
 			<param index="1" name="role" type="int" enum="DisplayServer.AccessibilityRole" />
@@ -19,7 +19,7 @@
 				[b]Note:[/b] An accessibility element is created and freed automatically for each [Node]. In general, this function should not be called manually.
 			</description>
 		</method>
-		<method name="accessibility_create_sub_element">
+		<method name="accessibility_create_sub_element" deprecated="Use [AccessibilityServer] instead.">
 			<return type="RID" />
 			<param index="0" name="parent_rid" type="RID" />
 			<param index="1" name="role" type="int" enum="DisplayServer.AccessibilityRole" />
@@ -28,7 +28,7 @@
 				Creates a new, empty accessibility sub-element resource. Sub-elements can be used to provide accessibility information for objects which are not [Node]s, such as list items, table cells, or menu items. Sub-elements are freed automatically when the parent element is freed, or can be freed early using the [method accessibility_free_element] method.
 			</description>
 		</method>
-		<method name="accessibility_create_sub_text_edit_elements">
+		<method name="accessibility_create_sub_text_edit_elements" deprecated="Use [AccessibilityServer] instead.">
 			<return type="RID" />
 			<param index="0" name="parent_rid" type="RID" />
 			<param index="1" name="shaped_text" type="RID" />
@@ -40,14 +40,14 @@
 				If [param is_last_line] is [code]true[/code], no trailing newline is appended to the text content. Set to [code]true[/code] for the last line in multi-line text fields and for single-line text fields.
 			</description>
 		</method>
-		<method name="accessibility_element_get_meta" qualifiers="const">
+		<method name="accessibility_element_get_meta" qualifiers="const" deprecated="Use [AccessibilityServer] instead.">
 			<return type="Variant" />
 			<param index="0" name="id" type="RID" />
 			<description>
 				Returns the metadata of the accessibility element [param id].
 			</description>
 		</method>
-		<method name="accessibility_element_set_meta">
+		<method name="accessibility_element_set_meta" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="meta" type="Variant" />
@@ -55,21 +55,21 @@
 				Sets the metadata of the accessibility element [param id] to [param meta].
 			</description>
 		</method>
-		<method name="accessibility_free_element">
+		<method name="accessibility_free_element" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<description>
 				Frees the accessibility element [param id] created by [method accessibility_create_element], [method accessibility_create_sub_element], or [method accessibility_create_sub_text_edit_elements].
 			</description>
 		</method>
-		<method name="accessibility_get_window_root" qualifiers="const">
+		<method name="accessibility_get_window_root" qualifiers="const" deprecated="Use [AccessibilityServer] instead.">
 			<return type="RID" />
 			<param index="0" name="window_id" type="int" />
 			<description>
 				Returns the main accessibility element of the OS native window.
 			</description>
 		</method>
-		<method name="accessibility_has_element" qualifiers="const">
+		<method name="accessibility_has_element" qualifiers="const" deprecated="Use [AccessibilityServer] instead.">
 			<return type="bool" />
 			<param index="0" name="id" type="RID" />
 			<description>
@@ -84,7 +84,7 @@
 				[b]Note:[/b] Accessibility debugging tools, such as Accessibility Insights for Windows, Accessibility Inspector (macOS), or AT-SPI Browser (Linux/BSD), do not count as assistive apps and will not affect this value. To test your project with these tools, set [member ProjectSettings.accessibility/general/accessibility_support] to [code]1[/code].
 			</description>
 		</method>
-		<method name="accessibility_set_window_focused">
+		<method name="accessibility_set_window_focused" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="window_id" type="int" />
 			<param index="1" name="focused" type="bool" />
@@ -94,7 +94,7 @@
 				[b]Note:[/b] Advanced users only! [Window] objects call this method automatically.
 			</description>
 		</method>
-		<method name="accessibility_set_window_rect">
+		<method name="accessibility_set_window_rect" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="window_id" type="int" />
 			<param index="1" name="rect_out" type="Rect2" />
@@ -126,7 +126,7 @@
 				[b]Note:[/b] This method is implemented on macOS and Windows.
 			</description>
 		</method>
-		<method name="accessibility_update_add_action">
+		<method name="accessibility_update_add_action" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="action" type="int" enum="DisplayServer.AccessibilityAction" />
@@ -135,7 +135,7 @@
 				Adds a callback for the accessibility action (action which can be performed by using a special screen reader command or buttons on the Braille display), and marks this action as supported. The action callback receives one [Variant] argument, which value depends on action type.
 			</description>
 		</method>
-		<method name="accessibility_update_add_child">
+		<method name="accessibility_update_add_child" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="child_id" type="RID" />
@@ -144,7 +144,7 @@
 				[b]Note:[/b] [Node] children and sub-elements are added to the child list automatically.
 			</description>
 		</method>
-		<method name="accessibility_update_add_custom_action">
+		<method name="accessibility_update_add_custom_action" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="action_id" type="int" />
@@ -153,7 +153,7 @@
 				Adds support for a custom accessibility action. [param action_id] is passed as an argument to the callback of [constant ACTION_CUSTOM] action.
 			</description>
 		</method>
-		<method name="accessibility_update_add_related_controls">
+		<method name="accessibility_update_add_related_controls" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="related_id" type="RID" />
@@ -161,7 +161,7 @@
 				Adds an element that is controlled by this element.
 			</description>
 		</method>
-		<method name="accessibility_update_add_related_described_by">
+		<method name="accessibility_update_add_related_described_by" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="related_id" type="RID" />
@@ -169,7 +169,7 @@
 				Adds an element that describes this element.
 			</description>
 		</method>
-		<method name="accessibility_update_add_related_details">
+		<method name="accessibility_update_add_related_details" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="related_id" type="RID" />
@@ -177,7 +177,7 @@
 				Adds an element that details this element.
 			</description>
 		</method>
-		<method name="accessibility_update_add_related_flow_to">
+		<method name="accessibility_update_add_related_flow_to" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="related_id" type="RID" />
@@ -185,7 +185,7 @@
 				Adds an element that this element flow into.
 			</description>
 		</method>
-		<method name="accessibility_update_add_related_labeled_by">
+		<method name="accessibility_update_add_related_labeled_by" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="related_id" type="RID" />
@@ -193,7 +193,7 @@
 				Adds an element that labels this element.
 			</description>
 		</method>
-		<method name="accessibility_update_add_related_radio_group">
+		<method name="accessibility_update_add_related_radio_group" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="related_id" type="RID" />
@@ -202,7 +202,7 @@
 				[b]Note:[/b] This method should be called on each element of the group, using all other elements as [param related_id].
 			</description>
 		</method>
-		<method name="accessibility_update_set_active_descendant">
+		<method name="accessibility_update_set_active_descendant" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="other_id" type="RID" />
@@ -210,7 +210,7 @@
 				Adds an element that is an active descendant of this element.
 			</description>
 		</method>
-		<method name="accessibility_update_set_background_color">
+		<method name="accessibility_update_set_background_color" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="color" type="Color" />
@@ -218,15 +218,15 @@
 				Sets element background color.
 			</description>
 		</method>
-		<method name="accessibility_update_set_bounds">
+		<method name="accessibility_update_set_bounds" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
-			<param index="1" name="p_rect" type="Rect2" />
+			<param index="1" name="rect" type="Rect2" />
 			<description>
 				Sets element bounding box, relative to the node position.
 			</description>
 		</method>
-		<method name="accessibility_update_set_checked">
+		<method name="accessibility_update_set_checked" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="checekd" type="bool" />
@@ -234,7 +234,7 @@
 				Sets element checked state.
 			</description>
 		</method>
-		<method name="accessibility_update_set_classname">
+		<method name="accessibility_update_set_classname" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="classname" type="String" />
@@ -242,7 +242,7 @@
 				Sets element class name.
 			</description>
 		</method>
-		<method name="accessibility_update_set_color_value">
+		<method name="accessibility_update_set_color_value" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="color" type="Color" />
@@ -250,7 +250,7 @@
 				Sets element color value.
 			</description>
 		</method>
-		<method name="accessibility_update_set_description">
+		<method name="accessibility_update_set_description" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="description" type="String" />
@@ -258,7 +258,7 @@
 				Sets element accessibility description.
 			</description>
 		</method>
-		<method name="accessibility_update_set_error_message">
+		<method name="accessibility_update_set_error_message" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="other_id" type="RID" />
@@ -266,7 +266,7 @@
 				Sets an element which contains an error message for this element.
 			</description>
 		</method>
-		<method name="accessibility_update_set_extra_info">
+		<method name="accessibility_update_set_extra_info" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="name" type="String" />
@@ -274,7 +274,7 @@
 				Sets element accessibility extra information added to the element name.
 			</description>
 		</method>
-		<method name="accessibility_update_set_flag">
+		<method name="accessibility_update_set_flag" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="flag" type="int" enum="DisplayServer.AccessibilityFlags" />
@@ -283,14 +283,14 @@
 				Sets element flag.
 			</description>
 		</method>
-		<method name="accessibility_update_set_focus">
+		<method name="accessibility_update_set_focus" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<description>
 				Sets currently focused element.
 			</description>
 		</method>
-		<method name="accessibility_update_set_foreground_color">
+		<method name="accessibility_update_set_foreground_color" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="color" type="Color" />
@@ -298,7 +298,7 @@
 				Sets element foreground color.
 			</description>
 		</method>
-		<method name="accessibility_update_set_in_page_link_target">
+		<method name="accessibility_update_set_in_page_link_target" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="other_id" type="RID" />
@@ -306,7 +306,7 @@
 				Sets target element for the link.
 			</description>
 		</method>
-		<method name="accessibility_update_set_language">
+		<method name="accessibility_update_set_language" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="language" type="String" />
@@ -314,7 +314,7 @@
 				Sets element text language.
 			</description>
 		</method>
-		<method name="accessibility_update_set_list_item_count">
+		<method name="accessibility_update_set_list_item_count" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="size" type="int" />
@@ -322,7 +322,7 @@
 				Sets number of items in the list.
 			</description>
 		</method>
-		<method name="accessibility_update_set_list_item_expanded">
+		<method name="accessibility_update_set_list_item_expanded" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="expanded" type="bool" />
@@ -330,7 +330,7 @@
 				Sets list/tree item expanded status.
 			</description>
 		</method>
-		<method name="accessibility_update_set_list_item_index">
+		<method name="accessibility_update_set_list_item_index" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="index" type="int" />
@@ -338,7 +338,7 @@
 				Sets the position of the element in the list.
 			</description>
 		</method>
-		<method name="accessibility_update_set_list_item_level">
+		<method name="accessibility_update_set_list_item_level" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="level" type="int" />
@@ -346,7 +346,7 @@
 				Sets the hierarchical level of the element in the list.
 			</description>
 		</method>
-		<method name="accessibility_update_set_list_item_selected">
+		<method name="accessibility_update_set_list_item_selected" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="selected" type="bool" />
@@ -354,7 +354,7 @@
 				Sets list/tree item selected status.
 			</description>
 		</method>
-		<method name="accessibility_update_set_list_orientation">
+		<method name="accessibility_update_set_list_orientation" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="vertical" type="bool" />
@@ -362,7 +362,7 @@
 				Sets the orientation of the list elements.
 			</description>
 		</method>
-		<method name="accessibility_update_set_live">
+		<method name="accessibility_update_set_live" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="live" type="int" enum="DisplayServer.AccessibilityLiveMode" />
@@ -370,7 +370,7 @@
 				Sets the priority of the live region updates.
 			</description>
 		</method>
-		<method name="accessibility_update_set_member_of">
+		<method name="accessibility_update_set_member_of" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="group_id" type="RID" />
@@ -378,7 +378,7 @@
 				Sets the element to be a member of the group.
 			</description>
 		</method>
-		<method name="accessibility_update_set_name">
+		<method name="accessibility_update_set_name" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="name" type="String" />
@@ -386,7 +386,7 @@
 				Sets element accessibility name.
 			</description>
 		</method>
-		<method name="accessibility_update_set_next_on_line">
+		<method name="accessibility_update_set_next_on_line" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="other_id" type="RID" />
@@ -394,7 +394,7 @@
 				Sets next element on the line.
 			</description>
 		</method>
-		<method name="accessibility_update_set_num_jump">
+		<method name="accessibility_update_set_num_jump" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="jump" type="float" />
@@ -402,7 +402,7 @@
 				Sets numeric value jump.
 			</description>
 		</method>
-		<method name="accessibility_update_set_num_range">
+		<method name="accessibility_update_set_num_range" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="min" type="float" />
@@ -411,7 +411,7 @@
 				Sets numeric value range.
 			</description>
 		</method>
-		<method name="accessibility_update_set_num_step">
+		<method name="accessibility_update_set_num_step" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="step" type="float" />
@@ -419,7 +419,7 @@
 				Sets numeric value step.
 			</description>
 		</method>
-		<method name="accessibility_update_set_num_value">
+		<method name="accessibility_update_set_num_value" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="position" type="float" />
@@ -427,7 +427,7 @@
 				Sets numeric value.
 			</description>
 		</method>
-		<method name="accessibility_update_set_placeholder">
+		<method name="accessibility_update_set_placeholder" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="placeholder" type="String" />
@@ -435,7 +435,7 @@
 				Sets placeholder text.
 			</description>
 		</method>
-		<method name="accessibility_update_set_popup_type">
+		<method name="accessibility_update_set_popup_type" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="popup" type="int" enum="DisplayServer.AccessibilityPopupType" />
@@ -443,7 +443,7 @@
 				Sets popup type for popup buttons.
 			</description>
 		</method>
-		<method name="accessibility_update_set_previous_on_line">
+		<method name="accessibility_update_set_previous_on_line" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="other_id" type="RID" />
@@ -451,7 +451,7 @@
 				Sets previous element on the line.
 			</description>
 		</method>
-		<method name="accessibility_update_set_role">
+		<method name="accessibility_update_set_role" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="role" type="int" enum="DisplayServer.AccessibilityRole" />
@@ -459,7 +459,7 @@
 				Sets element accessibility role.
 			</description>
 		</method>
-		<method name="accessibility_update_set_role_description">
+		<method name="accessibility_update_set_role_description" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="description" type="String" />
@@ -467,7 +467,7 @@
 				Sets element accessibility role description text.
 			</description>
 		</method>
-		<method name="accessibility_update_set_scroll_x">
+		<method name="accessibility_update_set_scroll_x" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="position" type="float" />
@@ -475,7 +475,7 @@
 				Sets scroll bar x position.
 			</description>
 		</method>
-		<method name="accessibility_update_set_scroll_x_range">
+		<method name="accessibility_update_set_scroll_x_range" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="min" type="float" />
@@ -484,7 +484,7 @@
 				Sets scroll bar x range.
 			</description>
 		</method>
-		<method name="accessibility_update_set_scroll_y">
+		<method name="accessibility_update_set_scroll_y" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="position" type="float" />
@@ -492,7 +492,7 @@
 				Sets scroll bar y position.
 			</description>
 		</method>
-		<method name="accessibility_update_set_scroll_y_range">
+		<method name="accessibility_update_set_scroll_y_range" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="min" type="float" />
@@ -501,7 +501,7 @@
 				Sets scroll bar y range.
 			</description>
 		</method>
-		<method name="accessibility_update_set_shortcut">
+		<method name="accessibility_update_set_shortcut" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="shortcut" type="String" />
@@ -509,7 +509,7 @@
 				Sets the list of keyboard shortcuts used by element.
 			</description>
 		</method>
-		<method name="accessibility_update_set_state_description">
+		<method name="accessibility_update_set_state_description" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="description" type="String" />
@@ -517,7 +517,7 @@
 				Sets human-readable description of the current checked state.
 			</description>
 		</method>
-		<method name="accessibility_update_set_table_cell_position">
+		<method name="accessibility_update_set_table_cell_position" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="row_index" type="int" />
@@ -526,7 +526,7 @@
 				Sets cell position in the table.
 			</description>
 		</method>
-		<method name="accessibility_update_set_table_cell_span">
+		<method name="accessibility_update_set_table_cell_span" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="row_span" type="int" />
@@ -535,7 +535,7 @@
 				Sets cell row/column span.
 			</description>
 		</method>
-		<method name="accessibility_update_set_table_column_count">
+		<method name="accessibility_update_set_table_column_count" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="count" type="int" />
@@ -543,7 +543,7 @@
 				Sets number of columns in the table.
 			</description>
 		</method>
-		<method name="accessibility_update_set_table_column_index">
+		<method name="accessibility_update_set_table_column_index" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="index" type="int" />
@@ -551,7 +551,7 @@
 				Sets position of the column.
 			</description>
 		</method>
-		<method name="accessibility_update_set_table_row_count">
+		<method name="accessibility_update_set_table_row_count" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="count" type="int" />
@@ -559,7 +559,7 @@
 				Sets number of rows in the table.
 			</description>
 		</method>
-		<method name="accessibility_update_set_table_row_index">
+		<method name="accessibility_update_set_table_row_index" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="index" type="int" />
@@ -567,7 +567,7 @@
 				Sets position of the row in the table.
 			</description>
 		</method>
-		<method name="accessibility_update_set_text_align">
+		<method name="accessibility_update_set_text_align" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="align" type="int" enum="HorizontalAlignment" />
@@ -575,7 +575,7 @@
 				Sets element text alignment.
 			</description>
 		</method>
-		<method name="accessibility_update_set_text_decorations">
+		<method name="accessibility_update_set_text_decorations" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="underline" type="bool" />
@@ -585,7 +585,7 @@
 				Sets text underline/overline/strikethrough.
 			</description>
 		</method>
-		<method name="accessibility_update_set_text_orientation">
+		<method name="accessibility_update_set_text_orientation" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="vertical" type="bool" />
@@ -593,7 +593,7 @@
 				Sets text orientation.
 			</description>
 		</method>
-		<method name="accessibility_update_set_text_selection">
+		<method name="accessibility_update_set_text_selection" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="text_start_id" type="RID" />
@@ -604,7 +604,7 @@
 				Sets text selection to the text field. [param text_start_id] and [param text_end_id] should be elements created by [method accessibility_create_sub_text_edit_elements]. Character offsets are relative to the corresponding element.
 			</description>
 		</method>
-		<method name="accessibility_update_set_tooltip">
+		<method name="accessibility_update_set_tooltip" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="tooltip" type="String" />
@@ -612,7 +612,7 @@
 				Sets tooltip text.
 			</description>
 		</method>
-		<method name="accessibility_update_set_transform">
+		<method name="accessibility_update_set_transform" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="transform" type="Transform2D" />
@@ -620,7 +620,7 @@
 				Sets element 2D transform.
 			</description>
 		</method>
-		<method name="accessibility_update_set_url">
+		<method name="accessibility_update_set_url" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="url" type="String" />
@@ -628,7 +628,7 @@
 				Sets link URL.
 			</description>
 		</method>
-		<method name="accessibility_update_set_value">
+		<method name="accessibility_update_set_value" deprecated="Use [AccessibilityServer] instead.">
 			<return type="void" />
 			<param index="0" name="id" type="RID" />
 			<param index="1" name="value" type="String" />
@@ -653,6 +653,7 @@
 			<return type="Image" />
 			<description>
 				Returns the user's clipboard as an image if possible.
+				[b]Note:[/b] This method uses the copied pixel data, e.g. from an image editing software or a web browser, not an image file copied from file explorer.
 			</description>
 		</method>
 		<method name="clipboard_get_primary" qualifiers="const">
@@ -723,6 +724,7 @@
 			<description>
 				Sets a custom mouse cursor image for the given [param shape]. This means the user's operating system and mouse cursor theme will no longer influence the mouse cursor's appearance.
 				[param cursor] can be either a [Texture2D] or an [Image], and it should not be larger than 256×256 to display correctly. Optionally, [param hotspot] can be set to offset the image's position relative to the click point. By default, [param hotspot] is set to the top-left corner of the image. See also [method cursor_set_shape].
+				[b]Note:[/b] On Web, calling this method every frame can cause the cursor to flicker.
 			</description>
 		</method>
 		<method name="cursor_set_shape">
@@ -747,6 +749,7 @@
 			<param index="3" name="callback" type="Callable" />
 			<description>
 				Shows a text input dialog which uses the operating system's native look-and-feel. [param callback] should accept a single [String] parameter which contains the text field's contents.
+				[b]Note:[/b] This method is implemented if the display server has the [constant FEATURE_NATIVE_DIALOG_INPUT] feature. Supported platforms include macOS, Windows, and Android.
 			</description>
 		</method>
 		<method name="dialog_show">
@@ -757,6 +760,7 @@
 			<param index="3" name="callback" type="Callable" />
 			<description>
 				Shows a text dialog which uses the operating system's native look-and-feel. [param callback] should accept a single [int] parameter which corresponds to the index of the pressed button.
+				[b]Note:[/b] This method is implemented if the display server has the [constant FEATURE_NATIVE_DIALOG] feature. Supported platforms include macOS, Windows, and Android.
 			</description>
 		</method>
 		<method name="enable_for_stealing_focus">
@@ -780,14 +784,23 @@
 			<description>
 				Displays OS native dialog for selecting files or directories in the file system.
 				Each filter string in the [param filters] array should be formatted like this: [code]*.png,*.jpg,*.jpeg;Image Files;image/png,image/jpeg[/code]. The description text of the filter is optional and can be omitted. It is recommended to set both file extension and MIME type. See also [member FileDialog.filters].
+				Callbacks have the following arguments: [code]status: bool, selected_paths: PackedStringArray, selected_filter_index: int[/code]. [b]On Android,[/b] the third callback argument ([code]selected_filter_index[/code]) is always [code]0[/code].
+				[b]Note:[/b] This method is implemented if the display server has the [constant FEATURE_NATIVE_DIALOG_FILE] feature. Supported platforms include Linux (X11/Wayland), Windows, macOS, and Android.
 				[b]Note:[/b] [param current_directory] might be ignored.
+				[b]Note:[/b] Embedded file dialogs and Windows file dialogs support only file extensions, while Android, Linux, and macOS file dialogs also support MIME types.
+				[b]Note:[/b] On Android and Linux, [param show_hidden] is ignored.
+				[b]Note:[/b] On Android and macOS, native file dialogs have no title.
 				[b]Note:[/b] On macOS, sandboxed apps will save security-scoped bookmarks to retain access to the opened folders across multiple sessions. Use [method OS.get_granted_permissions] to get a list of saved bookmarks.
+				[b]Note:[/b] On Android, this method uses the Android Storage Access Framework (SAF).
 				The file picker returns a URI instead of a filesystem path. This URI can be passed directly to [FileAccess] to perform read/write operations.
 				When using [constant FILE_DIALOG_MODE_OPEN_DIR], it returns a tree URI that grants full access to the selected directory. File operations inside this directory can be performed by passing a path on the form [code]treeUri#relative/path/to/file[/code] to [FileAccess].
 				To avoid opening the file picker again after each app restart, you can take persistable URI permission as follows:
 				[codeblocks]
 				[gdscript]
+				val uri = "content://com.android..." # URI of the selected file or folder.
 				val persist = true # Set to false to release the persistable permission.
+				var android_runtime = Engine.get_singleton("AndroidRuntime")
+				android_runtime.updatePersistableUriPermission(uri, persist)
 				[/gdscript]
 				[/codeblocks]
 				The persistable URI permission remains valid across app restarts as long as the directory is not moved, renamed, or deleted.
@@ -815,6 +828,7 @@
 				Callbacks have the following arguments: [code]status: bool, selected_paths: PackedStringArray, selected_filter_index: int, selected_option: Dictionary[/code].
 				[b]Note:[/b] This method is implemented if the display server has the [constant FEATURE_NATIVE_DIALOG_FILE_EXTRA] feature. Supported platforms include Linux (X11/Wayland), Windows, and macOS.
 				[b]Note:[/b] [param current_directory] might be ignored.
+				[b]Note:[/b] Embedded file dialogs and Windows file dialogs support only file extensions, while Android, Linux, and macOS file dialogs also support MIME types.
 				[b]Note:[/b] On Linux (X11), [param show_hidden] is ignored.
 				[b]Note:[/b] On macOS, native file dialogs have no title.
 				[b]Note:[/b] On macOS, sandboxed apps will save security-scoped bookmarks to retain access to the opened folders across multiple sessions. Use [method OS.get_granted_permissions] to get a list of saved bookmarks.
@@ -831,24 +845,28 @@
 			<return type="Color" />
 			<description>
 				Returns OS theme accent color. Returns [code]Color(0, 0, 0, 0)[/code], if accent color is unknown.
+				[b]Note:[/b] This method is implemented on macOS, Windows, Android, and Linux (X11/Wayland).
 			</description>
 		</method>
 		<method name="get_base_color" qualifiers="const">
 			<return type="Color" />
 			<description>
 				Returns the OS theme base color (default control background). Returns [code]Color(0, 0, 0, 0)[/code] if the base color is unknown.
+				[b]Note:[/b] This method is implemented on macOS, Windows, and Android.
 			</description>
 		</method>
 		<method name="get_display_cutouts" qualifiers="const">
 			<return type="Rect2[]" />
 			<description>
 				Returns an [Array] of [Rect2], each of which is the bounding rectangle for a display cutout or notch. These are non-functional areas on edge-to-edge screens used by cameras and sensors. Returns an empty array if the device does not have cutouts. See also [method get_display_safe_area].
+				[b]Note:[/b] Currently only implemented on Android. Other platforms will return an empty array even if they do have display cutouts or notches.
 			</description>
 		</method>
 		<method name="get_display_safe_area" qualifiers="const">
 			<return type="Rect2i" />
 			<description>
 				Returns the unobscured area of the display where interactive controls should be rendered. See also [method get_display_cutouts].
+				[b]Note:[/b] Currently only implemented on Android and iOS. On other platforms, [code]screen_get_usable_rect(SCREEN_OF_MAIN_WINDOW)[/code] will be returned as a fallback. See also [method screen_get_usable_rect].
 			</description>
 		</method>
 		<method name="get_keyboard_focus_screen" qualifiers="const">
@@ -862,6 +880,7 @@
 			<return type="String" />
 			<description>
 				Returns the name of the [DisplayServer] currently in use. Most operating systems only have a single [DisplayServer], but Linux has access to more than one [DisplayServer] (currently X11 and Wayland).
+				The names of built-in display servers are [code]Windows[/code], [code]macOS[/code], [code]X11[/code] (Linux), [code]Wayland[/code] (Linux), [code]Android[/code], [code]iOS[/code], [code]web[/code] (HTML5), and [code]headless[/code] (when started with the [code]--headless[/code] [url=$DOCS_URL/tutorials/editor/command_line_tutorial.html]command line argument[/url]).
 			</description>
 		</method>
 		<method name="get_primary_screen" qualifiers="const">
@@ -1543,6 +1562,7 @@
 			<return type="bool" />
 			<description>
 				Returns [code]true[/code] if a hardware keyboard is connected.
+				[b]Note:[/b] This method is implemented on Android and iOS. On other platforms, this method always returns [code]true[/code].
 			</description>
 		</method>
 		<method name="help_set_search_callbacks">
@@ -1574,17 +1594,28 @@
 			<return type="bool" />
 			<description>
 				Returns [code]true[/code] if OS is using dark mode.
+				[b]Note:[/b] This method is implemented on Android, iOS, macOS, Windows, and Linux (X11/Wayland).
 			</description>
 		</method>
 		<method name="is_dark_mode_supported" qualifiers="const">
 			<return type="bool" />
 			<description>
 				Returns [code]true[/code] if OS supports dark mode.
+				[b]Note:[/b] This method is implemented on Android, iOS, macOS, Windows, and Linux (X11/Wayland).
+			</description>
+		</method>
+		<method name="is_in_pip_mode">
+			<return type="bool" />
+			<param index="0" name="window_id" type="int" default="0" />
+			<description>
+				Returns [code]true[/code] if the application is in picture-in-picture mode.
+				[b]Note:[/b] This method is implemented on Android.
 			</description>
 		</method>
 		<method name="is_touchscreen_available" qualifiers="const">
 			<return type="bool" />
 			<description>
+				Returns [code]true[/code] if touch events are available (Android or iOS), the capability is detected on the Web platform or if [member ProjectSettings.input_devices/pointing/emulate_touch_from_mouse] is [code]true[/code].
 			</description>
 		</method>
 		<method name="is_window_transparency_available" qualifiers="const">
@@ -1672,6 +1703,33 @@
 				Sets the current mouse mode. See also [method mouse_get_mode].
 			</description>
 		</method>
+		<method name="pip_mode_enter">
+			<return type="void" />
+			<param index="0" name="window_id" type="int" default="0" />
+			<description>
+				Enters picture-in-picture mode.
+				[b]Note:[/b] This method is implemented on Android.
+			</description>
+		</method>
+		<method name="pip_mode_set_aspect_ratio">
+			<return type="void" />
+			<param index="0" name="numerator" type="int" />
+			<param index="1" name="denominator" type="int" />
+			<param index="2" name="window_id" type="int" default="0" />
+			<description>
+				Specifies the aspect ratio for picture-in-picture mode.
+				[b]Note:[/b] This method is implemented on Android.
+			</description>
+		</method>
+		<method name="pip_mode_set_auto_enter_on_background">
+			<return type="void" />
+			<param index="0" name="auto_enter_on_background" type="bool" />
+			<param index="1" name="window_id" type="int" default="0" />
+			<description>
+				Specifies whether picture-in-picture mode should be entered automatically when the application goes in the background.
+				[b]Note:[/b] This method is implemented on Android.
+			</description>
+		</method>
 		<method name="process_events">
 			<return type="void" />
 			<description>
@@ -1693,6 +1751,7 @@
 				Returns the dots per inch density of the specified screen. Returns platform specific default value if [param screen] is invalid.
 				[b]Note:[/b] One of the following constants can be used as [param screen]: [constant SCREEN_OF_MAIN_WINDOW], [constant SCREEN_PRIMARY], [constant SCREEN_WITH_MOUSE_FOCUS], or [constant SCREEN_WITH_KEYBOARD_FOCUS].
 				[b]Note:[/b] On macOS, returned value is inaccurate if fractional display scaling mode is used.
+				[b]Note:[/b] On Android devices, the actual screen densities are grouped into six generalized densities:
 				[codeblock lang=text]
 				   ldpi - 120 dpi
 				   mdpi - 160 dpi
@@ -1701,6 +1760,7 @@
 				 xxhdpi - 480 dpi
 				xxxhdpi - 640 dpi
 				[/codeblock]
+				[b]Note:[/b] This method is implemented on Android, iOS, Linux (X11/Wayland), macOS, Web, and Windows. On other platforms, this method always returns [code]72[/code].
 			</description>
 		</method>
 		<method name="screen_get_image" qualifiers="const">
@@ -1736,6 +1796,7 @@
 			<description>
 				Returns the [param screen]'s current orientation. See also [method screen_set_orientation]. Returns [constant SCREEN_LANDSCAPE] if [param screen] is invalid.
 				[b]Note:[/b] One of the following constants can be used as [param screen]: [constant SCREEN_OF_MAIN_WINDOW], [constant SCREEN_PRIMARY], [constant SCREEN_WITH_MOUSE_FOCUS], or [constant SCREEN_WITH_KEYBOARD_FOCUS].
+				[b]Note:[/b] This method is implemented on Android and iOS. On other platforms, this method always returns [constant SCREEN_LANDSCAPE].
 			</description>
 		</method>
 		<method name="screen_get_pixel" qualifiers="const">
@@ -1776,6 +1837,7 @@
 					refresh_rate = 60.0
 				[/codeblock]
 				[b]Note:[/b] One of the following constants can be used as [param screen]: [constant SCREEN_OF_MAIN_WINDOW], [constant SCREEN_PRIMARY], [constant SCREEN_WITH_MOUSE_FOCUS], or [constant SCREEN_WITH_KEYBOARD_FOCUS].
+				[b]Note:[/b] This method is implemented on Android, iOS, macOS, Linux (X11 and Wayland), and Windows. On other platforms, this method always returns [code]-1.0[/code].
 			</description>
 		</method>
 		<method name="screen_get_scale" qualifiers="const">
@@ -1786,6 +1848,7 @@
 				[b]Note:[/b] One of the following constants can be used as [param screen]: [constant SCREEN_OF_MAIN_WINDOW], [constant SCREEN_PRIMARY], [constant SCREEN_WITH_MOUSE_FOCUS], or [constant SCREEN_WITH_KEYBOARD_FOCUS].
 				[b]Note:[/b] On macOS, the returned value is [code]2.0[/code] for hiDPI (Retina) screens, and [code]1.0[/code] for all other cases.
 				[b]Note:[/b] On Linux (Wayland), the returned value is accurate only when [param screen] is [constant SCREEN_OF_MAIN_WINDOW]. Due to API limitations, passing a direct index will return a rounded-up integer, if the screen has a fractional scale (e.g. [code]1.25[/code] would get rounded up to [code]2.0[/code]).
+				[b]Note:[/b] This method is implemented on Android, iOS, Web, macOS, and Linux (Wayland). On other platforms, this method always returns [code]1.0[/code].
 			</description>
 		</method>
 		<method name="screen_get_size" qualifiers="const">
@@ -1825,6 +1888,7 @@
 			<description>
 				Sets the [param screen]'s [param orientation]. See also [method screen_get_orientation].
 				[b]Note:[/b] One of the following constants can be used as [param screen]: [constant SCREEN_OF_MAIN_WINDOW], [constant SCREEN_PRIMARY], [constant SCREEN_WITH_MOUSE_FOCUS], or [constant SCREEN_WITH_KEYBOARD_FOCUS].
+				[b]Note:[/b] This method is implemented on Android and iOS.
 				[b]Note:[/b] On iOS, this method has no effect if [member ProjectSettings.display/window/handheld/orientation] is not set to [constant SCREEN_SENSOR].
 			</description>
 		</method>
@@ -1833,13 +1897,14 @@
 			<param index="0" name="callable" type="Callable" />
 			<description>
 				Sets the callback that should be called when a hardware keyboard is connected or disconnected. [param callable] should accept a single [bool] argument indicating whether the keyboard has been connected ([code]true[/code]) or disconnected ([code]false[/code]).
+				[b]Note:[/b] This method is only implemented on Android.
 			</description>
 		</method>
 		<method name="set_icon">
 			<return type="void" />
 			<param index="0" name="image" type="Image" />
 			<description>
-				Sets the window icon (usually displayed in the top-left corner) with an [Image]. To use icons in the operating system's native format, use [method set_native_icon] instead.
+				Sets the application icon and icons of all windows with an [Image]. To use icons in the operating system's native format, use [method set_native_icon] instead.
 				[b]Note:[/b] Requires support for [constant FEATURE_ICON].
 			</description>
 		</method>
@@ -1856,6 +1921,7 @@
 			<param index="0" name="callable" type="Callable" />
 			<description>
 				Sets the callback that should be called when the system's theme settings are changed. [param callable] should accept zero arguments.
+				[b]Note:[/b] This method is implemented on Android, iOS, macOS, Windows, and Linux (X11/Wayland).
 			</description>
 		</method>
 		<method name="show_emoji_and_symbol_picker" qualifiers="const">
@@ -1954,6 +2020,7 @@
 				- [code]id[/code] is voice identifier.
 				- [code]language[/code] is language code in [code]lang_Variant[/code] format. The [code]lang[/code] part is a 2 or 3-letter code based on the ISO-639 standard, in lowercase. The [code skip-lint]Variant[/code] part is an engine-dependent string describing country, region or/and dialect.
 				Note that Godot depends on system libraries for text-to-speech functionality. These libraries are installed by default on Windows and macOS, but not on all Linux distributions. If they are not present, this method will return an empty list. This applies to both Godot users on Linux, as well as end-users on Linux running Godot games that use text-to-speech.
+				[b]Note:[/b] This method is implemented on Android, iOS, Web, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="tts_get_voices_for_language" qualifiers="const">
@@ -1961,30 +2028,35 @@
 			<param index="0" name="language" type="String" />
 			<description>
 				Returns a [PackedStringArray] of voice identifiers for the [param language].
+				[b]Note:[/b] This method is implemented on Android, iOS, Web, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="tts_is_paused" qualifiers="const">
 			<return type="bool" />
 			<description>
 				Returns [code]true[/code] if the synthesizer is in a paused state.
+				[b]Note:[/b] This method is implemented on Android, iOS, Web, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="tts_is_speaking" qualifiers="const">
 			<return type="bool" />
 			<description>
 				Returns [code]true[/code] if the synthesizer is generating speech, or have utterance waiting in the queue.
+				[b]Note:[/b] This method is implemented on Android, iOS, Web, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="tts_pause">
 			<return type="void" />
 			<description>
 				Puts the synthesizer into a paused state.
+				[b]Note:[/b] This method is implemented on Android, iOS, Web, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="tts_resume">
 			<return type="void" />
 			<description>
 				Resumes the synthesizer if it was paused.
+				[b]Note:[/b] This method is implemented on Android, iOS, Web, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="tts_set_utterance_callback">
@@ -1996,6 +2068,7 @@
 				- [constant TTS_UTTERANCE_STARTED], [constant TTS_UTTERANCE_ENDED], and [constant TTS_UTTERANCE_CANCELED] callable's method should take one [int] parameter, the utterance ID.
 				- [constant TTS_UTTERANCE_BOUNDARY] callable's method should take two [int] parameters, the index of the character and the utterance ID.
 				[b]Note:[/b] The granularity of the boundary callbacks is engine dependent.
+				[b]Note:[/b] This method is implemented on Android, iOS, Web, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="tts_speak">
@@ -2016,12 +2089,14 @@
 				- [param utterance_id] is passed as a parameter to the callback functions.
 				[b]Note:[/b] On Windows and Linux (X11/Wayland), utterance [param text] can use SSML markup. SSML support is engine and voice dependent. If the engine does not support SSML, you should strip out all XML markup before calling [method tts_speak].
 				[b]Note:[/b] The granularity of pitch, rate, and volume is engine and voice dependent. Values may be truncated.
+				[b]Note:[/b] This method is implemented on Android, iOS, Web, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="tts_stop">
 			<return type="void" />
 			<description>
 				Stops synthesis in progress and removes all utterances from the queue.
+				[b]Note:[/b] This method is implemented on Android, iOS, Web, Linux (X11/Wayland), macOS, and Windows.
 			</description>
 		</method>
 		<method name="unregister_additional_output">
@@ -2035,6 +2110,7 @@
 			<return type="int" />
 			<description>
 				Returns the on-screen keyboard's height in pixels. Returns [code]0[/code] if there is no keyboard or if it is currently hidden.
+				[b]Note:[/b] On Android 7 and 8, the keyboard height may return [code]0[/code] the first time the keyboard is opened in non-immersive mode. This behavior does not occur in immersive mode.
 			</description>
 		</method>
 		<method name="virtual_keyboard_hide">
@@ -2059,6 +2135,7 @@
 				[param max_length] limits the number of characters that can be entered if different from [code]-1[/code].
 				[param cursor_start] can optionally define the current text cursor position if [param cursor_end] is not set.
 				[param cursor_start] and [param cursor_end] can optionally define the current text selection.
+				[b]Note:[/b] This method is implemented on Android, iOS and Web.
 			</description>
 		</method>
 		<method name="warp_mouse">
@@ -2066,6 +2143,7 @@
 			<param index="0" name="position" type="Vector2i" />
 			<description>
 				Sets the mouse cursor position to the given [param position] relative to an origin at the upper left corner of the currently focused game Window Manager window.
+				[b]Note:[/b] [method warp_mouse] is only supported on Windows, macOS, and Linux (X11/Wayland). It has no effect on Android, iOS, and Web.
 			</description>
 		</method>
 		<method name="window_can_draw" qualifiers="const">
@@ -2104,6 +2182,36 @@
 				Returns the current value of the given window's [param flag].
 			</description>
 		</method>
+		<method name="window_get_hdr_output_current_max_luminance" qualifiers="const" experimental="">
+			<return type="float" />
+			<param index="0" name="window_id" type="int" default="0" />
+			<description>
+				When [method window_is_hdr_output_enabled] returns [code]true[/code], this returns the current maximum luminance in nits (cd/m²) for HDR output by the window specified by [param window_id]. If the maximum luminance is being automatically adjusted based on the screen's capabilities, this method will return that value. Otherwise, it will return the value set by [method window_set_hdr_output_max_luminance]. This maximum luminance value is used when calculating [method window_get_output_max_linear_value].
+				[b]Note:[/b] This maximum luminance may not match the physical behavior of the screen, but will always be proportionally correct relative to [method window_get_hdr_output_current_reference_luminance].
+			</description>
+		</method>
+		<method name="window_get_hdr_output_current_reference_luminance" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="window_id" type="int" default="0" />
+			<description>
+				When [method window_is_hdr_output_enabled] returns [code]true[/code], this returns the current reference white luminance in nits (cd/m²) for HDR output by the window specified by [param window_id]. If the reference luminance is being automatically adjusted to match the operating system brightness, this will return that value. Otherwise, it will return the value set by [method window_set_hdr_output_reference_luminance]. This reference luminance value is used when calculating [method window_get_output_max_linear_value].
+				[b]Note:[/b] This reference white luminance may not match the physical behavior of the screen, but will always be proportionally correct relative to [method window_get_hdr_output_current_max_luminance].
+			</description>
+		</method>
+		<method name="window_get_hdr_output_max_luminance" qualifiers="const" experimental="">
+			<return type="float" />
+			<param index="0" name="window_id" type="int" default="0" />
+			<description>
+				Returns the maximum luminance in nits (cd/m²) set for HDR output by the window specified by [param window_id]. Negative values indicate that the value is being automatically adjusted based on the screen's capabilities. See also [method window_get_hdr_output_current_max_luminance].
+			</description>
+		</method>
+		<method name="window_get_hdr_output_reference_luminance" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="window_id" type="int" default="0" />
+			<description>
+				Returns the reference white luminance in nits (cd/m²) set for HDR output by the window specified by [param window_id]. Negative values indicate that the value is being automatically adjusted to match the operating system brightness. See also [method window_get_hdr_output_current_reference_luminance].
+			</description>
+		</method>
 		<method name="window_get_max_size" qualifiers="const">
 			<return type="Vector2i" />
 			<param index="0" name="window_id" type="int" default="0" />
@@ -2131,6 +2239,14 @@
 			<param index="1" name="window_id" type="int" default="0" />
 			<description>
 				Returns internal structure pointers for use in plugins.
+				[b]Note:[/b] This method is implemented on Android, Linux (X11/Wayland), macOS, and Windows.
+			</description>
+		</method>
+		<method name="window_get_output_max_linear_value" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="window_id" type="int" default="0" />
+			<description>
+				Returns the maximum value for linear color components that can be displayed for the window specified by [param window_id], regardless of SDR or HDR output. Returns [code]1.0[/code] if HDR is not enabled or not supported. When HDR output is enabled, this is calculated based on [method window_get_hdr_output_current_reference_luminance] and [method window_get_hdr_output_current_max_luminance]. The [signal Window.output_max_linear_value_changed] signal will be emitted whenever this value changes. This value is used by tonemapping and other [Environment] effects to ensure that bright colors are presented in the range that can be displayed by this window. Corresponds to [method Window.get_output_max_linear_value].
 			</description>
 		</method>
 		<method name="window_get_popup_safe_rect" qualifiers="const">
@@ -2198,6 +2314,27 @@
 				Returns [code]true[/code] if the window specified by [param window_id] is focused.
 			</description>
 		</method>
+		<method name="window_is_hdr_output_enabled" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="window_id" type="int" default="0" />
+			<description>
+				Returns [code]true[/code] if HDR output is currently enabled for the window specified by [param window_id]. The returned value may change dynamically based on system settings, screen capabilities, and which screen the window is currently on.
+			</description>
+		</method>
+		<method name="window_is_hdr_output_requested" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="window_id" type="int" default="0" />
+			<description>
+				Returns [code]true[/code] if HDR output is requested for the window specified by [param window_id]. Corresponds to [member Window.hdr_output_requested].
+			</description>
+		</method>
+		<method name="window_is_hdr_output_supported" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="window_id" type="int" default="0" />
+			<description>
+				Returns [code]true[/code] if the window specified by [param window_id] supports HDR output. This depends on the platform, screen capabilities, system settings, and the screen the window is currently on.
+			</description>
+		</method>
 		<method name="window_is_maximize_allowed" qualifiers="const">
 			<return type="bool" />
 			<param index="0" name="window_id" type="int" default="0" />
@@ -2233,11 +2370,20 @@
 				Makes the window specified by [param window_id] request attention, which is materialized by the window title and taskbar entry blinking until the window is focused. This usually has no visible effect if the window is currently focused. The exact behavior varies depending on the operating system.
 			</description>
 		</method>
+		<method name="window_request_hdr_output">
+			<return type="void" />
+			<param index="0" name="enable" type="bool" />
+			<param index="1" name="window_id" type="int" default="0" />
+			<description>
+				If [param enable] is [code]true[/code], HDR output is requested for the window specified by [param window_id]. The window will automatically switch between HDR and SDR if it is moved between screens, screen capabilities change, or system settings are modified. This will internally force [member Viewport.use_hdr_2d] to be enabled on the main [Viewport]. All other [SubViewport] of the [Window] must have their [member Viewport.use_hdr_2d] property enabled to produce HDR output. Corresponds to [member Window.hdr_output_requested].
+			</description>
+		</method>
 		<method name="window_set_color">
 			<return type="void" />
 			<param index="0" name="color" type="Color" />
 			<description>
 				Sets the background color of the root window.
+				[b]Note:[/b] This method is implemented only on Android.
 			</description>
 		</method>
 		<method name="window_set_current_screen">
@@ -2257,6 +2403,7 @@
 			<description>
 				Sets the [param callback] that should be called when files are dropped from the operating system's file manager to the window specified by [param window_id]. [param callback] should take one [PackedStringArray] argument, which is the list of dropped files.
 				[b]Warning:[/b] Advanced users only! Adding such a callback to a [Window] node will override its default implementation, which can introduce bugs.
+				[b]Note:[/b] This method is implemented on Windows, macOS, Linux (X11/Wayland), and Web.
 			</description>
 		</method>
 		<method name="window_set_exclusive">
@@ -2276,6 +2423,33 @@
 			<param index="2" name="window_id" type="int" default="0" />
 			<description>
 				Enables or disables the given window's given [param flag].
+			</description>
+		</method>
+		<method name="window_set_hdr_output_max_luminance" experimental="">
+			<return type="void" />
+			<param index="0" name="max_luminance" type="float" />
+			<param index="1" name="window_id" type="int" default="0" />
+			<description>
+				Sets the maximum luminance in nits (cd/m²) for HDR output by the window specified by [param window_id]. If [param max_luminance] is negative, the window uses the screen's maximum luminance that is reported by the operating system. By default, this luminance is set to [code]-1.0[/code] for every window. Typically this property should be left at this default value, but may optionally be exposed through in-game settings to allow the player to correct an inaccurate maximum luminance reported by the operating system. See also [method window_get_hdr_output_current_max_luminance] and [method window_get_hdr_output_max_luminance].
+				[b]Note:[/b] This method is only implemented on macOS and Windows. Other platforms will always use the screen's maximum luminance that is reported by the operating system.
+			</description>
+		</method>
+		<method name="window_set_hdr_output_reference_luminance">
+			<return type="void" />
+			<param index="0" name="reference_luminance" type="float" />
+			<param index="1" name="window_id" type="int" default="0" />
+			<description>
+				Sets the reference white luminance in nits (cd/m²) for HDR output by the window specified by [param window_id]. If [param reference_luminance] is negative, the window automatically adjusts to the brightness set by the operating system. By default, this luminance is set to [code]-1.0[/code] for every window. Typically this property should be left at this default value, but may optionally be exposed as an "HDR Brightness" in-game setting to allow the player to adjust the brightness of their game, independently of their device settings. See also [method window_get_hdr_output_current_reference_luminance] and [method window_get_hdr_output_reference_luminance].
+				[b]Note:[/b] This method is only implemented on Windows. Other platforms will always use the reference luminance that is reported by the operating system.
+			</description>
+		</method>
+		<method name="window_set_icon">
+			<return type="void" />
+			<param index="0" name="icon" type="Image" />
+			<param index="1" name="window_id" type="int" default="0" />
+			<description>
+				Sets the window icon (usually displayed in the top-left corner) for the window specified by [param window_id].
+				[b]Note:[/b] This method is implemented on Linux and Windows.
 			</description>
 		</method>
 		<method name="window_set_ime_active">
@@ -2339,6 +2513,7 @@
 			<param index="1" name="window_id" type="int" default="0" />
 			<description>
 				Sets window mode for the given window to [param mode].
+				[b]Note:[/b] On Android, setting it to [constant WINDOW_MODE_FULLSCREEN] or [constant WINDOW_MODE_EXCLUSIVE_FULLSCREEN] will enable immersive mode.
 				[b]Note:[/b] Setting the window to full screen forcibly sets the borderless flag to [code]true[/code], so make sure to set it back to [code]false[/code] when not wanted.
 			</description>
 		</method>
@@ -2420,6 +2595,27 @@
 				[b]Note:[/b] It's recommended to change this value using [member Window.size] instead.
 			</description>
 		</method>
+		<method name="window_set_taskbar_progress_state">
+			<return type="void" />
+			<param index="0" name="state" type="int" enum="DisplayServer.ProgressState" />
+			<param index="1" name="window_id" type="int" default="0" />
+			<description>
+				Sets the type and state of the progress bar on the taskbar/dock icon of the window specified by [param window_id]. See [enum ProgressState] for possible values and how each mode behaves.
+				[b]Note:[/b] This method is implemented only on Windows and macOS.
+				[b]Note:[/b] On macOS, the progress bar is displayed only for the main window.
+			</description>
+		</method>
+		<method name="window_set_taskbar_progress_value">
+			<return type="void" />
+			<param index="0" name="value" type="float" />
+			<param index="1" name="window_id" type="int" default="0" />
+			<description>
+				Creates a progress bar on the taskbar/dock icon of the window specified by [param window_id] if it does not exist, sets the progress of the icon.
+				[param value] acts as a relative percentage value, ranges from [code]0.0[/code] (lowest) to [code]1.0[/code] (highest).
+				[b]Note:[/b] This method is implemented only on Windows and macOS.
+				[b]Note:[/b] On macOS, the progress bar is displayed only for the main window.
+			</description>
+		</method>
 		<method name="window_set_title">
 			<return type="void" />
 			<param index="0" name="title" type="String" />
@@ -2447,7 +2643,7 @@
 			<description>
 				Sets the V-Sync mode of the given window. See also [member ProjectSettings.display/window/vsync/vsync_mode].
 				Depending on the platform and used renderer, the engine will fall back to [constant VSYNC_ENABLED] if the desired mode is not supported.
-				[b]Note:[/b] V-Sync modes other than [constant VSYNC_ENABLED] are only supported in the Forward+ rendering method.
+				[b]Note:[/b] V-Sync modes other than [constant VSYNC_ENABLED] are only supported in the Forward+ and Mobile rendering methods, not Compatibility.
 			</description>
 		</method>
 		<method name="window_set_window_buttons_offset">
@@ -2486,6 +2682,16 @@
 			</description>
 		</method>
 	</methods>
+	<signals>
+		<signal name="orientation_changed">
+			<param index="0" name="orientation" type="int" />
+			<description>
+				Emitted when the device orientation changes. [param orientation] is the new orientation.
+				Returns [code]1[/code] for portrait, [code]2[/code] for landscape, and [code]0[/code] if the orientation is undefined.
+				[b]Note:[/b] This method is implemented on Android and iOS.
+			</description>
+		</signal>
+	</signals>
 	<constants>
 		<constant name="FEATURE_GLOBAL_MENU" value="0" enum="Feature" deprecated="Use [NativeMenu] or [PopupMenu] instead.">
 			Display server supports global menu. This allows the application to display its menu items in the operating system's top bar. [b]macOS[/b]
@@ -2494,19 +2700,25 @@
 			Display server supports multiple windows that can be moved outside of the main window. [b]Windows, macOS, Linux (X11)[/b]
 		</constant>
 		<constant name="FEATURE_TOUCHSCREEN" value="2" enum="Feature">
+			Display server supports touchscreen input. [b]Windows, Linux (X11/Wayland), Android, iOS, Web[/b]
 		</constant>
 		<constant name="FEATURE_MOUSE" value="3" enum="Feature">
+			Display server supports mouse input. [b]Windows, macOS, Linux (X11/Wayland), Android, Web[/b]
 		</constant>
 		<constant name="FEATURE_MOUSE_WARP" value="4" enum="Feature">
 			Display server supports warping mouse coordinates to keep the mouse cursor constrained within an area, but looping when one of the edges is reached. [b]Windows, macOS, Linux (X11/Wayland)[/b]
 		</constant>
 		<constant name="FEATURE_CLIPBOARD" value="5" enum="Feature">
+			Display server supports setting and getting clipboard data. See also [constant FEATURE_CLIPBOARD_PRIMARY]. [b]Windows, macOS, Linux (X11/Wayland), Android, iOS, Web[/b]
 		</constant>
 		<constant name="FEATURE_VIRTUAL_KEYBOARD" value="6" enum="Feature">
+			Display server supports popping up a virtual keyboard when requested to input text without a physical keyboard. [b]Android, iOS, Web[/b]
 		</constant>
 		<constant name="FEATURE_CURSOR_SHAPE" value="7" enum="Feature">
+			Display server supports setting the mouse cursor shape to be different from the default. [b]Windows, macOS, Linux (X11/Wayland), Android, Web[/b]
 		</constant>
 		<constant name="FEATURE_CUSTOM_CURSOR_SHAPE" value="8" enum="Feature">
+			Display server supports setting the mouse cursor shape to a custom image. [b]Windows, macOS, Linux (X11/Wayland), Web[/b]
 		</constant>
 		<constant name="FEATURE_NATIVE_DIALOG" value="9" enum="Feature">
 			Display server supports spawning text dialogs using the operating system's native look-and-feel. See [method dialog_show]. [b]Windows, macOS[/b]
@@ -2515,6 +2727,7 @@
 			Display server supports [url=https://en.wikipedia.org/wiki/Input_method]Input Method Editor[/url], which is commonly used for inputting Chinese/Japanese/Korean text. This is handled by the operating system, rather than by Godot. [b]Windows, macOS, Linux (X11)[/b]
 		</constant>
 		<constant name="FEATURE_WINDOW_TRANSPARENCY" value="11" enum="Feature">
+			Display server supports windows can use per-pixel transparency to make windows behind them partially or fully visible. [b]Windows, macOS, Linux (X11/Wayland), Android[/b]
 		</constant>
 		<constant name="FEATURE_HIDPI" value="12" enum="Feature">
 			Display server supports querying the operating system's display scale factor. This allows automatically detecting the hiDPI display [i]reliably[/i], instead of guessing based on the screen resolution and the display's reported DPI (which might be unreliable due to broken monitor EDID). [b]Windows, Linux (Wayland), macOS[/b]
@@ -2527,6 +2740,7 @@
 			Display server supports changing the window icon (usually displayed in the top-left corner). [b]Windows, macOS[/b]
 		</constant>
 		<constant name="FEATURE_ORIENTATION" value="15" enum="Feature">
+			Display server supports changing the screen orientation. [b]Android, iOS[/b]
 		</constant>
 		<constant name="FEATURE_SWAP_BUFFERS" value="16" enum="Feature">
 			Display server supports V-Sync status can be changed from the default (which is forced to be enabled platforms not supporting this feature). [b]Windows, macOS, Linux (X11/Wayland)[/b]
@@ -2535,6 +2749,7 @@
 			Display server supports Primary clipboard can be used. This is a different clipboard from [constant FEATURE_CLIPBOARD]. [b]Linux (X11/Wayland)[/b]
 		</constant>
 		<constant name="FEATURE_TEXT_TO_SPEECH" value="19" enum="Feature">
+			Display server supports text-to-speech. See [code]tts_*[/code] methods. [b]Windows, macOS, Linux (X11/Wayland), Android, iOS, Web[/b]
 		</constant>
 		<constant name="FEATURE_EXTEND_TO_TITLE" value="20" enum="Feature">
 			Display server supports expanding window content to the title. See [constant WINDOW_FLAG_EXTEND_TO_TITLE]. [b]macOS[/b]
@@ -2552,6 +2767,7 @@
 			Display server supports spawning text input dialogs using the operating system's native look-and-feel. See [method dialog_input_text]. [b]Windows, macOS[/b]
 		</constant>
 		<constant name="FEATURE_NATIVE_DIALOG_FILE" value="25" enum="Feature">
+			Display server supports spawning dialogs for selecting files or directories using the operating system's native look-and-feel. See [method file_dialog_show]. [b]Windows, macOS, Linux (X11/Wayland), Android[/b]
 		</constant>
 		<constant name="FEATURE_NATIVE_DIALOG_FILE_EXTRA" value="26" enum="Feature">
 			The display server supports all features of [constant FEATURE_NATIVE_DIALOG_FILE], with the added functionality of Options and native dialog file access to [code]res://[/code] and [code]user://[/code] paths. See [method file_dialog_show] and [method file_dialog_with_options_show]. [b]Windows, macOS, Linux (X11/Wayland)[/b]
@@ -2580,290 +2796,303 @@
 		<constant name="FEATURE_ACCESSIBILITY_SCREEN_READER" value="34" enum="Feature">
 			Display server supports interaction with screen reader or Braille display. [b]Linux (X11/Wayland), macOS, Windows[/b]
 		</constant>
-		<constant name="ROLE_UNKNOWN" value="0" enum="AccessibilityRole">
+		<constant name="FEATURE_HDR_OUTPUT" value="35" enum="Feature">
+			Display server supports HDR output. [b]Linux (Wayland), macOS, iOS, visionOS, Windows[/b]
+		</constant>
+		<constant name="FEATURE_PIP_MODE" value="36" enum="Feature">
+			Display server supports putting the application in picture-in-picture mode. [b]Android[/b]
+		</constant>
+		<constant name="ROLE_UNKNOWN" value="0" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Unknown or custom role.
 		</constant>
-		<constant name="ROLE_DEFAULT_BUTTON" value="1" enum="AccessibilityRole">
+		<constant name="ROLE_DEFAULT_BUTTON" value="1" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Default dialog button element.
 		</constant>
-		<constant name="ROLE_AUDIO" value="2" enum="AccessibilityRole">
+		<constant name="ROLE_AUDIO" value="2" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Audio player element.
 		</constant>
-		<constant name="ROLE_VIDEO" value="3" enum="AccessibilityRole">
+		<constant name="ROLE_VIDEO" value="3" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Video player element.
 		</constant>
-		<constant name="ROLE_STATIC_TEXT" value="4" enum="AccessibilityRole">
+		<constant name="ROLE_STATIC_TEXT" value="4" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Non-editable text label.
 		</constant>
-		<constant name="ROLE_CONTAINER" value="5" enum="AccessibilityRole">
+		<constant name="ROLE_CONTAINER" value="5" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Container element. Elements with this role are used for internal structure and ignored by screen readers.
 		</constant>
-		<constant name="ROLE_PANEL" value="6" enum="AccessibilityRole">
+		<constant name="ROLE_PANEL" value="6" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Panel container element.
 		</constant>
-		<constant name="ROLE_BUTTON" value="7" enum="AccessibilityRole">
+		<constant name="ROLE_BUTTON" value="7" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Button element.
 		</constant>
-		<constant name="ROLE_LINK" value="8" enum="AccessibilityRole">
+		<constant name="ROLE_LINK" value="8" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Link element.
 		</constant>
-		<constant name="ROLE_CHECK_BOX" value="9" enum="AccessibilityRole">
+		<constant name="ROLE_CHECK_BOX" value="9" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Check box element.
 		</constant>
-		<constant name="ROLE_RADIO_BUTTON" value="10" enum="AccessibilityRole">
+		<constant name="ROLE_RADIO_BUTTON" value="10" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Radio button element.
 		</constant>
-		<constant name="ROLE_CHECK_BUTTON" value="11" enum="AccessibilityRole">
+		<constant name="ROLE_CHECK_BUTTON" value="11" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Check button element.
 		</constant>
-		<constant name="ROLE_SCROLL_BAR" value="12" enum="AccessibilityRole">
+		<constant name="ROLE_SCROLL_BAR" value="12" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Scroll bar element.
 		</constant>
-		<constant name="ROLE_SCROLL_VIEW" value="13" enum="AccessibilityRole">
+		<constant name="ROLE_SCROLL_VIEW" value="13" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Scroll container element.
 		</constant>
-		<constant name="ROLE_SPLITTER" value="14" enum="AccessibilityRole">
+		<constant name="ROLE_SPLITTER" value="14" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Container splitter handle element.
 		</constant>
-		<constant name="ROLE_SLIDER" value="15" enum="AccessibilityRole">
+		<constant name="ROLE_SLIDER" value="15" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Slider element.
 		</constant>
-		<constant name="ROLE_SPIN_BUTTON" value="16" enum="AccessibilityRole">
+		<constant name="ROLE_SPIN_BUTTON" value="16" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Spin box element.
 		</constant>
-		<constant name="ROLE_PROGRESS_INDICATOR" value="17" enum="AccessibilityRole">
+		<constant name="ROLE_PROGRESS_INDICATOR" value="17" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Progress indicator element.
 		</constant>
-		<constant name="ROLE_TEXT_FIELD" value="18" enum="AccessibilityRole">
+		<constant name="ROLE_TEXT_FIELD" value="18" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Editable text field element.
 		</constant>
-		<constant name="ROLE_MULTILINE_TEXT_FIELD" value="19" enum="AccessibilityRole">
+		<constant name="ROLE_MULTILINE_TEXT_FIELD" value="19" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Multiline editable text field element.
 		</constant>
-		<constant name="ROLE_COLOR_PICKER" value="20" enum="AccessibilityRole">
+		<constant name="ROLE_COLOR_PICKER" value="20" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Color picker element.
 		</constant>
-		<constant name="ROLE_TABLE" value="21" enum="AccessibilityRole">
+		<constant name="ROLE_TABLE" value="21" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Table element.
 		</constant>
-		<constant name="ROLE_CELL" value="22" enum="AccessibilityRole">
+		<constant name="ROLE_CELL" value="22" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Table/tree cell element.
 		</constant>
-		<constant name="ROLE_ROW" value="23" enum="AccessibilityRole">
+		<constant name="ROLE_ROW" value="23" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Table/tree row element.
 		</constant>
-		<constant name="ROLE_ROW_GROUP" value="24" enum="AccessibilityRole">
+		<constant name="ROLE_ROW_GROUP" value="24" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Table/tree row group element.
 		</constant>
-		<constant name="ROLE_ROW_HEADER" value="25" enum="AccessibilityRole">
+		<constant name="ROLE_ROW_HEADER" value="25" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Table/tree row header element.
 		</constant>
-		<constant name="ROLE_COLUMN_HEADER" value="26" enum="AccessibilityRole">
+		<constant name="ROLE_COLUMN_HEADER" value="26" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Table/tree column header element.
 		</constant>
-		<constant name="ROLE_TREE" value="27" enum="AccessibilityRole">
+		<constant name="ROLE_TREE" value="27" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Tree view element.
 		</constant>
-		<constant name="ROLE_TREE_ITEM" value="28" enum="AccessibilityRole">
+		<constant name="ROLE_TREE_ITEM" value="28" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Tree view item element.
 		</constant>
-		<constant name="ROLE_LIST" value="29" enum="AccessibilityRole">
+		<constant name="ROLE_LIST" value="29" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			List element.
 		</constant>
-		<constant name="ROLE_LIST_ITEM" value="30" enum="AccessibilityRole">
+		<constant name="ROLE_LIST_ITEM" value="30" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			List item element.
 		</constant>
-		<constant name="ROLE_LIST_BOX" value="31" enum="AccessibilityRole">
+		<constant name="ROLE_LIST_BOX" value="31" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			List view element.
 		</constant>
-		<constant name="ROLE_LIST_BOX_OPTION" value="32" enum="AccessibilityRole">
+		<constant name="ROLE_LIST_BOX_OPTION" value="32" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			List view item element.
 		</constant>
-		<constant name="ROLE_TAB_BAR" value="33" enum="AccessibilityRole">
+		<constant name="ROLE_TAB_BAR" value="33" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Tab bar element.
 		</constant>
-		<constant name="ROLE_TAB" value="34" enum="AccessibilityRole">
+		<constant name="ROLE_TAB" value="34" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Tab bar item element.
 		</constant>
-		<constant name="ROLE_TAB_PANEL" value="35" enum="AccessibilityRole">
+		<constant name="ROLE_TAB_PANEL" value="35" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Tab panel element.
 		</constant>
-		<constant name="ROLE_MENU_BAR" value="36" enum="AccessibilityRole">
+		<constant name="ROLE_MENU_BAR" value="36" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Menu bar element.
 		</constant>
-		<constant name="ROLE_MENU" value="37" enum="AccessibilityRole">
+		<constant name="ROLE_MENU" value="37" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Popup menu element.
 		</constant>
-		<constant name="ROLE_MENU_ITEM" value="38" enum="AccessibilityRole">
+		<constant name="ROLE_MENU_ITEM" value="38" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Popup menu item element.
 		</constant>
-		<constant name="ROLE_MENU_ITEM_CHECK_BOX" value="39" enum="AccessibilityRole">
+		<constant name="ROLE_MENU_ITEM_CHECK_BOX" value="39" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Popup menu check button item element.
 		</constant>
-		<constant name="ROLE_MENU_ITEM_RADIO" value="40" enum="AccessibilityRole">
+		<constant name="ROLE_MENU_ITEM_RADIO" value="40" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Popup menu radio button item element.
 		</constant>
-		<constant name="ROLE_IMAGE" value="41" enum="AccessibilityRole">
+		<constant name="ROLE_IMAGE" value="41" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Image element.
 		</constant>
-		<constant name="ROLE_WINDOW" value="42" enum="AccessibilityRole">
+		<constant name="ROLE_WINDOW" value="42" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Window element.
 		</constant>
-		<constant name="ROLE_TITLE_BAR" value="43" enum="AccessibilityRole">
+		<constant name="ROLE_TITLE_BAR" value="43" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Embedded window title bar element.
 		</constant>
-		<constant name="ROLE_DIALOG" value="44" enum="AccessibilityRole">
+		<constant name="ROLE_DIALOG" value="44" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Dialog window element.
 		</constant>
-		<constant name="ROLE_TOOLTIP" value="45" enum="AccessibilityRole">
+		<constant name="ROLE_TOOLTIP" value="45" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
 			Tooltip element.
 		</constant>
-		<constant name="POPUP_MENU" value="0" enum="AccessibilityPopupType">
+		<constant name="ROLE_REGION" value="46" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
+			Region/landmark element. Screen readers can navigate between regions using landmark navigation.
+		</constant>
+		<constant name="ROLE_TEXT_RUN" value="47" enum="AccessibilityRole" deprecated="Use [AccessibilityServer] instead.">
+			Unifor text run.
+			Note: This role is used for internal text elements, and should not be assigned to nodes.
+		</constant>
+		<constant name="POPUP_MENU" value="0" enum="AccessibilityPopupType" deprecated="Use [AccessibilityServer] instead.">
 			Popup menu.
 		</constant>
-		<constant name="POPUP_LIST" value="1" enum="AccessibilityPopupType">
+		<constant name="POPUP_LIST" value="1" enum="AccessibilityPopupType" deprecated="Use [AccessibilityServer] instead.">
 			Popup list.
 		</constant>
-		<constant name="POPUP_TREE" value="2" enum="AccessibilityPopupType">
+		<constant name="POPUP_TREE" value="2" enum="AccessibilityPopupType" deprecated="Use [AccessibilityServer] instead.">
 			Popup tree view.
 		</constant>
-		<constant name="POPUP_DIALOG" value="3" enum="AccessibilityPopupType">
+		<constant name="POPUP_DIALOG" value="3" enum="AccessibilityPopupType" deprecated="Use [AccessibilityServer] instead.">
 			Popup dialog.
 		</constant>
-		<constant name="FLAG_HIDDEN" value="0" enum="AccessibilityFlags">
+		<constant name="FLAG_HIDDEN" value="0" enum="AccessibilityFlags" deprecated="Use [AccessibilityServer] instead.">
 			Element is hidden for accessibility tools.
 		</constant>
-		<constant name="FLAG_MULTISELECTABLE" value="1" enum="AccessibilityFlags">
+		<constant name="FLAG_MULTISELECTABLE" value="1" enum="AccessibilityFlags" deprecated="Use [AccessibilityServer] instead.">
 			Element supports multiple item selection.
 		</constant>
-		<constant name="FLAG_REQUIRED" value="2" enum="AccessibilityFlags">
+		<constant name="FLAG_REQUIRED" value="2" enum="AccessibilityFlags" deprecated="Use [AccessibilityServer] instead.">
 			Element require user input.
 		</constant>
-		<constant name="FLAG_VISITED" value="3" enum="AccessibilityFlags">
+		<constant name="FLAG_VISITED" value="3" enum="AccessibilityFlags" deprecated="Use [AccessibilityServer] instead.">
 			Element is a visited link.
 		</constant>
-		<constant name="FLAG_BUSY" value="4" enum="AccessibilityFlags">
+		<constant name="FLAG_BUSY" value="4" enum="AccessibilityFlags" deprecated="Use [AccessibilityServer] instead.">
 			Element content is not ready (e.g. loading).
 		</constant>
-		<constant name="FLAG_MODAL" value="5" enum="AccessibilityFlags">
+		<constant name="FLAG_MODAL" value="5" enum="AccessibilityFlags" deprecated="Use [AccessibilityServer] instead.">
 			Element is modal window.
 		</constant>
-		<constant name="FLAG_TOUCH_PASSTHROUGH" value="6" enum="AccessibilityFlags">
+		<constant name="FLAG_TOUCH_PASSTHROUGH" value="6" enum="AccessibilityFlags" deprecated="Use [AccessibilityServer] instead.">
 			Element allows touches to be passed through when a screen reader is in touch exploration mode.
 		</constant>
-		<constant name="FLAG_READONLY" value="7" enum="AccessibilityFlags">
+		<constant name="FLAG_READONLY" value="7" enum="AccessibilityFlags" deprecated="Use [AccessibilityServer] instead.">
 			Element is text field with selectable but read-only text.
 		</constant>
-		<constant name="FLAG_DISABLED" value="8" enum="AccessibilityFlags">
+		<constant name="FLAG_DISABLED" value="8" enum="AccessibilityFlags" deprecated="Use [AccessibilityServer] instead.">
 			Element is disabled.
 		</constant>
-		<constant name="FLAG_CLIPS_CHILDREN" value="9" enum="AccessibilityFlags">
+		<constant name="FLAG_CLIPS_CHILDREN" value="9" enum="AccessibilityFlags" deprecated="Use [AccessibilityServer] instead.">
 			Element clips children.
 		</constant>
-		<constant name="ACTION_CLICK" value="0" enum="AccessibilityAction">
+		<constant name="ACTION_CLICK" value="0" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Single click action, callback argument is not set.
 		</constant>
-		<constant name="ACTION_FOCUS" value="1" enum="AccessibilityAction">
+		<constant name="ACTION_FOCUS" value="1" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Focus action, callback argument is not set.
 		</constant>
-		<constant name="ACTION_BLUR" value="2" enum="AccessibilityAction">
+		<constant name="ACTION_BLUR" value="2" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Blur action, callback argument is not set.
 		</constant>
-		<constant name="ACTION_COLLAPSE" value="3" enum="AccessibilityAction">
+		<constant name="ACTION_COLLAPSE" value="3" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Collapse action, callback argument is not set.
 		</constant>
-		<constant name="ACTION_EXPAND" value="4" enum="AccessibilityAction">
+		<constant name="ACTION_EXPAND" value="4" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Expand action, callback argument is not set.
 		</constant>
-		<constant name="ACTION_DECREMENT" value="5" enum="AccessibilityAction">
+		<constant name="ACTION_DECREMENT" value="5" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Decrement action, callback argument is not set.
 		</constant>
-		<constant name="ACTION_INCREMENT" value="6" enum="AccessibilityAction">
+		<constant name="ACTION_INCREMENT" value="6" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Increment action, callback argument is not set.
 		</constant>
-		<constant name="ACTION_HIDE_TOOLTIP" value="7" enum="AccessibilityAction">
+		<constant name="ACTION_HIDE_TOOLTIP" value="7" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Hide tooltip action, callback argument is not set.
 		</constant>
-		<constant name="ACTION_SHOW_TOOLTIP" value="8" enum="AccessibilityAction">
+		<constant name="ACTION_SHOW_TOOLTIP" value="8" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Show tooltip action, callback argument is not set.
 		</constant>
-		<constant name="ACTION_SET_TEXT_SELECTION" value="9" enum="AccessibilityAction">
+		<constant name="ACTION_SET_TEXT_SELECTION" value="9" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Set text selection action, callback argument is set to [Dictionary] with the following keys:
 			- [code]"start_element"[/code] accessibility element of the selection start.
 			- [code]"start_char"[/code] character offset relative to the accessibility element of the selection start.
 			- [code]"end_element"[/code] accessibility element of the selection end.
 			- [code]"end_char"[/code] character offset relative to the accessibility element of the selection end.
 		</constant>
-		<constant name="ACTION_REPLACE_SELECTED_TEXT" value="10" enum="AccessibilityAction">
+		<constant name="ACTION_REPLACE_SELECTED_TEXT" value="10" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Replace text action, callback argument is set to [String] with the replacement text.
 		</constant>
-		<constant name="ACTION_SCROLL_BACKWARD" value="11" enum="AccessibilityAction">
+		<constant name="ACTION_SCROLL_BACKWARD" value="11" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Scroll backward action, callback argument is not set.
 		</constant>
-		<constant name="ACTION_SCROLL_DOWN" value="12" enum="AccessibilityAction">
+		<constant name="ACTION_SCROLL_DOWN" value="12" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Scroll down action, callback argument is set to [enum AccessibilityScrollUnit].
 		</constant>
-		<constant name="ACTION_SCROLL_FORWARD" value="13" enum="AccessibilityAction">
+		<constant name="ACTION_SCROLL_FORWARD" value="13" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Scroll forward action, callback argument is not set.
 		</constant>
-		<constant name="ACTION_SCROLL_LEFT" value="14" enum="AccessibilityAction">
+		<constant name="ACTION_SCROLL_LEFT" value="14" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Scroll left action, callback argument is set to [enum AccessibilityScrollUnit].
 		</constant>
-		<constant name="ACTION_SCROLL_RIGHT" value="15" enum="AccessibilityAction">
+		<constant name="ACTION_SCROLL_RIGHT" value="15" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Scroll right action, callback argument is set to [enum AccessibilityScrollUnit].
 		</constant>
-		<constant name="ACTION_SCROLL_UP" value="16" enum="AccessibilityAction">
+		<constant name="ACTION_SCROLL_UP" value="16" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Scroll up action, callback argument is set to [enum AccessibilityScrollUnit].
 		</constant>
-		<constant name="ACTION_SCROLL_INTO_VIEW" value="17" enum="AccessibilityAction">
+		<constant name="ACTION_SCROLL_INTO_VIEW" value="17" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Scroll into view action, callback argument is set to [enum AccessibilityScrollHint].
 		</constant>
-		<constant name="ACTION_SCROLL_TO_POINT" value="18" enum="AccessibilityAction">
+		<constant name="ACTION_SCROLL_TO_POINT" value="18" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Scroll to point action, callback argument is set to [Vector2] with the relative point coordinates.
 		</constant>
-		<constant name="ACTION_SET_SCROLL_OFFSET" value="19" enum="AccessibilityAction">
+		<constant name="ACTION_SET_SCROLL_OFFSET" value="19" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Set scroll offset action, callback argument is set to [Vector2] with the scroll offset.
 		</constant>
-		<constant name="ACTION_SET_VALUE" value="20" enum="AccessibilityAction">
+		<constant name="ACTION_SET_VALUE" value="20" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Set value action, callback argument is set to [String] or number with the new value.
 		</constant>
-		<constant name="ACTION_SHOW_CONTEXT_MENU" value="21" enum="AccessibilityAction">
+		<constant name="ACTION_SHOW_CONTEXT_MENU" value="21" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Show context menu action, callback argument is not set.
 		</constant>
-		<constant name="ACTION_CUSTOM" value="22" enum="AccessibilityAction">
+		<constant name="ACTION_CUSTOM" value="22" enum="AccessibilityAction" deprecated="Use [AccessibilityServer] instead.">
 			Custom action, callback argument is set to the integer action ID.
 		</constant>
-		<constant name="LIVE_OFF" value="0" enum="AccessibilityLiveMode">
+		<constant name="LIVE_OFF" value="0" enum="AccessibilityLiveMode" deprecated="Use [AccessibilityServer] instead.">
 			Indicates that updates to the live region should not be presented.
 		</constant>
-		<constant name="LIVE_POLITE" value="1" enum="AccessibilityLiveMode">
+		<constant name="LIVE_POLITE" value="1" enum="AccessibilityLiveMode" deprecated="Use [AccessibilityServer] instead.">
 			Indicates that updates to the live region should be presented at the next opportunity (for example at the end of speaking the current sentence).
 		</constant>
-		<constant name="LIVE_ASSERTIVE" value="2" enum="AccessibilityLiveMode">
+		<constant name="LIVE_ASSERTIVE" value="2" enum="AccessibilityLiveMode" deprecated="Use [AccessibilityServer] instead.">
 			Indicates that updates to the live region have the highest priority and should be presented immediately.
 		</constant>
-		<constant name="SCROLL_UNIT_ITEM" value="0" enum="AccessibilityScrollUnit">
+		<constant name="SCROLL_UNIT_ITEM" value="0" enum="AccessibilityScrollUnit" deprecated="Use [AccessibilityServer] instead.">
 			The amount by which to scroll. A single item of a list, line of text.
 		</constant>
-		<constant name="SCROLL_UNIT_PAGE" value="1" enum="AccessibilityScrollUnit">
+		<constant name="SCROLL_UNIT_PAGE" value="1" enum="AccessibilityScrollUnit" deprecated="Use [AccessibilityServer] instead.">
 			The amount by which to scroll. A single page.
 		</constant>
-		<constant name="SCROLL_HINT_TOP_LEFT" value="0" enum="AccessibilityScrollHint">
+		<constant name="SCROLL_HINT_TOP_LEFT" value="0" enum="AccessibilityScrollHint" deprecated="Use [AccessibilityServer] instead.">
 			A preferred position for the node scrolled into view. Top-left edge of the scroll container.
 		</constant>
-		<constant name="SCROLL_HINT_BOTTOM_RIGHT" value="1" enum="AccessibilityScrollHint">
+		<constant name="SCROLL_HINT_BOTTOM_RIGHT" value="1" enum="AccessibilityScrollHint" deprecated="Use [AccessibilityServer] instead.">
 			A preferred position for the node scrolled into view. Bottom-right edge of the scroll container.
 		</constant>
-		<constant name="SCROLL_HINT_TOP_EDGE" value="2" enum="AccessibilityScrollHint">
+		<constant name="SCROLL_HINT_TOP_EDGE" value="2" enum="AccessibilityScrollHint" deprecated="Use [AccessibilityServer] instead.">
 			A preferred position for the node scrolled into view. Top edge of the scroll container.
 		</constant>
-		<constant name="SCROLL_HINT_BOTTOM_EDGE" value="3" enum="AccessibilityScrollHint">
+		<constant name="SCROLL_HINT_BOTTOM_EDGE" value="3" enum="AccessibilityScrollHint" deprecated="Use [AccessibilityServer] instead.">
 			A preferred position for the node scrolled into view. Bottom edge of the scroll container.
 		</constant>
-		<constant name="SCROLL_HINT_LEFT_EDGE" value="4" enum="AccessibilityScrollHint">
+		<constant name="SCROLL_HINT_LEFT_EDGE" value="4" enum="AccessibilityScrollHint" deprecated="Use [AccessibilityServer] instead.">
 			A preferred position for the node scrolled into view. Left edge of the scroll container.
 		</constant>
-		<constant name="SCROLL_HINT_RIGHT_EDGE" value="5" enum="AccessibilityScrollHint">
+		<constant name="SCROLL_HINT_RIGHT_EDGE" value="5" enum="AccessibilityScrollHint" deprecated="Use [AccessibilityServer] instead.">
 			A preferred position for the node scrolled into view. Right edge of the scroll container.
 		</constant>
 		<constant name="MOUSE_MODE_VISIBLE" value="0" enum="MouseMode">
@@ -2890,15 +3119,19 @@
 		</constant>
 		<constant name="SCREEN_WITH_MOUSE_FOCUS" value="-4">
 			Represents the screen containing the mouse pointer.
+			[b]Note:[/b] On Android, iOS, Web, and Linux (Wayland), this constant always represents the screen at index [code]0[/code].
 		</constant>
 		<constant name="SCREEN_WITH_KEYBOARD_FOCUS" value="-3">
 			Represents the screen containing the window with the keyboard focus.
+			[b]Note:[/b] On Android, iOS, Web, and Linux (Wayland), this constant always represents the screen at index [code]0[/code].
 		</constant>
 		<constant name="SCREEN_PRIMARY" value="-2">
 			Represents the primary screen.
+			[b]Note:[/b] On Android, iOS, Web, and Linux (Wayland), this constant always represents the screen at index [code]0[/code].
 		</constant>
 		<constant name="SCREEN_OF_MAIN_WINDOW" value="-1">
 			Represents the screen where the main window is located. This is usually the default value in functions that allow specifying one of several screens.
+			[b]Note:[/b] On Android, iOS, Web, and Linux (Wayland), this constant always represents the screen at index [code]0[/code].
 		</constant>
 		<constant name="MAIN_WINDOW_ID" value="0">
 			The ID of the main window spawned by the engine, which can be passed to methods expecting a [code]window_id[/code].
@@ -2950,6 +3183,7 @@
 		</constant>
 		<constant name="KEYBOARD_TYPE_PASSWORD" value="6" enum="VirtualKeyboardType">
 			Virtual keyboard for entering a password. On most platforms, this should disable autocomplete and autocapitalization.
+			[b]Note:[/b] This is not supported on Web. Instead, this behaves identically to [constant KEYBOARD_TYPE_DEFAULT].
 		</constant>
 		<constant name="KEYBOARD_TYPE_URL" value="7" enum="VirtualKeyboardType">
 			Virtual keyboard with additional keys to assist with typing URLs.
@@ -3035,6 +3269,7 @@
 		<constant name="WINDOW_MODE_FULLSCREEN" value="3" enum="WindowMode">
 			Full screen mode with full multi-window support.
 			Full screen window covers the entire display area of a screen and has no decorations. The display's video mode is not changed.
+			[b]On Android:[/b] This enables immersive mode.
 			[b]On macOS:[/b] A new desktop is used to display the running project.
 			[b]Note:[/b] Regardless of the platform, enabling full screen will change the window size to match the monitor's size. Therefore, make sure your project supports [url=$DOCS_URL/tutorials/rendering/multiple_resolutions.html]multiple resolutions[/url] when enabling full screen mode.
 		</constant>
@@ -3042,31 +3277,56 @@
 			A single window full screen mode. This mode has less overhead, but only one window can be open on a given screen at a time (opening a child window or application switching will trigger a full screen transition).
 			Full screen window covers the entire display area of a screen and has no border or decorations. The display's video mode is not changed.
 			[b]Note:[/b] This mode might not work with screen recording software.
+			[b]On Android:[/b] This enables immersive mode.
 			[b]On Windows:[/b] Depending on video driver, full screen transition might cause screens to go black for a moment.
 			[b]On macOS:[/b] A new desktop is used to display the running project. Exclusive full screen mode prevents Dock and Menu from showing up when the mouse pointer is hovering the edge of the screen.
 			[b]On Linux (X11):[/b] Exclusive full screen mode bypasses compositor.
 			[b]On Linux (Wayland):[/b] Equivalent to [constant WINDOW_MODE_FULLSCREEN].
 			[b]Note:[/b] Regardless of the platform, enabling full screen will change the window size to match the monitor's size. Therefore, make sure your project supports [url=$DOCS_URL/tutorials/rendering/multiple_resolutions.html]multiple resolutions[/url] when enabling full screen mode.
 		</constant>
+		<constant name="PROGRESS_STATE_NOPROGRESS" value="0" enum="ProgressState">
+			Stops displaying progress and returns the button to its normal state.
+		</constant>
+		<constant name="PROGRESS_STATE_INDETERMINATE" value="1" enum="ProgressState">
+			The progress indicator shows an indeterminate progress.
+			On Windows, the progress indicator does not grow in size, but cycles repeatedly along the length of the taskbar button by default.
+		</constant>
+		<constant name="PROGRESS_STATE_NORMAL" value="2" enum="ProgressState">
+			The progress indicator shows progress normally.
+		</constant>
+		<constant name="PROGRESS_STATE_ERROR" value="3" enum="ProgressState">
+			The progress indicator shows that an error has occurred.
+			On Windows, the progress indicator turns red by default to show that an error has occurred in one of the windows that is broadcasting progress.
+		</constant>
+		<constant name="PROGRESS_STATE_PAUSED" value="4" enum="ProgressState">
+			The progress indicator shows it was paused.
+			On Windows, the progress indicator turns yellow by default to show that progress is currently stopped in one of the windows but can be resumed by the user.
+		</constant>
 		<constant name="WINDOW_FLAG_RESIZE_DISABLED" value="0" enum="WindowFlags">
 			The window can't be resized by dragging its resize grip. It's still possible to resize the window using [method window_set_size]. This flag is ignored for full screen windows.
+			[b]Note:[/b] This flag is implemented on Linux (X11), macOS, and Windows.
 		</constant>
 		<constant name="WINDOW_FLAG_BORDERLESS" value="1" enum="WindowFlags">
 			The window do not have native title bar and other decorations. This flag is ignored for full-screen windows.
+			[b]Note:[/b] This flag is implemented on Linux (X11/Wayland), macOS, and Windows.
 		</constant>
 		<constant name="WINDOW_FLAG_ALWAYS_ON_TOP" value="2" enum="WindowFlags">
 			The window is floating on top of all other windows. This flag is ignored for full-screen windows.
+			[b]Note:[/b] This flag is implemented on Linux (X11), macOS, and Windows.
 		</constant>
 		<constant name="WINDOW_FLAG_TRANSPARENT" value="3" enum="WindowFlags">
 			The window background can be transparent.
 			[b]Note:[/b] This flag has no effect if [method is_window_transparency_available] returns [code]false[/code].
 			[b]Note:[/b] Transparency support is implemented on Linux (X11/Wayland), macOS, and Windows, but availability might vary depending on GPU driver, display manager, and compositor capabilities.
+			[b]Note:[/b] Transparency support is implemented on Android, but can only be enabled via [member ProjectSettings.display/window/per_pixel_transparency/allowed]. This flag has no effect on Android.
 		</constant>
 		<constant name="WINDOW_FLAG_NO_FOCUS" value="4" enum="WindowFlags">
 			The window can't be focused. No-focus window will ignore all input, except mouse clicks.
+			[b]Note:[/b] This flag is implemented on Linux (X11), macOS, and Windows.
 		</constant>
 		<constant name="WINDOW_FLAG_POPUP" value="5" enum="WindowFlags">
 			Window is part of menu or [OptionButton] dropdown. This flag can't be changed when the window is visible. An active popup window will exclusively receive all input, without stealing focus from its parent. Popup windows are automatically closed when uses click outside it, or when an application is switched. Popup window must have transient parent set (see [method window_set_transient]).
+			[b]Note:[/b] This flag is implemented on Linux (X11/Wayland), macOS, and Windows.
 		</constant>
 		<constant name="WINDOW_FLAG_EXTEND_TO_TITLE" value="6" enum="WindowFlags">
 			Window content is expanded to the full size of the window. Unlike borderless window, the frame is left intact and can be used to resize the window, title bar is transparent, but have minimize/maximize/close buttons.
@@ -3076,6 +3336,7 @@
 		</constant>
 		<constant name="WINDOW_FLAG_MOUSE_PASSTHROUGH" value="7" enum="WindowFlags">
 			All mouse events are passed to the underlying window of the same application.
+			[b]Note:[/b] This flag is implemented on Linux (X11), macOS, and Windows.
 		</constant>
 		<constant name="WINDOW_FLAG_SHARP_CORNERS" value="8" enum="WindowFlags">
 			Window style is overridden, forcing sharp corners.
@@ -3088,14 +3349,15 @@
 		</constant>
 		<constant name="WINDOW_FLAG_POPUP_WM_HINT" value="10" enum="WindowFlags">
 			Signals the window manager that this window is supposed to be an implementation-defined "popup" (usually a floating, borderless, untileable and immovable child window).
+			[b]Note:[/b] This flag is implemented on Linux (Wayland).
 		</constant>
 		<constant name="WINDOW_FLAG_MINIMIZE_DISABLED" value="11" enum="WindowFlags">
 			Window minimize button is disabled.
-			[b]Note:[/b] This flag is implemented on macOS and Windows.
+			[b]Note:[/b] This flag is implemented on Linux (X11), macOS, and Windows.
 		</constant>
 		<constant name="WINDOW_FLAG_MAXIMIZE_DISABLED" value="12" enum="WindowFlags">
 			Window maximize button is disabled.
-			[b]Note:[/b] This flag is implemented on macOS and Windows.
+			[b]Note:[/b] This flag is implemented on Linux (X11), macOS, and Windows.
 		</constant>
 		<constant name="WINDOW_FLAG_MAX" value="13" enum="WindowFlags">
 			Represents the size of the [enum WindowFlags] enum.
@@ -3117,6 +3379,7 @@
 		</constant>
 		<constant name="WINDOW_EVENT_GO_BACK_REQUEST" value="5" enum="WindowEvent">
 			Sent when the device "Back" button is pressed.
+			[b]Note:[/b] This event is implemented only on Android.
 		</constant>
 		<constant name="WINDOW_EVENT_DPI_CHANGE" value="6" enum="WindowEvent">
 			Sent when the window is moved to the display with different DPI, or display DPI is changed.
@@ -3129,6 +3392,10 @@
 		<constant name="WINDOW_EVENT_FORCE_CLOSE" value="8" enum="WindowEvent">
 			Sent when the window has been forcibly closed by the display server. The window will immediately hide and clean any internal rendering references.
 			[b]Note:[/b] This flag is implemented only on Linux (Wayland).
+		</constant>
+		<constant name="WINDOW_EVENT_OUTPUT_MAX_LINEAR_VALUE_CHANGED" value="9" enum="WindowEvent">
+			Sent when the output max linear value returned by [method Window.get_output_max_linear_value] has changed.
+			This occurs when HDR output is enabled or disabled and when any HDR output luminance values of the window have changed, such as when the player adjusts their screen brightness setting or moves the window to a different screen.
 		</constant>
 		<constant name="WINDOW_EDGE_TOP_LEFT" value="0" enum="WindowResizeEdge">
 			Top-left edge of a window.
@@ -3164,32 +3431,58 @@
 			Default vertical synchronization mode, the image is displayed only on vertical blanking intervals (no tearing is visible). Framerate is limited by the monitor refresh rate (regardless of [member Engine.max_fps]).
 		</constant>
 		<constant name="VSYNC_ADAPTIVE" value="2" enum="VSyncMode">
-			Behaves like [constant VSYNC_DISABLED] when the framerate drops below the screen's refresh rate to reduce stuttering (tearing may be visible). Otherwise, vertical synchronization is enabled to avoid tearing. Framerate is limited by the monitor refresh rate (regardless of [member Engine.max_fps]).
+			Behaves like [constant VSYNC_DISABLED] when the framerate drops below the screen's refresh rate to reduce stuttering (tearing may be visible). Otherwise, vertical synchronization is enabled to avoid tearing. Framerate is limited by the monitor refresh rate (regardless of [member Engine.max_fps]). Behaves like [constant VSYNC_ENABLED] when using the Compatibility rendering method.
 		</constant>
 		<constant name="VSYNC_MAILBOX" value="3" enum="VSyncMode">
 			Displays the most recent image in the queue on vertical blanking intervals, while rendering to the other images (no tearing is visible). Framerate is unlimited (regardless of [member Engine.max_fps]).
-			Although not guaranteed, the images can be rendered as fast as possible, which may reduce input lag (also called "Fast" V-Sync mode). [constant VSYNC_MAILBOX] works best when at least twice as many frames as the display refresh rate are rendered.
+			Although not guaranteed, the images can be rendered as fast as possible, which may reduce input lag (also called "Fast" V-Sync mode). [constant VSYNC_MAILBOX] works best when at least twice as many frames as the display refresh rate are rendered. Behaves like [constant VSYNC_ENABLED] when using the Compatibility rendering method.
 		</constant>
 		<constant name="DISPLAY_HANDLE" value="0" enum="HandleType">
 			Display handle:
 			- Linux (X11): [code]X11::Display*[/code] for the display.
 			- Linux (Wayland): [code]wl_display[/code] for the display.
-
+			- Android: [code]EGLDisplay[/code] for the display.
 		</constant>
 		<constant name="WINDOW_HANDLE" value="1" enum="HandleType">
 			Window handle:
 			- Windows: [code]HWND[/code] for the window.
 			- Linux (X11): [code]X11::Window*[/code] for the window.
 			- Linux (Wayland): [code]wl_surface[/code] for the window.
-
-
-
+			- macOS: [code]NSWindow*[/code] for the window.
+			- iOS: [code]UIViewController*[/code] for the view controller.
+			- Android: [code]jObject[/code] for the activity.
 		</constant>
 		<constant name="WINDOW_VIEW" value="2" enum="HandleType">
 			Window view:
-			- Windows: [code]HDC[/code] for the window.
-
-
+			- Windows: [code]HDC[/code] for the window (only with the Compatibility renderer).
+			- macOS: [code]NSView*[/code] for the window main view.
+			- iOS: [code]UIView*[/code] for the window main view.
+		</constant>
+		<constant name="OPENGL_CONTEXT" value="3" enum="HandleType">
+			OpenGL context (only with the Compatibility renderer):
+			- Windows: [code]HGLRC[/code] for the window (native GL), or [code]EGLContext[/code] for the window (ANGLE).
+			- Linux (X11): [code]GLXContext*[/code] for the window.
+			- Linux (Wayland): [code]EGLContext[/code] for the window.
+			- macOS: [code]NSOpenGLContext*[/code] for the window (native GL), or [code]EGLContext[/code] for the window (ANGLE).
+			- Android: [code]EGLContext[/code] for the window.
+		</constant>
+		<constant name="EGL_DISPLAY" value="4" enum="HandleType">
+			- Windows: [code]EGLDisplay[/code] for the window (ANGLE).
+			- macOS: [code]EGLDisplay[/code] for the window (ANGLE).
+			- Linux (Wayland): [code]EGLDisplay[/code] for the window.
+		</constant>
+		<constant name="EGL_CONFIG" value="5" enum="HandleType">
+			- Windows: [code]EGLConfig[/code] for the window (ANGLE).
+			- macOS: [code]EGLConfig[/code] for the window (ANGLE).
+			- Linux (Wayland): [code]EGLConfig[/code] for the window.
+		</constant>
+		<constant name="GLX_VISUALID" value="6" enum="HandleType">
+			The GLX [code]VisualID[/code] for the window.
+			[b]Note:[/b] Only available on Linux when using X11.
+		</constant>
+		<constant name="GLX_FBCONFIG" value="7" enum="HandleType">
+			The [code]GLXFBConfig[/code] for the window.
+			[b]Note:[/b] Only available on Linux when using X11.
 		</constant>
 		<constant name="TTS_UTTERANCE_STARTED" value="0" enum="TTSUtteranceEvent">
 			Utterance has begun to be spoken.

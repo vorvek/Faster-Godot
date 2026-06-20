@@ -30,11 +30,15 @@
 
 #include "editor_run_bar.h"
 
+#include "core/config/engine.h"
 #include "core/config/project_settings.h"
+#include "core/object/callable_mp.h"
 #include "editor/debugger/editor_debugger_node.h"
 #include "editor/debugger/script_editor_debugger.h"
 #include "editor/editor_node.h"
 #include "editor/editor_string_names.h"
+#include "editor/export/editor_export_platform.h"
+#include "editor/export/editor_export_preset.h"
 #include "editor/gui/editor_bottom_panel.h"
 #include "editor/gui/editor_quick_open_dialog.h"
 #include "editor/gui/editor_toaster.h"
@@ -47,6 +51,7 @@
 #include "scene/gui/button.h"
 #include "scene/gui/menu_button.h"
 #include "scene/gui/panel_container.h"
+#include "scene/main/scene_tree.h"
 
 EditorRunBar *EditorRunBar::singleton = nullptr;
 
@@ -450,11 +455,11 @@ Error EditorRunBar::start_native_device(int p_device_id) const {
 	return run_native->start_run_native(p_device_id);
 }
 
-OS::ProcessID EditorRunBar::has_child_process(OS::ProcessID p_pid) const {
+ProcessID EditorRunBar::has_child_process(ProcessID p_pid) const {
 	return editor_run.has_child_process(p_pid);
 }
 
-void EditorRunBar::stop_child_process(OS::ProcessID p_pid) {
+void EditorRunBar::stop_child_process(ProcessID p_pid) {
 	if (!has_child_process(p_pid)) {
 		return;
 	}
@@ -465,7 +470,7 @@ void EditorRunBar::stop_child_process(OS::ProcessID p_pid) {
 	}
 }
 
-OS::ProcessID EditorRunBar::get_current_process() const {
+ProcessID EditorRunBar::get_current_process() const {
 	return editor_run.get_current_process();
 }
 

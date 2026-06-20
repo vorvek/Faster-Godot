@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="Viewport" inherits="Node" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+<class name="Viewport" inherits="Node" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
 	<brief_description>
 		Abstract base class for viewports. Encapsulates drawing and interaction with a game world.
 	</brief_description>
@@ -308,6 +308,7 @@
 			<param index="0" name="position" type="Vector2" />
 			<description>
 				Moves the mouse pointer to the specified position in this [Viewport] using the coordinate system of this [Viewport].
+				[b]Note:[/b] [method warp_mouse] is only supported on Windows, macOS and Linux. It has no effect on Android, iOS and Web.
 			</description>
 		</method>
 	</methods>
@@ -343,15 +344,6 @@
 		<member name="disable_3d" type="bool" setter="set_disable_3d" getter="is_3d_disabled" default="false">
 			Disable 3D rendering (but keep 2D rendering).
 		</member>
-		<member name="frame_generation_mode" type="int" setter="set_frame_generation_mode" getter="get_frame_generation_mode" enum="Viewport.FrameGenerationMode" default="0">
-			Sets the 3D frame generation mode. [constant FRAME_GENERATION_INTERPOLATED] uses Godot's internal motion-vector interpolation path and works for offscreen viewports. Vendor frame generation modes are exposed per viewport, but only activate for viewports that contribute to a presented window backbuffer; unsupported configurations fall back to [constant FRAME_GENERATION_INTERPOLATED].
-		</member>
-		<member name="frame_generation_target_fps" type="int" setter="set_frame_generation_target_fps" getter="get_frame_generation_target_fps" default="0">
-			When greater than [code]0[/code], throttles Godot's internal interpolated frame generation input rate to this target FPS. Vendor frame generation providers may use their own present pacing.
-		</member>
-		<member name="frame_generation_warp_scale" type="float" setter="set_frame_generation_warp_scale" getter="get_frame_generation_warp_scale" default="1.0">
-			Controls the motion-vector warp strength used by [constant FRAME_GENERATION_INTERPOLATED].
-		</member>
 		<member name="fsr_sharpness" type="float" setter="set_fsr_sharpness" getter="get_fsr_sharpness" default="0.2">
 			Determines how sharp the upscaled image will be when using the FSR upscaling mode. Sharpness halves with every whole number. Values go from 0.0 (sharpest) to 2.0. Values above 2.0 won't make a visible difference.
 			To control this property on the root viewport, set the [member ProjectSettings.rendering/scaling_3d/fsr_sharpness] project setting.
@@ -379,6 +371,7 @@
 		<member name="mesh_lod_threshold" type="float" setter="set_mesh_lod_threshold" getter="get_mesh_lod_threshold" default="1.0">
 			The automatic LOD bias to use for meshes rendered within the [Viewport] (this is analogous to [member ReflectionProbe.mesh_lod_threshold]). Higher values will use less detailed versions of meshes that have LOD variations generated. If set to [code]0.0[/code], automatic LOD is disabled. Increase [member mesh_lod_threshold] to improve performance at the cost of geometry detail.
 			To control this property on the root viewport, set the [member ProjectSettings.rendering/mesh_lod/lod_change/threshold_pixels] project setting.
+			[b]Note:[/b] Depending on the mesh's attributes (vertex colors, blend shapes, ...), a mesh may have fewer levels of LOD generated to avoid visible distortion of the mesh once it is affected by vertex colors or blend shapes. Meshes with a very low vertex count will also not have any LODs generated, which means this setting will not affect them at all. In general, this setting makes the largest impact on static meshes with a high vertex count.
 			[b]Note:[/b] [member mesh_lod_threshold] does not affect [GeometryInstance3D] visibility ranges (also known as "manual" LOD or hierarchical LOD).
 		</member>
 		<member name="msaa_2d" type="int" setter="set_msaa_2d" getter="get_msaa_2d" enum="Viewport.MSAA" default="0">
@@ -458,35 +451,20 @@
 		<member name="snap_2d_vertices_to_pixel" type="bool" setter="set_snap_2d_vertices_to_pixel" getter="is_snap_2d_vertices_to_pixel_enabled" default="false">
 			If [code]true[/code], vertices of [CanvasItem] nodes will snap to full pixels. Only affects the final vertex positions, not the transforms. This can lead to a crisper appearance at the cost of less smooth movement, especially when [Camera2D] smoothing is enabled.
 		</member>
-		<member name="taa_disocclusion_threshold" type="float" setter="set_taa_disocclusion_threshold" getter="get_taa_disocclusion_threshold" default="2.5">
-			Sets how much the per-pixel motion vector can change, in texels, before TAA starts rejecting history for that pixel. Lower values reduce ghosting in motion, but can increase flickering.
-		</member>
-		<member name="taa_history_weight" type="float" setter="set_taa_history_weight" getter="get_taa_history_weight" default="0.9375">
-			Sets how much previous frame history contributes to the TAA resolve before additional rejection logic is applied. Higher values produce a more stable image, but can increase ghosting.
-		</member>
-		<member name="taa_jitter_phase_count" type="int" setter="set_taa_jitter_phase_count" getter="get_taa_jitter_phase_count" default="16">
-			Sets the number of jitter positions used by TAA. Higher values can improve still-image convergence, but take more frames to converge and can increase temporal instability in motion.
-			[b]Note:[/b] This does not affect FSR2 temporal upscaling.
-		</member>
-		<member name="taa_jitter_scale" type="float" setter="set_taa_jitter_scale" getter="get_taa_jitter_scale" default="1.0">
-			Scales the camera jitter offset used by TAA. Lower values reduce subpixel jitter, which can reduce shimmering but also reduces TAA's ability to reconstruct subpixel detail. A value of [code]0.0[/code] disables TAA camera jitter while leaving TAA resolve enabled.
-			[b]Note:[/b] This does not affect FSR2 temporal upscaling.
-		</member>
-		<member name="taa_sharpness" type="float" setter="set_taa_sharpness" getter="get_taa_sharpness" default="0.0">
-			Sets how much sharpening is applied during the TAA resolve. Higher values counteract TAA blur, but can increase shimmering or edge halos.
-		</member>
 		<member name="texture_mipmap_bias" type="float" setter="set_texture_mipmap_bias" getter="get_texture_mipmap_bias" default="0.0">
 			Affects the final texture sharpness by reading from a lower or higher mipmap (also called "texture LOD bias"). Negative values make mipmapped textures sharper but grainier when viewed at a distance, while positive values make mipmapped textures blurrier (even when up close).
 			Enabling temporal antialiasing ([member use_taa]) will automatically apply a [code]-0.5[/code] offset to this value, while enabling FXAA ([member screen_space_aa]) will automatically apply a [code]-0.25[/code] offset to this value. If both TAA and FXAA are enabled at the same time, an offset of [code]-0.75[/code] is applied to this value.
 			To control this property on the root viewport, set the [member ProjectSettings.rendering/textures/default_filters/texture_mipmap_bias] project setting.
 			[b]Note:[/b] If [member scaling_3d_scale] is lower than [code]1.0[/code] (exclusive), [member texture_mipmap_bias] is used to adjust the automatic mipmap bias which is calculated internally based on the scale factor. The formula for this is [code]log2(scaling_3d_scale) + mipmap_bias[/code].
+			[b]Note:[/b] This property is only supported in the Forward+ and Mobile renderers, not Compatibility. In Compatibility, this property is always treated as if it was set to [code]0.0[/code].
 		</member>
 		<member name="transparent_bg" type="bool" setter="set_transparent_background" getter="has_transparent_background" default="false">
 			If [code]true[/code], the viewport should render its background as transparent.
 			[b]Note:[/b] Due to technical limitations, certain rendering features are disabled when a viewport has a transparent background. This currently applies to screen-space reflections, subsurface scattering, and depth of field.
 		</member>
 		<member name="use_debanding" type="bool" setter="set_use_debanding" getter="is_using_debanding" default="false">
-			Set [member use_debanding] to enable or disable the debanding feature of this [Viewport]. If [member use_hdr_2d] is [code]false[/code], 2D rendering is [i]not[/i] affected by debanding unless the [member Environment.background_mode] is [constant Environment.BG_CANVAS]. If [member use_hdr_2d] is [code]true[/code], debanding will only be applied if this is the root [Viewport] and will affect all 2D and 3D rendering, including canvas items.
+			When using the Mobile or Forward+ renderers, set [member use_debanding] to enable or disable the debanding feature of this [Viewport]. If [member use_hdr_2d] is [code]false[/code], 2D rendering is [i]not[/i] affected by debanding unless the [member Environment.background_mode] is [constant Environment.BG_CANVAS]. If [member use_hdr_2d] is [code]true[/code], debanding will only be applied if this is the root [Viewport] and will affect all 2D and 3D rendering, including canvas items.
+			[member use_debanding] has no effect when using the Compatibility rendering method. The Mobile renderer can also use material debanding, which can be set with [method RenderingServer.material_set_use_debanding] or configured with [member ProjectSettings.rendering/anti_aliasing/quality/use_debanding].
 			See also [member ProjectSettings.rendering/anti_aliasing/quality/use_debanding], [method RenderingServer.material_set_use_debanding], and [method RenderingServer.viewport_set_use_debanding].
 		</member>
 		<member name="use_hdr_2d" type="bool" setter="set_use_hdr_2d" getter="is_using_hdr_2d" default="false">
@@ -496,6 +474,7 @@
 		<member name="use_occlusion_culling" type="bool" setter="set_use_occlusion_culling" getter="is_using_occlusion_culling" default="false">
 			If [code]true[/code], [OccluderInstance3D] nodes will be usable for occlusion culling in 3D for this viewport. For the root viewport, [member ProjectSettings.rendering/occlusion_culling/use_occlusion_culling] must be set to [code]true[/code] instead.
 			[b]Note:[/b] Enabling occlusion culling has a cost on the CPU. Only enable occlusion culling if you actually plan to use it, and think whether your scene can actually benefit from occlusion culling. Large, open scenes with few or no objects blocking the view will generally not benefit much from occlusion culling. Large open scenes generally benefit more from mesh LOD and visibility ranges ([member GeometryInstance3D.visibility_range_begin] and [member GeometryInstance3D.visibility_range_end]) compared to occlusion culling.
+			[b]Note:[/b] Due to memory constraints, occlusion culling is not supported by default in Web export templates. It can be enabled by compiling custom Web export templates with [code]module_raycast_enabled=yes[/code].
 		</member>
 		<member name="use_taa" type="bool" setter="set_use_taa" getter="is_using_taa" default="false">
 			Enables temporal antialiasing for this viewport. TAA works by jittering the camera and accumulating the images of the last rendered frames, motion vector rendering is used to account for camera and object motion.
@@ -582,32 +561,26 @@
 		<constant name="SCALING_3D_MODE_FSR2" value="2" enum="Scaling3DMode">
 			Use AMD FidelityFX Super Resolution 2.2 upscaling for the viewport's 3D buffer. The amount of scaling can be set using [member Viewport.scaling_3d_scale]. Values less than [code]1.0[/code] will result in the viewport being upscaled using FSR2. Values greater than [code]1.0[/code] are not supported and bilinear downsampling will be used instead. A value of [code]1.0[/code] will use FSR2 at native resolution as a TAA solution.
 		</constant>
+		<constant name="SCALING_3D_MODE_METALFX_SPATIAL" value="3" enum="Scaling3DMode">
+			Use the [url=https://developer.apple.com/documentation/metalfx/mtlfxspatialscaler#overview]MetalFX spatial upscaler[/url] for the viewport's 3D buffer.
+			The amount of scaling can be set using [member scaling_3d_scale].
+			Values less than [code]1.0[/code] will result in the viewport being upscaled using MetalFX. Values greater than [code]1.0[/code] are not supported and bilinear downsampling will be used instead. A value of [code]1.0[/code] disables scaling.
+			More information: [url=https://developer.apple.com/documentation/metalfx]MetalFX[/url].
+			[b]Note:[/b] Only supported when the Metal rendering driver is in use, which limits this scaling mode to macOS and iOS.
+		</constant>
+		<constant name="SCALING_3D_MODE_METALFX_TEMPORAL" value="4" enum="Scaling3DMode">
+			Use the [url=https://developer.apple.com/documentation/metalfx/mtlfxtemporalscaler#overview]MetalFX temporal upscaler[/url] for the viewport's 3D buffer.
+			The amount of scaling can be set using [member scaling_3d_scale]. To determine the minimum input scale, use the [method RenderingDevice.limit_get] method with [constant RenderingDevice.LIMIT_METALFX_TEMPORAL_SCALER_MIN_SCALE].
+			Values less than [code]1.0[/code] will result in the viewport being upscaled using MetalFX. Values greater than [code]1.0[/code] are not supported and bilinear downsampling will be used instead. A value of [code]1.0[/code] will use MetalFX at native resolution as a TAA solution.
+			More information: [url=https://developer.apple.com/documentation/metalfx]MetalFX[/url].
+			[b]Note:[/b] Only supported when the Metal rendering driver is in use, which limits this scaling mode to macOS and iOS.
+		</constant>
 		<constant name="SCALING_3D_MODE_NEAREST" value="5" enum="Scaling3DMode">
-			Use nearest-neighbor scaling for the viewport's 3D buffer.
+			Use nearest-neighbor filtering for the viewport's 3D buffer. This looks crisper than [constant SCALING_3D_MODE_BILINEAR] and has no additional rendering cost. The amount of scaling can be set using [member scaling_3d_scale]. Values greater than [code]1.0[/code] are not supported and bilinear downsampling will be used instead. A value of [code]1.0[/code] disables scaling.
+			[b]Note:[/b] When using the [b]Nearest[/b] scaling mode, to avoid uneven pixel scaling, it's highly recommended to use a value equal to an integer divisor with a dividend of [code]1[/code]. For example, it's best to use a scale of [code]0.5[/code] (1/2), [code]0.3333[/code] (1/3), [code]0.25[/code] (1/4), [code]0.2[/code] (1/5), and so on.
 		</constant>
-		<constant name="SCALING_3D_MODE_SHARP_BILINEAR" value="6" enum="Scaling3DMode">
-			Use sharp bilinear scaling for the viewport's 3D buffer.
-		</constant>
-		<constant name="SCALING_3D_MODE_BICUBIC" value="7" enum="Scaling3DMode">
-			Use bicubic scaling for the viewport's 3D buffer.
-		</constant>
-		<constant name="SCALING_3D_MODE_SGSR" value="8" enum="Scaling3DMode">
-			Use SGSR spatial upscaling for the viewport's 3D buffer.
-		</constant>
-		<constant name="SCALING_3D_MODE_XESS" value="11" enum="Scaling3DMode">
-			Use Intel XeSS temporal upscaling for the viewport's 3D buffer when the native backend is available. Falls back to [constant SCALING_3D_MODE_FSR2] if unavailable or disabled for driver/runtime safety.
-		</constant>
-		<constant name="SCALING_3D_MODE_MAX" value="12" enum="Scaling3DMode">
+		<constant name="SCALING_3D_MODE_MAX" value="6" enum="Scaling3DMode">
 			Represents the size of the [enum Scaling3DMode] enum.
-		</constant>
-		<constant name="FRAME_GENERATION_DISABLED" value="0" enum="FrameGenerationMode">
-			Disable frame generation.
-		</constant>
-		<constant name="FRAME_GENERATION_INTERPOLATED" value="1" enum="FrameGenerationMode">
-			Use Godot's internal motion-vector interpolation path.
-		</constant>
-		<constant name="FRAME_GENERATION_MAX" value="2" enum="FrameGenerationMode">
-			Represents the size of the [enum FrameGenerationMode] enum.
 		</constant>
 		<constant name="MSAA_DISABLED" value="0" enum="MSAA">
 			Multisample antialiasing mode disabled. This is the default value, and is also the fastest setting.
@@ -694,6 +667,8 @@
 		</constant>
 		<constant name="DEBUG_DRAW_WIREFRAME" value="4" enum="DebugDraw">
 			Objects are displayed as wireframe models.
+			[b]Note:[/b] [method RenderingServer.set_debug_generate_wireframes] must be called before loading any meshes for wireframes to be visible when using the Compatibility renderer.
+			[b]Note:[/b] In the Compatibility renderer, backfaces are always visible when using wireframe rendering. In the Forward+ and Mobile renderers, wireframes follow the material's backface culling properties instead.
 		</constant>
 		<constant name="DEBUG_DRAW_NORMAL_BUFFER" value="5" enum="DebugDraw">
 			Objects are displayed without lighting information and their textures replaced by normal mapping.
@@ -719,7 +694,7 @@
 		</constant>
 		<constant name="DEBUG_DRAW_SCENE_LUMINANCE" value="11" enum="DebugDraw">
 			Draws the scene luminance buffer (if available) in the upper left quadrant of the [Viewport].
-			[b]Note:[/b] Only supported when using the Forward+ rendering method.
+			[b]Note:[/b] Only supported when using the Forward+ or Mobile rendering methods.
 		</constant>
 		<constant name="DEBUG_DRAW_SSAO" value="12" enum="DebugDraw">
 			Draws the screen-space ambient occlusion texture instead of the scene so that you can clearly see how it is affecting objects. In order for this display mode to work, you must have [member Environment.ssao_enabled] set in your [WorldEnvironment].
@@ -732,11 +707,11 @@
 		<constant name="DEBUG_DRAW_PSSM_SPLITS" value="14" enum="DebugDraw">
 			Colors each PSSM split for the [DirectionalLight3D]s in the scene a different color so you can see where the splits are. In order (from closest to furthest from the camera), they are colored red, green, blue, and yellow.
 			[b]Note:[/b] When using this debug draw mode, custom shaders are ignored since all materials in the scene temporarily use a debug material. This means the result from custom shader functions (such as vertex displacement) won't be visible anymore when using this debug draw mode.
-			[b]Note:[/b] Only supported when using the Forward+ rendering method.
+			[b]Note:[/b] Only supported when using the Forward+ or Mobile rendering methods.
 		</constant>
 		<constant name="DEBUG_DRAW_DECAL_ATLAS" value="15" enum="DebugDraw">
 			Draws the decal atlas used by [Decal]s and light projector textures in the upper left quadrant of the [Viewport].
-			[b]Note:[/b] Only supported when using the Forward+ rendering method.
+			[b]Note:[/b] Only supported when using the Forward+ or Mobile rendering methods.
 		</constant>
 		<constant name="DEBUG_DRAW_SDFGI" value="16" enum="DebugDraw">
 			Draws the cascades used to render signed distance field global illumination (SDFGI).
@@ -774,7 +749,7 @@
 		</constant>
 		<constant name="DEBUG_DRAW_OCCLUDERS" value="24" enum="DebugDraw">
 			Draws the buffer used for occlusion culling.
-			[b]Note:[/b] Only supported when using the Forward+ rendering method.
+			[b]Note:[/b] Only supported when using the Forward+ or Mobile rendering methods.
 		</constant>
 		<constant name="DEBUG_DRAW_MOTION_VECTORS" value="25" enum="DebugDraw">
 			Draws vector lines over the viewport to indicate the movement of pixels between frames.
@@ -782,7 +757,7 @@
 		</constant>
 		<constant name="DEBUG_DRAW_INTERNAL_BUFFER" value="26" enum="DebugDraw">
 			Draws the internal resolution buffer of the scene in linear colorspace before tonemapping or post-processing is applied.
-			[b]Note:[/b] Only supported when using the Forward+ rendering method.
+			[b]Note:[/b] Only supported when using the Forward+ or Mobile rendering methods.
 		</constant>
 		<constant name="DEBUG_DRAW_CLUSTER_AREA_LIGHTS" value="27" enum="DebugDraw">
 			Draws the cluster used by [AreaLight3D] nodes to optimize light rendering.
@@ -790,7 +765,7 @@
 		</constant>
 		<constant name="DEBUG_DRAW_AREA_LIGHT_ATLAS" value="28" enum="DebugDraw">
 			Draws the atlas used by [AreaLight3D] nodes in the upper left quadrant of the [Viewport].
-			[b]Note:[/b] Only supported when using the Forward+ rendering method.
+			[b]Note:[/b] Only supported when using the Forward+ or Mobile rendering method.
 		</constant>
 		<constant name="DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST" value="0" enum="DefaultCanvasItemTextureFilter">
 			The texture filter reads from the nearest pixel only. This makes the texture look pixelated from up close, and grainy from a distance (due to mipmaps not being sampled).
@@ -806,7 +781,10 @@
 			The texture filter reads from the nearest pixel and blends between the nearest 2 mipmaps (or uses the nearest mipmap if [member ProjectSettings.rendering/textures/default_filters/use_nearest_mipmap_filter] is [code]true[/code]). This makes the texture look pixelated from up close, and smooth from a distance.
 			Use this for non-pixel art textures that may be viewed at a low scale (e.g. due to [Camera2D] zoom or sprite scaling), as mipmaps are important to smooth out pixels that are smaller than on-screen pixels.
 		</constant>
-		<constant name="DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_MAX" value="4" enum="DefaultCanvasItemTextureFilter">
+		<constant name="DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_PARENT_NODE" value="4" enum="DefaultCanvasItemTextureFilter">
+			The [Viewport] will inherit the filter from its parent [CanvasItem] or [Viewport].
+		</constant>
+		<constant name="DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_MAX" value="5" enum="DefaultCanvasItemTextureFilter">
 			Represents the size of the [enum DefaultCanvasItemTextureFilter] enum.
 		</constant>
 		<constant name="DEFAULT_CANVAS_ITEM_TEXTURE_REPEAT_DISABLED" value="0" enum="DefaultCanvasItemTextureRepeat">
@@ -818,7 +796,10 @@
 		<constant name="DEFAULT_CANVAS_ITEM_TEXTURE_REPEAT_MIRROR" value="2" enum="DefaultCanvasItemTextureRepeat">
 			Flip the texture when repeating so that the edge lines up instead of abruptly changing.
 		</constant>
-		<constant name="DEFAULT_CANVAS_ITEM_TEXTURE_REPEAT_MAX" value="3" enum="DefaultCanvasItemTextureRepeat">
+		<constant name="DEFAULT_CANVAS_ITEM_TEXTURE_REPEAT_PARENT_NODE" value="3" enum="DefaultCanvasItemTextureRepeat">
+			The [Viewport] will inherit the repeat mode from its parent [CanvasItem] or [Viewport].
+		</constant>
+		<constant name="DEFAULT_CANVAS_ITEM_TEXTURE_REPEAT_MAX" value="4" enum="DefaultCanvasItemTextureRepeat">
 			Represents the size of the [enum DefaultCanvasItemTextureRepeat] enum.
 		</constant>
 		<constant name="SDF_OVERSIZE_100_PERCENT" value="0" enum="SDFOversize">

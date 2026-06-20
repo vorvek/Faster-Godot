@@ -12,6 +12,7 @@
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
+#include "servers/rendering/rendering_server_globals.h"
 
 using namespace RendererRD;
 
@@ -121,8 +122,8 @@ void RTGIGIResolve::_dispatch_volumetric_fog(const FogPushConstant &p_push_const
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
 	ERR_FAIL_NULL(material_storage);
 
-	RID linear_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
-	RID nearest_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID linear_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID nearest_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 	RID shader_rd = fog_shader.version_get_shader(fog_shader_version, 0);
 
 	RD::Uniform u_color(RD::UNIFORM_TYPE_IMAGE, 0, p_color);
@@ -313,7 +314,7 @@ void RTGIGIResolve::run_resolve(RID p_depth, RID p_normal_roughness, RID p_veloc
 	// SPG atlas/headers + G-buffers, but they are bound as SAMPLER_WITH_TEXTURE (mirroring
 	// the SPG consumer); the WRC fallback query does bilinear taps + already clamps its
 	// per-tile UVs, so clamp-to-edge is correct.
-	RID linear_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID linear_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 
 	// Neutral guide fallback (A-fix): the guide-albedo (binding 2) and guide-orm (binding 15) are
 	// consumed ONLY by the do_spec-gated rough-spec path; the diffuse A is guide-independent. If a
@@ -745,7 +746,7 @@ void RTGIGIResolve::render_resolve_debug(Ref<RenderSceneBuffersRD> p_rb, const S
 	ERR_FAIL_NULL(material_storage);
 
 	RID shader_rd = shader.version_get_shader(shader_version, 0);
-	RID linear_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID linear_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 
 	// Same full set-0 layout as run_resolve (one GLSL shader, one layout). DEBUG_GI reads
 	// binding 11 (diffuse), 12 (spec) and writes 13 (debug dest). The neutral SAMPLER slots
@@ -932,7 +933,7 @@ void RTGIGIResolve::render_composite(RID p_depth, RID p_normal_roughness, RID p_
 	ERR_FAIL_NULL(material_storage);
 
 	RID shader_rd = shader.version_get_shader(shader_version, 0);
-	RID linear_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID linear_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 
 	// Same full set-0 layout as render_resolve_debug (one GLSL shader, one layout), with the SAME
 	// hazard discipline: the images in this set are gi_debug_image (at 9/10/13) and the reactive mask

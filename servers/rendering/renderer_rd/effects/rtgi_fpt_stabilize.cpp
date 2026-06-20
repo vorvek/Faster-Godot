@@ -114,7 +114,7 @@ void RTGIFPTStabilize::run_stabilize(RID p_cur_color, RID p_velocity, RID p_hist
 	RID shader_rd = shader.version_get_shader(shader_version, 0);
 	// Every guide read is an integer texelFetch (sampler filtering is irrelevant); clamp-to-edge linear
 	// matches the GI resolve's sampler choice.
-	RID linear_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID linear_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 
 	// One-frame reset after a (re)allocation (cleared history) or on the caller's request (camera cut /
 	// RT history invalidation), plus the natural frame-0 seed.

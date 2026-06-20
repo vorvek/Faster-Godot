@@ -31,10 +31,17 @@
 /drivers/sdl/                                 @godotengine/input
 
 ## Rendering
+/drivers/d3d12/                               @godotengine/rendering
+/drivers/dummy/                               @godotengine/rendering
+/drivers/egl/                                 @godotengine/rendering
+/drivers/gles3/                               @godotengine/rendering
+/drivers/metal/                               @godotengine/rendering
+/drivers/spirv-reflect/                       @godotengine/rendering
 /drivers/vulkan/                              @godotengine/rendering
 
 ## OS
 /drivers/apple/                               @godotengine/macos @godotengine/ios
+/drivers/apple_embedded/                      @godotengine/ios
 /drivers/unix/                                @godotengine/linux-bsd
 /drivers/windows/                             @godotengine/windows
 
@@ -121,10 +128,18 @@
 /modules/multiplayer/doc_classes/             @godotengine/network @godotengine/documentation
 /modules/multiplayer/editor/                  @godotengine/network @godotengine/editor
 /modules/multiplayer/tests/                   @godotengine/network @godotengine/tests
+/modules/upnp/                                @godotengine/network
+/modules/upnp/doc_classes/                    @godotengine/network @godotengine/documentation
+/modules/webrtc/                              @godotengine/network
+/modules/webrtc/doc_classes/                  @godotengine/network @godotengine/documentation
+/modules/websocket/                           @godotengine/network
+/modules/websocket/doc_classes/               @godotengine/network @godotengine/documentation
+/modules/websocket/editor/                    @godotengine/network @godotengine/editor
 
 ## Physics
+/modules/godot_physics_2d/                    @godotengine/physics
+/modules/godot_physics_3d/                    @godotengine/physics
 /modules/jolt_physics/                        @godotengine/physics @godotengine/jolt-physics
-/modules/rapier_2d/                           @godotengine/physics
 
 ## Rendering
 /modules/glslang/                             @godotengine/rendering
@@ -132,6 +147,10 @@
 /modules/meshoptimizer/                       @godotengine/rendering
 /modules/raycast/                             @godotengine/rendering
 /modules/vhacd/                               @godotengine/rendering
+/modules/visual_shader/                       @godotengine/shaders
+/modules/visual_shader/doc_classes/           @godotengine/shaders @godotengine/documentation
+/modules/visual_shader/editor/                @godotengine/shaders @godotengine/editor
+/modules/visual_shader/tests/                 @godotengine/shaders @godotengine/tests
 /modules/xatlas_unwrap/                       @godotengine/rendering
 
 ## Scripting
@@ -154,6 +173,14 @@
 /modules/text_server_fb/doc_classes/          @godotengine/gui-nodes @godotengine/documentation
 
 ## XR
+/modules/camera/                              @godotengine/xr
+/modules/mobile_vr/                           @godotengine/xr
+/modules/mobile_vr/doc_classes/               @godotengine/xr @godotengine/documentation
+/modules/openxr/                              @godotengine/xr
+/modules/openxr/doc_classes/                  @godotengine/xr @godotengine/documentation
+/modules/openxr/editor/                       @godotengine/xr @godotengine/editor
+/modules/webxr/                               @godotengine/xr
+/modules/webxr/doc_classes/                   @godotengine/xr @godotengine/documentation
 
 ## Misc
 /modules/register_module_types.*              @godotengine/buildsystem
@@ -164,6 +191,7 @@
 /modules/gridmap/                             @godotengine/3d-nodes
 /modules/gridmap/doc_classes/                 @godotengine/3d-nodes @godotengine/documentation
 /modules/gridmap/editor/                      @godotengine/3d-nodes @godotengine/editor
+/modules/gridmap/tests/                       @godotengine/3d-nodes @godotengine/tests
 /modules/navigation_2d/                       @godotengine/navigation
 /modules/navigation_2d/editor/                @godotengine/navigation @godotengine/editor
 /modules/navigation_3d/                       @godotengine/navigation
@@ -184,8 +212,18 @@
 # Platform
 
 /platform/register_platform_apis.*            @godotengine/buildsystem
+/platform/android/                            @godotengine/android
+/platform/android/doc_classes/                @godotengine/android @godotengine/documentation
+/platform/ios/                                @godotengine/ios
+/platform/ios/doc_classes/                    @godotengine/ios @godotengine/documentation
 /platform/linuxbsd/                           @godotengine/linux-bsd
 /platform/linuxbsd/doc_classes/               @godotengine/linux-bsd @godotengine/documentation
+/platform/macos/                              @godotengine/macos
+/platform/macos/doc_classes/                  @godotengine/macos @godotengine/documentation
+/platform/visionos/                           @godotengine/xr
+/platform/visionos/doc_classes/               @godotengine/xr @godotengine/documentation
+/platform/web/                                @godotengine/web
+/platform/web/doc_classes/                    @godotengine/web @godotengine/documentation
 /platform/windows/                            @godotengine/windows
 /platform/windows/doc_classes/                @godotengine/windows @godotengine/documentation
 
@@ -219,7 +257,6 @@
 /scene/resources/shader*                      @godotengine/shaders
 /scene/resources/skeleton*                    @godotengine/animation
 /scene/resources/text_*                       @godotengine/gui-nodes
-/scene/resources/visual_shader*               @godotengine/shaders
 /scene/theme/                                 @godotengine/gui-nodes
 
 # Servers
@@ -248,7 +285,6 @@
 
 /thirdparty/                                  @godotengine/buildsystem
 /thirdparty/jolt_physics/                     @godotengine/buildsystem @godotengine/jolt-physics
-/thirdparty/rapier_2d/                        @godotengine/buildsystem @godotengine/physics
 
 # Buildsystem (After everything to catch all)
 

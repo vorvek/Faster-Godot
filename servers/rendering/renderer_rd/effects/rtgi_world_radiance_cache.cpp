@@ -10,6 +10,7 @@
 #include "servers/rendering/renderer_rd/effects/copy_effects.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
+#include "servers/rendering/rendering_server_enums.h"
 
 using namespace RendererRD;
 
@@ -298,7 +299,7 @@ void RTGIWorldRadianceCache::render_gi_debug(Ref<RenderSceneBuffersRD> p_render_
 	RID shader_rd = gi_debug_shader.version_get_shader(gi_debug_shader_version, 0);
 	// Linear sampler, clamp-to-edge: the query does bilinear taps and already
 	// clamps its UVs to the per-tile half-texel inset, so edge clamp is correct.
-	RID linear_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RID linear_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 
 	// Set 0: radiance/distance atlases (sampler+texture), depth + normal-roughness
 	// G-buffers (sampler+texture), and the output storage image.

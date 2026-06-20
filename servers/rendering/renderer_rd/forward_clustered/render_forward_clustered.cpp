@@ -1848,7 +1848,7 @@ uint32_t RenderForwardClustered::_setup_environment(const RenderDataRD *p_render
 
 	// now do implementation UBO
 
-	scene_state.ubo.cluster_shift = get_shift_from_power_of_2(p_render_data->cluster_size);
+	scene_state.ubo.cluster_shift = Math::get_shift_from_power_of_2(p_render_data->cluster_size);
 	scene_state.ubo.max_cluster_element_count_div_32 = p_render_data->cluster_max_elements / 32;
 	{
 		uint32_t cluster_screen_width = Math::division_round_up((uint32_t)p_screen_size.width, p_render_data->cluster_size);
@@ -1926,7 +1926,7 @@ void RenderForwardClustered::SceneState::grow_instance_buffer(RenderListType p_r
 	if (p_req_element_count > 0) {
 		if (instance_buffer[p_render_list].get_size(0u) < p_req_element_count * sizeof(SceneState::InstanceData)) {
 			instance_buffer[p_render_list].uninit();
-			uint32_t new_size = nearest_power_of_2_templated(MAX(uint64_t(INSTANCE_DATA_BUFFER_MIN_SIZE), p_req_element_count));
+			uint32_t new_size = Math::nearest_power_of_2_templated(MAX(uint64_t(INSTANCE_DATA_BUFFER_MIN_SIZE), p_req_element_count));
 			instance_buffer[p_render_list].set_storage_size(0u, new_size * sizeof(SceneState::InstanceData));
 			curr_gpu_ptr[p_render_list] = nullptr;
 		}
@@ -3833,7 +3833,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// valid here; this runs before the opaque/motion/transparent color passes that read
 		// base_specialization (the depth and guide prepasses ran earlier with the default false and
 		// carry no area-light code).
-		base_specialization.use_area_lights = current_cluster_builder != nullptr && current_cluster_builder->get_cluster_count_by_type(ClusterBuilderRD::ELEMENT_TYPE_AREA_LIGHT) > 0;
+		base_specialization.cluster_has_area_light = current_cluster_builder != nullptr && current_cluster_builder->get_cluster_count_by_type(ClusterBuilderRD::ELEMENT_TYPE_AREA_LIGHT) > 0;
 
 		RENDER_TIMESTAMP("Render Opaque Pass");
 
@@ -5628,33 +5628,41 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 			RD::Uniform u;
 			u.binding = 5;
 			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+			u.append_id(RendererRD::LightStorage::get_singleton()->get_area_light_buffer());
+			uniforms.push_back(u);
+		}
+
+		{
+			RD::Uniform u;
+			u.binding = 6;
+			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 			u.append_id(RendererRD::LightStorage::get_singleton()->get_reflection_probe_buffer());
 			uniforms.push_back(u);
 		}
 		{
 			RD::Uniform u;
-			u.binding = 6;
+			u.binding = 7;
 			u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
 			u.append_id(RendererRD::LightStorage::get_singleton()->get_directional_light_buffer());
 			uniforms.push_back(u);
 		}
 		{
 			RD::Uniform u;
-			u.binding = 7;
+			u.binding = 8;
 			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 			u.append_id(scene_state.lightmap_buffer);
 			uniforms.push_back(u);
 		}
 		{
 			RD::Uniform u;
-			u.binding = 8;
+			u.binding = 9;
 			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 			u.append_id(scene_state.lightmap_capture_buffer);
 			uniforms.push_back(u);
 		}
 		{
 			RD::Uniform u;
-			u.binding = 9;
+			u.binding = 10;
 			u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
 			RID decal_atlas = RendererRD::TextureStorage::get_singleton()->decal_atlas_get_texture();
 			u.append_id(decal_atlas);
@@ -5662,7 +5670,7 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 		}
 		{
 			RD::Uniform u;
-			u.binding = 10;
+			u.binding = 11;
 			u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
 			RID decal_atlas = RendererRD::TextureStorage::get_singleton()->decal_atlas_get_texture_srgb();
 			u.append_id(decal_atlas);
@@ -5670,7 +5678,7 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 		}
 		{
 			RD::Uniform u;
-			u.binding = 11;
+			u.binding = 12;
 			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 			u.append_id(RendererRD::TextureStorage::get_singleton()->get_decal_buffer());
 			uniforms.push_back(u);
@@ -5679,7 +5687,7 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 		{
 			RD::Uniform u;
 			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-			u.binding = 12;
+			u.binding = 13;
 			u.append_id(RendererRD::MaterialStorage::get_singleton()->global_shader_uniforms_get_storage_buffer());
 			uniforms.push_back(u);
 		}
@@ -5687,14 +5695,14 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 		{
 			RD::Uniform u;
 			u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
-			u.binding = 13;
+			u.binding = 14;
 			u.append_id(sdfgi_get_ubo());
 			uniforms.push_back(u);
 		}
 
 		{
 			RD::Uniform u;
-			u.binding = 14;
+			u.binding = 15;
 			u.uniform_type = RD::UNIFORM_TYPE_SAMPLER;
 			u.append_id(RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RSE::CanvasItemTextureFilter::CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS, RSE::CanvasItemTextureRepeat::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED));
 			uniforms.push_back(u);
@@ -5702,7 +5710,7 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 
 		{
 			RD::Uniform u;
-			u.binding = 15;
+			u.binding = 16;
 			u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
 			u.append_id(best_fit_normal.texture);
 			uniforms.push_back(u);
@@ -5710,7 +5718,7 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 
 		{
 			RD::Uniform u;
-			u.binding = 16;
+			u.binding = 17;
 			u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
 			u.append_id(dfg_lut.texture);
 			uniforms.push_back(u);
@@ -5731,7 +5739,7 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 
 				ltc.lut1_texture = RS::get_singleton()->texture_2d_create(lut1_image);
 
-				int lut2_bytes = 3 * dimensions * dimensions;
+				int lut2_bytes = 4 * dimensions * dimensions;
 				size_t lut2_size = lut2_bytes * 4;
 
 				Ref<Image> lut2_image;
@@ -5739,21 +5747,10 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 				lut2_data.resize(lut2_size);
 
 				memcpy(lut2_data.ptrw(), LTC_LUT2, lut2_size);
-				lut2_image = Image::create_from_data(dimensions, dimensions, false, Image::FORMAT_RGBF, lut2_data);
+				lut2_image = Image::create_from_data(dimensions, dimensions, false, Image::FORMAT_RGBAF, lut2_data);
 
 				ltc.lut2_texture = RS::get_singleton()->texture_2d_create(lut2_image);
 			}
-		}
-		// Area lights (LTC). Bound at the next free contiguous set-0 slots (17-20),
-		// matching the shader declarations in scene_forward_clustered_inc.glsl.
-		// The lazy ltc.lut1_texture/lut2_texture creation above runs first so the
-		// LUT textures are valid here.
-		{
-			RD::Uniform u;
-			u.binding = 17;
-			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-			u.append_id(RendererRD::LightStorage::get_singleton()->get_area_light_buffer());
-			uniforms.push_back(u);
 		}
 
 		{
@@ -5779,7 +5776,7 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 			u.binding = 20;
 			u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
 			// area_light_atlas_get_texture() already returns an RD texture (like the
-			// decal atlas at binding 9), so bind it directly — do NOT wrap in
+			// decal atlas at binding 9), so bind it directly: do NOT wrap in
 			// texture_get_rd_texture() (that expects a Texture2D storage RID and
 			// would return an invalid RID, breaking the whole set-0 uniform set).
 			u.append_id(RendererRD::TextureStorage::get_singleton()->area_light_atlas_get_texture());

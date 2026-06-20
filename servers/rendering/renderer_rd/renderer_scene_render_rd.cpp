@@ -503,11 +503,15 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 	}
 
 	RSE::ViewportScaling3DMode scale_mode = rb->get_scaling_3d_mode();
-	bool use_upscaled_texture = rb->has_upscaled_texture() && scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_FSR2;
+	bool use_upscaled_texture = rb->has_upscaled_texture() && (scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_FSR2 || scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL);
 	SpatialUpscaler *spatial_upscaler = nullptr;
 	if (can_use_effects) {
 		if (scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_FSR) {
 			spatial_upscaler = fsr;
+		} else if (scale_mode == RSE::VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL) {
+#if METAL_ENABLED
+			spatial_upscaler = mfx_spatial;
+#endif
 		}
 	}
 
@@ -757,10 +761,10 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 
 		if (glow_enabled) {
 			tonemap.use_glow = true;
-			tonemap.glow_mode = glow_blend_mode;
-			tonemap.glow_intensity = tonemap.glow_mode == RSE::ENV_GLOW_BLEND_MODE_MIX ? glow_mix : glow_intensity;
+			tonemap.glow_mode = environment_get_glow_blend_mode(p_render_data->environment);
+			tonemap.glow_intensity = tonemap.glow_mode == RSE::ENV_GLOW_BLEND_MODE_MIX ? environment_get_glow_mix(p_render_data->environment) : environment_get_glow_intensity(p_render_data->environment);
 			for (int i = 0; i < RSE::MAX_GLOW_LEVELS; i++) {
-				tonemap.glow_levels[i] = glow_levels[i];
+				tonemap.glow_levels[i] = environment_get_glow_levels(p_render_data->environment)[i];
 			}
 
 			Size2i msize = rb->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_BLUR_1, 0);
@@ -1691,7 +1695,7 @@ PackedByteArray RendererSceneRenderRD::bake_render_area_light_atlas(const TypedA
 	ERR_FAIL_COND_V_MSG(p_mipmaps <= 0, data, "Mipmaps must be greater than 0");
 	ERR_FAIL_COND_V_MSG(p_size.width < pow(2, p_mipmaps), data, "Image width must be greater than mipmaps to power of 2");
 	ERR_FAIL_COND_V_MSG(p_size.height < pow(2, p_mipmaps), data, "Image height must be greater than mipmaps to power of 2");
-	ERR_FAIL_COND_V_MSG(p_size.width != nearest_power_of_2_templated(p_size.width) || p_size.height != nearest_power_of_2_templated(p_size.height), data, "Image size must be a power of 2");
+	ERR_FAIL_COND_V_MSG(p_size.width != Math::nearest_power_of_2_templated(p_size.width) || p_size.height != Math::nearest_power_of_2_templated(p_size.height), data, "Image size must be a power of 2");
 	ERR_FAIL_COND_V_MSG(p_area_light_textures.size() != p_area_light_atlas_texture_rects.size(), data, "Number of Texture2Ds and number of Rect2s must match");
 
 	RD::TextureFormat tf;

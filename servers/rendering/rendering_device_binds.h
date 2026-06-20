@@ -797,7 +797,6 @@ protected:
 	static void _bind_methods() {
 		RD_BIND(Variant::INT, RDAccelerationStructureGeometry, geometry_type);
 		RD_BIND(Variant::INT, RDAccelerationStructureGeometry, flags);
-
 		RD_BIND(Variant::RID, RDAccelerationStructureGeometry, vertex_buffer);
 		RD_BIND(Variant::INT, RDAccelerationStructureGeometry, vertex_offset);
 		RD_BIND(Variant::INT, RDAccelerationStructureGeometry, vertex_stride);

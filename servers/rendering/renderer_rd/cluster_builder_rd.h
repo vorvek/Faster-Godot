@@ -76,10 +76,6 @@ class ClusterBuilderSharedDataRD {
 		enum ShaderVariant {
 			SHADER_NORMAL,
 			SHADER_USE_ATTACHMENT,
-			SHADER_NORMAL_MOLTENVK,
-			SHADER_USE_ATTACHMENT_MOLTENVK,
-			SHADER_NORMAL_NO_ATOMICS,
-			SHADER_USE_ATTACHMENT_NO_ATOMICS,
 		};
 
 		enum PipelineVersion {
@@ -155,9 +151,9 @@ public:
 	enum ElementType {
 		ELEMENT_TYPE_OMNI_LIGHT,
 		ELEMENT_TYPE_SPOT_LIGHT,
+		ELEMENT_TYPE_AREA_LIGHT,
 		ELEMENT_TYPE_DECAL,
 		ELEMENT_TYPE_REFLECTION_PROBE,
-		ELEMENT_TYPE_AREA_LIGHT,
 		ELEMENT_TYPE_MAX,
 	};
 
@@ -195,14 +191,7 @@ private:
 	};
 
 	uint32_t cluster_size = 32;
-#if defined(MACOS_ENABLED) || defined(APPLE_EMBEDDED_ENABLED)
-	// Results in visual artifacts on macOS and iOS/visionOS when using MSAA and subgroups.
-	// Using subgroups and disabling MSAA is the optimal solution for now and also works
-	// with MoltenVK.
-	bool use_msaa = false;
-#else
 	bool use_msaa = true;
-#endif
 	Divisor divisor = DIVISOR_4;
 
 	Size2i screen_size;
@@ -306,11 +295,11 @@ public:
 			// Approximate, probably better to use a cone support function.
 			float max_d = -1e20;
 			float min_d = 1e20;
-#define CONE_MINMAX(m_x, m_y)                                             \
-	{                                                                     \
+#define CONE_MINMAX(m_x, m_y) \
+	{ \
 		float d = -xform.xform(Vector3(len * m_x, len * m_y, -radius)).z; \
-		min_d = MIN(d, min_d);                                            \
-		max_d = MAX(d, max_d);                                            \
+		min_d = MIN(d, min_d); \
+		max_d = MAX(d, max_d); \
 	}
 
 			CONE_MINMAX(1, 1);
@@ -426,13 +415,17 @@ public:
 		render_element_count++;
 	}
 
+	_FORCE_INLINE_ uint32_t get_cluster_count_by_type(ElementType p_element_type) const {
+		DEV_ASSERT(p_element_type < ELEMENT_TYPE_MAX);
+		return cluster_count_by_type[p_element_type];
+	}
+
 	void bake_cluster();
 	void debug(ElementType p_element);
 
 	RID get_cluster_buffer() const;
 	uint32_t get_cluster_size() const;
 	uint32_t get_max_cluster_elements() const;
-	_FORCE_INLINE_ uint32_t get_cluster_count_by_type(ElementType p_element_type) const { return cluster_count_by_type[p_element_type]; }
 
 	void set_shared(ClusterBuilderSharedDataRD *p_shared);
 

@@ -33,7 +33,7 @@
 
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
-#include "core/object/callable_method_pointer.h"
+#include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "scene/resources/gradient_texture.h"
@@ -1554,6 +1554,7 @@ void Environment::_validate_property(PropertyInfo &p_property) const {
 	if (p_property.name == "tonemap_agx_white") {
 		if (tone_mapper != TONE_MAPPER_AGX) {
 			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+			return;
 		}
 		return;
 	}

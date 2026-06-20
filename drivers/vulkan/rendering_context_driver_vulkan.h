@@ -113,7 +113,6 @@ private:
 	Error _initialize_instance_extensions();
 	Error _initialize_instance();
 	Error _initialize_devices();
-	void _check_driver_workarounds(const VkPhysicalDeviceProperties &p_device_properties, Device &r_device);
 
 	// Static callbacks.
 	static VKAPI_ATTR VkBool32 VKAPI_CALL _debug_messenger_callback(VkDebugUtilsMessageSeverityFlagBitsEXT p_message_severity, VkDebugUtilsMessageTypeFlagsEXT p_message_type, const VkDebugUtilsMessengerCallbackDataEXT *p_callback_data, void *p_user_data);
@@ -138,8 +137,8 @@ public:
 	virtual void driver_free(RenderingDeviceDriver *p_driver) override;
 	virtual SurfaceID surface_create(const void *p_platform_data) override;
 	virtual void surface_set_size(SurfaceID p_surface, uint32_t p_width, uint32_t p_height) override;
-	virtual void surface_set_vsync_mode(SurfaceID p_surface, DisplayServer::VSyncMode p_vsync_mode) override;
-	virtual DisplayServer::VSyncMode surface_get_vsync_mode(SurfaceID p_surface) const override;
+	virtual void surface_set_vsync_mode(SurfaceID p_surface, DisplayServerEnums::VSyncMode p_vsync_mode) override;
+	virtual DisplayServerEnums::VSyncMode surface_get_vsync_mode(SurfaceID p_surface) const override;
 	virtual void surface_set_hdr_output_enabled(SurfaceID p_surface, bool p_enabled) override;
 	virtual bool surface_get_hdr_output_enabled(SurfaceID p_surface) const override;
 	virtual void surface_set_hdr_output_reference_luminance(SurfaceID p_surface, float p_reference_luminance) override;
@@ -163,7 +162,7 @@ public:
 		VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
 		uint32_t width = 0;
 		uint32_t height = 0;
-		DisplayServer::VSyncMode vsync_mode = DisplayServer::VSYNC_ENABLED;
+		DisplayServerEnums::VSyncMode vsync_mode = DisplayServerEnums::VSYNC_ENABLED;
 		bool needs_resize = false;
 
 		bool hdr_output = false;

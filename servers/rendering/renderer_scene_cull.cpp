@@ -33,7 +33,7 @@
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/math/geometry_3d.h"
-#include "core/object/callable_method_pointer.h"
+#include "core/object/callable_mp.h"
 #include "core/object/worker_thread_pool.h"
 #include "servers/rendering/rendering_light_culler.h"
 #include "servers/rendering/rendering_server.h"
@@ -1417,7 +1417,6 @@ void RendererSceneCull::instance_geometry_set_cast_shadows_setting(RID p_instanc
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 		ERR_FAIL_NULL(geom->geometry_instance);
 
-		geom->geometry_instance->set_cast_shadows_only(instance->cast_shadows == RSE::SHADOW_CASTING_SETTING_SHADOWS_ONLY);
 		geom->geometry_instance->set_cast_double_sided_shadows(instance->cast_shadows == RSE::SHADOW_CASTING_SETTING_DOUBLE_SIDED);
 	}
 
@@ -2746,7 +2745,7 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 	return animated_material_found;
 }
 
-void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_camera, RID p_scenario, RID p_viewport, Size2 p_viewport_size, uint32_t p_jitter_phase_count, float p_jitter_scale, float p_screen_mesh_lod_threshold, RID p_shadow_atlas, Ref<XRInterface> &p_xr_interface, float p_window_output_max_value, RenderingServerTypes::RenderInfo *r_render_info) {
+void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_camera, RID p_scenario, RID p_viewport, Size2 p_viewport_size, uint32_t p_jitter_phase_count, float p_screen_mesh_lod_threshold, RID p_shadow_atlas, Ref<XRInterface> &p_xr_interface, float p_window_output_max_value, RenderingServerTypes::RenderInfo *r_render_info) {
 #ifndef _3D_DISABLED
 
 	Camera *camera = camera_owner.get_or_null(p_camera);
@@ -2766,7 +2765,7 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 			}
 		}
 
-		jitter = camera_jitter_array[RSG::rasterizer->get_frame_number() % p_jitter_phase_count] * p_jitter_scale / p_viewport_size;
+		jitter = camera_jitter_array[RSG::rasterizer->get_frame_number() % p_jitter_phase_count] / p_viewport_size;
 		taa_frame_count = float(RSG::rasterizer->get_frame_number() % p_jitter_phase_count);
 	}
 
@@ -4479,10 +4478,6 @@ void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
 
 				geom->can_cast_shadows = can_cast_shadows;
 			}
-			geom->geometry_instance->set_cast_shadows(can_cast_shadows);
-			geom->geometry_instance->set_shadow_casting_setting_enabled(p_instance->cast_shadows != RSE::SHADOW_CASTING_SETTING_OFF);
-			geom->geometry_instance->set_cast_shadows_only(p_instance->cast_shadows == RSE::SHADOW_CASTING_SETTING_SHADOWS_ONLY);
-
 			geom->material_is_animated = is_animated;
 
 			if (p_instance->instance_uniforms.materials_finish(p_instance->self)) {

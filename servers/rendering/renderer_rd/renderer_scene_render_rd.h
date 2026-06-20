@@ -51,7 +51,6 @@
 #include "servers/rendering/rendering_server_types.h"
 #include "servers/rendering/rendering_shader_library.h"
 
-
 class RendererSceneRenderRD : public RendererSceneRender, public RenderingShaderLibrary {
 	friend RendererRD::SkyRD;
 	friend RendererRD::GI;

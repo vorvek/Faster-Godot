@@ -30,6 +30,7 @@
 
 #include "mesh_storage.h"
 
+#include "core/config/engine.h"
 #include "core/math/simd_defs.h"
 #include "core/math/transform_interpolator.h"
 
@@ -65,7 +66,7 @@ void RendererMeshStorage::multimesh_free(RID p_rid) {
 	_multimesh_free(p_rid);
 }
 
-void RendererMeshStorage::multimesh_allocate_data(RID p_multimesh, int p_instances, RS::MultimeshTransformFormat p_transform_format, bool p_use_colors, bool p_use_custom_data, bool p_use_indirect) {
+void RendererMeshStorage::multimesh_allocate_data(RID p_multimesh, int p_instances, RSE::MultimeshTransformFormat p_transform_format, bool p_use_colors, bool p_use_custom_data, bool p_use_indirect) {
 	MultiMeshInterpolator *mmi = _multimesh_get_interpolator(p_multimesh);
 	if (mmi) {
 		mmi->_transform_format = p_transform_format;
@@ -73,7 +74,7 @@ void RendererMeshStorage::multimesh_allocate_data(RID p_multimesh, int p_instanc
 		mmi->_use_custom_data = p_use_custom_data;
 		mmi->_num_instances = p_instances;
 
-		mmi->_vf_size_xform = p_transform_format == RS::MULTIMESH_TRANSFORM_2D ? 8 : 12;
+		mmi->_vf_size_xform = p_transform_format == RSE::MULTIMESH_TRANSFORM_2D ? 8 : 12;
 		mmi->_vf_size_color = p_use_colors ? 4 : 0;
 		mmi->_vf_size_data = p_use_custom_data ? 4 : 0;
 
@@ -254,7 +255,7 @@ Color RendererMeshStorage::multimesh_instance_get_custom_data(RID p_multimesh, i
 void RendererMeshStorage::multimesh_set_buffer(RID p_multimesh, const Vector<float> &p_buffer) {
 	MultiMeshInterpolator *mmi = _multimesh_get_interpolator(p_multimesh);
 	if (mmi && mmi->interpolated) {
-		ERR_FAIL_COND_MSG(p_buffer.size() != mmi->_data_curr.size(), vformat("Buffer should have %d elements, got %d instead.", mmi->_data_curr.size(), p_buffer.size()));
+		ERR_FAIL_COND_MSG(p_buffer.size() != mmi->_data_curr.size(), "Buffer should have " + itos(mmi->_data_curr.size()) + " elements, got " + itos(p_buffer.size()) + " instead.");
 
 		mmi->_data_curr = p_buffer;
 		_multimesh_add_to_interpolation_lists(p_multimesh, *mmi);
@@ -286,8 +287,8 @@ Vector<float> RendererMeshStorage::multimesh_get_buffer(RID p_multimesh) const {
 void RendererMeshStorage::multimesh_set_buffer_interpolated(RID p_multimesh, const Vector<float> &p_buffer, const Vector<float> &p_buffer_prev) {
 	MultiMeshInterpolator *mmi = _multimesh_get_interpolator(p_multimesh);
 	if (mmi) {
-		ERR_FAIL_COND_MSG(p_buffer.size() != mmi->_data_curr.size(), vformat("Buffer for current frame should have %d elements, got %d instead.", mmi->_data_curr.size(), p_buffer.size()));
-		ERR_FAIL_COND_MSG(p_buffer_prev.size() != mmi->_data_prev.size(), vformat("Buffer for previous frame should have %d elements, got %d instead.", mmi->_data_prev.size(), p_buffer_prev.size()));
+		ERR_FAIL_COND_MSG(p_buffer.size() != mmi->_data_curr.size(), "Buffer for current frame should have " + itos(mmi->_data_curr.size()) + " elements, got " + itos(p_buffer.size()) + " instead.");
+		ERR_FAIL_COND_MSG(p_buffer_prev.size() != mmi->_data_prev.size(), "Buffer for previous frame should have " + itos(mmi->_data_prev.size()) + " elements, got " + itos(p_buffer_prev.size()) + " instead.");
 
 		// We are assuming that mmi->interpolated is the case. (Can possibly assert this?)
 		// Even if this flag hasn't been set - just calling this function suggests interpolation is desired.
@@ -323,7 +324,7 @@ void RendererMeshStorage::multimesh_set_physics_interpolated(RID p_multimesh, bo
 	}
 }
 
-void RendererMeshStorage::multimesh_set_physics_interpolation_quality(RID p_multimesh, RS::MultimeshPhysicsInterpolationQuality p_quality) {
+void RendererMeshStorage::multimesh_set_physics_interpolation_quality(RID p_multimesh, RSE::MultimeshPhysicsInterpolationQuality p_quality) {
 	ERR_FAIL_COND((p_quality < 0) || (p_quality > 1));
 	MultiMeshInterpolator *mmi = _multimesh_get_interpolator(p_multimesh);
 	if (mmi) {

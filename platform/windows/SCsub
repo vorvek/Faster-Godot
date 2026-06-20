@@ -16,6 +16,8 @@ common_win = [
     "display_server_windows.cpp",
     "key_mapping_windows.cpp",
     "tts_windows.cpp",
+    "tts_driver_sapi.cpp",
+    "winrt_utils.cpp",
     "windows_terminal_logger.cpp",
     "windows_utils.cpp",
     "native_menu_windows.cpp",

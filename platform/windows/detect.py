@@ -376,7 +376,7 @@ def configure_msvc(env: "SConsEnvironment"):
     if env["use_asan"]:
         env.extra_suffix += ".san"
         prebuilt_lib_extra_suffix = ".san"
-        env.AppendUnique(CPPDEFINES=["SANITIZERS_ENABLED"])
+        env.Append(CPPDEFINES=["ASAN_ENABLED"])
         env.Append(CCFLAGS=["/fsanitize=address"])
         env.Append(LINKFLAGS=["/INFERASANLIBS"])
 
@@ -409,13 +409,14 @@ def configure_msvc(env: "SConsEnvironment"):
         "wbemuuid",
         "ntdll",
         "hid",
+        "mincore",
     ]
 
     if env.debug_features:
         LIBS += ["psapi", "dbghelp"]
 
     if env["accesskit"]:
-        if env["accesskit_sdk_path"] != "":
+        if os.path.exists(env["accesskit_sdk_path"]):
             env.Prepend(CPPPATH=[env["accesskit_sdk_path"] + "/include"])
             if env["arch"] == "arm64":
                 env.Append(LIBPATH=[env["accesskit_sdk_path"] + "/lib/windows/arm64/msvc/static"])
@@ -433,9 +434,16 @@ def configure_msvc(env: "SConsEnvironment"):
                 "userenv",
                 "ntdll",
             ]
+            env.Append(CPPDEFINES=["ACCESSKIT_ENABLED"])
         else:
-            env.Append(CPPDEFINES=["ACCESSKIT_DYNAMIC"])
-        env.Append(CPPDEFINES=["ACCESSKIT_ENABLED"])
+            print_error(
+                "The screen reader support driver requires dependencies to be installed.\n"
+                f"You can install them by running `python {os.path.join('misc', 'scripts', 'install_accesskit.py')}`.\n"
+                "See the documentation for more information:\n"
+                "\thttps://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_windows.html\n"
+                "Alternatively, disable this driver by compiling with `accesskit=no` explicitly."
+            )
+            env["accesskit"] = False
 
     if env["vulkan"]:
         env.AppendUnique(CPPDEFINES=["VULKAN_ENABLED", "RD_ENABLED"])
@@ -509,7 +517,8 @@ def get_ar_version(env):
     }
     try:
         output = (
-            subprocess.check_output([env.subst(env["AR"]), "--version"], shell=(os.name == "nt"))
+            subprocess
+            .check_output([env.subst(env["AR"]), "--version"], shell=(os.name == "nt"))
             .strip()
             .decode("utf-8")
         )
@@ -716,11 +725,12 @@ def configure_mingw(env: "SConsEnvironment"):
             sys.exit(255)
 
         env.extra_suffix += ".san"
-        env.AppendUnique(CPPDEFINES=["SANITIZERS_ENABLED"])
         san_flags = []
         if env["use_asan"]:
+            env.Append(CPPDEFINES=["ASAN_ENABLED"])
             san_flags.append("-fsanitize=address")
         if env["use_ubsan"]:
+            env.Append(CPPDEFINES=["UBSAN_ENABLED"])
             san_flags.append("-fsanitize=undefined")
             # Disable the vptr check since it gets triggered on any COM interface calls.
             san_flags.append("-fno-sanitize=vptr")
@@ -768,11 +778,36 @@ def configure_mingw(env: "SConsEnvironment"):
             "wbemuuid",
             "ntdll",
             "hid",
+            "mincore",
         ]
     )
 
+    if env["winrt"]:
+        if not os.path.exists(env["winrt_path"]):
+            prefix = os.getenv("MINGW_PREFIX", "")
+            msys = os.getenv("MSYSTEM", "")
+            if msys != "" and prefix != "":
+                if not os.path.exists(os.path.join(prefix, "include/winrt")):
+                    print_warning(
+                        "The WinRT/OneCore API requires dependencies to be installed.\n"
+                        f"You can install them by installing `cppwinrt` MSYS2 package or by running `python {os.path.join('misc', 'scripts', 'install_winrt.py')}`.\n"
+                        "See the documentation for more information:\n"
+                        "\thttps://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_windows.html\n"
+                        "Alternatively, disable this driver by compiling with `winrt=no` explicitly."
+                    )
+                env["winrt"] = False
+            else:
+                print_warning(
+                    "The WinRT/OneCore API requires dependencies to be installed.\n"
+                    f"You can install them by running `python {os.path.join('misc', 'scripts', 'install_winrt.py')}`.\n"
+                    "See the documentation for more information:\n"
+                    "\thttps://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_windows.html\n"
+                    "Alternatively, disable this driver by compiling with `winrt=no` explicitly."
+                )
+                env["winrt"] = False
+
     if env["accesskit"]:
-        if env["accesskit_sdk_path"] != "":
+        if os.path.exists(env["accesskit_sdk_path"]):
             env.Prepend(CPPPATH=[env["accesskit_sdk_path"] + "/include"])
             if env["use_llvm"]:
                 if env["arch"] == "arm64":
@@ -799,10 +834,17 @@ def configure_mingw(env: "SConsEnvironment"):
                     "ntdll",
                 ]
             )
+            env.Append(LIBPATH=["#platform/windows"])
+            env.Append(CPPDEFINES=["ACCESSKIT_ENABLED"])
         else:
-            env.Append(CPPDEFINES=["ACCESSKIT_DYNAMIC"])
-        env.Append(LIBPATH=["#platform/windows"])
-        env.Append(CPPDEFINES=["ACCESSKIT_ENABLED"])
+            print_warning(
+                "The screen reader support driver requires dependencies to be installed.\n"
+                f"You can install them by running `python {os.path.join('misc', 'scripts', 'install_accesskit.py')}`.\n"
+                "See the documentation for more information:\n"
+                "\thttps://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_windows.html\n"
+                "Alternatively, disable this driver by compiling with `accesskit=no` explicitly."
+            )
+            env["accesskit"] = False
 
     if env.debug_features:
         env.Append(LIBS=["psapi", "dbghelp"])
