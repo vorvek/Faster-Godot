@@ -150,12 +150,44 @@ struct alignas(16) RT_GeometryData {
 	uint32_t _pad[2];
 };
 static_assert(sizeof(RT_GeometryData) == 128, "RT_GeometryData must be 128 bytes for std430");
+// Per-field std430 offsets (must match GLSL GeometryData in raytracing_data_inc.glsl).
+// All members are 4-/8-byte scalars, so the C++ offsets equal the std430 offsets exactly;
+// `layer_mask` resolves to byte 108 here and in GLSL (no tail shift).
+static_assert(offsetof(RT_GeometryData, vertex_buffer_address) == 0);
+static_assert(offsetof(RT_GeometryData, attribute_buffer_address) == 8);
+static_assert(offsetof(RT_GeometryData, index_buffer_address) == 16);
+static_assert(offsetof(RT_GeometryData, vertex_count) == 24);
+static_assert(offsetof(RT_GeometryData, position_stride) == 28);
+static_assert(offsetof(RT_GeometryData, normal_byte_offset) == 32);
+static_assert(offsetof(RT_GeometryData, normal_stride) == 36);
+static_assert(offsetof(RT_GeometryData, tangent_byte_offset) == 40);
+static_assert(offsetof(RT_GeometryData, tangent_stride) == 44);
+static_assert(offsetof(RT_GeometryData, attribute_stride) == 48);
+static_assert(offsetof(RT_GeometryData, uv_byte_offset) == 52);
+static_assert(offsetof(RT_GeometryData, uv_scale_packed) == 56);
+static_assert(offsetof(RT_GeometryData, index_format) == 60);
+static_assert(offsetof(RT_GeometryData, primitive_count) == 64);
+static_assert(offsetof(RT_GeometryData, flags) == 68);
+static_assert(offsetof(RT_GeometryData, aabb_size_x) == 72);
+static_assert(offsetof(RT_GeometryData, aabb_size_y) == 76);
+static_assert(offsetof(RT_GeometryData, aabb_size_z) == 80);
+static_assert(offsetof(RT_GeometryData, color_byte_offset) == 84);
+static_assert(offsetof(RT_GeometryData, aabb_pos_x) == 88);
+static_assert(offsetof(RT_GeometryData, aabb_pos_y) == 92);
+static_assert(offsetof(RT_GeometryData, aabb_pos_z) == 96);
+static_assert(offsetof(RT_GeometryData, prev_vertex_buffer_address_lo) == 100);
+static_assert(offsetof(RT_GeometryData, prev_vertex_buffer_address_hi) == 104);
+static_assert(offsetof(RT_GeometryData, layer_mask) == 108);
+static_assert(offsetof(RT_GeometryData, history_id) == 112);
+static_assert(offsetof(RT_GeometryData, uv2_byte_offset) == 116);
 
 /// Per-instance motion data for velocity computation (matches GLSL InstanceMotionData, 48 bytes).
 struct RT_InstanceMotionData {
 	float prev_object_to_world[12]; // Previous object-to-world (mat3x4, transposed 3x4).
 };
 static_assert(sizeof(RT_InstanceMotionData) == 48, "RT_InstanceMotionData must be 48 bytes");
+// Must match GLSL InstanceMotionData in raytracing_data_inc.glsl.
+static_assert(offsetof(RT_InstanceMotionData, prev_object_to_world) == 0);
 
 // Must match GLSL MaterialData (std430, 112 bytes).
 struct alignas(16) RT_MaterialData {
@@ -181,6 +213,29 @@ struct alignas(16) RT_MaterialData {
 	uint64_t uniform_address; // BDA for custom shader uniform buffer (0 = none).
 };
 static_assert(sizeof(RT_MaterialData) == 112, "RT_MaterialData must be 112 bytes for std430");
+// Per-field std430 offsets (must match GLSL MaterialData in raytracing_data_inc.glsl).
+// `emission_color` (vec3) is followed by `emission_strength` packed into its 16-byte tail
+// at byte 44 in both layouts; `uniform_address` (uint64) lands at byte 104.
+static_assert(offsetof(RT_MaterialData, albedo_texture_idx) == 0);
+static_assert(offsetof(RT_MaterialData, normal_texture_idx) == 4);
+static_assert(offsetof(RT_MaterialData, orm_texture_idx) == 8);
+static_assert(offsetof(RT_MaterialData, emission_texture_idx) == 12);
+static_assert(offsetof(RT_MaterialData, albedo_color) == 16);
+static_assert(offsetof(RT_MaterialData, emission_color) == 32);
+static_assert(offsetof(RT_MaterialData, emission_strength) == 44);
+static_assert(offsetof(RT_MaterialData, metallic) == 48);
+static_assert(offsetof(RT_MaterialData, roughness) == 52);
+static_assert(offsetof(RT_MaterialData, ao_strength) == 56);
+static_assert(offsetof(RT_MaterialData, flags) == 60);
+static_assert(offsetof(RT_MaterialData, uv1_scale) == 64);
+static_assert(offsetof(RT_MaterialData, uv1_offset) == 72);
+static_assert(offsetof(RT_MaterialData, normal_map_depth) == 80);
+static_assert(offsetof(RT_MaterialData, specular) == 84);
+static_assert(offsetof(RT_MaterialData, alpha_scissor_threshold) == 88);
+static_assert(offsetof(RT_MaterialData, alpha_hash_scale) == 92);
+static_assert(offsetof(RT_MaterialData, metallic_texture_idx) == 96);
+static_assert(offsetof(RT_MaterialData, _pad0) == 100);
+static_assert(offsetof(RT_MaterialData, uniform_address) == 104);
 
 // Must match GLSL RTEmissivePrimitiveDistribution (std430, 16 bytes).
 struct alignas(16) RT_EmissivePrimitiveDistribution {
@@ -190,6 +245,10 @@ struct alignas(16) RT_EmissivePrimitiveDistribution {
 	float _pad;
 };
 static_assert(sizeof(RT_EmissivePrimitiveDistribution) == 16, "RT_EmissivePrimitiveDistribution must be 16 bytes for std430");
+// Must match GLSL RTEmissivePrimitiveDistribution in raytracing_common_inc.glsl.
+static_assert(offsetof(RT_EmissivePrimitiveDistribution, primitive_id) == 0);
+static_assert(offsetof(RT_EmissivePrimitiveDistribution, cumulative_weight) == 4);
+static_assert(offsetof(RT_EmissivePrimitiveDistribution, area) == 8);
 
 // Must match GLSL RTEmissiveCandidate (std430, 80 bytes).
 struct alignas(16) RT_EmissiveCandidate {
@@ -203,6 +262,15 @@ struct alignas(16) RT_EmissiveCandidate {
 	uint32_t _pad[2];
 };
 static_assert(sizeof(RT_EmissiveCandidate) == 80, "RT_EmissiveCandidate must be 80 bytes for std430");
+// Must match GLSL RTEmissiveCandidate in raytracing_common_inc.glsl. The float[12] matrix
+// occupies bytes 0..47 (12 tightly-packed floats), scalars follow from byte 48.
+static_assert(offsetof(RT_EmissiveCandidate, object_to_world) == 0);
+static_assert(offsetof(RT_EmissiveCandidate, geometry_index) == 48);
+static_assert(offsetof(RT_EmissiveCandidate, flags) == 52);
+static_assert(offsetof(RT_EmissiveCandidate, selection_weight) == 56);
+static_assert(offsetof(RT_EmissiveCandidate, primitive_weight_sum) == 60);
+static_assert(offsetof(RT_EmissiveCandidate, primitive_offset) == 64);
+static_assert(offsetof(RT_EmissiveCandidate, primitive_count) == 68);
 
 // Light types for raytracing (matches GLSL RT_LIGHT_TYPE_* defines).
 enum RTLightType : uint32_t {
@@ -247,6 +315,33 @@ struct alignas(16) RT_LightData {
 	uint32_t area_pad1;
 };
 static_assert(sizeof(RT_LightData) == 128, "RT_LightData must be 128 bytes for std430");
+// Per-field std430 offsets (must match GLSL RTLightData in raytracing_lights_inc.glsl).
+// Each vec3 (`position`, `emission`, `spot_direction`) is followed by a scalar packed into
+// its 16-byte tail, exactly as the C++ float[3] + scalar pairs do. `shadow_caster_mask`
+// resolves to byte 80 here and in GLSL (byte 96 is `area_atlas_rect`, not this field).
+static_assert(offsetof(RT_LightData, position) == 0);
+static_assert(offsetof(RT_LightData, type) == 12);
+static_assert(offsetof(RT_LightData, emission) == 16);
+static_assert(offsetof(RT_LightData, radius) == 28);
+static_assert(offsetof(RT_LightData, attenuation) == 32);
+static_assert(offsetof(RT_LightData, inv_max_range) == 36);
+static_assert(offsetof(RT_LightData, max_range_squared) == 40);
+static_assert(offsetof(RT_LightData, specular_amount) == 44);
+static_assert(offsetof(RT_LightData, indirect_energy) == 48);
+static_assert(offsetof(RT_LightData, inv_spot_attenuation) == 52);
+static_assert(offsetof(RT_LightData, cos_spot_angle) == 56);
+static_assert(offsetof(RT_LightData, flags) == 60);
+static_assert(offsetof(RT_LightData, spot_direction) == 64);
+static_assert(offsetof(RT_LightData, cull_mask) == 76);
+static_assert(offsetof(RT_LightData, shadow_caster_mask) == 80);
+static_assert(offsetof(RT_LightData, shadow_opacity) == 84);
+static_assert(offsetof(RT_LightData, shadow_max_distance) == 88);
+static_assert(offsetof(RT_LightData, source_id) == 92);
+static_assert(offsetof(RT_LightData, area_atlas_rect) == 96);
+static_assert(offsetof(RT_LightData, area_atlas_idx) == 112);
+static_assert(offsetof(RT_LightData, area_max_mip) == 116);
+static_assert(offsetof(RT_LightData, area_pad0) == 120);
+static_assert(offsetof(RT_LightData, area_pad1) == 124);
 
 enum {
 	RT_LIGHTS_MAX = 64,
