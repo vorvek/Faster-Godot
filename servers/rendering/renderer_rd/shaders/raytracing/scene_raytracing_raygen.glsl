@@ -2068,9 +2068,16 @@ void main() {
 	GeometryData geom = geometries[geometry_idx];
 
 	bool shadow_ray = is_shadow_ray(payload.packed_bounces_flags);
-	if (shadow_ray && (geom.layer_mask & payload.rng_state) == 0u) {
-		ignoreIntersectionEXT;
-		return;
+	if (shadow_ray) {
+		uint shadow_caster_mask = get_shadow_ray_caster_mask(payload.packed_bounces_flags);
+		bool casts_shadow = shadow_caster_mask == SHADOW_RAY_CASTER_MASK;
+		for (uint layer_bit = 1u; !casts_shadow && layer_bit <= SHADOW_RAY_CASTER_MASK; layer_bit <<= 1u) {
+			casts_shadow = ((geom.layer_mask & layer_bit) != 0u) && ((shadow_caster_mask & layer_bit) != 0u);
+		}
+		if (!casts_shadow) {
+			ignoreIntersectionEXT;
+			return;
+		}
 	}
 
 	MaterialData mat = materials[geometry_idx];

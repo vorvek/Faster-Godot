@@ -222,12 +222,16 @@ bool is_sample_zero(uint packed) {
 }
 
 // Shadow ray flag (bit 25) - indicates this ray is a shadow/occlusion test
+const uint SHADOW_RAY_CASTER_MASK = 0x000FFFFFu; // VisualInstance3D layers 1..20.
 const uint SHADOW_RAY_FLAG = (1u << 25);
-uint set_shadow_ray(uint packed) {
-	return packed | SHADOW_RAY_FLAG;
-}
 bool is_shadow_ray(uint packed) {
 	return (packed & SHADOW_RAY_FLAG) != 0u;
+}
+uint pack_shadow_ray(uint shadow_caster_mask) {
+	return SHADOW_RAY_FLAG | (shadow_caster_mask & SHADOW_RAY_CASTER_MASK);
+}
+uint get_shadow_ray_caster_mask(uint packed) {
+	return packed & SHADOW_RAY_CASTER_MASK;
 }
 
 const uint PATH_TERMINATED_FLAG = (1u << 26);

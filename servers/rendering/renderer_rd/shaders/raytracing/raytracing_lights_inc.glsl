@@ -299,8 +299,8 @@ bool lights_trace_shadow_ray(vec3 origin, vec3 direction, float max_dist, uint s
 	shadow_ps.radiance = vec3(0.0);
 	shadow_ps.specular_radiance = vec3(0.0);
 	shadow_ps.throughput = vec3(0.0);
-	shadow_ps.packed_bounces_flags = set_shadow_ray(0u);
-	shadow_ps.rng_state = shadow_caster_mask;
+	shadow_ps.packed_bounces_flags = pack_shadow_ray(shadow_caster_mask);
+	shadow_ps.rng_state = rng_state;
 	shadow_ps.hit_t = 0.0;
 	shadow_ps.offset_normal = vec3(0.0, 0.0, 1.0);
 	shadow_ps.next_ray_dir = vec3(0.0, 0.0, 1.0);
@@ -327,8 +327,8 @@ bool lights_trace_shadow_ray(vec3 origin, vec3 direction, float max_dist, uint s
 	shadow_ps.radiance = vec3(0.0);
 	shadow_ps.specular_radiance = vec3(0.0);
 	shadow_ps.throughput = vec3(0.0);
-	shadow_ps.packed_bounces_flags = set_shadow_ray(0u);
-	shadow_ps.rng_state = shadow_caster_mask;
+	shadow_ps.packed_bounces_flags = pack_shadow_ray(shadow_caster_mask);
+	shadow_ps.rng_state = rng_state;
 	shadow_ps.hit_t = 0.0;
 	shadow_ps.offset_normal = vec3(0.0, 0.0, 1.0);
 	shadow_ps.next_ray_dir = vec3(0.0, 0.0, 1.0);
