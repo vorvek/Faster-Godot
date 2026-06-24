@@ -128,6 +128,33 @@ void RenderGeometryInstanceBase::set_instance_shader_uniforms_offset(int32_t p_o
 	_mark_dirty();
 }
 
+void RenderGeometryInstanceBase::set_cast_shadows(bool p_enable) {
+	if (data->cast_shadows == p_enable) {
+		return;
+	}
+	data->cast_shadows = p_enable;
+
+	_mark_dirty();
+}
+
+void RenderGeometryInstanceBase::set_shadow_casting_setting_enabled(bool p_enable) {
+	if (data->shadow_casting_setting_enabled == p_enable) {
+		return;
+	}
+	data->shadow_casting_setting_enabled = p_enable;
+
+	_mark_dirty();
+}
+
+void RenderGeometryInstanceBase::set_cast_shadows_only(bool p_enable) {
+	if (data->cast_shadows_only == p_enable) {
+		return;
+	}
+	data->cast_shadows_only = p_enable;
+
+	_mark_dirty();
+}
+
 void RenderGeometryInstanceBase::set_cast_double_sided_shadows(bool p_enable) {
 	data->cast_double_sided_shadows = p_enable;
 

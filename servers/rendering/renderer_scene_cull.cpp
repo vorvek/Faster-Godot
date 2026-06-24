@@ -1417,6 +1417,7 @@ void RendererSceneCull::instance_geometry_set_cast_shadows_setting(RID p_instanc
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 		ERR_FAIL_NULL(geom->geometry_instance);
 
+		geom->geometry_instance->set_cast_shadows_only(instance->cast_shadows == RSE::SHADOW_CASTING_SETTING_SHADOWS_ONLY);
 		geom->geometry_instance->set_cast_double_sided_shadows(instance->cast_shadows == RSE::SHADOW_CASTING_SETTING_DOUBLE_SIDED);
 	}
 
@@ -4478,6 +4479,10 @@ void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
 
 				geom->can_cast_shadows = can_cast_shadows;
 			}
+			geom->geometry_instance->set_cast_shadows(can_cast_shadows);
+			geom->geometry_instance->set_shadow_casting_setting_enabled(p_instance->cast_shadows != RSE::SHADOW_CASTING_SETTING_OFF);
+			geom->geometry_instance->set_cast_shadows_only(p_instance->cast_shadows == RSE::SHADOW_CASTING_SETTING_SHADOWS_ONLY);
+
 			geom->material_is_animated = is_animated;
 
 			if (p_instance->instance_uniforms.materials_finish(p_instance->self)) {
